@@ -548,6 +548,8 @@ beyond that new clients get 429 until buckets refill.
 
 #### 4.1.2 `GET /api/auth/github/callback`
 
+Completes the GitHub sign-in: checks the state, exchanges the code and signs the person in.
+
 Public. Browser navigation from GitHub.
 
 Query from GitHub: `code` and `state`, or `error`, `error_description`, `error_uri`
@@ -586,10 +588,14 @@ Failure: **303** to `/sign-in?error=<code>` with `code` one of `state_mismatch`,
 
 #### 4.1.3 `POST /api/auth/logout`
 
+Signs the caller out.
+
 Session, CSRF rules apply. Body: none. Destroys the session row and expires the
 cookie. Audit `user.sign_out`. **204**. Without a session: also 204 (idempotent).
 
 #### 4.1.4 `GET /api/me`
+
+Returns the signed-in account, its projects and the current terms.
 
 Session.
 
@@ -611,6 +617,8 @@ Session.
 
 #### 4.1.5 `GET /api/terms`
 
+Returns the current terms of service.
+
 Public.
 
 ```json
@@ -621,6 +629,8 @@ Served from `docs/compliance/terms.md`, embedded in the binary at build time. Th
 version is the value of the file's front matter `version`.
 
 #### 4.1.6 `DELETE /api/me`
+
+Deletes the caller's own account.
 
 Session, CSRF rules apply. Body: none. Deletes the caller's own console
 account. **204**, with the session cookie expired.
@@ -964,14 +974,20 @@ Session. Enrollment.
 
 #### 4.2.2 `GET /api/tenants`
 
+Lists the caller's projects.
+
 Session. List envelope of Tenant for the caller's memberships, excluding
 `removed`, ordered by `(created_at, id)`.
 
 #### 4.2.3 `GET /api/tenants/{tenant_id}`
 
+Returns one project.
+
 Session, member. **200** Tenant.
 
 #### 4.2.4 `PATCH /api/tenants/{tenant_id}`
+
+Renames a project or changes its description.
 
 Session, owner. Body: any of `name`, `description`. These are the only tenant
 columns `cp_tenant` may update (`00003_cp_security.sql`). Editing
@@ -1053,6 +1069,8 @@ Audit `invite.revoke`.
 
 #### 4.2.6 `POST /api/tenants/{tenant_id}/terms`
 
+Accepts the current terms version for a project.
+
 Session, owner. Body `{"version": "..."}`. Must equal the current version, else 409
 `terms_version_mismatch`. Sets `cp.tenants.accepted_terms_version`. **200** Tenant.
 Audit `tenant.terms_accept`.
@@ -1087,14 +1105,20 @@ Session, member.
 
 #### 4.3.2 `GET /api/tenants/{tenant_id}/sites`
 
+Lists a project's sites.
+
 Session, member. List envelope of Site, ordered by `(created_at, id)`. Query
 `include_removed=true` adds sites with `status = 'removed'`.
 
 #### 4.3.3 `GET /api/tenants/{tenant_id}/sites/{site_id}`
 
+Returns one site.
+
 Session, member. **200** Site.
 
 #### 4.3.4 `PATCH /api/tenants/{tenant_id}/sites/{site_id}`
+
+Changes a site's name, origins or UTM collection.
 
 Session, member. Body: any of `name`, `origins` (whole list replaced),
 `collect_utm` (boolean; any other JSON type answers 400). `domain` is
@@ -1109,12 +1133,16 @@ republishes the registry entry, so the gateway applies new origins and the
 
 #### 4.3.5 `DELETE /api/tenants/{tenant_id}/sites/{site_id}`
 
+Deletes a site and its web analytics data.
+
 Session, owner. Sets `status = 'removed'` (the row stays: `cp.erasure_requests`
 references it, and the review rule of 5.6 reads the domains of removed tenants' sites). **202** Site with
 `status: "removed"`. Reconcile deletes both Umami websites (and their data) and the
 `registry_sites` key. Audit `site.delete`. Repeating the call: 202, no change.
 
 #### 4.3.6 `GET /api/sites/{site_id}/snippet`
+
+Returns the script tag that installs the tracker on a site.
 
 Session, member of the site's tenant.
 
@@ -1146,6 +1174,8 @@ Query: `version` (optional; default the newest non-revoked version of
   `tracker_version_revoked`, 409 `site_removed`.
 
 #### 4.3.7 `GET /api/sites/{site_id}/ingest`
+
+Returns what the gateway did with a site's events, per hour or day.
 
 Session, member. Hourly outcome counts from `cp.web_ingest_hourly`.
 
@@ -1327,6 +1357,8 @@ approval or resume note). Stored in `cp.tenants.status_reason` (or
 
 ### 5.3 `GET /api/operator/tenants`
 
+Lists every project for operators, with filters for review.
+
 Operator. List envelope (2.3) of OperatorTenantSummary.
 
 Query:
@@ -1350,6 +1382,8 @@ Query:
 - 400 `invalid_query` for an unknown status, sort or order, or `q` out of range.
 
 ### 5.4 `GET /api/operator/tenants/{tenant_id}`
+
+Returns everything operators need to review one project.
 
 Operator. **200**:
 
@@ -1394,6 +1428,8 @@ Operator. **200**:
 - 404 `not_found` for unknown, malformed or internal ids.
 
 ### 5.5 Tenant lifecycle actions
+
+Operators approve, reject, suspend, resume and remove projects with these routes.
 
 All are `POST`, operator, body `{"reason": "..."}` (5.2), run under `cp_system`
 in one transaction with the tenant row locked (`for update`), write one audit
@@ -1576,6 +1612,8 @@ to the same host over HTTPS (`redirect_refused`), and gives a request 10
 seconds.
 
 ### 5.9 `GET /api/operator/audit`
+
+Lists the audit log for operators.
 
 Operator. List envelope of AuditEntry, ordered by `(at desc, id desc)`, under
 `cp_system`.
@@ -1860,6 +1898,8 @@ entry has `status = "active"`.
 
 ### 6.2 `POST /api/tenants/{tenant_id}/otlp-tokens`
 
+Creates an OTLP token and returns it once.
+
 Session, member, current terms (4.2.6).
 
 ```json
@@ -1882,11 +1922,15 @@ Session, member, current terms (4.2.6).
 
 ### 6.3 `GET /api/tenants/{tenant_id}/otlp-tokens` and `GET .../otlp-tokens/{token_id}`
 
+These routes list a project's OTLP tokens or return one, never the token itself.
+
 Session, member, any non-removed status. The list is the envelope of 2.3 over
 Token objects, ordered by `(created_at, id)`. Query `include_revoked=true` adds
 revoked tokens. A token of another tenant is 404 `not_found` (1.3).
 
 ### 6.4 `DELETE /api/tenants/{tenant_id}/otlp-tokens/{token_id}`
+
+Revokes an OTLP token, so the collector refuses it.
 
 Session, member. Allowed in every non-removed status and without current terms,
 because taking a credential out of use must never be blocked.
@@ -2131,6 +2175,8 @@ CORS preflights never inflate the volume, the error rates or the latency percent
 
 ### 7.5 `GET .../api-metrics/overview`
 
+Returns the headline API numbers of a range and of the range before it.
+
 Parameters: range and filters. The summary of the range and of the preceding
 range of equal length: `previous.from = from − (to − from)`,
 `previous.to = from`, resolved with the retention step of 7.2 on its own
@@ -2149,6 +2195,8 @@ range of equal length: `previous.from = from − (to − from)`,
 counted then.
 
 ### 7.6 `GET .../api-metrics/timeseries`
+
+Returns the API numbers per time bucket, for charts.
 
 Parameters: range and filters. One point per bucket from `from` (inclusive) to
 `to` (exclusive), in time order, including buckets without data (zeros,
@@ -2170,6 +2218,8 @@ points (a 24-month range has 730 or 731).
 Each point's percentiles come from the bucket arrays of that time bucket only.
 
 ### 7.7 `GET .../api-metrics/routes`
+
+Lists the API numbers per service, method and route.
 
 Parameters: range, filters, `sort`, `order`, `limit`, `cursor`. One item per
 service, method and route with at least one selected row. A route that only infrastructure
@@ -2204,6 +2254,8 @@ requests reached, such as `GET /healthz`, is listed with `requests` 0 and its
 
 ### 7.8 `GET .../api-metrics/status`
 
+Returns requests per status class and status code.
+
 Parameters: range and filters.
 
 ```json
@@ -2229,6 +2281,8 @@ Parameters: range and filters.
 
 ### 7.9 `GET .../api-metrics/services`
 
+Lists the services that sent API data in the range.
+
 Parameters: range only (a filter is 400 `invalid_query`). Every service with any
 row in the range, ordered by `service`; the list behind the service filter. An
 empty `items` is the console's empty state, which links to the OTLP token page
@@ -2247,6 +2301,8 @@ empty `items` is the console's empty state, which links to the OTLP token page
 `requests` and `lossy` are over the selected source of that service.
 
 ### 7.10 `GET .../api-metrics/warnings`
+
+Returns the ingest warnings of the range, per kind and day.
 
 Parameters: range only. Ingest warnings from `api.ingest_warnings`, which are
 counted per UTC day: every day from the day of `from` to the day of the last
@@ -2383,6 +2439,8 @@ rules of 5.2) and `has_web_data`, `has_api_data`.
 
 ### 8.3 `GET /api/operator/web/projects`
 
+Lists every project with its web numbers, for ranking and filtering.
+
 Operator. Default sort `pageviews`. Item:
 
 ```json
@@ -2438,6 +2496,8 @@ Operator. Default sort `pageviews`. Item:
 
 ### 8.4 `GET /api/operator/web/compare`
 
+Compares the web numbers of up to five projects day by day.
+
 Operator. Query `tenants` (1 to 5 distinct tenant ids, comma-separated),
 `from`, `to` (8.1), `breakdown_limit` (1 to 500, default 10). **200**:
 
@@ -2490,6 +2550,8 @@ Operator. Query `tenants` (1 to 5 distinct tenant ids, comma-separated),
 
 ### 8.5 `GET /api/operator/api/projects`
 
+Lists every project with its API numbers, for ranking and filtering.
+
 Operator. Default sort `requests`. Source rows are chosen per tenant and
 service exactly as 7.3 (metric rows when the service has any in the range,
 otherwise span rows), over `api.metrics_daily` for the UTC days of the range.
@@ -2537,6 +2599,8 @@ than through `apimetrics.Select`, which is tenant-scoped. Item:
   complete the item.
 
 ### 8.6 `GET /api/operator/api/compare`
+
+Compares the API numbers of up to five projects day by day.
 
 Operator. Query `tenants` (as 8.4), `from`, `to`, `service_order` (`desc`
 default, or `asc`). **200**:
@@ -2617,6 +2681,8 @@ Usage for operators: [Operator API keys](../operators/api-keys.md).
 - Every machine route is `GET`; other methods are 405.
 
 ### 9.2 Key management (operator)
+
+Operators create, list and revoke the keys of the machine API.
 
 Every route is **session** and **operator** (5.1) and runs as `cp_system`.
 Create and revoke follow the CSRF rules of 1.2.
@@ -2727,6 +2793,8 @@ Tenants in scope, ordered by id: `id`, `slug`, `name`, `status`, `created_at`,
 
 ### 9.5 `GET /web/daily`
 
+Returns daily web totals per tenant and band.
+
 Parameters `tenant`, `band` (`primary` or `quarantine`, absent for both),
 `from`, `to`, `limit`, `cursor`. One item per tenant, day and band that
 `agg.web_daily` holds: the sums over the tenant's sites of `pageviews`,
@@ -2741,6 +2809,8 @@ site and day (17.4).
 
 ### 9.6 `GET /web/dimensions`
 
+Returns daily web breakdowns (referrer, country, device, browser, operating system) per tenant.
+
 Parameters as 9.5 plus `dimension` (`referrer`, `country`, `device`,
 `browser`, `os`; absent for all). One item per tenant, day, band, dimension and
 key: `value` summed over the tenant's sites (Umami's `y`, 8.3). Ordered by
@@ -2748,6 +2818,8 @@ tenant, day, band, dimension, key (bytewise). Summed over a range these equal
 the breakdowns of 8.4.
 
 ### 9.7 `GET /web/hourly`
+
+Returns one tenant's web totals per hour, read live from Umami.
 
 Parameters `tenant`, `from`, `to` (hours). A key for every tenant must give
 `tenant` (400 otherwise). The control plane reads Umami's `/stats` for every
@@ -2761,6 +2833,8 @@ most 4 Umami requests of one answer run at once. The external prober
 (`cmd/prober`) uses this route as its freshness check.
 
 ### 9.8 `GET /api/daily`
+
+Returns daily API numbers per tenant.
 
 Parameters `tenant`, `service`, `from`, `to`, `limit`, `cursor`. From
 `api.metrics_daily`, the source chosen per tenant and service over the whole
@@ -2780,6 +2854,8 @@ service's `source`. Ordered by tenant, day, service, method, route (bytewise).
 
 ### 9.10 `GET /api/hourly`
 
+Returns hourly API numbers per tenant.
+
 Parameters `tenant`, `service`, `from`, `to` (hours), `limit`, `cursor`. As
 9.8 over `api.operator_hourly` (item field `hour`): the rolled-up rows of
 `api.metrics_hourly`, and for hours the rollup (every 5 minutes) has not
@@ -2787,6 +2863,8 @@ reached yet, the sums of their minute rows, so the current hour holds every
 minute the metrics writer has stored.
 
 ### 9.11 `GET /api/operator/api-keys/{key_id}/usage`
+
+Returns how often a machine API key was used, per hour.
 
 Operator. Parameters `from`, `to` (UTC days, default the 7 days ending today,
 at most 31). Answer: `key_id`, `from`, `to`, `totals` `{requests, rejected}`
@@ -2859,6 +2937,8 @@ in [Right to erasure](../compliance/erasure.md); this section is the contract. C
 
 ### 10.2 `POST /api/tenants/{tenant_id}/erasure`
 
+Starts an erasure: one visitor of today, one session, or a whole site.
+
 Session, owner (403 `owner_required` for members). Allowed in every tenant
 status a member can reach (suspended included) and without current terms.
 
@@ -2889,10 +2969,14 @@ continues in the control plane; clients poll 10.4.
 
 ### 10.3 `GET /api/tenants/{tenant_id}/erasure`
 
+Lists a project's erasure requests.
+
 Session, member. List envelope (2.3), newest first by `(requested_at, id)`.
 Optional query `site_id` filters to one site.
 
 ### 10.4 `GET /api/tenants/{tenant_id}/erasure/{request_id}`
+
+Returns one erasure request and its result.
 
 Session, member. The request object; 404 for an unknown id or one of another
 tenant.
@@ -2948,6 +3032,8 @@ cluster holds right now. It is the operators' alert channel, so the route never
 lets the page say "all clear" without having asked Alertmanager.
 
 ### 11.1 `GET /api/operator/alerts`
+
+Returns the alerts Alertmanager holds right now.
 
 Operator (5.1). No query parameters. The control plane asks every configured
 Alertmanager member at once (`GET /api/v2/alerts` without filters, 5 seconds
@@ -3164,8 +3250,8 @@ security, exactly as for the console. Only `GET` reaches them.
 
 **12.4.2 Web analytics tools** read Umami's REST API on the private network as
 the credential user's own Umami user, through the same reader as the web
-dashboard (18.8: daily derived password, a 5 minute login cache per user and
-site shared with the console, a 401 logs in once more). A `site_id` from the client is first read through 4.3.3 as the
+dashboard (18.8: daily derived password, login reused for 5 minutes per user
+and site). A `site_id` from the client is first read through 4.3.3 as the
 principal, which answers only for a site of the credential's tenant; only
 then is the Umami website id derived from it (`view` `primary` is the site
 id, `quarantine` its `quarantine_website_id`). Saved funnel and goal ids are
@@ -3252,6 +3338,8 @@ a JSON-RPC error.
   `MCPToolFailuresHigh` ([alert runbook](../runbooks/alerts.md)).
 
 ### 12.8 Console routes
+
+Members and operators manage MCP access keys, and approve OAuth requests, with these routes.
 
 Session routes with the CSRF rules of 1.2.
 
@@ -3722,6 +3810,8 @@ rules of 15.3; 404 for an id of another tenant.
 
 ### 16.1 Operator exports
 
+Operators download the global views and a contract's calls as CSV files.
+
 All under `/api/operator` (403 `operator_required` otherwise), `text/csv;
 charset=utf-8` as an attachment, streamed, one header row:
 
@@ -3918,6 +4008,8 @@ operators read every project's under `cp_operator`; both get the same report.
 
 ### 17.2 `GET /api/tenants/{tenant_id}/integrity`
 
+Returns a project's own integrity report.
+
 Member (1.3). Query `from`, `to`: UTC days, both included, `to` not after
 today, at most 366 days; without `to` the range ends today, without `from`
 it holds 30 days. **200** Report of the tenant. 400 `invalid_query` for a bad
@@ -3925,6 +4017,8 @@ or unknown parameter. A project without graded days gets a report with
 `grade` `null` and no sites.
 
 ### 17.3 `GET /api/operator/web/integrity`
+
+Returns one project's integrity report for operators.
 
 Operator. Query `tenant` (required, lowercase UUID), `from`, `to` (8.1).
 **200** Report of that project. 400 `invalid_query` without `tenant` or for
@@ -4081,6 +4175,8 @@ Today is a range like any other: the aggregates of today are those the hourly
 
 ### 18.3 `GET /api/tenants/{tenant_id}/web/summary`
 
+Returns a project's web totals and daily series, with the previous period.
+
 Member (1.3). Query `from`, `to`, `site`, `band`. **200**:
 
 ```json
@@ -4125,6 +4221,8 @@ Member (1.3). Query `from`, `to`, `site`, `band`. **200**:
 
 ### 18.4 `GET /api/tenants/{tenant_id}/web/breakdown`
 
+Returns the top values of one dimension, such as pages or referrers.
+
 Member. Query `dimension` (required), `from`, `to`, `site`, `band`, `limit`
 (1 to 100, default 10). `dimension` is one of `referrer`, `country`,
 `browser`, `os`, `device`, `page`, `entry_page`, `exit_page`, `event`,
@@ -4156,6 +4254,8 @@ Member. Query `dimension` (required), `from`, `to`, `site`, `band`, `limit`
 
 ### 18.5 `GET /api/tenants/{tenant_id}/web/hourly`
 
+Returns page views and visitors per hour of one day.
+
 Member. Query `day` (a UTC day, default today, not after today), `site`,
 `band`. **200** `{ "day", "band", "source": "engine", "sites": [...],
 "points": [{ "at", "pageviews", "visitors" }] }` with 24 points, one per UTC
@@ -4164,6 +4264,8 @@ to the day's page views in Umami, which the aggregates hold after the next
 hourly read.
 
 ### 18.6 `GET /api/tenants/{tenant_id}/web/realtime`
+
+Returns the visitors right now and the page views of the last 30 minutes.
 
 Member. Query `site`. Primary band only. **200**:
 
@@ -4180,6 +4282,8 @@ over the sites. `minutes` holds the last 30 minutes; the last one is the
 current minute and still filling. The console asks every 30 seconds.
 
 ### 18.7 `GET /api/tenants/{tenant_id}/web/sessions`
+
+Lists one site's sessions of a day.
 
 Member. Query `site` (required), `day` (a UTC day, default today, not after
 today), `band`, `page` (1 to 1000, default 1). Lists the sessions of one site
@@ -4228,7 +4332,10 @@ project's data:
 4. Umami: the engine reads log in as the member's own Umami user (a
    `view-only` user in the project's team with a daily derived password),
    never as the admin, and only for one of the site's two websites. Umami's
-   own team check then refuses any website outside the project's team.
+   own team check then refuses any website outside the project's team. Each
+   control plane instance keeps a login in memory for 5 minutes per user and
+   site, for the console and the MCP tools alike; a 401 from Umami drops it
+   and logs in again.
 
 The tenant isolation gate (`make isolation`) sends every route of this
 section with real, guessed, malformed and mixed ids as a member of another
