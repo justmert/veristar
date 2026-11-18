@@ -13,49 +13,23 @@ import { withCohort } from "@/pages/home/enroll";
 import { ComparePage } from "@/pages/operator/compare";
 import { OperatorProjectsPage } from "@/pages/operator/projects";
 import { RulesPage } from "@/pages/operator/rules";
+import { ScfReviewPage, SignedReports } from "@/pages/project/scf";
 import type { ProjectContext } from "@/pages/project-layout";
-import { PublicReportPage } from "@/pages/public-report";
-import { SignedReports } from "@/pages/reports";
-import { SCFViewPage } from "@/pages/scf-view";
+import { PublicReportPage } from "@/pages/public/report";
 import * as c from "./fixtures/contract";
 import * as f from "./fixtures/global";
 import {
   byLabel,
   byRole,
-  type Call,
   click,
   renderRoutes,
+  routeFetch,
   stubFetch,
   type,
   waitFor,
 } from "./helpers";
 
 const EM_DASH = String.fromCharCode(0x2014);
-
-// answers by method and path; test double only
-function routeFetch(
-  answer: (method: string, url: string) => { status: number; body?: unknown },
-): Call[] {
-  const calls: Call[] = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: string, init: RequestInit = {}) => {
-      const method = init.method ?? "GET";
-      calls.push({
-        url: input,
-        method,
-        headers: new Headers(init.headers),
-        body: typeof init.body === "string" ? JSON.parse(init.body) : undefined,
-      });
-      const a = answer(method, input);
-      return new Response(a.body === undefined ? null : JSON.stringify(a.body), {
-        status: a.status,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      });
-    }),
-  );
-  return calls;
-}
 
 async function select(el: HTMLSelectElement, value: string) {
   await act(async () => {
@@ -387,7 +361,7 @@ const document = {
     award_date: "2026-09-01",
     percentile_program: "Build Award",
     percentile_round: "SCF #38",
-    cohort_size: 4,
+    cohort_size: 12,
     kpis: {
       visitors: {
         value: "4321.000000",
@@ -405,6 +379,8 @@ const document = {
 const documentV2 = {
   ...document,
   version: 2,
+  // a cohort below five projects: the page keeps its percentiles back
+  cohort: { ...document.cohort, cohort_size: 3 },
   methods: { ...document.methods, format: 2, integrity_rules: [1, 2] },
   web: {
     ...document.web,
@@ -481,8 +457,14 @@ describe("the public report page (contract 20.5)", () => {
     const host = await renderRoutes(publicRoute, "/r/abcdefghijklmnopqrstuvwxyz");
     await waitFor(() => expect(host.querySelector("[data-verdict=verified]")).not.toBeNull());
     expect(calls[0]?.url).toBe("/api/public/reports/abcdefghijklmnopqrstuvwxyz");
+    // the plain line first, the standard and the key on demand
+    expect(host.querySelector("[data-verdict=verified]")?.textContent).toBe(
+      "Signed by Veristar. This browser checked the signature.",
+    );
     expect(host.textContent).toContain("Veristar's current report key");
     expect(host.textContent).toContain(SIGNER);
+    // the build metadata is the footer, after every figure
+    expect(host.querySelector("footer")?.textContent).toContain("Route rules2");
     expect(host.textContent).toContain("4,321");
     expect(host.textContent).toContain("Grade A");
     expect(host.textContent).toContain("+116%");
@@ -508,6 +490,11 @@ describe("the public report page (contract 20.5)", () => {
     expect(host.textContent).toContain("No API traffic was recorded in this period.");
     expect(host.textContent).toContain("Infrastructure requests12");
     expect(host.textContent).toContain("15 a week on average over 2 weeks, 2 missing");
+    expect(host.textContent).not.toContain("P75");
+    expect(host.querySelector("tr[data-kpi=visitors] [data-missing]")).not.toBeNull();
+    expect(host.querySelector("[data-testid=percentile-hidden]")?.textContent).toContain(
+      "This cohort has 3 projects",
+    );
   });
 
   it("reads a version 3 report with the calls per contract function", async () => {
@@ -536,7 +523,7 @@ describe("the public report page (contract 20.5)", () => {
     const host = await renderRoutes(publicRoute, "/r/abcdefghijklmnopqrstuvwxyz");
     await waitFor(() => expect(host.querySelector("[data-verdict=unknown-key]")).not.toBeNull());
     expect(host.textContent).toContain("Not signed by Veristar");
-    expect(host.textContent).not.toContain("Signature verified");
+    expect(host.textContent).not.toContain("Signed by Veristar.");
     expect(host.querySelector("[data-verdict=unknown-key]")?.getAttribute("role")).toBe("alert");
   });
 
@@ -615,7 +602,7 @@ describe("the reports page (contract 20.3 and 20.4)", () => {
       const day = new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 10);
       await type(byLabel(host, "To") as HTMLInputElement, day);
       await click(byRole(host, "button", "Generate and sign"));
-      expect(host.textContent).toContain("the last 4 days can still change");
+      expect(host.textContent).toContain("The last 4 days can still change.");
     }
     expect(calls.some((x) => x.method === "POST")).toBe(false);
 
@@ -623,23 +610,32 @@ describe("the reports page (contract 20.3 and 20.4)", () => {
     await type(byLabel(host, "To") as HTMLInputElement, "2026-10-31");
     await click(byRole(host, "button", "Generate and sign"));
     await waitFor(() => expect(host.textContent).toContain("Report generated"));
+    expect(host.querySelector("[role=status] a")?.getAttribute("href")).toBe(summary.url);
     expect(calls.find((x) => x.method === "POST")?.body).toEqual({
       from: "2026-10-01",
       to: "2026-10-31",
     });
     expect(calls.find((x) => x.method === "POST")?.url).toBe(`/api/tenants/${c.TENANT_ID}/reports`);
 
-    // repeated row buttons name their report
-    expect(byRole(host, "button", "Revoke link").getAttribute("aria-label")).toBe(
-      "Revoke link of the report for Oct 1 to Oct 31, 2026",
-    );
-    await click(byRole(host, "button", "Revoke link"));
+    // one main action per row; the rest is in a menu named for its report
+    const row = host.querySelector(`[data-report="${summary.id}"]`) as HTMLElement;
+    expect(
+      row.querySelector('button[aria-label="Copy link of the report for Oct 1 to Oct 31, 2026"]'),
+    ).not.toBeNull();
+    await openMenu(row, "Actions for the report for Oct 1 to Oct 31, 2026");
+    await click(menuItem("Revoke link"));
     const dialog = [...host.querySelectorAll("dialog")].find((d) => d.hasAttribute("open"));
     const confirm = [...(dialog?.querySelectorAll("button") ?? [])].find(
       (b) => b.textContent === "Revoke link",
     );
     await click(confirm as HTMLElement);
     await waitFor(() => expect(host.textContent).toContain("Link revoked"));
+    // a revoked report keeps one action: its signed file
+    expect(
+      host.querySelector(
+        `[data-report="${summary.id}"] button[aria-label="Download JSON of the report for Oct 1 to Oct 31, 2026"]`,
+      ),
+    ).not.toBeNull();
     expect(calls.find((x) => x.url.endsWith("/revoke"))?.url).toBe(
       `/api/tenants/${c.TENANT_ID}/reports/abcdefghijklmnopqrstuvwxyz/revoke`,
     );
@@ -676,7 +672,9 @@ describe("revoking a report link", () => {
     );
     await waitFor(() => expect(host.textContent).toContain("3 views"));
     const open = () => [...host.querySelectorAll("dialog")].find((d) => d.hasAttribute("open"));
-    await click(byRole(host, "button", "Revoke link"));
+    const actions = "Actions for the report for Oct 1 to Oct 31, 2026";
+    await openMenu(host, actions);
+    await click(menuItem("Revoke link"));
     const confirm = [...(open()?.querySelectorAll("button") ?? [])].find(
       (b) => b.textContent === "Revoke link",
     );
@@ -684,12 +682,13 @@ describe("revoking a report link", () => {
     await waitFor(() => expect(open()?.textContent).toContain("Too many requests"));
     await click(byRole(open() as HTMLElement, "button", "Cancel"));
     await waitFor(() => expect(open()).toBeUndefined());
-    await click(byRole(host, "button", "Revoke link"));
+    await openMenu(host, actions);
+    await click(menuItem("Revoke link"));
     expect(open()?.textContent).not.toContain("Too many requests");
   });
 });
 
-describe("what scf sees with cohorts (contract 19.3)", () => {
+describe("scf review with cohorts (contract 19.3)", () => {
   const body = {
     from: "2026-10-18",
     to: "2026-11-16",
@@ -738,37 +737,51 @@ describe("what scf sees with cohorts (contract 19.3)", () => {
   };
 
   it("shows the cohort, the change and percentile of each metric and the rules met", async () => {
-    const calls = routeFetch((method) =>
-      method === "PUT"
-        ? {
-            status: 200,
-            body: {
-              ...body.cohort,
-              proposal: {
-                program: "Build Award",
-                round: "SCF #40",
-                category: null,
-                award_date: null,
-              },
+    const calls = routeFetch((method, url) => {
+      if (method === "PUT")
+        return {
+          status: 200,
+          body: {
+            ...body.cohort,
+            proposal: {
+              program: "Build Award",
+              round: "SCF #40",
+              category: null,
+              award_date: null,
             },
-          }
-        : { status: 200, body },
-    );
+          },
+        };
+      if (url.includes("/integrity")) return { status: 200, body: f.integrityReportBody };
+      if (url.includes("/sites")) return { status: 200, body: { items: [], next_cursor: null } };
+      if (url.includes("/reports")) return { status: 200, body: { items: [] } };
+      return { status: 200, body };
+    });
     const host = await renderRoutes(
-      projectRoutes(<SCFViewPage />, "scf-view"),
-      `/projects/${c.TENANT_ID}/scf-view`,
+      projectRoutes(<ScfReviewPage />, "scf"),
+      `/projects/${c.TENANT_ID}/scf`,
     );
     await waitFor(() => expect(host.textContent).toContain("Change and place in the cohort"));
-    expect(host.textContent).toContain(
-      "the projects confirmed in Build Award, SCF #38 (4 active or suspended)",
+    expect(host.querySelector("[data-testid=cohort-population]")?.textContent).toContain(
+      "the projects confirmed in Build Award, SCF #38: 4 projects, active or suspended",
     );
     const visitors = host.querySelector("tr[data-kpi=visitors]");
     expect(visitors?.textContent).toContain("+100%");
-    expect(visitors?.textContent).toContain("P75");
+    // a cohort of four is too small for a percentile, and the page says why
+    expect(visitors?.textContent).not.toContain("P75");
+    expect(visitors?.querySelector("[data-missing]")?.textContent).toContain(
+      "Fewer than 5 projects in the cohort",
+    );
+    expect(host.querySelector("[data-testid=percentile-hidden]")).not.toBeNull();
     expect(host.querySelector("tr[data-kpi=error_rate]")?.textContent).toContain("-0.1 pp");
     expect(host.querySelector(`[data-rule="${rule.id}"]`)?.textContent).toContain(
-      "2026-10: 4 qualifying days",
+      "Oct 2026: 4 qualifying days",
     );
+    // the full integrity report sits on this page, with its appeal for a B
+    await waitFor(() =>
+      expect(host.querySelector('[aria-label="Integrity report"]')).not.toBeNull(),
+    );
+    expect(host.querySelector("[data-testid=integrity-appeal]")).not.toBeNull();
+    expect(host.querySelectorAll("[data-testid=coverage]")).toHaveLength(1);
     expect(host.querySelector("[data-proposal]")?.textContent).toContain("SCF #39");
     expect(host.querySelector("[data-award]")?.textContent).toContain("award date");
     expect(host.querySelector("[data-marker='2026-11-15']")).not.toBeNull();
@@ -867,3 +880,21 @@ describe("the operator's cohort panel (contract 19.1)", () => {
     });
   });
 });
+
+// radix opens a menu on pointer down, not on click
+async function openMenu(scope: HTMLElement, label: string) {
+  const trigger = scope.querySelector<HTMLElement>(`button[aria-label="${label}"]`);
+  if (!trigger) throw new Error(`no menu ${label}`);
+  await act(async () => {
+    trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+  });
+}
+
+function menuItem(text: string): HTMLElement {
+  // the report fixture above is named document; the page is globalThis's
+  const el = [...globalThis.document.querySelectorAll<HTMLElement>("[role=menuitem]")].find(
+    (m) => m.textContent === text,
+  );
+  if (!el) throw new Error(`no menu item ${text}`);
+  return el;
+}

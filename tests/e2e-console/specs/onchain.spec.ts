@@ -1,6 +1,6 @@
-// the on-chain witness, "what scf sees" and the csv exports, end to end. an
+// the on-chain witness, the scf review and the csv exports, end to end. an
 // owner declares an account in the console and sees it unverified with a
-// challenge to prove it; the scf view and the overview export answer for
+// challenge to prove it; the scf review and the overview export answer for
 // the project; another project's member gets 404 on every route of it; an
 // operator sees the on-chain column, exports exactly the rows on screen
 // and reads the on-chain section of the project's detail.
@@ -126,12 +126,13 @@ test("an owner declares an account and gets a challenge to prove it", async () =
   );
 });
 
-test("what scf sees and the overview export answer for the project", async () => {
+test("scf review and the overview export answer for the project", async () => {
   const { page, ctx } = owner;
   await page.goto(`${APP}/projects/${tenant.id}/scf`);
-  await expect(page.getByRole("heading", { name: "What SCF sees" })).toBeVisible();
-  await expect(page.getByText("The project's on-chain column.")).toBeVisible();
-  await expect(page.getByText("Weekly active accounts", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "SCF review", level: 1 })).toBeVisible();
+  const chain = page.getByRole("region", { name: "On-chain" });
+  await expect(chain).toContainText("0 of 1");
+  await expect(chain.getByText("Weekly active accounts", { exact: true })).toBeVisible();
   const href = await page.getByRole("link", { name: "Export CSV" }).getAttribute("href");
   expect(href).toMatch(new RegExp(`^/api/tenants/${tenant.id}/overview\\.csv\\?from=`));
 

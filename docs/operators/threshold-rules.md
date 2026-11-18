@@ -6,7 +6,7 @@ description: "Save a traction threshold once and list the projects that meet it,
 A threshold rule states a traction requirement once, for example "verified visitors at or above
 100 per day on at least 10 days in each of the last three months, with an integrity grade of B or
 better". The console then lists every project that meets it, with the evidence. Rules are kept
-for every operator, and the project sees on its "What SCF sees" page which rules it meets.
+for every operator, and the project sees on its **SCF review** page which rules it meets.
 
 ## A rule
 

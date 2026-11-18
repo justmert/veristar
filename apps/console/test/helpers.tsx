@@ -185,3 +185,29 @@ export function stubFetch(
   );
   return calls;
 }
+
+// a fetch double answering by method and path, for pages whose queries
+// start together and may reach the network in either order
+export function routeFetch(
+  answer: (method: string, url: string) => { status: number; body?: unknown },
+): Call[] {
+  const calls: Call[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string, init: RequestInit = {}) => {
+      const method = init.method ?? "GET";
+      calls.push({
+        url: input,
+        method,
+        headers: new Headers(init.headers),
+        body: typeof init.body === "string" ? JSON.parse(init.body) : undefined,
+      });
+      const a = answer(method, input);
+      return new Response(a.body === undefined ? null : JSON.stringify(a.body), {
+        status: a.status,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    }),
+  );
+  return calls;
+}

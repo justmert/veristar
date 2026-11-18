@@ -21,13 +21,8 @@ const skip = new Set([
 
 // the console takes its spacing from the scale (spacing.generated.css). the
 // website keeps tailwind's own step, so the spacing rules apply to the
-// console only. the files listed below still use steps between two scale
-// values; each leaves the list when its page moves onto the scale.
+// console only.
 const spacingRoots = ["apps/console/src"];
-const spacingPending = new Set([
-  "apps/console/src/pages/scf-view.tsx",
-  "apps/console/src/pages/public-report.tsx",
-]);
 const steps4 = new Set(Object.keys(space));
 const spacingUtility =
   /(?<![\w-])(?:[a-z-]+:)*!?-?((?:p|px|py|pt|pr|pb|pl|ps|pe|m|mx|my|mt|mr|mb|ml|ms|me|gap|gap-x|gap-y|space-x|space-y|scroll-m[xytrblse]?|scroll-p[xytrblse]?))-(\[[^\]\s]+\]|\([^)\s]+\)|[0-9.]+)(?![\w.-])/g;
@@ -111,7 +106,7 @@ for (const root of roots) {
           const value = m[2] ?? "";
           if (value.startsWith("[") || value.startsWith("("))
             at(`${m[0].trim()} is an arbitrary spacing value; use a step of the spacing scale`);
-          else if (!steps4.has(value) && !spacingPending.has(rel))
+          else if (!steps4.has(value))
             at(`${m[0].trim()} is not a step of the spacing scale (${[...steps4].join(", ")})`);
         }
       }

@@ -166,7 +166,10 @@ test("a signed report verifies in a browser without a session, until its link is
     const r = await reader.newPage();
     watch(r);
     await r.goto(url);
-    await expect(r.locator("[data-verdict=verified]")).toBeVisible();
+    await expect(r.locator("[data-verdict=verified]")).toHaveText(
+      "Signed by Veristar. This browser checked the signature.",
+    );
+    await r.getByText("Signature details").click();
     await expect(r.getByRole("region", { name: "Signature" })).toContainText(
       "Veristar's current report key",
     );
@@ -198,9 +201,14 @@ test("a signed report verifies in a browser without a session, until its link is
 
     // the owner revokes the link; the same address now says so
     await page.reload();
-    await page.getByRole("button", { name: "Revoke link" }).first().click();
+    const reports = page.getByRole("list", { name: "Reports" });
+    await reports
+      .getByRole("button", { name: /^Actions for the report for / })
+      .first()
+      .click();
+    await page.getByRole("menuitem", { name: "Revoke link" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Revoke link" }).click();
-    await expect(page.getByText("Link revoked")).toBeVisible();
+    await expect(reports.getByText("Link revoked").first()).toBeVisible();
 
     const again = await reader.newPage();
     await again.goto(url);

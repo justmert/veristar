@@ -47,6 +47,7 @@ import { WalletPicker } from "@/components/wallet-picker";
 import { countOf, formatDateTimeUtc } from "@/lib/format";
 import { isDay, lastDays } from "@/lib/global";
 import {
+  DAYS_WITHOUT_DATA,
   METHOD_TEXT,
   shortKey,
   verifiedActivity,
@@ -234,7 +235,7 @@ function Activity({ view }: { view: OnchainView }) {
         <StatCard
           data-stat="days-missing"
           label="Days without data"
-          definition="Days before today without a ledger read, added up over the verified ids."
+          definition={DAYS_WITHOUT_DATA}
           value={none ? null : a.daysMissing}
           missingReason={none}
         />

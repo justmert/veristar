@@ -179,7 +179,7 @@ describe("appeal this grade", () => {
     const host = await render(
       <IntegrityPanel report={report} appeal={{ slug: "stellar-dex", siteDomains: {} }} />,
     );
-    expect(host.textContent).toContain("graded under rule sets 1 and 2");
+    expect(host.textContent).toContain("Graded with rule sets 1 and 2");
     const a = host.querySelector<HTMLAnchorElement>("[data-testid=integrity-appeal]");
     expect(new URL(a?.getAttribute("href") ?? "").searchParams.get("rule_version")).toBe("1, 2");
   });

@@ -222,7 +222,12 @@ test("the project reads its own grade on the overview, as operators see it", asy
   // sees". the issue the link opens for a lower grade is checked in the
   // console's unit tests
   await page.goto(`${APP}/projects/${tenant.id}/scf`);
-  await expect(page.getByTestId("integrity-grade")).toHaveText("A");
+  await expect(page.getByTestId("standing-grade").locator("[data-grade]")).toHaveAttribute(
+    "data-grade",
+    "A",
+  );
+  await expect(page.getByTestId("standing-grade")).toContainText("Fewer than a quarter");
+  await expect(page.getByRole("region", { name: "Integrity report" })).toContainText(site.domain);
   await expect(page.getByRole("link", { name: "Appeal this grade" })).toHaveCount(0);
 });
 
