@@ -129,7 +129,7 @@ func TestPageSignals(t *testing.T) {
 	s.Drained(t, 5*time.Minute)
 
 	t.Run("umami derives browser, os and device without screen and language", func(t *testing.T) {
-		evs := s.Events(t, siteStatic.ID, today())
+		evs := s.Events(t, siteStatic.ID, runRange())
 		if len(evs) == 0 {
 			t.Fatal("no static events in umami")
 		}

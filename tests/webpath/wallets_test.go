@@ -115,7 +115,7 @@ func TestWalletsKit(t *testing.T) {
 	s.WaitStored(t, siteWallets.ID, 17)
 
 	t.Run("stored in umami", func(t *testing.T) {
-		evs := s.Events(t, siteWallets.ID, today())
+		evs := s.Events(t, siteWallets.ID, runRange())
 		names := countBy(evs, func(e UmamiEvent) string {
 			if e.EventType == umamiPageview {
 				return "pageview"
@@ -124,7 +124,7 @@ func TestWalletsKit(t *testing.T) {
 		})
 		t.Logf("umami events of the site: %s", joinKeys(names))
 		expectCounts(t, "umami", names, want)
-		if q := s.Events(t, quarantine, today()); len(q) != 0 {
+		if q := s.Events(t, quarantine, runRange()); len(q) != 0 {
 			t.Errorf("%d events in the quarantine website", len(q))
 		}
 
@@ -189,7 +189,7 @@ func TestWalletsKit(t *testing.T) {
 			X string `json:"x"`
 		}
 		q := url.Values{}
-		r := today()
+		r := runRange()
 		q.Set("startAt", strconv.FormatInt(r.Start.UnixMilli(), 10))
 		q.Set("endAt", strconv.FormatInt(r.End.UnixMilli(), 10))
 		q.Set("type", "event")
