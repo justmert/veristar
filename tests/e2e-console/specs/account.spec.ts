@@ -68,7 +68,7 @@ test("a member of a project opens its web dashboard", async () => {
 test("the only owner of a project is refused and sees which project", async () => {
   const page = await person.newPage();
   await page.goto(`${APP}/`);
-  await page.getByRole("button", { name: /account menu/ }).click();
+  await page.getByRole("button", { name: /account menu/i }).click();
   await page.getByRole("menuitem", { name: "Account" }).click();
   await page.waitForURL(`${APP}/account`);
   await expect(page.getByRole("heading", { name: "Account", level: 1 })).toBeVisible();
