@@ -201,7 +201,6 @@ export function ComparePage() {
           <li>Visitors are unique per UTC day and site.</li>
           <li>Latency percentiles come from summed duration buckets, not from averages.</li>
         </ul>
-        <DbIpAttribution className="mt-2" />
       </details>
     </div>
   );
@@ -472,6 +471,7 @@ function WebSection({ data }: { data: WebCompare }) {
           {DIMENSIONS.map((d) => (
             <section key={d.dim} aria-label={d.label} className="flex flex-col gap-3">
               <h3 className="text-title text-fg">{d.label}</h3>
+              {d.dim === "country" ? <DbIpAttribution /> : null}
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {data.projects.map((p, i) => {
                   const b = p.breakdowns[d.dim];
