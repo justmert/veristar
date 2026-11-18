@@ -304,12 +304,14 @@ func (su *suite) devices(t *testing.T) {
 	s.Drained(t, 2*time.Minute)
 	s.WaitStored(t, siteAstro.ID, 5)
 	// umami's own classification of the playwright device profiles
-	// (src/lib/detect.ts: detect-browser names, getDevice with screen width).
+	// (src/lib/detect.ts: detect-browser names, getDevice). the tracker sends
+	// no screen since 1.3.0, so getDevice decides from the user agent alone:
+	// a desktop browser is "desktop" (with a screen width it was "laptop").
 	// playwright's firefox reaches the gateway with its real linux user agent
 	// rather than the windows one of the "Desktop Firefox" descriptor
 	// (observed in the umami session row), so firefox counts as Linux.
 	want := map[string]map[string]int64{
-		"device":  {"laptop": 3, "mobile": 2},
+		"device":  {"desktop": 3, "mobile": 2},
 		"browser": {"chrome": 2, "firefox": 1, "safari": 1, "ios": 1},
 		"os":      {"Windows 10": 1, "Linux": 1, "Mac OS": 1, "Android OS": 1, "iOS": 1},
 	}
