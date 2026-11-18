@@ -209,19 +209,18 @@ test("the gateway classified every event and the job graded the day", async () =
 test("the project reads its own grade on the overview, as operators see it", async () => {
   const page = owner.page;
   await page.goto(`${APP}/projects/${tenant.id}`);
-  const panel = page.getByRole("region", { name: "Integrity" });
-  await expect(panel).toBeVisible();
-  await expect(panel.getByText("exactly the report SCF operators see")).toBeVisible();
-  await expect(panel.locator("[data-grade]").first()).toHaveText("Grade A");
-  await expect(panel.getByText("IP to ASN data by DB-IP")).toBeVisible();
-  await panel.getByText(site.name).click();
-  await expect(panel.getByText("Accepted events").first()).toBeVisible();
+  // the overview sums the grade up in one card that links to the full report
+  const card = page.getByRole("region", { name: "Integrity grade" });
+  await expect(card.locator("[data-grade]")).toHaveAttribute("data-grade", "A");
+  await expect(card.getByRole("link", { name: "SCF review" })).toHaveAttribute(
+    "href",
+    `/projects/${tenant.id}/scf`,
+  );
   await page.screenshot({ path: join(shots, "overview.png"), fullPage: true });
 
-  // grade A is the best grade, so there is nothing to appeal: no link here
-  // or on "what scf sees". the issue the link opens for a lower grade is
-  // checked in the console's unit tests
-  await expect(panel.getByRole("link", { name: "Appeal this grade" })).toHaveCount(0);
+  // grade A is the best grade, so there is nothing to appeal on "what scf
+  // sees". the issue the link opens for a lower grade is checked in the
+  // console's unit tests
   await page.goto(`${APP}/projects/${tenant.id}/scf`);
   await expect(page.getByTestId("integrity-grade")).toHaveText("A");
   await expect(page.getByRole("link", { name: "Appeal this grade" })).toHaveCount(0);

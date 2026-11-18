@@ -1,21 +1,12 @@
+// the project's api numbers: requests, error rates and latency of its http
+// services per route, for a range of utc minutes, hours or days against the
+// previous range of equal length
+
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { fade, stagger } from "@veristar/brand/motion";
-import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  ChevronLeft,
-  ChevronRight,
-  Filter,
-  Search,
-  Server,
-  X,
-} from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
-import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
+import { Filter as FilterIcon, Server } from "lucide-react";
+import { type ReactNode, useEffect, useId, useState } from "react";
 import { Link, useSearchParams } from "react-router";
-import type { ApiRangeQuery } from "@/api/endpoints";
 import {
   apiOverviewQuery,
   apiRoutesQuery,
@@ -29,38 +20,35 @@ import type {
   ApiPoint,
   ApiRange,
   ApiRouteItem,
-  ApiRouteSort,
   ApiServiceItem,
   ApiStatus,
   ApiWarnings,
   Percentile,
+  StatusClass,
   WarningKind,
 } from "@/api/schemas";
-import {
-  alignPrevious,
-  ErrorChart,
-  LatencyChart,
-  PlotSkeleton,
-  StatusClassBar,
-  VolumeChart,
-} from "@/components/api-charts";
-import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
-import { NativeSelect } from "@/components/form-field";
-import { StaggerItem } from "@/components/motion";
+import { BreakdownList, type TimeBucket, TimeChart } from "@/components/charts";
+import { type Column, DataTable } from "@/components/data-table";
+import { type Filter, FilterBar } from "@/components/filter-bar";
 import { Notice } from "@/components/notice";
-import { PageHeader, Panel } from "@/components/panel";
-import { Segmented } from "@/components/segmented";
-import { Sparkline, StatTile, type Trend } from "@/components/stat-tile";
+import { PageHeader } from "@/components/page-header";
+import { parseUtcDayTime, RangeControl } from "@/components/range-control";
+import { Sparkline, StatCard } from "@/components/stat-card";
+import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
 import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tooltip } from "@/components/ui/tooltip";
 import {
-  type Change,
+  CUSTOM_MAX_DAYS,
+  CUSTOM_MIN_DAY,
   type DashboardState,
   defaultOrder,
+  formatBucket,
   formatRange,
+  instantToField,
+  isPartialBucket,
   latencyText,
-  localInputToUtc,
   METHODS,
   OPEN_BUCKET_CEILING,
   PAGE_SIZE,
@@ -74,12 +62,14 @@ import {
   readState,
   relativeChange,
   routesQuery,
-  utcToLocalInput,
-  validateCustom,
+  tickFormatter,
+  toStatChange,
+  validateCustomEnd,
   writeState,
 } from "@/lib/api-metrics";
-import { formatCount, formatDate, formatShareOf } from "@/lib/format";
+import { formatCount, formatDate, formatLatency, formatPercent, OPEN_BUCKET } from "@/lib/format";
 import { useProject } from "@/pages/project-layout";
+import { SelectFilter } from "./select-filter";
 
 // contract 7.3: the one line shown with every trace-derived badge
 export const SPAN_NOTE =
@@ -91,6 +81,8 @@ export const SPAN_NOTE =
 export const IGNORED_NOTE =
   "Counted from its metrics for the whole range. Numbers derived from its traces (sent alongside the metrics, or before it started sending metrics) are left out.";
 
+const CADENCE = "Hourly and daily counts refresh every few minutes. Minute counts are live.";
+
 export function ApiPage() {
   const { tenant } = useProject();
   const [params, setParams] = useSearchParams();
@@ -99,234 +91,76 @@ export function ApiPage() {
 
   const services = useQuery(apiServicesQuery(tenant.id, state.range));
   const warnings = useQuery(apiWarningsQuery(tenant.id, state.range));
+  const range = services.data?.range ?? null;
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-4">
-        <PageHeader
-          title="API traffic"
-          description="Requests, errors and latency of your HTTP API, per normalized route. Times are UTC; hourly and daily numbers are updated every few minutes."
-        />
-      </div>
-
-      <Controls
-        state={state}
-        set={set}
-        services={services.data?.items ?? []}
-        range={services.data?.range ?? null}
-      />
-
-      {services.error ? (
-        <ErrorPanel error={services.error} onRetry={() => services.refetch()} />
-      ) : null}
-      {warnings.error ? (
-        <ErrorPanel
-          title="Ingest warnings could not be loaded"
-          error={warnings.error}
-          onRetry={() => warnings.refetch()}
-        />
-      ) : null}
-
-      {services.isPending ? <Loading label="Loading API traffic" /> : null}
-      {services.data ? (
-        <>
-          {services.data.range.resolution_note ? (
-            <Notice tone="info">{RESOLUTION_NOTE[services.data.range.resolution_note]}</Notice>
-          ) : null}
-          {warnings.data ? <WarningBanners warnings={warnings.data} /> : null}
-          {services.data.items.length === 0 ? (
-            <EmptyState tenantId={tenant.id} range={services.data.range} />
-          ) : (
-            <Dashboard
-              tenantId={tenant.id}
-              state={state}
-              set={set}
-              services={services.data.items}
-            />
-          )}
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-function EmptyState({ tenantId, range }: { tenantId: string; range: ApiRange }) {
-  return (
-    <StateBlock
-      kind="empty"
-      icon={<Server aria-hidden strokeWidth={1.75} />}
-      title="No API requests in this range"
-      action={
-        <Button asChild>
-          <Link to={`/projects/${tenantId}/connect-api`}>Set up API analytics</Link>
-        </Button>
-      }
-    >
-      Nothing arrived from your services between {formatRange(range)}. Hourly and daily numbers are
-      updated every few minutes; the 1 hour range shows the newest minutes. If your app does not
-      send data yet, create a token and add the second exporter described on the Connect tab.
-    </StateBlock>
-  );
-}
-
-// ---- controls: range, custom range and filters in one row above
-// everything they scope
-
-function Controls({
-  state,
-  set,
-  services,
-  range,
-}: {
-  state: DashboardState;
-  set: (s: DashboardState) => void;
-  services: ApiServiceItem[];
-  range: ApiRange | null;
-}) {
-  const [custom, setCustom] = useState(state.range.range === "custom");
-  useEffect(() => {
-    if (state.range.range === "custom") setCustom(true);
-  }, [state.range.range]);
-
-  const choose = (value: string) => {
-    if (value === "custom") {
-      setCustom(true);
-      return;
-    }
-    setCustom(false);
-    const preset = PRESETS.find((p) => p.value === value);
-    if (preset) set({ ...state, range: { range: preset.value } });
-  };
-  const selected = custom ? "custom" : state.range.range;
-
-  return (
-    <div className="flex flex-col gap-3">
-      <Filters
-        state={state}
-        set={set}
-        services={services}
-        range={
-          <Segmented
-            label="Range"
-            value={selected}
-            onChange={choose}
-            options={[
-              ...PRESETS.map((p) => ({ value: p.value as string, label: p.value })),
-              { value: "custom", label: "Custom" },
-            ]}
-            hint={range ? RESOLUTION_LABEL[range.resolution] : undefined}
-            className="max-w-full overflow-x-auto"
-          />
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="API"
+        freshness={
+          services.dataUpdatedAt ? { at: new Date(services.dataUpdatedAt), cadence: CADENCE } : null
         }
       />
-      <AnimatePresence initial={false}>
-        {custom ? (
-          <motion.div key="custom" {...fade}>
-            <CustomRange
-              key={state.range.range === "custom" ? `${state.range.from}|${state.range.to}` : "new"}
-              current={state.range}
-              resolved={range}
-              onApply={(r) => set({ ...state, range: r })}
-            />
-          </motion.div>
+
+      <div className="flex flex-col gap-4">
+        <Controls state={state} set={set} services={services.data?.items ?? []} />
+        {range ? <RangeLine range={range} /> : null}
+        {warnings.data ? <WarningNotices warnings={warnings.data} /> : null}
+        {warnings.error ? (
+          <ErrorState
+            compact
+            title="Data warnings did not load"
+            error={warnings.error}
+            onRetry={() => warnings.refetch()}
+          />
         ) : null}
-      </AnimatePresence>
-      {range ? (
-        <p className="text-small text-fg-2">
-          <span className="font-medium text-fg">{formatRange(range)}</span>,{" "}
-          {RESOLUTION_LABEL[range.resolution]}
-        </p>
-      ) : null}
+      </div>
+
+      {services.isPending ? (
+        <ApiSkeleton />
+      ) : services.error ? (
+        <ErrorState error={services.error} onRetry={() => services.refetch()} />
+      ) : services.data.items.length === 0 ? (
+        <EmptyState
+          icon={<Server aria-hidden strokeWidth={1.75} />}
+          title="No API requests in this range"
+          action={
+            <Button asChild variant="outline">
+              <Link to={`/projects/${tenant.id}/connect-api`}>Connect API</Link>
+            </Button>
+          }
+        >
+          Nothing arrived from your services in this range. To send data, connect your API.
+        </EmptyState>
+      ) : (
+        <Dashboard tenantId={tenant.id} state={state} set={set} services={services.data.items} />
+      )}
     </div>
   );
 }
 
-function CustomRange({
-  current,
-  resolved,
-  onApply,
-}: {
-  current: ApiRangeQuery;
-  resolved: ApiRange | null;
-  onApply: (r: ApiRangeQuery) => void;
-}) {
-  const start =
-    current.range === "custom"
-      ? { from: current.from, to: current.to }
-      : resolved
-        ? { from: resolved.from, to: resolved.to }
-        : null;
-  const [from, setFrom] = useState(start ? utcToLocalInput(start.from) : "");
-  const [to, setTo] = useState(start ? utcToLocalInput(start.to) : "");
-  const [errors, setErrors] = useState<{ from?: string; to?: string }>({});
-  const fromId = useId();
-  const toId = useId();
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    const found = validateCustom(from, to, new Date());
-    setErrors(found);
-    const f = localInputToUtc(from);
-    const t = localInputToUtc(to);
-    if (Object.keys(found).length > 0 || !f || !t) return;
-    onApply({ range: "custom", from: f, to: t });
-  }
-
+function ApiSkeleton() {
   return (
-    <form
-      noValidate
-      onSubmit={submit}
-      aria-label="Custom range"
-      className="grid gap-3 rounded-lg border border-line bg-raised p-4 sm:grid-cols-[1fr_1fr_auto] sm:items-start"
-    >
-      <div className="flex flex-col gap-1">
-        <label htmlFor={fromId} className="text-small font-medium text-fg">
-          From (UTC)
-        </label>
-        <Input
-          id={fromId}
-          type="datetime-local"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-          aria-invalid={errors.from ? true : undefined}
-          aria-describedby={errors.from ? `${fromId}-err` : undefined}
-          className="font-mono max-lg:h-(--vs-control-touch)"
-        />
-        {errors.from ? (
-          <p id={`${fromId}-err`} className="text-small text-critical">
-            {errors.from}
-          </p>
-        ) : null}
-      </div>
-      <div className="flex flex-col gap-1">
-        <label htmlFor={toId} className="text-small font-medium text-fg">
-          To (UTC)
-        </label>
-        <Input
-          id={toId}
-          type="datetime-local"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          aria-invalid={errors.to ? true : undefined}
-          aria-describedby={errors.to ? `${toId}-err` : undefined}
-          className="font-mono max-lg:h-(--vs-control-touch)"
-        />
-        {errors.to ? (
-          <p id={`${toId}-err`} className="text-small text-critical">
-            {errors.to}
-          </p>
-        ) : null}
-      </div>
-      <Button type="submit" className="max-lg:h-(--vs-control-touch) sm:mt-6">
-        Apply range
-      </Button>
-      <p className="text-caption font-normal text-fg-3 sm:col-span-3">
-        Up to 6 hours is shown per minute, up to 31 days per hour, longer ranges per day. The start
-        and end move out to whole buckets.
-      </p>
-    </form>
+    <LoadingState label="Loading the API numbers">
+      <Skeleton.StatRow count={4} />
+      <Skeleton.Chart />
+      <Skeleton.Table rows={6} columns={7} />
+    </LoadingState>
   );
 }
+
+// the resolved range in words with its resolution, and why the resolution
+// is coarser than the range asks for, when it is
+function RangeLine({ range }: { range: ApiRange }) {
+  return (
+    <p className="text-small text-fg-2" aria-live="polite">
+      <span className="text-fg">{formatRange(range)}</span>, {RESOLUTION_LABEL[range.resolution]}
+      {range.resolution_note ? <span> {RESOLUTION_NOTE[range.resolution_note]}</span> : null}
+    </p>
+  );
+}
+
+// ---- controls: range and filters, applied at once
 
 // select values are prefixed, so a service named like a sentinel cannot
 // collide with "all"
@@ -334,239 +168,220 @@ const ALL = "all";
 const opt = (v: string) => `v:${v}`;
 const unopt = (v: string) => (v === ALL ? null : v.slice(2));
 
-// a compact select with its name inside the control's frame, as the board's
-// filter buttons; a native select works on phones and with every reader
-function FilterSelect({
-  label,
-  value,
-  onChange,
-  children,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  children: ReactNode;
-}) {
-  const id = useId();
-  return (
-    <div className="flex h-(--vs-control-sm) items-center rounded-md border border-line-input bg-sunken pl-2 transition-colors duration-(--vs-duration-reveal) ease-standard focus-within:border-fg-3 hover:border-fg-3 max-lg:h-(--vs-control-touch)">
-      <label htmlFor={id} className="text-small whitespace-nowrap text-fg-3">
-        {label}
-      </label>
-      <NativeSelect
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        size="sm"
-        bare
-        className="h-full max-w-48"
-      >
-        {children}
-      </NativeSelect>
-    </div>
-  );
+function serviceName(s: string): string {
+  return s === "" ? "No service name" : s;
 }
 
-function Filters({
+function Controls({
   state,
   set,
   services,
-  range,
 }: {
   state: DashboardState;
   set: (s: DashboardState) => void;
   services: ApiServiceItem[];
-  range: ReactNode;
 }) {
   const f = state.filters;
-  const [route, setRoute] = useState(f.route ?? "");
-  useEffect(() => setRoute(f.route ?? ""), [f.route]);
-  const routeId = useId();
   const names = services.map((s) => s.service);
   // a filtered service with no data in this range still shows as chosen
   if (f.service !== null && !names.includes(f.service)) names.push(f.service);
+  const setFilter = (k: keyof typeof f, v: string | null) =>
+    set({ ...state, filters: { ...f, [k]: v } });
+  const shown = (v: string) => (v === "" ? "(empty)" : v);
+  const methods = [
+    ...METHODS,
+    ...(f.method !== null && !METHODS.includes(f.method) ? [f.method] : []),
+  ];
 
-  function submitRoute(e: FormEvent) {
-    e.preventDefault();
-    const r = route.trim();
-    set({ ...state, filters: { ...f, route: r === "" ? null : r } });
-  }
-
-  const active = f.service !== null || f.route !== null || f.method !== null;
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {range}
-        <FilterSelect
+  const filters: Filter[] = [
+    {
+      key: "service",
+      label: "Service",
+      control: (
+        <SelectFilter
           label="Service"
           value={f.service === null ? ALL : opt(f.service)}
-          onChange={(v) => set({ ...state, filters: { ...f, service: unopt(v) } })}
+          onChange={(v) => setFilter("service", unopt(v))}
         >
           <option value={ALL}>All services</option>
-          {names.map((n) => {
-            const s = services.find((x) => x.service === n);
-            return (
-              <option key={n} value={opt(n)}>
-                {n === "" ? "(no service name)" : n}
-                {s?.source === "span" ? " (from traces)" : ""}
-              </option>
-            );
-          })}
-        </FilterSelect>
-        <FilterSelect
-          label="Method"
-          value={f.method === null ? ALL : opt(f.method)}
-          onChange={(v) => set({ ...state, filters: { ...f, method: unopt(v) } })}
-        >
-          <option value={ALL}>All methods</option>
-          {[
-            ...METHODS,
-            ...(f.method !== null && !METHODS.includes(f.method) ? [f.method] : []),
-          ].map((m) => (
-            <option key={m} value={opt(m)}>
-              {m === "_OTHER" ? "Other (_OTHER)" : m}
+          {names.map((n) => (
+            <option key={n} value={opt(n)}>
+              {serviceName(n)}
             </option>
           ))}
-        </FilterSelect>
-        <form
-          onSubmit={submitRoute}
-          aria-label="Route filter"
-          className="flex min-w-0 flex-1 basis-64 items-center gap-1"
+        </SelectFilter>
+      ),
+      active:
+        f.service === null
+          ? null
+          : { label: serviceName(f.service), onClear: () => setFilter("service", null) },
+    },
+    {
+      key: "method",
+      label: "Method",
+      control: (
+        <SelectFilter
+          label="Method"
+          value={f.method === null ? ALL : opt(f.method)}
+          onChange={(v) => setFilter("method", unopt(v))}
         >
-          <label htmlFor={routeId} className="sr-only">
-            Route
-          </label>
-          <div className="flex h-(--vs-control-sm) min-w-0 flex-1 items-center gap-2 rounded-md border border-line-input bg-sunken px-2 transition-colors duration-(--vs-duration-reveal) ease-standard focus-within:border-fg-3 hover:border-fg-3 max-lg:h-(--vs-control-touch)">
-            <Search aria-hidden className="size-3.5 shrink-0 text-fg-3" />
-            <input
-              id={routeId}
-              value={route}
-              onChange={(e) => setRoute(e.target.value)}
-              placeholder="Route, like /v1/accounts/{id}"
-              autoComplete="off"
-              spellCheck={false}
-              maxLength={1024}
-              className="h-full min-w-0 flex-1 bg-transparent font-mono text-caption font-normal text-fg outline-none placeholder:text-fg-3"
-            />
-          </div>
-          <Button
-            type="submit"
-            variant="outline"
-            size="sm"
-            className="max-lg:h-(--vs-control-touch)"
-          >
-            Apply
-          </Button>
-        </form>
-      </div>
-      <p className="text-caption font-normal text-fg-3">
-        Routes match exactly, as normalized (placeholders like {"{id}"}). Pick one from the routes
-        table below with its filter button.
-      </p>
-      {active ? (
-        <ul
-          aria-label="Active filters"
-          className="flex animate-fade-in flex-wrap items-center gap-2"
-        >
-          {(
-            [
-              ["service", "Service"],
-              ["method", "Method"],
-              ["route", "Route"],
-            ] as const
-          ).map(([k, label]) =>
-            f[k] === null ? null : (
-              <li key={k}>
-                <span className="inline-flex h-7 items-center gap-1 rounded-full border border-line-strong bg-raised pr-1 pl-2 text-caption font-normal text-fg-2">
-                  {label}:{" "}
-                  <span className="font-mono text-fg">{f[k] === "" ? "(empty)" : f[k]}</span>
-                  <button
-                    type="button"
-                    aria-label={`Remove the ${label.toLowerCase()} filter`}
-                    onClick={() => set({ ...state, filters: { ...f, [k]: null } })}
-                    className="rounded-full p-1 text-fg-3 transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover hover:text-fg focus-ring"
-                  >
-                    <X aria-hidden className="size-3.5" />
-                  </button>
-                </span>
-              </li>
-            ),
-          )}
-          <li>
-            <Button
-              variant="link"
-              size="xs"
-              onClick={() =>
-                set({ ...state, filters: { service: null, route: null, method: null } })
-              }
-            >
-              Clear filters
-            </Button>
-          </li>
-        </ul>
-      ) : null}
+          <option value={ALL}>All methods</option>
+          {methods.map((m) => (
+            <option key={m} value={opt(m)}>
+              {m === "_OTHER" ? "Other" : m}
+            </option>
+          ))}
+        </SelectFilter>
+      ),
+      active:
+        f.method === null
+          ? null
+          : { label: shown(f.method), onClear: () => setFilter("method", null) },
+    },
+    {
+      key: "route",
+      label: "Route",
+      control: <RouteField value={f.route} onChange={(v) => setFilter("route", v)} />,
+      active:
+        f.route === null
+          ? null
+          : { label: shown(f.route), onClear: () => setFilter("route", null) },
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-3">
+      <RangeControl
+        value={state.range.range}
+        presets={PRESETS}
+        onPreset={(preset) => set({ ...state, range: { range: preset } })}
+        custom={
+          state.range.range === "custom"
+            ? { from: instantToField(state.range.from), to: instantToField(state.range.to) }
+            : null
+        }
+        onCustom={(r) => set({ ...state, range: { range: "custom", from: r.from, to: r.to } })}
+        time
+        minDay={CUSTOM_MIN_DAY}
+        maxDays={CUSTOM_MAX_DAYS}
+        validate={(r) => {
+          const to = parseUtcDayTime(r.to);
+          const e = to ? validateCustomEnd(to, new Date()) : null;
+          return e ? { to: e } : {};
+        }}
+      />
+      <FilterBar
+        filters={filters}
+        onClearAll={() => set({ ...state, filters: { service: null, route: null, method: null } })}
+      />
     </div>
   );
 }
 
-// ---- warnings about the data's sources
+// the route filter: a route matches exactly, as stored, with its
+// placeholders. it applies when typing pauses, and at once on enter.
+const ROUTE_PAUSE = 500;
 
-const WARNING_TEXT: Record<WarningKind, { title: string; body: string }> = {
-  span_derived: {
-    title: "Some numbers come from traces",
-    body: "A service that sends no metrics is counted from its server spans. Its numbers are marked From traces and are lower than the real request count when traces are sampled.",
-  },
+function RouteField({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (v: string | null) => void;
+}) {
+  const id = useId();
+  const [draft, setDraft] = useState(value ?? "");
+  useEffect(() => setDraft(value ?? ""), [value]);
+  const next = draft.trim() === "" ? null : draft.trim();
+  useEffect(() => {
+    if (next === value) return;
+    const t = setTimeout(() => onChange(next), ROUTE_PAUSE);
+    return () => clearTimeout(t);
+  }, [next, value, onChange]);
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <label htmlFor={id} className="text-caption text-fg-2">
+        Route
+      </label>
+      <Input
+        id={id}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && next !== value) onChange(next);
+        }}
+        placeholder="/v1/accounts/{id}"
+        title="The exact route, with its placeholders"
+        spellCheck={false}
+        autoComplete="off"
+        className="h-(--vs-control-sm) w-full font-mono text-small max-lg:h-(--vs-control-touch) sm:w-56"
+      />
+    </div>
+  );
+}
+
+// ---- warnings about the data's sources. data from traces is said where it
+// applies (the services and routes it marks), not in a banner.
+
+type ShownWarning = Exclude<WarningKind, "span_derived">;
+
+const WARNING_TEXT: Record<
+  ShownWarning,
+  { title: string; body: string; tone: "info" | "warning" | "critical" }
+> = {
   lossy_histogram: {
+    tone: "info",
     title: "Some latency percentiles are approximate",
-    body: "A histogram arrived with bucket bounds other than the standard ones and was re-bucketed. Percentiles marked approximate can be off by up to one bucket.",
+    body: "A histogram arrived with other bucket bounds than the standard ones. Percentiles marked approximate can be off by one bucket.",
   },
   cardinality_overflow: {
-    title: "Some routes or services were grouped as {other}",
-    body: "More distinct routes or services arrived in a day than the daily limit, and the rest were counted under {other}. Check that your routes are templates, not raw paths with ids.",
+    tone: "warning",
+    title: "Some routes or services are grouped as {other}",
+    body: "More distinct routes or services arrived in a day than the daily limit. Make sure that your routes are templates, not raw paths with ids.",
   },
   coarse_buckets: {
+    tone: "warning",
     title: "Some latency percentiles are not reliable",
-    body: "A histogram arrived with buckets much wider than the standard ones, for example millisecond bounds on a metric in seconds. Its requests were placed at the top of their wide bucket, so percentiles for it can be ten times too high or more. Record http.server.request.duration in seconds with the standard bucket bounds.",
+    body: "A histogram arrived with buckets much wider than the standard ones. Record http.server.request.duration in seconds with the standard bucket bounds.",
   },
   secret_in_path: {
-    title: "A Stellar secret seed appeared in a request path",
-    body: "It was replaced with {redacted-secret} before anything was stored here, but it travelled in a URL and may sit in your own logs and proxies. Treat that key as exposed and move its funds to a new account.",
+    tone: "critical",
+    title: "A Stellar secret seed was in a request path",
+    body: "This service replaced it before it stored the request. The URL can still be in your own logs and proxies. Treat that key as exposed and move its funds to a new account.",
   },
 };
 
-export function WarningBanners({ warnings }: { warnings: ApiWarnings }) {
-  const shown = warnings.totals.filter((t) => t.count > 0);
+function WarningNotices({ warnings }: { warnings: ApiWarnings }) {
+  const shown = warnings.totals.filter((t) => t.kind !== "span_derived" && t.count > 0);
   if (shown.length === 0) return null;
   return (
-    <section aria-label="Ingest warnings" className="flex flex-col gap-2">
-      {shown.map((t) => (
-        <div key={t.kind} data-warning={t.kind}>
-          <Notice
-            tone={t.kind === "secret_in_path" ? "critical" : "warning"}
-            title={WARNING_TEXT[t.kind].title}
-          >
-            <p>{WARNING_TEXT[t.kind].body}</p>
-            <p className="mt-1 text-caption font-normal text-fg-3">
-              {formatCount(t.count)} {t.count === 1 ? "time" : "times"} in this range
-              {t.last_day ? `, last on ${formatDate(`${t.last_day}T00:00:00Z`)}` : ""}
-            </p>
-          </Notice>
-        </div>
-      ))}
+    <section aria-label="Data warnings" className="flex flex-col gap-2">
+      {shown.map((t) => {
+        const w = WARNING_TEXT[t.kind as ShownWarning];
+        return (
+          <div key={t.kind} data-warning={t.kind}>
+            <Notice tone={w.tone} title={w.title} role={w.tone === "critical" ? "alert" : "status"}>
+              <p>{w.body}</p>
+              <p className="mt-1 text-caption text-fg-2">
+                {formatCount(t.count)} {t.count === 1 ? "time" : "times"} in this range
+                {t.last_day ? `, last on ${formatDate(t.last_day)}` : ""}
+              </p>
+            </Notice>
+          </div>
+        );
+      })}
     </section>
   );
 }
 
-function serviceName(s: string): string {
-  return s === "" ? "(no service name)" : s;
-}
-
-export function TracesBadge({ id }: { id?: string }) {
+function TracesBadge() {
   return (
-    <span title={SPAN_NOTE} aria-describedby={id} className="inline-flex">
-      <Pill tone="warning">From traces</Pill>
-    </span>
+    <Tooltip content={SPAN_NOTE}>
+      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the note opens on focus too */}
+      <span tabIndex={0} className="inline-flex rounded-full focus-ring">
+        <Pill tone="info">From traces</Pill>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -574,7 +389,7 @@ function ApproxBadge() {
   return <Pill tone="info">Approximate</Pill>;
 }
 
-// ---- the dashboard proper
+// ---- the dashboard
 
 type Metric = "requests" | "4xx" | "5xx" | "p95";
 
@@ -610,17 +425,14 @@ function Dashboard({
       : null;
   const previous =
     series.data && prevData ? alignPrevious(series.data.points, series.data.range, prevData) : null;
-
   const [metric, setMetric] = useState<Metric>("requests");
-  const [showPrev, setShowPrev] = useState(true);
-  const togglePrev = () => setShowPrev((v) => !v);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-8">
       {overview.error ? (
-        <ErrorPanel error={overview.error} onRetry={() => overview.refetch()} />
+        <ErrorState error={overview.error} onRetry={() => overview.refetch()} />
       ) : (
-        <OverviewTiles
+        <Summary
           overview={overview.data ?? null}
           dim={overview.isPlaceholderData}
           points={series.data?.points ?? null}
@@ -630,138 +442,60 @@ function Dashboard({
         />
       )}
 
-      {series.error ? (
-        <ErrorPanel error={series.error} onRetry={() => series.refetch()} />
-      ) : series.data ? (
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div key={metric === "4xx" || metric === "5xx" ? "errors" : metric} {...fade}>
-            {metric === "requests" ? (
-              <VolumeChart
-                range={series.data.range}
-                points={series.data.points}
-                dim={series.isPlaceholderData}
-                previous={previous}
-                showPrevious={showPrev}
-                onTogglePrevious={togglePrev}
-              />
-            ) : metric === "p95" ? (
-              <LatencyChart
-                range={series.data.range}
-                points={series.data.points}
-                dim={series.isPlaceholderData}
-                previous={previous}
-                showPrevious={showPrev}
-                onTogglePrevious={togglePrev}
-              />
-            ) : (
-              <ErrorChart
-                range={series.data.range}
-                points={series.data.points}
-                dim={series.isPlaceholderData}
-                previous={previous}
-                showPrevious={showPrev}
-                onTogglePrevious={togglePrev}
-                focus={metric}
-              />
-            )}
-          </motion.div>
-        </AnimatePresence>
-      ) : (
-        <Panel title="Requests">
-          <PlotSkeleton label="Loading the charts" />
-        </Panel>
-      )}
+      <ApiChart
+        key={metric}
+        metric={metric}
+        state={series.isPending ? "loading" : series.error ? "error" : "data"}
+        error={series.error}
+        onRetry={() => series.refetch()}
+        range={series.data?.range ?? null}
+        points={series.data?.points ?? []}
+        previous={previous}
+        dim={series.isPlaceholderData}
+      />
 
       <RoutesSection tenantId={tenantId} state={state} set={set} />
 
-      {status.error ? (
-        <ErrorPanel error={status.error} onRetry={() => status.refetch()} />
-      ) : status.data ? (
-        <StatusSection status={status.data} dim={status.isPlaceholderData} />
-      ) : (
-        <Loading label="Loading status codes" />
-      )}
-
-      <ServicesSection services={services} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <StatusSection
+          status={status.data ?? null}
+          state={status.isPending ? "loading" : status.error ? "error" : "data"}
+          error={status.error}
+          onRetry={() => status.refetch()}
+          dim={status.isPlaceholderData}
+        />
+        <ServicesSection services={services} />
+      </div>
     </div>
   );
 }
 
-function ServicesSection({ services }: { services: ApiServiceItem[] }) {
-  const noteId = useId();
-  const anySpan = services.some((s) => s.source === "span");
-  const max = Math.max(1, ...services.map((s) => s.requests));
-  return (
-    <Panel title="Services" flush>
-      <motion.ul
-        aria-label="Services"
-        initial="initial"
-        animate="animate"
-        variants={stagger}
-        className="divide-y divide-line-subtle border-t border-line"
-      >
-        {services.map((s) => (
-          <StaggerItem
-            as="li"
-            key={s.service}
-            className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 sm:px-5"
-          >
-            <span className="min-w-0 flex-1 truncate text-body font-medium text-fg">
-              {serviceName(s.service)}
-            </span>
-            {s.source === "span" ? <TracesBadge id={noteId} /> : null}
-            {s.lossy ? <ApproxBadge /> : null}
-            <span className="flex items-center gap-2">
-              <span
-                aria-hidden
-                className="hidden h-1.5 w-24 overflow-hidden rounded-bar bg-hover sm:block"
-              >
-                <span
-                  className="block h-full rounded-bar bg-series-1"
-                  // the bar is the service's share of the busiest one: data
-                  style={{ width: `${(s.requests / max) * 100}%` }}
-                />
-              </span>
-              <span className="font-mono text-small text-fg-2">
-                {formatCount(s.requests)} {s.requests === 1 ? "request" : "requests"}
-              </span>
-            </span>
-            {s.span_data_ignored ? (
-              <span className="basis-full text-caption font-normal text-fg-3">{IGNORED_NOTE}</span>
-            ) : null}
-          </StaggerItem>
-        ))}
-      </motion.ul>
-      {anySpan ? (
-        <p
-          id={noteId}
-          className="border-t border-line px-4 py-3 text-caption font-normal text-fg-3 sm:px-5"
-        >
-          From traces: {SPAN_NOTE}
-        </p>
-      ) : null}
-    </Panel>
-  );
+// the previous period, bucket by bucket: the same offset into the previous
+// range as the current bucket has into the current one. ranges at another
+// resolution (a retention step) are not compared bucket by bucket.
+export function alignPrevious(
+  points: ApiPoint[],
+  range: ApiRange,
+  previous: { range: ApiRange; points: ApiPoint[] } | null | undefined,
+): (ApiPoint | null)[] | null {
+  if (!previous || previous.range.resolution !== range.resolution) return null;
+  const offset = Date.parse(range.from) - Date.parse(previous.range.from);
+  const byAt = new Map(previous.points.map((p) => [Date.parse(p.at), p]));
+  return points.map((p) => byAt.get(Date.parse(p.at) - offset) ?? null);
 }
 
-function percentileText(p: Percentile): string {
-  return latencyText(p) ?? "No requests";
+// a sparkline only when it has a shape: two buckets or more that differ
+export function sparkValues(
+  points: ApiPoint[] | null,
+  v: (p: ApiPoint) => number | null,
+): number[] | null {
+  if (!points || points.length < 2) return null;
+  const values = points.map((p) => v(p) ?? 0);
+  if (Math.max(...values) === Math.min(...values)) return null;
+  return values;
 }
 
-function trend(change: Change, upIsBad: boolean | null): Trend | null {
-  if (change.direction === null || !change.text) return null;
-  const direction = change.direction === "same" ? "flat" : change.direction;
-  const good = upIsBad === null || direction === "flat" ? null : (direction === "up") !== upIsBad;
-  return { text: change.text, direction, good, period: "previous range" };
-}
-
-// a line under a tile. a change with nothing to compare against has no
-// arrow, so it is said in words here
-function Note({ children }: { children: ReactNode }) {
-  return <span className="text-caption font-normal text-fg-3">{children}</span>;
-}
-
-function OverviewTiles({
+function Summary({
   overview,
   dim,
   points,
@@ -776,40 +510,39 @@ function OverviewTiles({
   metric: Metric;
   onMetric: (m: Metric) => void;
 }) {
-  const spark = (v: (p: ApiPoint) => number | null, label: string) =>
-    points && points.length > 1 ? (
-      <Sparkline
-        label={label}
-        values={points.map((p) => v(p) ?? 0)}
-        previous={previous ? previous.map((q) => (q ? (v(q) ?? 0) : 0)) : undefined}
-      />
+  const spark = (v: (p: ApiPoint) => number | null) => {
+    const values = sparkValues(points, v);
+    return values ? (
+      <Sparkline values={values} previous={previous?.map((q) => (q ? (v(q) ?? 0) : 0))} />
     ) : null;
+  };
 
   if (!overview)
     return (
       <section aria-label="Summary" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {["Requests", "4xx rate", "5xx rate", "p95 latency"].map((l) => (
-          <StatTile key={l} label={l} value="" state="loading" />
+          <StatCard key={l} label={l} value={null} state="loading" />
         ))}
       </section>
     );
 
   const cur = overview.current.summary;
   const prev = overview.previous.summary;
-  const rate = (r: number) => rateText(r) ?? "";
-  const reqChange = relativeChange(cur.requests, prev.requests);
-  const p95Change = percentileChange(cur.p95, prev.p95);
-  const words = (c: Change) => (c.direction === null && c.text ? <Note>{c.text}</Note> : null);
-  const pct = (k: "p50" | "p99") => {
-    const c = percentileChange(cur[k], prev[k]);
+  const hadPrevious = prev.requests > 0;
+  const p95Plot = (p: ApiPoint) => {
+    const x = plotPercentile(p.p95);
+    return x === null ? null : Math.min(x, OPEN_BUCKET_CEILING);
+  };
+  const percent = (k: "p50" | "p99") => {
+    const t = latencyText(cur[k]);
     return (
-      <span
-        data-tile={k}
-        className="flex flex-wrap items-baseline gap-x-1 text-caption font-normal"
-      >
-        <span className="text-fg-3">{k}</span>
-        <span className="font-mono text-fg">{percentileText(cur[k])}</span>
-        {c.text && c.direction !== null ? <span className="text-fg-3">{c.text}</span> : null}
+      <span data-tile={k} className="flex items-baseline gap-1">
+        <span className="text-fg-2">{k}</span>
+        {t === null ? (
+          <Missing reason="No requests in this range" />
+        ) : (
+          <span className="font-mono text-fg">{t}</span>
+        )}
       </span>
     );
   };
@@ -818,205 +551,222 @@ function OverviewTiles({
     <section
       aria-labelledby="api-summary"
       className={cn(
-        "flex flex-col gap-2 transition-opacity duration-(--vs-duration-change) ease-standard",
+        "flex flex-col gap-3 transition-opacity duration-(--vs-duration-change) ease-standard",
         dim && "opacity-60",
       )}
     >
       <h2 id="api-summary" className="sr-only">
         Summary
       </h2>
-      <p className="text-caption font-normal text-fg-3">
-        Compared with the previous range of equal length, {formatRange(overview.previous.range)}.
-        Select a figure to chart it.
-      </p>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div data-tile="Requests" className="flex min-w-0">
-          <StatTile
-            className="flex-1"
-            label="Requests"
-            value={formatCount(cur.requests)}
-            numeric={cur.requests}
-            format={(n) => formatCount(Math.round(n))}
-            trend={trend(reqChange, null)}
-            pressed={metric === "requests"}
-            onPress={() => onMetric("requests")}
-            spark={spark((p) => p.requests, "Requests per bucket, with the previous period")}
-            footer={
-              <span className="flex flex-col">
-                {words(reqChange) ?? <Note>Previous range: {formatCount(prev.requests)}</Note>}
-              </span>
-            }
-          />
-        </div>
+        <StatCard
+          data-tile="Requests"
+          label="Requests"
+          definition="Requests that your services answered. Health checks and preflights are not included."
+          value={cur.requests}
+          change={toStatChange(relativeChange(cur.requests, prev.requests), null)}
+          spark={spark((p) => p.requests)}
+          selected={metric === "requests"}
+          onSelect={() => onMetric("requests")}
+        />
         {(["4xx", "5xx"] as const).map((k) => {
           const r = k === "4xx" ? cur.rate_4xx : cur.rate_5xx;
           const pr = k === "4xx" ? prev.rate_4xx : prev.rate_5xx;
           const n = k === "4xx" ? cur.errors_4xx : cur.errors_5xx;
-          const c = rateChange(r, pr);
           return (
-            <div key={k} data-tile={`${k} rate`} className="flex min-w-0">
-              <StatTile
-                className="flex-1"
-                label={`${k} rate`}
-                hint={`Share of requests answered with a ${k} status`}
-                value={rateText(r) ?? "No requests"}
-                numeric={r ?? undefined}
-                format={rate}
-                trend={trend(c, true)}
-                pressed={metric === k}
-                onPress={() => onMetric(k)}
-                spark={spark(
-                  (p) => (k === "4xx" ? p.rate_4xx : p.rate_5xx),
-                  `${k} rate per bucket, with the previous period`,
-                )}
-                footer={
-                  <span className="flex flex-col">
-                    <Note>
-                      {formatCount(n)} {k === "4xx" ? "client errors" : "server errors"}
-                    </Note>
-                    {words(c) ?? <Note>Previous range: {rateText(pr) ?? "no requests"}</Note>}
-                  </span>
-                }
-              />
-            </div>
+            <StatCard
+              key={k}
+              data-tile={`${k} rate`}
+              label={`${k} rate`}
+              definition={`Share of requests answered with a ${k} status.`}
+              value={r}
+              format={formatPercent}
+              missingReason="No requests in this range"
+              change={toStatChange(rateChange(r, pr), true)}
+              spark={spark((p) => (k === "4xx" ? p.rate_4xx : p.rate_5xx))}
+              selected={metric === k}
+              onSelect={() => onMetric(k)}
+              footer={
+                <span className="text-caption text-fg-2">
+                  {formatCount(n)} {k === "4xx" ? "client errors" : "server errors"}
+                </span>
+              }
+            />
           );
         })}
-        <div data-tile="p95" className="flex min-w-0">
-          <StatTile
-            className="flex-1"
-            label="p95 latency"
-            hint="95 of 100 requests were faster than this"
-            value={percentileText(cur.p95)}
-            trend={trend(p95Change, true)}
-            pressed={metric === "p95"}
-            onPress={() => onMetric("p95")}
-            spark={spark((p) => {
-              const v = plotPercentile(p.p95);
-              return v === null ? null : Math.min(v, OPEN_BUCKET_CEILING);
-            }, "p95 latency per bucket, with the previous period")}
-            footer={
-              <span className="flex flex-col gap-1">
-                {words(p95Change) ?? <Note>Previous range: {percentileText(prev.p95)}</Note>}
-                {pct("p50")}
-                {pct("p99")}
-                {cur.lossy ? <Note>Percentiles are approximate</Note> : null}
-              </span>
-            }
-          />
-        </div>
+        <StatCard
+          data-tile="p95"
+          label="p95 latency"
+          definition="95 of 100 requests were faster than this. Percentiles are approximate."
+          value={latencyText(cur.p95)}
+          missingReason="No requests in this range"
+          change={toStatChange(percentileChange(cur.p95, prev.p95), true)}
+          spark={spark(p95Plot)}
+          selected={metric === "p95"}
+          onSelect={() => onMetric("p95")}
+          footer={
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption">
+              {percent("p50")}
+              {percent("p99")}
+              {cur.lossy ? <span className="text-fg-2">Approximate</span> : null}
+            </span>
+          }
+        />
       </div>
-      <InfrastructureNote overview={overview} />
+      <p className="text-caption text-fg-2">
+        {hadPrevious
+          ? `Compared with ${formatRange(overview.previous.range)}.`
+          : "The previous range of equal length has no requests, so no change shows."}
+        {cur.infrastructure_requests > 0 ? (
+          <span data-testid="infrastructure-requests">
+            {" "}
+            {formatCount(cur.infrastructure_requests)} health checks and preflights are not included
+            {overview.traffic_classes.applied_from
+              ? ` (kept apart since ${formatDate(overview.traffic_classes.applied_from)})`
+              : ""}
+            .
+          </span>
+        ) : null}
+      </p>
     </section>
   );
 }
 
-// infrastructure requests stay out of every figure above; this line says
-// how many there were and since when they are counted apart
-function InfrastructureNote({ overview }: { overview: ApiOverview }) {
-  const n = overview.current.summary.infrastructure_requests;
-  const from = overview.traffic_classes.applied_from;
+// ---- the chart of the selected card
+
+// the open latency bucket is drawn on the 10 s line; a value just above 10
+// reads as ">10 s" in the readout and the table, never as an invented time
+const OPEN_PLOT = OPEN_BUCKET_CEILING + 0.001;
+export const plotLatency = (p: Percentile): number | null => (p === OPEN_BUCKET ? OPEN_PLOT : p);
+
+function ApiChart({
+  metric,
+  state,
+  error,
+  onRetry,
+  range,
+  points,
+  previous,
+  dim,
+}: {
+  metric: Metric;
+  state: "loading" | "error" | "data";
+  error: unknown;
+  onRetry: () => void;
+  range: ApiRange | null;
+  points: ApiPoint[];
+  previous: (ApiPoint | null)[] | null;
+  dim: boolean;
+}) {
+  const now = Date.now();
+  const tick = range ? tickFormatter(range) : () => "";
+  const buckets: TimeBucket[] = range
+    ? points.map((p) => ({
+        at: p.at,
+        tick: tick(p.at),
+        // a bucket from a re-bucketed histogram says so where its values are read
+        label:
+          metric === "p95" && p.lossy
+            ? `${formatBucket(p.at, range)}, approximate`
+            : formatBucket(p.at, range),
+        partial: isPartialBucket(p.at, range, now),
+      }))
+    : [];
+  const total = points.reduce((a, p) => a + p.requests, 0);
+  const chartState = state === "data" && total === 0 ? "empty" : state;
+  const per = range ? RESOLUTION_LABEL[range.resolution] : "";
+  const common = {
+    buckets,
+    state: chartState,
+    error,
+    onRetry,
+    emptyTitle: "No requests in this range",
+    emptyText: "Requests show here a few minutes after your services answer them.",
+    className: cn(
+      "transition-opacity duration-(--vs-duration-change) ease-standard",
+      dim && "opacity-60",
+    ),
+  } as const;
+
+  if (metric === "requests")
+    return (
+      <TimeChart
+        key={chartState}
+        {...common}
+        title={`Requests ${per}`}
+        series={[
+          {
+            key: "requests",
+            label: "Requests",
+            tone: "series-1",
+            values: points.map((p) => p.requests),
+          },
+        ]}
+        previous={previous?.map((q) => (q ? q.requests : null)) ?? null}
+      />
+    );
+
+  if (metric === "4xx" || metric === "5xx") {
+    const order = metric === "4xx" ? (["4xx", "5xx"] as const) : (["5xx", "4xx"] as const);
+    return (
+      <TimeChart
+        key={chartState}
+        {...common}
+        kind="line"
+        title={`Error rates ${per}`}
+        description="Gaps are buckets without requests."
+        series={order.map((k) => ({
+          key: k,
+          label: `${k} rate`,
+          tone: k === "4xx" ? ("warning" as const) : ("critical" as const),
+          values: points.map((p) => (k === "4xx" ? p.rate_4xx : p.rate_5xx)),
+        }))}
+        previous={
+          previous?.map((q) => (q ? (metric === "4xx" ? q.rate_4xx : q.rate_5xx) : null)) ?? null
+        }
+        previousLabel={`${metric} rate, previous period`}
+        format={formatPercent}
+        axisFormat={formatPercent}
+        higherIsBetter={false}
+      />
+    );
+  }
+
+  const anyOpen = points.some((p) => [p.p50, p.p95, p.p99].includes(OPEN_BUCKET));
+  const anyLossy = points.some((p) => p.lossy);
+  const lines = [
+    ["p95", "series-1"],
+    ["p50", "series-2"],
+    ["p99", "series-3"],
+  ] as const;
   return (
-    <p data-testid="infrastructure-requests" className="text-caption font-normal text-fg-3">
-      {formatCount(n)} infrastructure {n === 1 ? "request" : "requests"} (CORS preflights, health
-      and probe routes, known health checkers) are not part of these figures.
-      {from ? ` They are counted apart from ${formatDate(from)} on.` : null}
-    </p>
+    <TimeChart
+      key={chartState}
+      {...common}
+      kind="line"
+      title={`Latency ${per}`}
+      description={anyLossy ? "Some buckets are approximate." : undefined}
+      series={lines.map(([k, tone]) => ({
+        key: k,
+        label: k,
+        tone,
+        values: points.map((p) => plotLatency(p[k])),
+      }))}
+      previous={previous?.map((q) => (q ? plotLatency(q.p95) : null)) ?? null}
+      previousLabel="p95, previous period"
+      format={formatLatency}
+      axisFormat={formatLatency}
+      higherIsBetter={false}
+      ceiling={anyOpen ? { value: OPEN_BUCKET_CEILING, label: "Above 10 s" } : null}
+    />
   );
 }
 
-function StatusSection({ status, dim }: { status: ApiStatus; dim: boolean }) {
-  const max = Math.max(1, ...status.codes.map((c) => c.requests));
-  return (
-    <section
-      aria-labelledby="api-status"
-      className={cn(
-        "grid gap-4 transition-opacity duration-(--vs-duration-change) ease-standard lg:grid-cols-2",
-        dim && "opacity-60",
-      )}
-    >
-      <h2 id="api-status" className="sr-only">
-        Status codes
-      </h2>
-      <Panel
-        title="By status class"
-        description={`${formatCount(status.requests)} requests in the range.`}
-      >
-        <StatusClassBar status={status} />
-      </Panel>
-      <Panel title="By status code" flush>
-        {status.codes.length === 0 ? (
-          <p className="px-4 pb-4 text-small text-fg-2 sm:px-5">No requests in the range.</p>
-        ) : (
-          <div className="relative max-h-80 overflow-auto">
-            <table className="w-full text-left text-small">
-              <thead className="text-caption text-fg-2">
-                <tr className="border-y border-line">
-                  <th scope="col" className="h-9 pr-3 pl-4 font-medium sm:pl-5">
-                    Code
-                  </th>
-                  <th scope="col" className="w-full pr-3 font-medium">
-                    <span className="sr-only">Share bar</span>
-                  </th>
-                  <th scope="col" className="pr-3 text-right font-medium">
-                    Requests
-                  </th>
-                  <th scope="col" className="pr-4 text-right font-medium sm:pr-5">
-                    Share
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line-subtle">
-                {status.codes.map((c) => (
-                  <tr key={c.status_code} data-code={c.status_code} className="hover:bg-hover">
-                    <th scope="row" className="h-9 pr-3 pl-4 font-mono font-medium text-fg sm:pl-5">
-                      {c.status_code === 0 ? "none" : c.status_code}
-                    </th>
-                    <td className="pr-3" aria-hidden>
-                      <div
-                        className={cn("h-1.5 rounded-bar", CODE_BAR[c.class])}
-                        // the bar's length is the value, so it is data, not a class
-                        style={{ width: `${Math.max(1, (c.requests / max) * 100)}%` }}
-                      />
-                    </td>
-                    <td className="pr-3 text-right font-mono text-fg">{formatCount(c.requests)}</td>
-                    <td className="pr-4 text-right font-mono text-fg-3 sm:pr-5">
-                      {formatShareOf(c.requests, status.requests)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Panel>
-    </section>
-  );
-}
-
-const CODE_BAR: Record<ApiStatus["codes"][number]["class"], string> = {
-  "1xx": "bg-series-3",
-  "2xx": "bg-series-1",
-  "3xx": "bg-series-4",
-  "4xx": "bg-warning",
-  "5xx": "bg-critical",
-  unknown: "bg-series-prev",
-};
-
-// ---- routes table
-
-const COLUMNS: { sort: ApiRouteSort; label: string; numeric: boolean }[] = [
-  { sort: "route", label: "Route", numeric: false },
-  { sort: "requests", label: "Requests", numeric: true },
-  { sort: "rate_4xx", label: "4xx rate", numeric: true },
-  { sort: "rate_5xx", label: "5xx rate", numeric: true },
-  { sort: "p50", label: "p50", numeric: true },
-  { sort: "p95", label: "p95", numeric: true },
-  { sort: "p99", label: "p99", numeric: true },
-];
+// ---- routes
 
 // the page's most failing and slowest routes are marked in their rows, so
 // the one to look at stands out without reading every number
-function standouts(items: ApiRouteItem[]) {
+export function standouts(items: ApiRouteItem[]) {
   const num = (p: Percentile) => plotPercentile(p) ?? -1;
   let failing: ApiRouteItem | null = null;
   let slow: ApiRouteItem | null = null;
@@ -1036,6 +786,18 @@ function standouts(items: ApiRouteItem[]) {
   };
 }
 
+// rates at or above these marks are coloured; the legend above the table
+// says so, so the colour never stands alone
+export const RATE_4XX_MARK = 0.05;
+
+export function rateTone(k: "4xx" | "5xx", r: number | null): string | undefined {
+  if (r === null) return undefined;
+  if (k === "4xx") return r >= RATE_4XX_MARK ? "text-warning" : undefined;
+  return r > 0 ? "text-critical" : undefined;
+}
+
+const routeKey = (r: ApiRouteItem) => `${r.service}\u0000${r.method}\u0000${r.route}`;
+
 function RoutesSection({
   tenantId,
   state,
@@ -1054,261 +816,323 @@ function RoutesSection({
     cursors: [null],
   });
   const cursors = nav.sig === sig ? nav.cursors : [null];
-  const setCursors = (f: (c: (string | null)[]) => (string | null)[]) =>
-    setNav({ sig, cursors: f(cursors) });
   const cursor = cursors[cursors.length - 1] ?? null;
   const routes = useQuery(
     apiRoutesQuery(tenantId, state.range, state.filters, routesQuery(state, cursor)),
   );
   const page = cursors.length - 1;
-
-  const sortBy = (sort: ApiRouteSort) => {
-    const order =
-      state.sort === sort ? (state.order === "asc" ? "desc" : "asc") : defaultOrder(sort);
-    set({ ...state, sort, order });
-  };
-
   const data = routes.data;
-  const first = page * PAGE_SIZE + 1;
-  const last = data ? page * PAGE_SIZE + data.items.length : 0;
-  const max = data ? Math.max(1, ...data.items.map((r) => r.requests)) : 1;
   const marks = data ? standouts(data.items) : { failing: null, slow: null };
-  const sortLabel = COLUMNS.find((c) => c.sort === state.sort)?.label ?? state.sort;
+
+  const latency = (p: Percentile) => {
+    const t = latencyText(p);
+    return t === null ? <Missing reason="No requests" /> : t;
+  };
+  const rate = (k: "4xx" | "5xx") => (r: ApiRouteItem) => {
+    const v = k === "4xx" ? r.rate_4xx : r.rate_5xx;
+    const n = k === "4xx" ? r.errors_4xx : r.errors_5xx;
+    const t = rateText(v);
+    return t === null ? (
+      <Missing reason="No requests" />
+    ) : (
+      <Tooltip content={`${formatCount(n)} ${k === "4xx" ? "client" : "server"} errors`}>
+        <span className={rateTone(k, v)}>{t}</span>
+      </Tooltip>
+    );
+  };
+  const num = { align: "right", numeric: true, minWidth: "min-w-20" } as const;
+
+  const columns: Column<ApiRouteItem>[] = [
+    {
+      key: "route",
+      header: "Route",
+      sortKey: "route",
+      primary: true,
+      minWidth: "min-w-72",
+      cell: (r) => (
+        <span className="flex min-w-0 flex-col gap-1 py-2">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="w-14 shrink-0 font-mono text-axis text-fg-2">{r.method}</span>
+            <span className="min-w-0 font-mono break-all text-fg">{r.route}</span>
+            {marks.failing === r ? <Pill tone="critical">Most 5xx</Pill> : null}
+            {marks.slow === r ? <Pill tone="warning">Slowest p95</Pill> : null}
+          </span>
+          <span className="flex flex-wrap items-center gap-2 text-caption text-fg-2 sm:pl-16">
+            {serviceName(r.service)}
+            {r.source === "span" ? <TracesBadge /> : null}
+            {r.lossy ? <ApproxBadge /> : null}
+            {r.infrastructure_requests > 0 ? (
+              <span>{formatCount(r.infrastructure_requests)} health checks not included</span>
+            ) : null}
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: "requests",
+      header: "Requests",
+      sortKey: "requests",
+      align: "right",
+      numeric: true,
+      // 45,881,688 fits without a cut
+      minWidth: "min-w-28",
+      mobile: true,
+      cell: (r) => formatCount(r.requests),
+    },
+    { key: "rate_4xx", header: "4xx rate", sortKey: "rate_4xx", ...num, cell: rate("4xx") },
+    {
+      key: "rate_5xx",
+      header: "5xx rate",
+      sortKey: "rate_5xx",
+      ...num,
+      mobile: true,
+      cell: rate("5xx"),
+    },
+    { key: "p50", header: "p50", sortKey: "p50", ...num, cell: (r) => latency(r.p50) },
+    {
+      key: "p95",
+      header: "p95",
+      sortKey: "p95",
+      ...num,
+      mobile: true,
+      cell: (r) => (
+        <span className={marks.slow === r ? "text-warning" : undefined}>{latency(r.p95)}</span>
+      ),
+    },
+    { key: "p99", header: "p99", sortKey: "p99", ...num, cell: (r) => latency(r.p99) },
+    {
+      key: "filter",
+      header: "Filter",
+      align: "right",
+      className: "w-12",
+      cell: (r) => (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Filter to ${r.method} ${r.route} of ${serviceName(r.service)}`}
+          onClick={() =>
+            set({ ...state, filters: { service: r.service, method: r.method, route: r.route } })
+          }
+        >
+          <FilterIcon aria-hidden />
+        </Button>
+      ),
+    },
+  ];
 
   return (
-    <section
-      aria-labelledby="api-routes"
-      className="flex min-w-0 flex-col rounded-lg border border-line bg-raised"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-5">
-        <h2 id="api-routes" className="text-title text-fg">
-          Routes
-        </h2>
-        {data ? (
-          <p className="text-caption font-normal text-fg-3" aria-live="polite">
-            {data.total === 0
-              ? "No routes match"
-              : `${formatCount(first)} to ${formatCount(last)} of ${formatCount(data.total)}, sorted by ${sortLabel}`}
-          </p>
-        ) : null}
+    // the table itself is the "Routes" region; this only holds its heading
+    <div className="flex min-w-0 flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <h2 className="text-section text-fg">Routes</h2>
+        <ul
+          aria-label="Rate colours"
+          className="flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-fg-2"
+        >
+          <li className="flex items-center gap-1">
+            <span aria-hidden className="size-2 rounded-bar bg-warning" />
+            4xx rate 5% or more
+          </li>
+          <li className="flex items-center gap-1">
+            <span aria-hidden className="size-2 rounded-bar bg-critical" />
+            Any 5xx
+          </li>
+        </ul>
       </div>
-      {routes.error ? (
-        <div className="px-4 pb-4 sm:px-5">
-          <ErrorPanel error={routes.error} onRetry={() => routes.refetch()} />
-        </div>
-      ) : null}
-      {routes.isPending ? (
-        <div className="px-4 pb-4 sm:px-5">
-          <Loading label="Loading routes" />
-        </div>
-      ) : null}
-      {data ? (
-        <section
-          aria-label="Routes table"
-          // the table scrolls sideways on a narrow screen, so keyboard users
-          // must be able to focus it to scroll. relative keeps the sr-only
-          // header text inside it, or it widens the page on a phone
-          // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs focus (wcag 2.1.1)
-          tabIndex={0}
-          className={cn(
-            "relative overflow-x-auto transition-opacity duration-(--vs-duration-change) ease-standard focus-ring",
-            routes.isPlaceholderData && "opacity-60",
-          )}
-        >
-          <table className="w-full min-w-[58rem] text-left text-small">
-            <thead className="text-caption text-fg-2">
-              <tr className="border-y border-line">
-                {COLUMNS.map((c) => {
-                  const on = state.sort === c.sort;
-                  return (
-                    <th
-                      key={c.sort}
-                      scope="col"
-                      aria-sort={on ? (state.order === "asc" ? "ascending" : "descending") : "none"}
-                      className={cn(
-                        "h-9 px-2 font-medium",
-                        c.numeric && "text-right",
-                        c.sort === "route" && "pl-3 sm:pl-4",
-                        c.sort === "requests" && "w-56",
-                      )}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => sortBy(c.sort)}
-                        className={cn(
-                          "inline-flex items-center gap-1 rounded-sm px-1 py-1 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring",
-                          on && "text-fg",
-                        )}
-                      >
-                        {c.label}
-                        {on ? (
-                          state.order === "asc" ? (
-                            <ArrowUp aria-hidden className="size-3.5" />
-                          ) : (
-                            <ArrowDown aria-hidden className="size-3.5" />
-                          )
-                        ) : (
-                          <ArrowUpDown aria-hidden className="size-3.5 text-fg-3" />
-                        )}
-                      </button>
-                    </th>
-                  );
-                })}
-                <th scope="col" className="px-2 pr-4 sm:pr-5">
-                  <span className="sr-only">Filter</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line-subtle">
-              {data.items.map((r) => (
-                <RouteRow
-                  key={`${r.service}\u0000${r.method}\u0000${r.route}`}
-                  item={r}
-                  max={max}
-                  failing={marks.failing === r}
-                  slow={marks.slow === r}
-                  onFilter={() =>
-                    set({
-                      ...state,
-                      filters: { service: r.service, method: r.method, route: r.route },
-                    })
-                  }
-                />
-              ))}
-            </tbody>
-          </table>
-        </section>
-      ) : null}
-      {data && (page > 0 || data.next_cursor !== null) ? (
-        <nav
-          aria-label="Routes pages"
-          className="flex justify-end gap-2 border-t border-line px-4 py-3 sm:px-5"
-        >
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page === 0}
-            onClick={() => setCursors((c) => c.slice(0, -1))}
-          >
-            <ChevronLeft aria-hidden />
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={data.next_cursor === null || routes.isPlaceholderData}
-            onClick={() => {
-              const next = data.next_cursor;
-              if (next !== null) setCursors((c) => [...c, next]);
-            }}
-          >
-            Next
-            <ChevronRight aria-hidden />
-          </Button>
-        </nav>
-      ) : null}
+      <DataTable
+        label="Routes"
+        columns={columns}
+        rows={data?.items ?? []}
+        getRowKey={routeKey}
+        rowLabel={(r) => `${r.method} ${r.route}`}
+        rowProps={(r) => ({
+          "data-route": r.route,
+          "data-service": r.service,
+          "data-method": r.method,
+        })}
+        sort={{ key: state.sort, order: state.order }}
+        onSort={(key) => {
+          const sort = key as DashboardState["sort"];
+          const order =
+            state.sort === sort ? (state.order === "asc" ? "desc" : "asc") : defaultOrder(sort);
+          set({ ...state, sort, order });
+        }}
+        state={routes.isPending ? "loading" : routes.error ? "error" : "data"}
+        error={routes.error}
+        onRetry={() => routes.refetch()}
+        empty={{ title: "No routes match", text: "Change the range or clear the filters." }}
+        footer={
+          data
+            ? {
+                kind: "pager",
+                page,
+                pageSize: PAGE_SIZE,
+                total: data.total,
+                onPage: (to) => {
+                  if (to < page) setNav({ sig, cursors: cursors.slice(0, -1) });
+                  // a page still loading has no cursor of its own yet
+                  else if (!routes.isPlaceholderData && data.next_cursor !== null)
+                    setNav({ sig, cursors: [...cursors, data.next_cursor] });
+                },
+              }
+            : undefined
+        }
+        className={cn(
+          "transition-opacity duration-(--vs-duration-change) ease-standard",
+          routes.isPlaceholderData && "opacity-60",
+        )}
+      />
+    </div>
+  );
+}
+
+// ---- status codes and services
+
+const CLASS: Record<StatusClass, { label: string; bg: string }> = {
+  "1xx": { label: "1xx informational", bg: "bg-series-3" },
+  "2xx": { label: "2xx success", bg: "bg-series-1" },
+  "3xx": { label: "3xx redirect", bg: "bg-series-4" },
+  "4xx": { label: "4xx client error", bg: "bg-warning" },
+  "5xx": { label: "5xx server error", bg: "bg-critical" },
+  unknown: { label: "No status code", bg: "bg-series-prev" },
+};
+
+function Card({
+  title,
+  id,
+  children,
+  className,
+}: {
+  title: string;
+  id: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      aria-labelledby={id}
+      className={cn(
+        "flex min-w-0 flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5",
+        className,
+      )}
+    >
+      <h2 id={id} className="text-title text-fg">
+        {title}
+      </h2>
+      {children}
     </section>
   );
 }
 
-function Cell({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <td className={cn("px-3 text-right font-mono whitespace-nowrap", className ?? "text-fg-2")}>
-      {children}
-    </td>
-  );
-}
-
-function Missing() {
-  return (
-    <>
-      <span aria-hidden>-</span>
-      <span className="sr-only">none</span>
-    </>
-  );
-}
-
-function RouteRow({
-  item,
-  max,
-  failing,
-  slow,
-  onFilter,
+function StatusSection({
+  status,
+  state,
+  error,
+  onRetry,
+  dim,
 }: {
-  item: ApiRouteItem;
-  max: number;
-  failing: boolean;
-  slow: boolean;
-  onFilter: () => void;
+  status: ApiStatus | null;
+  state: "loading" | "error" | "data";
+  error: unknown;
+  onRetry: () => void;
+  dim: boolean;
 }) {
-  const pct = (p: Percentile) => {
-    const t = latencyText(p);
-    return t === null ? <Missing /> : t;
-  };
-  const rate = (r: number | null, n: number) => {
-    const t = rateText(r);
-    return t === null ? <Missing /> : <span title={`${formatCount(n)} requests`}>{t}</span>;
-  };
+  const total = status?.requests ?? 0;
+  const parts = status?.classes.filter((c) => c.requests > 0) ?? [];
   return (
-    <tr
-      data-route={item.route}
-      data-service={item.service}
-      data-method={item.method}
-      className="transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover"
+    <Card
+      title="Status codes"
+      id="api-status"
+      className={cn(
+        "transition-opacity duration-(--vs-duration-change) ease-standard",
+        dim && "opacity-60",
+      )}
     >
-      <th scope="row" className="max-w-[26rem] py-2 pr-3 pl-4 text-left font-normal sm:pl-5">
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="w-12 shrink-0 font-mono text-axis text-fg-2">{item.method}</span>
-          <span className="font-mono break-all text-fg">{item.route}</span>
-          {failing ? <Pill tone="critical">Most 5xx</Pill> : null}
-          {slow ? <Pill tone="warning">Slowest p95</Pill> : null}
-        </span>
-        <span className="mt-1 flex flex-wrap items-center gap-2 pl-12 text-caption font-normal text-fg-3">
-          {serviceName(item.service)}
-          {item.source === "span" ? <TracesBadge /> : null}
-          {item.lossy ? <ApproxBadge /> : null}
-          {item.infrastructure_requests > 0 ? (
-            <span title="CORS preflights, health and probe routes and known health checkers, not counted in requests">
-              {formatCount(item.infrastructure_requests)} infrastructure
+      {parts.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <div
+            role="img"
+            aria-label={`Requests by status class: ${parts
+              .map((c) => `${CLASS[c.class].label} ${formatCount(c.requests)}`)
+              .join("; ")}`}
+            className="flex h-2 w-full gap-1 overflow-hidden rounded-sm"
+          >
+            {parts.map((c) => (
+              <div
+                key={c.class}
+                className={cn("h-full min-w-0.5 rounded-bar", CLASS[c.class].bg)}
+                // widths are data, so they cannot be classes
+                style={{ flexGrow: c.requests, flexBasis: 0 }}
+              />
+            ))}
+          </div>
+          <ul aria-label="Status classes" className="flex flex-wrap gap-x-4 gap-y-1 text-caption">
+            {parts.map((c) => (
+              <li key={c.class} data-class={c.class} className="flex items-center gap-1 text-fg-2">
+                <span aria-hidden className={cn("size-2 rounded-bar", CLASS[c.class].bg)} />
+                {CLASS[c.class].label}
+                <span className="font-mono text-fg tabular">{formatCount(c.requests)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <BreakdownList
+        label="Status codes"
+        state={state === "data" ? undefined : state}
+        error={error}
+        onRetry={onRetry}
+        items={(status?.codes ?? []).map((c) => ({
+          key: String(c.status_code),
+          label:
+            c.status_code === 0 ? (
+              "No status code"
+            ) : (
+              <span className="font-mono">{c.status_code}</span>
+            ),
+          text: c.status_code === 0 ? "No status code" : String(c.status_code),
+          value: c.requests,
+        }))}
+        total={total}
+        valueLabel="Requests"
+        emptyTitle="No requests in this range"
+      />
+    </Card>
+  );
+}
+
+function ServicesSection({ services }: { services: ApiServiceItem[] }) {
+  const anySpan = services.some((s) => s.source === "span");
+  const total = services.reduce((a, s) => a + s.requests, 0);
+  return (
+    <Card title="Services" id="api-services">
+      <BreakdownList
+        label="Services"
+        items={services.map((s) => ({
+          key: s.service,
+          text: serviceName(s.service),
+          label: (
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate">{serviceName(s.service)}</span>
+              {s.source === "span" ? <TracesBadge /> : null}
+              {s.lossy ? <ApproxBadge /> : null}
+              {s.span_data_ignored ? (
+                <Tooltip content={IGNORED_NOTE}>
+                  {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the note opens on focus too */}
+                  <span tabIndex={0} className="inline-flex rounded-full focus-ring">
+                    <Pill tone="info">Metrics only</Pill>
+                  </span>
+                </Tooltip>
+              ) : null}
             </span>
-          ) : null}
-        </span>
-      </th>
-      <td className="px-3">
-        <span className="flex items-center gap-2">
-          <span className="w-16 shrink-0 text-right font-mono text-fg">
-            {formatCount(item.requests)}
-          </span>
-          <span aria-hidden className="h-1.5 min-w-8 flex-1 overflow-hidden rounded-bar bg-hover">
-            <span
-              className="block h-full rounded-bar bg-series-1"
-              // the row's share of the busiest route on this page: data, so it
-              // cannot be a class
-              style={{ width: `${(item.requests / max) * 100}%` }}
-            />
-          </span>
-        </span>
-      </td>
-      <Cell className={(item.rate_4xx ?? 0) >= 0.05 ? "text-warning" : undefined}>
-        {rate(item.rate_4xx, item.errors_4xx)}
-      </Cell>
-      <Cell className={(item.rate_5xx ?? 0) > 0 ? "text-critical" : undefined}>
-        {rate(item.rate_5xx, item.errors_5xx)}
-      </Cell>
-      <Cell>{pct(item.p50)}</Cell>
-      <Cell className={slow ? "text-warning" : "text-fg"}>{pct(item.p95)}</Cell>
-      <Cell>{pct(item.p99)}</Cell>
-      <td className="py-2 pr-4 pl-2 text-right sm:pr-5">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`Filter to ${item.method} ${item.route} of ${serviceName(item.service)}`}
-          title="Filter to this route"
-          onClick={onFilter}
-        >
-          <Filter aria-hidden />
-        </Button>
-      </td>
-    </tr>
+          ),
+          value: s.requests,
+        }))}
+        total={total}
+        valueLabel="Requests"
+        limit={20}
+      />
+      {anySpan ? <p className="text-caption text-fg-2">From traces: {SPAN_NOTE}</p> : null}
+    </Card>
   );
 }
