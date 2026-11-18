@@ -496,6 +496,8 @@ test("an api key is created, read with from a client without a session, and revo
     await expect(
       page.getByRole("region", { name: `Usage of ${name}` }).locator("[data-usage=requests]"),
     ).toHaveText("1");
+    // the closed menu finishes its exit before the row menu opens again
+    await expect(page.getByRole("menu")).toHaveCount(0);
 
     await row.getByRole("button", { name: `Actions for ${name}` }).click();
     await page.getByRole("menuitem", { name: "Revoke" }).click();
