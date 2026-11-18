@@ -104,6 +104,9 @@ here, before they take effect, as the processing terms require
   `tenantguard_invalid_items`. Two sums near the floating point limit in one
   minute or one hour no longer fail the writer's message or the hourly
   rollup.
+- The collector drops a histogram point whose count is not the total of its
+  buckets, counted as `count` in `tenantguard_invalid_items`, as OTLP
+  requires; the metrics writer refused each one alone with a log line.
 
 ### Fixed
 

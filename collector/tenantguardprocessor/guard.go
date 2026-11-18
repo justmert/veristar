@@ -140,10 +140,19 @@ func checkHistogram(dp pmetric.HistogramDataPoint) string {
 			return invalidBuckets
 		}
 	}
+	var total uint64
 	for i := 0; i < counts.Len(); i++ {
 		if counts.At(i) > MaxPointCount {
 			return invalidCount
 		}
+		// each count is at most 10^12 and a 4 MiB export holds far fewer
+		// than 10^7 of them, so the total cannot overflow
+		total += counts.At(i)
+	}
+	if total != dp.Count() {
+		// otlp requires the count to equal the sum of the buckets; the
+		// writer cannot tell which of the two is right
+		return invalidCount
 	}
 	return ""
 }
@@ -162,6 +171,26 @@ func checkExponential(dp pmetric.ExponentialHistogramDataPoint) string {
 	}
 	if dp.HasSum() && !validSum(dp.Sum()) {
 		return invalidSum
+	}
+	// otlp requires the count to equal the zero count plus every positive
+	// and negative bucket; the conversion keeps the buckets' total, so a
+	// point that breaks it would reach the writer with a count its
+	// buckets do not add up to
+	total := dp.ZeroCount()
+	if total > MaxPointCount {
+		return invalidCount
+	}
+	for _, b := range []pmetric.ExponentialHistogramDataPointBuckets{dp.Positive(), dp.Negative()} {
+		counts := b.BucketCounts()
+		for i := 0; i < counts.Len(); i++ {
+			if counts.At(i) > MaxPointCount {
+				return invalidCount
+			}
+			total += counts.At(i)
+		}
+	}
+	if total != dp.Count() {
+		return invalidCount
 	}
 	return ""
 }

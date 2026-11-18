@@ -340,7 +340,8 @@ requests, so it is not one of the kept metrics (see "tenantguard" below).
   (`temporality`); explicit bounds that are not finite and strictly
   increasing, or bucket counts that are not one more than the bounds,
   including a point without buckets (`buckets`); a count or a bucket count
-  above 10^12 (`count`); a sum that is NaN, infinite or above 10^18 seconds
+  above 10^12, or a count that is not the total of the buckets (for an
+  exponential histogram, the zero count plus every bucket) (`count`); a sum that is NaN, infinite or above 10^18 seconds
   in magnitude (`sum`). A stale marker (no recorded value) is checked for
   its times only.
 - Spans kept: kind SERVER with an HTTP method, a start time, and an end
