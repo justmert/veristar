@@ -241,6 +241,12 @@ func (r *Replayer) own(ctx context.Context, part int) error {
 		case part == legacyLead && time.Now().Before(legacyAgain):
 			sleepCtx(ctx, acquireRetry)
 			continue
+		case part == legacyLead && r.legacyMissing(ctx):
+			// a fresh installation, or retire-legacy-web ran: nothing to
+			// take the lock for, which would otherwise be taken and given
+			// back on every instance every legacyRecheck
+			legacyAgain = time.Now().Add(legacyRecheck)
+			continue
 		case part != legacyLead && !r.wants(ctx, part, &freeSince):
 			sleepCtx(ctx, acquireRetry)
 			continue
@@ -269,6 +275,13 @@ func (r *Replayer) own(ctx context.Context, part int) error {
 			return err
 		}
 	}
+}
+
+// legacyMissing reports whether the legacy consumer is known to be gone. an
+// error other than "not found" counts as present, so the hold finds out.
+func (r *Replayer) legacyMissing(ctx context.Context) bool {
+	_, err := r.js.Consumer(ctx, natsx.StreamWebEvents, natsx.ConsumerReplayer)
+	return errors.Is(err, jetstream.ErrConsumerNotFound)
 }
 
 // wants reports whether this instance should contend for partition p: it is
