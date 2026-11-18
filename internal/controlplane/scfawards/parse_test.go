@@ -32,7 +32,7 @@ const (
 // row is one export row; fields not set stay empty.
 type row struct {
 	project, round, category, awardType, date, amount, pct, status, website string
-	description, traction                                                    string
+	description, traction                                                   string
 }
 
 func (r row) cells() []string {
