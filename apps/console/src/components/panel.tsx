@@ -98,7 +98,7 @@ export function Fact({
 
 export function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded-sm border border-line-strong px-1 text-axis text-fg-3">
+    <kbd className="inline-flex h-5 min-w-5 items-center justify-center whitespace-nowrap rounded-sm align-middle border border-line-strong px-1 text-axis text-fg-3">
       {children}
     </kbd>
   );

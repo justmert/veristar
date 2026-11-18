@@ -140,7 +140,7 @@ export function ReviewQueuePage() {
                 {list.isFetchingNextPage ? "Loading" : "Load more"}
               </Button>
             ) : null}
-            <p className="flex items-center gap-1 text-caption text-fg-2 max-lg:hidden">
+            <p className="text-caption leading-6 text-fg-2 max-lg:hidden">
               <Kbd>J</Kbd> <Kbd>K</Kbd> move in the queue. <Kbd>A</Kbd> <Kbd>R</Kbd> choose.{" "}
               <Kbd>Ctrl Enter</Kbd> sends.
             </p>
