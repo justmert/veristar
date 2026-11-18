@@ -87,7 +87,7 @@ version of Chrome, Edge, Firefox or Safari.
 ## Link GitHub, a wallet and a passkey
 
 Open the account menu at the bottom of the sidebar and choose **Account**.
-Under **Linked sign-in methods**:
+Under **Sign-in methods**:
 
 - **Link a wallet** signs a challenge with the wallet you choose and adds its
   address to your account.

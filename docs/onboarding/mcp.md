@@ -6,7 +6,7 @@ description: "Ask Claude, ChatGPT, Cursor or any MCP client about your project's
 
 Veristar runs a [Model Context Protocol](https://modelcontextprotocol.io) server at
 `https://app.analytics.example/mcp` (your deployment's console address followed by `/mcp`; the
-project's **AI / MCP** page shows it). Connect an AI client to it and ask questions in plain language:
+project's **AI assistants** page shows it). Connect an AI client to it and ask questions in plain language:
 the client calls read-only tools that return your project's web analytics (from the tracker) and
 API analytics (from OpenTelemetry). The contract is section 12 of
 [`docs/reference/control-plane-api.md`](../reference/control-plane-api.md).
@@ -29,16 +29,16 @@ API analytics (from OpenTelemetry). The contract is section 12 of
 | | Access key | Connector (OAuth) |
 |---|---|---|
 | Clients | Claude Code, Cursor, any client that sends a header | claude.ai, Claude Desktop, ChatGPT, Claude Code, Cursor |
-| Made on | the project's **AI / MCP** page | the consent page the client opens |
+| Made on | the project's **AI assistants** page | the consent page the client opens |
 | Lifetime | 90 days by default, at most 365 | access token one hour, refreshed by the client; the connection stays until revoked |
 | Secret | `sa_mcp_` and 40 characters, shown once | handled by the client |
 
-Both appear in the list on the AI / MCP page with when they were last used. Members can revoke
+Both appear in the list on the AI assistants page with when they were last used. Members can revoke
 their own; owners can revoke any of the project's.
 
 ### Claude Code
 
-With an access key from the AI / MCP page:
+With an access key from the AI assistants page:
 
 ```sh
 claude mcp add --transport http veristar https://app.analytics.example/mcp \
