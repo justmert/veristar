@@ -104,8 +104,11 @@ contention add time, which the production drills measure.
   but one replayer, the holder of the `replayer` lock, delivers them for the whole cluster to
   the `core_umami_processes` (2) Umami processes of its own node, so delivery does not grow with
   the node count ([capacity.md](capacity.md), "Web events end to end", says why and what
-  delivery from every node would need). The delivery rate of a production node has not been
-  measured. The local drill gave 280 events a second for one Umami process
+  delivery from every node would need; release `0.4.0` does not include it). On production on
+  2026-11-18 the cluster delivered 55.5 events a second end to end, challenges included, every
+  event stored in Umami in the second it was sent and the queue never holding one: above the
+  expected peak, but the rate one address could offer, not the ceiling. The ceiling of a
+  production node has not been measured. The local drill gave 280 events a second for one Umami process
   ([drills/2026-11-13.md](drills/2026-11-13.md)); scaled by the drill's 1.5x for two processes
   that is about 420 a second, an estimate. Local runs on 2026-11-17 on a contended host drained
   282 to 696 a second. Against the expected peak (50 a second) that leaves room; above the

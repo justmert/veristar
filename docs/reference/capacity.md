@@ -168,11 +168,41 @@ Reading:
 - A `WEB_EVENTS` message of these page views takes **690 bytes** of the store (8,280,000 bytes for
   12,000 messages).
 
-**What is not measured.** No end-to-end sustained rate of a production node has been measured:
-the "about 420 events a second" of [availability.md](availability.md) is the 2026-11-13 drill's
-280/s of one process scaled by its 1.5x for two, not a run. The production ingest figure of about
-700 events a second per node was measured with proofs solved before the run, so it holds no
-`GET /v1/c`; a real page load also fetches one challenge, which that figure does not include.
+**Measured on production, 2026-11-18** (release `v0.4.0`, three `Standard_B2as_v2` nodes, the
+replayer lock on `production-node-3`, its two Umami processes delivering, the Patroni leader on
+`production-node-2`). A load client built on `tests/gateway/gwclient` ran on an operator
+workstation inside `admin_cidrs`, 58 ms from the region, and sent page views of the internal probe
+site through each node's Caddy (`in.veristar.app` dialled per node), with production's gateway
+limits unchanged. **Challenges are included**: each page load fetched one `GET /v1/c`, solved it
+and sent six page views with it, as the tracker does. The load came from one address, so the
+per-site and prefix limits (20 a second per node, [gateway-limits.md](gateway-limits.md)) cap it
+near 60 a second, and the same-network threshold put the visitors after the twentieth of the hour
+in the quarantine band, which Umami stores the same way. A sampler read the `WEB_EVENTS` consumer
+of the replayer every 2 s from its NATS leader, and afterwards every acknowledged path was looked
+up in Umami's `website_event`.
+
+| Run | Sent | Answered 202 | Stored in Umami | Consumer backlog | Send to stored |
+|---|---|---|---|---|---|
+| 1 client, 1,500 visitors, 1,500 challenges | 9,000 in 199.6 s, **45.1/s** | 9,000 | 9,000 (114 primary, 8,886 quarantine), 1,500 sessions | `num_pending` 0 in all 141 samples, at most 5 unacknowledged | every event in the second it was sent (`created_at` has 1 s resolution), at most 0.3 s later |
+| 3 clients (one per node), 500 visitors, 1,500 challenges | 9,000 in 162.0 s, **55.5/s** | 9,000 | 9,000 (all quarantine), 500 sessions, each visitor one session across the three nodes | `num_pending` 0 in all 112 samples, at most 10 unacknowledged | every event in the second it was sent |
+
+Client latency of `POST /v1/e` was p50 55 ms and p99 61 to 66 ms including the 58 ms round trip.
+On the delivering node, `docker stats` averaged 10 to 11 % of a core per Umami process, 6 % for
+the replayer and 6 % for its PostgreSQL replica during run 1; `top` showed a median of 59 % idle.
+
+**Result: the cluster delivers 55.5 web events a second end to end, challenges included, with no
+backlog**, above the expected peak of 50 a second. This is a sustained rate at the level one
+address can offer, not the ceiling: the queue never held an event, so the delivery rate the
+replayer reaches under a backlog was not reached. Measuring that ceiling needs a backlog, either
+the replayers stopped while events queue and then started again, or the gateway limits raised for
+load from several addresses as in [gateway-limits.md](gateway-limits.md), "Capacity". This release
+does not include partitioned replay: one replayer still delivers for the whole cluster to the Umami
+processes of its own node.
+
+**What is not measured.** The delivery ceiling of a production node: the "about 420 events a
+second" of [availability.md](availability.md) is the 2026-11-13 drill's 280/s of one process scaled
+by its 1.5x for two, not a run. The production ingest figure of about 700 events a second per node
+was measured with proofs solved before the run, so it holds no `GET /v1/c`.
 
 **What a backlog costs.** Above the delivery rate, events wait in `WEB_EVENTS`:
 
