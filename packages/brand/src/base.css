@@ -228,6 +228,27 @@
   }
 }
 
+/* a list that scrolls inside its box fades out at its lower edge while more
+   rows lie below, so a cut row reads as "more below". a box that does not
+   scroll has no scroll timeline, so it draws no fade */
+@utility scroll-fade {
+  animation: vs-scroll-fade linear both;
+  animation-timeline: scroll(self);
+}
+@keyframes vs-scroll-fade {
+  0%,
+  98% {
+    mask-image: linear-gradient(
+      to bottom,
+      var(--vs-fg) calc(100% - var(--vs-space-6)),
+      transparent
+    );
+  }
+  100% {
+    mask-image: none;
+  }
+}
+
 @utility hatch {
   background-image: repeating-linear-gradient(
     135deg,
