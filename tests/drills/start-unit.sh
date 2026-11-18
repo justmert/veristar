@@ -26,7 +26,7 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 . "$root/infra/local/lib.sh"
 ANSIBLE_BIN="${ANSIBLE_VENV:-$HOME/.local/share/veristar/ansible-venv}/bin"
 OUT="$root/.scratch/drills/start-unit"
-NODE=sa-lc-edge-1 LOC=fsn1 PUB=172.31.99.12 PRIV=10.99.1.12
+NODE=sa-lc-edge-1 LOC=fsn1 PUB=10.98.99.12 PRIV=10.99.1.12
 PROJECT=/opt/veristar/edge
 mkdir -p "$OUT"
 

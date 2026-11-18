@@ -33,8 +33,8 @@ make local-converge-down               # removes containers, volumes, networks, 
 Alertmanager would push, run the test receiver on the controller and pass its address:
 
 ```sh
-go run ./tests/observability/receiver -listen 172.31.99.1:8099 &
-make local-converge ANSIBLE_EXTRA='-e observability_test_webhook_base=http://172.31.99.1:8099'
+go run ./tests/observability/receiver -listen 10.98.99.1:8099 &
+make local-converge ANSIBLE_EXTRA='-e observability_test_webhook_base=http://10.98.99.1:8099'
 ```
 
 The play accepts `observability_test_webhook_base` in the local environment only.
@@ -90,7 +90,7 @@ over SSH, so SSH hardening, `AllowUsers` and the firewall's SSH rule all run as 
 - **Privileges.** The node containers run with `--privileged`, which gives them the
   capabilities Docker, nftables and systemd need. `/var/lib/docker` and `/var/lib/containerd`
   are volumes per node, because overlayfs cannot be stacked on the container's own overlay root.
-- **Networks.** `sa-lc-public` (172.31.99.0/24, default route) stands in for the internet side.
+- **Networks.** `sa-lc-public` (10.98.99.0/24, default route) stands in for the internet side.
   The private network 10.99.0.0/16 is split into one Docker network per location (`sa-lc-fsn1`,
   `sa-lc-nbg1`, `sa-lc-hel1`), joined by a router container (`sa-lc-router`,
   `infra/local/lib.sh`). Each node gets the route `10.99.0.0/16 via 10.99.<loc>.254` at every
@@ -108,7 +108,7 @@ over SSH, so SSH hardening, `AllowUsers` and the firewall's SSH rule all run as 
   rebuild under the same tag is not pulled again (`pull: missing`); releases use immutable tags.
 - **Inventory.** `up.sh` writes an inventory with exactly the shape of the OpenTofu output, with
   `sa_environment: local`, `sa_provider: local` and the base domain `sa-local.test` (the reserved
-  `.test` TLD). The controller's address (172.31.99.1) is the only admin CIDR. Local-only
+  `.test` TLD). The controller's address (10.98.99.1) is the only admin CIDR. Local-only
   settings are in `infra/ansible/inventories/local/group_vars/all.yml`, each with its reason.
 - **TLS.** Caddy uses its local CA (`sa_tls: internal`). `deploy/caddy/assemble_test.go`
   validates the assembled node configs with `SA_TLS` set to `cloudflare`,

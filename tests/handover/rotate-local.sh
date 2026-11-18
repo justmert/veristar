@@ -43,9 +43,9 @@ cleanup() {
 trap cleanup EXIT
 
 # alertmanager needs a receiver (docs/deploy/local-converge.md section 2)
-go run "$root/tests/observability/receiver" -listen 172.31.99.1:8099 >"$out/receiver.log" 2>&1 &
+go run "$root/tests/observability/receiver" -listen 10.98.99.1:8099 >"$out/receiver.log" 2>&1 &
 receiver_pid=$!
-extra='-e observability_test_webhook_base=http://172.31.99.1:8099'
+extra='-e observability_test_webhook_base=http://10.98.99.1:8099'
 
 # names every node container that is not running, so a node that died (or
 # was removed by other work on a shared machine) is reported as such
