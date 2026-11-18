@@ -8,7 +8,7 @@ body:
       value: |
         **Never post personal data here.** This tracker is public. Do not paste an IP address, a user agent, a session id or anything else that identifies a visitor.
 
-        **Project owners** run erasure themselves on the project's Privacy page in the console (docs/compliance/erasure.md). Use this form only when a request failed or its result is unclear.
+        **Project owners** run erasure themselves on the **Privacy** page of the project's settings in the console (docs/compliance/erasure.md). Use this form only when a request failed or its result is unclear.
 
         **Visitors of a website** that uses this service: the website's owner decides about your data. Ask the website directly; it can erase your visit on the day of the visit, or a session it can point to later. Requests that reach the maintainers are forwarded to the website's owner (docs/compliance/dpa-template.md section 7). The service never stores IP addresses, so it cannot find your visits itself (docs/compliance/erasure.md section 2).
   - type: input

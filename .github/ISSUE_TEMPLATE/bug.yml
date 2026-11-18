@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the report. A maintainer answers within 5 business days and aims to resolve it within 10 (docs/support.md).
+        Thanks for the report. A maintainer responds within 5 business days and resolves the issue within 10 (docs/support.md).
 
         This tracker is public. Do not paste OTLP tokens, operator API keys, session cookies, visitor IP addresses or user agents. If the bug is a security problem, close this form and use **Report a security vulnerability** instead.
   - type: dropdown
@@ -18,9 +18,13 @@ body:
         - Web event ingestion (in. host)
         - OTLP ingestion (otlp. host)
         - Console (app. host)
-        - Web dashboard (web. host)
-        - Tenant API dashboard
+        - Web dashboard in the console
+        - API dashboard in the console
+        - On-chain activity
+        - Signed reports
+        - Sign-in (GitHub, Stellar wallet or passkey)
         - Operator views or machine metrics API
+        - MCP server for AI clients
         - Infrastructure code or documentation
         - Not sure
     validations:
@@ -29,7 +33,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: The tracker version in your script tag (for example 1.1.0), or the commit or release you run if you self-host.
+      description: The tracker version in your script tag (for example 1.3.1), or the commit or release you run if you self-host.
     validations:
       required: false
   - type: textarea
