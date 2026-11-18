@@ -881,51 +881,50 @@ function ReportRow({
           Generated {formatDateTimeUtc(r.created_at)}, {countOf(r.view_count, "view")}
         </span>
       </span>
+      {/* the same slots on every row, right aligned: copy link while the
+          link is live, download always in one place, then the menu */}
       <span className="flex items-center gap-1">
+        {revoked ? null : (
+          <CopyButton text={r.url} label="Copy link" accessibleLabel={`Copy link of ${of}`} />
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onDownload}
+          pending={downloading}
+          aria-label={`Download JSON of ${of}`}
+          className="max-lg:h-(--vs-control-touch)"
+        >
+          <Download aria-hidden />
+          Download JSON
+        </Button>
         {revoked ? (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onDownload}
-            pending={downloading}
-            aria-label={`Download JSON of ${of}`}
-            className="max-lg:h-(--vs-control-touch)"
-          >
-            <Download aria-hidden />
-            Download JSON
-          </Button>
+          <span aria-hidden className="size-(--vs-control-sm) max-lg:size-(--vs-control-touch)" />
         ) : (
-          <>
-            <CopyButton text={r.url} label="Copy link" accessibleLabel={`Copy link of ${of}`} />
-            <Menu>
-              <MenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Actions for ${of}`}
-                  className="max-lg:size-(--vs-control-touch)"
-                >
-                  <MoreHorizontal aria-hidden />
-                </Button>
-              </MenuTrigger>
-              <MenuContent align="end">
-                <MenuItem asChild>
-                  <a href={r.url} target="_blank" rel="noopener">
-                    <ExternalLink aria-hidden />
-                    Open the report
-                  </a>
-                </MenuItem>
-                <MenuItem onSelect={onDownload}>
-                  <Download aria-hidden />
-                  Download JSON
-                </MenuItem>
-                <MenuSeparator />
-                <MenuItem tone="critical" onSelect={onRevoke}>
-                  Revoke link
-                </MenuItem>
-              </MenuContent>
-            </Menu>
-          </>
+          <Menu>
+            <MenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Actions for ${of}`}
+                className="max-lg:size-(--vs-control-touch)"
+              >
+                <MoreHorizontal aria-hidden />
+              </Button>
+            </MenuTrigger>
+            <MenuContent align="end">
+              <MenuItem asChild>
+                <a href={r.url} target="_blank" rel="noopener">
+                  <ExternalLink aria-hidden />
+                  Open the report
+                </a>
+              </MenuItem>
+              <MenuSeparator />
+              <MenuItem tone="critical" onSelect={onRevoke}>
+                Revoke link
+              </MenuItem>
+            </MenuContent>
+          </Menu>
         )}
       </span>
     </li>
