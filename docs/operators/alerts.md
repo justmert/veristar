@@ -9,9 +9,12 @@ shows the platform's alerts as Alertmanager holds them right now. It is the plat
 channel: operators read firing alerts here. A Discord push channel can be added on top of it
 (see [Push notifications](#push-notifications)).
 
-Only operators see the tab. The control plane answers its route,
-`GET /api/operator/alerts`, with `403 operator_required` for everyone else and does not
-ask Alertmanager for them ([contract section 11](../reference/control-plane-api.md#11-operator-alerts)).
+Only operator admins see the tab. The control plane answers its route,
+`GET /api/operator/alerts`, with `403 operator_admin_required` for an operator without the
+`operator_admin` role and `403 operator_required` for everyone else, and does not ask
+Alertmanager for them ([contract section 11](../reference/control-plane-api.md#11-operator-alerts)).
+Alert labels and descriptions name nodes and internal addresses, which is why the route
+needs the admin role.
 
 ## What the page shows
 
@@ -36,7 +39,7 @@ Across the operator area:
 
 - The **Alerts** tab carries the number of firing alerts, red while one of severity `page`
   is among them, and `!` while the alert source is unreachable.
-- Every operator page shows a banner while an alert of severity `page` fires, with a link to
+- Every operator page of an operator admin shows a banner while an alert of severity `page` fires, with a link to
   the Alerts tab.
 
 Project members never see any of this. The tab, the badge and the banner exist only inside
