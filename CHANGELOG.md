@@ -92,6 +92,24 @@ here, before they take effect, as the processing terms require
 
 ### Changed
 
+- The console is redesigned around one page per task. A grouped sidebar (Data, Funding,
+  Setup and Team for your project; Work and Admin for operators) and a command palette
+  (Ctrl K) take you to any page or project. Pages that showed the same thing in several
+  places are merged: SCF review holds your standing, integrity report, figures and signed
+  reports; All projects shows every project with status, web and API views; Access keys
+  holds machine and AI assistant keys; each site has one setup flow from the tag to the
+  first event, the domain check and stellar.toml.
+- Operator review shows the evidence, the numbers and the decision together, in the same
+  order on the review queue and the project page. Nothing is chosen until you pick Approve
+  or Reject.
+- Destructive actions are clearer: they are crimson, drawn as outline buttons and menu
+  items with an icon, and ask for confirmation in a dialog that names what you remove.
+- Numbers, dates and missing values read the same everywhere: numbers use tabular
+  figures, every date and range is in UTC, and a value that was not measured shows a dash
+  with the reason, while 0 means measured and zero.
+- On a phone, tables become cards with every field or a Details section, the navigation
+  opens in a drawer that holds the project switcher and the account menu, and the
+  operator decision is a bar at the bottom of the screen.
 - Development stack: the control plane's `CONSOLE_ORIGIN` and GitHub callback are now the
   Vite dev server, `http://localhost:5173`, which proxies `/api`, so a console started with
   `pnpm --filter ./apps/console dev` signs in. CONTRIBUTING.md lists every step from a
