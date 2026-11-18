@@ -1,7 +1,6 @@
 import {
   type QueryClient,
   useMutation,
-  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -12,6 +11,7 @@ import { ApiError } from "@/api/client";
 import {
   type CohortValue,
   cohortListQuery,
+  type ListedRule,
   type Rule,
   type RuleInput,
   type RuleMatches,
@@ -26,7 +26,7 @@ import { type Column, DataTable } from "@/components/data-table";
 import { SelectField, TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
 import { DateField, isIsoDay } from "@/components/range-control";
-import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
+import { EmptyState, ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { countOf, formatCount, formatDate, formatDateRange } from "@/lib/format";
@@ -151,9 +151,6 @@ export function RulesPage() {
   const asOf = isDay(asOfParam) ? asOfParam : "";
   const rules = useQuery(rulesQuery);
   const items = rules.data?.items ?? [];
-  // each rule's match count, evaluated today, so the list says how many
-  // projects meet it without opening it
-  const counts = useQueries({ queries: items.map((r) => ruleMatchesQuery(r.id, "")) });
   const qc = useQueryClient();
   const [editing, setEditing] = useState<{ id: string | null; form: RuleForm } | null>(null);
   async function remove(r: Rule) {
@@ -165,7 +162,7 @@ export function RulesPage() {
   const open = (id: string) => setParams({ rule: id }, { replace: true });
   const current = items.find((r) => r.id === selected) ?? null;
 
-  const columns: Column<Rule>[] = [
+  const columns: Column<ListedRule>[] = [
     {
       key: "rule",
       header: "Rule",
@@ -193,16 +190,11 @@ export function RulesPage() {
       align: "right",
       numeric: true,
       mobile: true,
-      cell: (r) => {
-        const q = counts[items.indexOf(r)];
-        if (!q || q.isPending) return <span className="text-fg-2">Evaluating</span>;
-        if (q.error || !q.data) return <Missing reason="The rule did not evaluate" />;
-        return (
-          <span data-matches={r.id}>
-            {formatCount(q.data.items.length)} of {formatCount(q.data.evaluated)}
-          </span>
-        );
-      },
+      cell: (r) => (
+        <span data-matches={r.id}>
+          {formatCount(r.match_count)} of {formatCount(r.evaluated)}
+        </span>
+      ),
     },
   ];
 

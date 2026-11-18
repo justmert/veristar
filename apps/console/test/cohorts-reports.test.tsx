@@ -170,7 +170,15 @@ describe("threshold rules (contract 19.4)", () => {
         return { status: 204 };
       }
       if (url === "/api/operator/rules")
-        return { status: 200, body: { items: saved && !deleted ? [rule] : [] } };
+        return {
+          status: 200,
+          body: {
+            items:
+              saved && !deleted
+                ? [{ ...rule, match_count: 1, evaluated: 3, matches_as_of: "2026-11-16" }]
+                : [],
+          },
+        };
       if (url.startsWith(`/api/operator/rules/${rule.id}/matches`))
         return { status: 200, body: matches };
       if (url === "/api/operator/cohorts") return { status: 200, body: f.cohortListBody };
@@ -214,7 +222,7 @@ describe("threshold rules (contract 19.4)", () => {
     expect(host.textContent).toContain("2026-09: 3 qualifying days");
     expect(host.textContent).toContain("Sep 1, 2026: 120");
     expect(host.textContent).toContain("Grade A");
-    // the list says how many projects meet each rule
+    // the list says how many projects meet each rule, from the list itself
     await waitFor(() =>
       expect(host.querySelector(`[data-matches="${rule.id}"]`)?.textContent).toBe("1 of 3"),
     );
