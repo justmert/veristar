@@ -82,7 +82,11 @@ export function ProjectsPage() {
     return (
       <section className="flex flex-col gap-8">
         {header}
-        <ErrorState error={me.error} onRetry={() => me.refetch()} />
+        <ErrorState
+          title="Your projects did not load"
+          error={me.error}
+          onRetry={() => me.refetch()}
+        />
       </section>
     );
 

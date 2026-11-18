@@ -96,7 +96,11 @@ export function AccountPage() {
     return (
       <div className="flex flex-col gap-8">
         <PageHeader {...HEADER} />
-        <ErrorState error={me.error} onRetry={() => me.refetch()} />
+        <ErrorState
+          title="Your account did not load"
+          error={me.error}
+          onRetry={() => me.refetch()}
+        />
       </div>
     );
   return (

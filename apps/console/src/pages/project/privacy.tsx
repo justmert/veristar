@@ -156,7 +156,11 @@ export function PrivacyPage() {
       {sites.isPending ? (
         <PrivacySkeleton />
       ) : sites.error ? (
-        <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
+        <ErrorState
+          title="The sites did not load"
+          error={sites.error}
+          onRetry={() => sites.refetch()}
+        />
       ) : (
         <PrivacyBody tenantId={tenant.id} isOwner={isOwner} all={sites.data} />
       )}
@@ -469,7 +473,15 @@ function LastRequest({
     if (status && status !== "running")
       void queryClient.invalidateQueries({ queryKey: keys.erasure(tenantId) });
   }, [status, tenantId]);
-  if (q.error) return <ErrorState error={q.error} onRetry={() => q.refetch()} compact />;
+  if (q.error)
+    return (
+      <ErrorState
+        title="The erasure request did not load"
+        error={q.error}
+        onRetry={() => q.refetch()}
+        compact
+      />
+    );
   if (!q.data)
     return (
       <div role="status" aria-busy="true">
@@ -735,7 +747,12 @@ export function SessionFinder({
           <Bone className="h-8 w-full" />
         </div>
       ) : q.error ? (
-        <ErrorState error={q.error} onRetry={() => q.refetch()} compact />
+        <ErrorState
+          title="The sessions did not load"
+          error={q.error}
+          onRetry={() => q.refetch()}
+          compact
+        />
       ) : q.data.items.length === 0 ? (
         <p className="text-small text-fg-2">No sessions on this day.</p>
       ) : (

@@ -110,7 +110,7 @@ export function ApiPage() {
         {warnings.error ? (
           <ErrorState
             compact
-            title="Data warnings did not load"
+            title="The notes about these numbers did not load"
             error={warnings.error}
             onRetry={() => warnings.refetch()}
           />
@@ -120,7 +120,11 @@ export function ApiPage() {
       {services.isPending ? (
         <ApiSkeleton />
       ) : services.error ? (
-        <ErrorState error={services.error} onRetry={() => services.refetch()} />
+        <ErrorState
+          title="The services did not load"
+          error={services.error}
+          onRetry={() => services.refetch()}
+        />
       ) : services.data.items.length === 0 ? (
         <EmptyState
           icon={<Server aria-hidden strokeWidth={1.75} />}
@@ -420,7 +424,11 @@ function Dashboard({
   return (
     <div className="flex flex-col gap-8">
       {overview.error ? (
-        <ErrorState error={overview.error} onRetry={() => overview.refetch()} />
+        <ErrorState
+          title="The API numbers did not load"
+          error={overview.error}
+          onRetry={() => overview.refetch()}
+        />
       ) : (
         <Summary
           overview={overview.data ?? null}

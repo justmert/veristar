@@ -192,7 +192,11 @@ export function EnrollPage() {
       <section className="flex flex-col gap-6">
         <BackLink />
         <PageHeader {...HEADER} />
-        <ErrorState error={me.error} onRetry={() => me.refetch()} />
+        <ErrorState
+          title="Your account did not load"
+          error={me.error}
+          onRetry={() => me.refetch()}
+        />
       </section>
     );
   return <EnrollForm termsVersion={me.data.terms.current_version} />;

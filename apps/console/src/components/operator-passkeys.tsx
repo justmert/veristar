@@ -95,6 +95,7 @@ export function OperatorPasskeys({ userName }: { userName: string }) {
         ) : list.error ? (
           <div className="p-4">
             <ErrorState
+              title="Your passkeys did not load"
               error={list.error}
               onRetry={() => list.refetch()}
               compact

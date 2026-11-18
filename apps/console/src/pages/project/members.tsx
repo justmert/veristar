@@ -154,7 +154,11 @@ export function MembersPage() {
       {list.isPending ? (
         <MembersSkeleton />
       ) : list.error ? (
-        <ErrorState error={list.error} onRetry={() => list.refetch()} />
+        <ErrorState
+          title="The members did not load"
+          error={list.error}
+          onRetry={() => list.refetch()}
+        />
       ) : (
         <MembersBody
           tenantId={tenant.id}

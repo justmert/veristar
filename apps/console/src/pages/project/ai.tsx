@@ -171,6 +171,7 @@ export function CredentialSection({
     return (
       <div className="p-4">
         <ErrorState
+          title="The connections did not load"
           error={list.error}
           onRetry={() => list.refetch()}
           compact

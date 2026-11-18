@@ -40,7 +40,11 @@ export function SiteSettingsPage() {
       <div className="flex flex-col gap-6">
         <SitesBackLink tenantId={tenant.id} />
         <PageHeader title="Site settings" />
-        <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
+        <ErrorState
+          title="The site did not load"
+          error={sites.error}
+          onRetry={() => sites.refetch()}
+        />
       </div>
     );
   if (!site) return <SitePageLoading tenantId={tenant.id} page="settings" />;

@@ -592,7 +592,11 @@ export function SitesPage() {
       {sites.isPending ? (
         <SitesSkeleton />
       ) : sites.error ? (
-        <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
+        <ErrorState
+          title="The sites did not load"
+          error={sites.error}
+          onRetry={() => sites.refetch()}
+        />
       ) : live.length === 0 ? (
         canChange ? (
           <section

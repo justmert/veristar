@@ -198,7 +198,13 @@ export function DataTable<Row>({
               ) : state === "error" ? (
                 <tr>
                   <td colSpan={span} className="p-4">
-                    <ErrorState error={error} onRetry={onRetry} compact className="border-0" />
+                    <ErrorState
+                      title={`${label} did not load`}
+                      error={error}
+                      onRetry={onRetry}
+                      compact
+                      className="border-0"
+                    />
                   </td>
                 </tr>
               ) : showEmpty ? (
@@ -303,7 +309,13 @@ export function DataTable<Row>({
           </ul>
         ) : state === "error" ? (
           <div className="p-4">
-            <ErrorState error={error} onRetry={onRetry} compact className="border-0" />
+            <ErrorState
+              title={`${label} did not load`}
+              error={error}
+              onRetry={onRetry}
+              compact
+              className="border-0"
+            />
           </div>
         ) : showEmpty ? (
           <div className="p-4">

@@ -100,7 +100,14 @@ export function OverviewPage() {
 
   let body: ReactNode;
   if (sites.isPending) body = <OverviewSkeleton />;
-  else if (sites.error) body = <ErrorState error={sites.error} onRetry={() => sites.refetch()} />;
+  else if (sites.error)
+    body = (
+      <ErrorState
+        title="The sites did not load"
+        error={sites.error}
+        onRetry={() => sites.refetch()}
+      />
+    );
   else if (live.length === 0)
     // a project without a site can still declare on-chain ids: the
     // summaries stay, only the web numbers wait for a site
@@ -299,7 +306,7 @@ function Numbers({
       </div>
 
       {summaryState === "error" ? (
-        <ErrorState error={summaryError} onRetry={onRetry} />
+        <ErrorState title="The numbers did not load" error={summaryError} onRetry={onRetry} />
       ) : summary ? (
         <WebTrendChart
           tenantId={tenantId}
