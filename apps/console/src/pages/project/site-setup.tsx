@@ -707,7 +707,7 @@ function SiteAside({ site }: { site: Site }) {
       <dl className="flex min-w-0 flex-col gap-3 text-small">
         <div className="flex min-w-0 flex-col gap-1">
           <dt className="text-caption text-fg-2">Domain</dt>
-          <dd className="truncate font-mono text-fg" title={site.domain}>
+          <dd className="break-all font-mono text-fg" title={site.domain}>
             {site.domain}
           </dd>
         </div>
@@ -715,7 +715,7 @@ function SiteAside({ site }: { site: Site }) {
           <dt className="text-caption text-fg-2">Allowed origins</dt>
           <dd className="flex min-w-0 flex-col gap-1">
             {site.origins.map((o) => (
-              <span key={o} className="truncate font-mono text-fg" title={o}>
+              <span key={o} className="break-all font-mono text-fg" title={o}>
                 {o}
               </span>
             ))}
