@@ -143,6 +143,11 @@ export function ProjectsPage() {
         </EmptyState>
       ) : (
         <div className="flex flex-col gap-4">
+          {/* the period is said once for every card, so card labels never
+              lose it to truncation */}
+          <p className="text-caption text-fg-2" data-testid="cards-period">
+            Page views and API requests: last 30 days, UTC
+          </p>
           {tenants.length >= SEARCH_FROM ? (
             <FilterBar
               search={q}
@@ -308,10 +313,7 @@ function ProjectCard({
             </span>
           )}
         </Metric>
-        <Metric
-          label="Page views, 30 days"
-          pending={sites.isPending || (hasSites && web.isPending)}
-        >
+        <Metric label="Page views" pending={sites.isPending || (hasSites && web.isPending)}>
           {sites.isError || web.isError ? (
             <NotLoaded />
           ) : !hasSites ? (
@@ -322,7 +324,7 @@ function ProjectCard({
             formatCount(views)
           )}
         </Metric>
-        <Metric label="API requests, 30 days" pending={api.isPending}>
+        <Metric label="API requests" pending={api.isPending}>
           {api.isError ? (
             <NotLoaded />
           ) : requests === null ? (
