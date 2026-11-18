@@ -75,7 +75,7 @@ test.beforeAll(async ({ browser }) => {
   const snip = await api<{ tag: string; version: string }>(
     owner.ctx,
     "GET",
-    `/api/sites/${site.id}`,
+    `/api/sites/${site.id}/snippet`,
   );
   expect(snip.status).toBe(200);
   expect(snip.body.version, "the console recommends the newest release").toBe("1.3.1");
