@@ -507,6 +507,12 @@ describe("review workspace", () => {
     const radios = [...host.querySelectorAll<HTMLElement>("[role=radio]")];
     const reject = radios.find((r) => r.textContent?.includes("Reject")) as HTMLElement;
     const approve = radios.find((r) => r.textContent?.includes("Approve")) as HTMLElement;
+    // nothing is chosen on open, so the send waits for a choice
+    expect(approve.getAttribute("aria-checked")).toBe("false");
+    expect(reject.getAttribute("aria-checked")).toBe("false");
+    expect((byRole(host, "button", "Choose Approve or Reject") as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     // one tab stop; the arrow keys move the choice and the focus
     expect(approve.tabIndex).toBe(0);
     expect(reject.tabIndex).toBe(-1);
