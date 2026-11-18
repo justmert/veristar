@@ -31,7 +31,7 @@ import { Answers } from "./project";
 
 // contract 5.3 review=true: pending projects and active projects with a site
 // in review, oldest first so nobody waits longest
-const QUEUE: TenantListQuery = {
+export const REVIEW_QUEUE: TenantListQuery = {
   status: [],
   review: true,
   q: "",
@@ -46,7 +46,7 @@ const QUEUE: TenantListQuery = {
 // selected project is its own screen with the decision at the bottom. the
 // selection is in the address (?project=), so a project can be shared.
 export function ReviewQueuePage() {
-  const list = useInfiniteQuery(operatorTenantsQuery(QUEUE));
+  const list = useInfiniteQuery(operatorTenantsQuery(REVIEW_QUEUE));
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   const [params, setParams] = useSearchParams();
   const picked = params.get("project");

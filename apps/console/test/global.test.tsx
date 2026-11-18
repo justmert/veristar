@@ -226,9 +226,12 @@ describe("project list, web view", () => {
     const host = await renderRoutes(operatorRoutes, "/operator/projects?view=web");
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     const a = rowOf(host, c.TENANT_ID);
-    for (const want of ["1,200", "410", "49%", "3.2%"]) expect(a.textContent).toContain(want);
-    // a project without visits shows the missing glyph with its reason
-    expect(rowOf(host, f.TENANT_B).textContent).toContain("No visits in this range");
+    // the default columns fit a wide screen: bounce rate and held back are
+    // a column choice away
+    for (const want of ["1,200", "410", "+100%"]) expect(a.textContent).toContain(want);
+    expect(a.textContent).not.toContain("49%");
+    // a project without a previous range shows the missing glyph with its reason
+    expect(rowOf(host, f.TENANT_B).textContent).toContain("No value in the previous range");
     expect(host.textContent).toContain("IP Geolocation by DB-IP");
     const visitorsHead = [...host.querySelectorAll("th button")].find(
       (b) => b.textContent === "Visitors",
@@ -286,12 +289,12 @@ describe("project list, web view", () => {
     window.localStorage.clear();
   });
 
-  it("selects projects into a comparison link and keeps the disabled state until then", async () => {
+  it("selects projects into a comparison bar that shows only with a selection", async () => {
     window.localStorage.clear();
     listFetch(f.webProjectsBody);
     const host = await renderRoutes(operatorRoutes, "/operator/projects?view=web");
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
-    expect(byRole(host, "button", "Compare").hasAttribute("disabled")).toBe(true);
+    expect(host.querySelector("[aria-label='Selected for comparison']")).toBeNull();
     for (const id of [c.TENANT_ID, f.TENANT_B]) {
       const box = rowOf(host, id).querySelector<HTMLElement>("[role=checkbox]");
       if (!box) throw new Error("no checkbox");
@@ -301,6 +304,44 @@ describe("project list, web view", () => {
     expect(link?.getAttribute("href")).toBe(
       `/operator/compare?tenants=${encodeURIComponent(`${c.TENANT_ID},${f.TENANT_B}`)}&from=2026-10-14&to=2026-11-12`,
     );
+  });
+});
+
+describe("project list, portfolio", () => {
+  it("counts the portfolio from the list totals and filters the list in one click", async () => {
+    window.localStorage.clear();
+    const calls = routeFetch((_m, url) => {
+      if (url.startsWith("/api/operator/cohorts")) return { status: 200, body: f.cohortListBody };
+      if (url.startsWith("/api/operator/tenants"))
+        return {
+          status: 200,
+          body: { items: [c.operatorSummaryBody], next_cursor: null },
+        };
+      if (url.startsWith("/api/operator/web/projects"))
+        return {
+          status: 200,
+          body: { ...f.webProjectsBody, total: url.includes("has_web_data=false") ? 7 : 3 },
+        };
+      return { status: 503, body: c.errorBody("unavailable") };
+    });
+    // the web view is the default
+    const host = await renderRoutes(operatorRoutes, "/operator/projects");
+    await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
+    const none = () => host.querySelector<HTMLElement>("[data-segment=none]") as HTMLElement;
+    await waitFor(() => expect(none().textContent).toBe("7No data"));
+    expect(host.querySelector("[data-segment=review]")?.textContent).toBe("1Needs review");
+    expect(host.querySelector("[data-segment=all]")?.getAttribute("aria-pressed")).toBe("true");
+    await click(none());
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (x) =>
+            x.url.includes("has_web_data=false&has_api_data=false") &&
+            x.url.includes("sort=pageviews"),
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() => expect(none().getAttribute("aria-pressed")).toBe("true"));
   });
 });
 
@@ -389,7 +430,7 @@ describe("comparison", () => {
     const add = [...host.querySelectorAll("a")].find((a) => a.textContent === "Add a project");
     if (!add) throw new Error("no add link");
     await click(add);
-    await waitFor(() => expect(host.textContent).toContain("2 of 5 selected"));
+    await waitFor(() => expect(host.textContent).toContain("2 of 5Stellar DEX"));
     const selected =
       host.querySelector("[aria-label='Selected for comparison']")?.textContent ?? "";
     expect(selected).toContain("Stellar DEX");
