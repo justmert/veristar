@@ -153,10 +153,10 @@ const VERB: Record<string, string> = {
   "report.create": "signed a report for",
   "report.revoke": "revoked a report link of",
   "report.view": "opened the report",
-  "onchain.add": "declared an on-chain id for",
-  "onchain.remove": "removed an on-chain id from",
+  "onchain.add": "declared an on-chain ID for",
+  "onchain.remove": "removed an on-chain ID from",
   "onchain.challenge": "started the on-chain check for",
-  "onchain.verify": "verified an on-chain id of",
+  "onchain.verify": "verified an on-chain ID of",
   "export.csv": "exported a CSV file of",
   // the setup steps the service runs for a project
   "provision.team_create": "set up analytics for",
@@ -194,7 +194,7 @@ const TARGET_KIND: Record<string, string> = {
   mcp_credential: "an AI assistant key",
   operator_api_key: "a machine API key",
   otlp_token: "an API token",
-  chain_id: "an on-chain id",
+  chain_id: "an on-chain ID",
   invite: "an invite",
   mcp_client: "an AI client",
 };
@@ -214,7 +214,7 @@ const PROJECT = /^tenant:([0-9a-f-]{36})$/;
 // a check that did not pass reads "checked", never "verified"
 const CHECKS: Record<string, string> = {
   "site.verify": "checked the domain of the site",
-  "onchain.verify": "checked an on-chain id of",
+  "onchain.verify": "checked an on-chain ID of",
 };
 
 // the name of the object from the detail of the entry: a name, a domain, a
@@ -250,8 +250,10 @@ export function auditSentence(
   let object: string | null = e.target ? (named ?? TARGET_KIND[prefix] ?? "an object") : null;
   // a verb that names its own object ("the project") reads "a project" twice
   // without a name, so the article goes
-  if (object && !named && / the (project|site|member|operator|rule|report)$/.test(verb)) {
-    verb = verb.replace(/ the (project|site|member|operator|rule|report)$/, "");
+  const own =
+    / the (project|site|member|operator|rule|report|AI assistant key|machine API key|API token)$/;
+  if (object && !named && own.test(verb)) {
+    verb = verb.replace(own, "");
   }
   // an action on the actor itself (a sign-in) or on a setting, whose verb
   // names it, reads without a second object
