@@ -192,15 +192,16 @@ export function StatGrid({
   // the narrowest a card gets before the row wraps
   min?: string;
   className?: string;
-} & React.HTMLAttributes<HTMLDivElement>) {
+} & React.HTMLAttributes<HTMLElement>) {
+  // a section, so a labelled row of numbers is a region a reader can jump to
   return (
-    <div
+    <section
       className={cn("grid gap-3", className)}
       style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(${min}, 100%), 1fr))` }}
       {...rest}
     >
       {children}
-    </div>
+    </section>
   );
 }
 
