@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Me, Site, Tenant } from "@/api/schemas";
 import { RemovedNotices } from "@/pages/home/projects";
 import { VerifyDomain } from "@/pages/project/site-verify";
-import { ProjectLayout, RemovedNotice, StatusNotice } from "@/pages/project-layout";
+import { ProjectLayout, RemovedNotice, StatusNotice, TermsNotice } from "@/pages/project-layout";
 import { resubmitBody, resubmitValues } from "@/pages/resubmit";
 import * as f from "./fixtures/contract";
 import { byLabel, byRole, click, render, renderRoutes, stubFetch, type, waitFor } from "./helpers";
@@ -151,6 +151,25 @@ describe("domain verification, the third setup step (contract 5.8)", () => {
     await waitFor(() => byRole(host, "button", "Check now"));
     await click(byRole(host, "button", "Check now"));
     await waitFor(() => expect(host.textContent).toContain("Try again in 10 minutes"));
+  });
+});
+
+describe("terms notice", () => {
+  it("asks to accept the terms when the project accepted none yet", async () => {
+    const host = await render(
+      <TermsNotice tenant={{ ...base, accepted_terms_version: null }} version="2" isOwner />,
+    );
+    expect(host.textContent).toContain("Accept the terms of the service");
+    expect(host.textContent).toContain("Until an owner accepts the terms, you can view");
+    expect(byRole(host, "button", "Accept the terms")).not.toBeNull();
+  });
+
+  it("says the terms changed when the project accepted an older version", async () => {
+    const host = await render(
+      <TermsNotice tenant={{ ...base, accepted_terms_version: "1" }} version="2" isOwner={false} />,
+    );
+    expect(host.textContent).toContain("The terms of the service changed");
+    expect(host.textContent).toContain("Until an owner accepts the new terms");
   });
 });
 

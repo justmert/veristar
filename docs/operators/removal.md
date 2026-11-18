@@ -19,6 +19,27 @@ On the **Projects** tab, open the project and choose **Remove**, or call
 required. The project's former members see it once as a notice when they next open the
 console.
 
+### From the command line
+
+`platformctl tenant remove` performs the same removal in the same transaction, with
+`system:platformctl-tenant` as the audit actor. Run it on the core node that holds the Patroni
+leader, with the flags of [bootstrap step 10](../deploy/bootstrap.md):
+
+```sh
+ssh <core node> sudo docker run --rm --network veristar-core_default \
+  --env-file /etc/veristar/env/platformctl.env \
+  -v /etc/veristar/tls/ca:/etc/sa-tls:ro \
+  -e PLATFORM_DB_HOST=haproxy -e PLATFORM_DB_PORT=5000 -e PLATFORM_DB_NAME=platform \
+  -e PLATFORM_DB_SSLMODE=verify-full -e PLATFORM_DB_SSLROOTCERT=/etc/sa-tls/ca.crt \
+  ghcr.io/justmert/veristar/platformctl:<release> \
+  tenant remove -slug <slug> -reason "<reason>"
+```
+
+Name the project with `-slug` or with `-tenant <tenant id>`. Run it with `-dry-run` first: it
+performs the removal, prints the project's id, slug, name, site count and the status it would
+have, and rolls back. The command refuses the internal monitoring project. The jobs `reconcile`
+task starts the purge within 10 minutes.
+
 ## What happens
 
 At once, in one transaction: the project and every site become `removed`, open invites are

@@ -18,6 +18,22 @@ here, before they take effect, as the processing terms require
 
 ### Added
 
+- `platformctl tenant create` enrolls a project on behalf of a console user,
+  who becomes its owner and accepts the terms at their next sign-in. It
+  checks every value with the console's rules, can add one site with its
+  origins, one OTLP token and a cohort proposal, prints the site's script tag
+  and the token once, and audits each row as `system:platformctl-tenant`.
+  `-approve` creates the project active in approval mode; `-dry-run` checks
+  and rolls back ([docs/operators/enroll-on-behalf.md](docs/operators/enroll-on-behalf.md)).
+- `platformctl tenant invite` adds a person to a project as the console does:
+  a member at once when their GitHub account has signed in, otherwise an
+  invite.
+- `platformctl tenant remove` removes a project with the operator removal of
+  section 5.5 of the control plane API reference, from the command line
+  ([docs/runbooks/tenant-removal.md](docs/runbooks/tenant-removal.md)).
+- The Go service images carry the tracker releases at `/releases`
+  (`TRACKER_RELEASE_DIR`), for the script tag of `platformctl tenant create`.
+
 - The operator web and API lists and compare views carry `read_at`: when
   the aggregation last read the web data shown, and the time of the read for
   the API views, which read the metric tables live.

@@ -146,6 +146,7 @@
               "operators/overview",
               "operators/roster",
               "operators/review-and-enrollment",
+              "operators/enroll-on-behalf",
               "operators/removal",
               "operators/global-views",
               "operators/threshold-rules",

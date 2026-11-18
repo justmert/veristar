@@ -30,6 +30,9 @@ Enrollment itself asks the project for its website, how it uses Stellar, optiona
 account or contract ids and an optional SCF round link, and the acceptance of the current
 terms ([terms of service](../compliance/terms.md)). A user can create at most 10 projects per day.
 
+To enroll a project for someone from the command line, see
+[Enrolling a project on its behalf](enroll-on-behalf.md).
+
 ## The review queue
 
 The **Review** page lists, oldest first:
