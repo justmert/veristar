@@ -127,12 +127,12 @@ describe("operator area guard", () => {
         {
           path: "/operator",
           element: <OperatorLayout />,
-          children: [{ index: true, element: <p>queue</p> }],
+          children: [{ index: true, element: <p>the queue page</p> }],
         },
       ],
       "/operator",
     );
-    await waitFor(() => expect(host.textContent).toContain("queue"));
+    await waitFor(() => expect(host.textContent).toContain("the queue page"));
     // each page draws its own header; the gate adds none and no tab bar
     expect(host.querySelector("h1")).toBeNull();
     expect(host.querySelector("nav")).toBeNull();

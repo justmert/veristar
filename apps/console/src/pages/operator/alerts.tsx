@@ -16,7 +16,7 @@ import { ALERTS_REFRESH_MS, operatorAlertsQuery } from "@/api/queries";
 import type { AlertSource, FiringAlert, OperatorAlerts } from "@/api/schemas";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
-import { ErrorState, LoadingState, Skeleton } from "@/components/states";
+import { ErrorState } from "@/components/states";
 import { StatusDot } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +30,7 @@ import {
   sentenceCase,
 } from "@/lib/alerts";
 import { countOf, formatDateTimeUtc, formatTimeUtc } from "@/lib/format";
+import { AlertsSkeleton } from "@/pages/operator/page-frame";
 
 const WATCHDOG_RUNBOOK = "docs/runbooks/alerts.md#watchdog";
 const EVERY = `${ALERTS_REFRESH_MS / 1000} seconds`;
@@ -85,9 +86,7 @@ export function AlertsPage() {
       />
 
       {alerts.isPending ? (
-        <LoadingState label="Loading the alerts">
-          <Skeleton.Table rows={3} columns={2} />
-        </LoadingState>
+        <AlertsSkeleton />
       ) : alerts.error ? (
         <AlertsError
           error={alerts.error}
