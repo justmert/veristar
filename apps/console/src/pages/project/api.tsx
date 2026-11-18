@@ -372,7 +372,7 @@ const WARNING_TEXT: Record<
   cardinality_overflow: {
     tone: "warning",
     title: "Some routes or services are grouped as {other}",
-    body: "More distinct routes or services arrived in a day than the daily limit. Make sure that your routes are templates, not raw paths with ids.",
+    body: "More distinct routes or services arrived in a day than the daily limit. Make sure that your routes are templates, not raw paths with IDs.",
   },
   coarse_buckets: {
     tone: "warning",

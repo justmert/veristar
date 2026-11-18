@@ -296,7 +296,7 @@ describe("overview page", () => {
     );
     await waitFor(() =>
       expect(host.querySelector('[data-summary="On-chain"]')?.textContent).toContain(
-        "1,234operations of verified ids, 1 of 2 verified",
+        "1,234operations of verified IDs, 1 of 2 verified",
       ),
     );
     expect(host.querySelector('[data-summary="Integrity grade"] [data-grade]')).not.toBeNull();

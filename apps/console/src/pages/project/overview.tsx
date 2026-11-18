@@ -641,7 +641,7 @@ function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[];
               {formatCount(activity?.operations ?? 0)}
             </span>
             <span className="text-small text-fg-2">
-              operations of verified ids, {formatCount(activity?.verified ?? 0)} of{" "}
+              operations of verified IDs, {formatCount(activity?.verified ?? 0)} of{" "}
               {formatCount(chain.data.totals.ids)} verified
             </span>
           </span>

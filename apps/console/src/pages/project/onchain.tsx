@@ -227,7 +227,7 @@ function Activity({ view }: { view: OnchainView }) {
         <StatCard
           data-stat="waa"
           label="Weekly active accounts"
-          definition="The average of the counted ISO weeks. An active account started at least one operation with your verified ids in the week."
+          definition="The average of the counted ISO weeks. An active account started at least one operation with your verified IDs in the week."
           value={w.average === null ? null : Math.round(w.average)}
           missingReason={weeklyActiveText(w)}
         />
@@ -252,7 +252,7 @@ function Activity({ view }: { view: OnchainView }) {
           </span>
         </div>
         <p className="max-w-prose text-caption text-fg-2">
-          Accounts that started at least one operation with your verified ids in an ISO week (UTC).
+          Accounts that started at least one operation with your verified IDs in an ISO week (UTC).
           This is the SCF Growth Hack definition.
         </p>
         <WeeklyActiveList weeks={view.weeks} label="Weekly active accounts per ISO week" />
@@ -307,7 +307,7 @@ function Ids({
           Accounts and contracts
         </h2>
         <p className="text-small text-fg-2">
-          Prove control of each id. Only proven ids count toward your activity.
+          Prove control of each ID. Only proven IDs count toward your activity.
         </p>
       </div>
       {canChange ? <AddForm tenantId={tenantId} /> : null}
@@ -321,7 +321,7 @@ function Ids({
             : "An owner or member adds them after the terms are accepted."}
         </EmptyState>
       ) : (
-        <ul className="flex flex-col gap-3" aria-label="Declared ids">
+        <ul className="flex flex-col gap-3" aria-label="Declared IDs">
           {view.ids.map((id) => (
             <IdItem
               key={id.id}
@@ -355,7 +355,7 @@ function AddForm({ tenantId }: { tenantId: string }) {
       if (err instanceof ApiError && err.fields.strkey) {
         setError(
           err.fields.strkey === "duplicate"
-            ? "The project already declares this id."
+            ? "The project already declares this ID."
             : err.fields.strkey === "too_many"
               ? "A project declares at most 20 accounts and contracts."
               : "Enter a Stellar account (G…) or a Soroban contract (C…). Add a muxed account (M…) as its G account.",

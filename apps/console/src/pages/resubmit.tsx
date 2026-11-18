@@ -48,7 +48,7 @@ export function validateResubmit(values: ResubmitValues): ResubmitErrors {
   put("stellarUsage", v.stellarUsage(values.stellarUsage));
   put("scfRoundUrl", v.httpsUrl(values.scfRoundUrl.trim(), false));
   const ids = splitIds(values.stellarIds);
-  if (ids.length > 20) errors.stellarIds = "At most 20 ids.";
+  if (ids.length > 20) errors.stellarIds = "At most 20 IDs.";
   else {
     const bad = ids.findIndex((id) => v.strkey(id) !== null);
     if (bad >= 0) errors.stellarIds = `${ids[bad]}: ${v.fieldMessage("invalid_strkey")}`;
@@ -229,13 +229,13 @@ export function ResubmitForm({ tenant }: { tenant: Tenant }) {
           hint={changed("stellarUsage")}
         />
         <TextAreaField
-          label="Account or contract ids"
+          label="Account or contract IDs"
           name="stellar_ids"
           optional
           rows={3}
           className="font-mono text-small"
           spellCheck={false}
-          hint={changed("stellarIds", "Up to 20 ids starting with G, M or C, one per line.")}
+          hint={changed("stellarIds", "Up to 20 IDs starting with G, M or C, one per line.")}
           value={values.stellarIds}
           onChange={set("stellarIds")}
           error={errors.stellarIds}

@@ -337,7 +337,7 @@ function Answers({ detail }: { detail: OperatorTenantDetail }) {
             {detail.stellar_ids.length === 0 ? (
               <span className="text-fg">Not given</span>
             ) : (
-              <ul className="flex flex-col gap-1" aria-label="Account and contract ids">
+              <ul className="flex flex-col gap-1" aria-label="Account and contract IDs">
                 {detail.stellar_ids.map((s) => (
                   <li key={s.id} className="flex min-w-0 flex-col">
                     <code className="font-mono text-caption break-all text-fg">{s.id}</code>

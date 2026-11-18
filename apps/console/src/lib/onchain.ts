@@ -85,7 +85,7 @@ export function missingReasons(id: ChainId): { code: string; days: number }[] {
 
 // one definition of "Days without data" for every page that shows it
 export const DAYS_WITHOUT_DATA =
-  "Days before today without a ledger read, added up over the verified ids.";
+  "Days before today without a ledger read, added up over the verified IDs.";
 
 export const NO_VERIFIED_IDS = "No verified account or contract";
 export const NO_LEDGER_READ = "No ledger read for a verified id in this range";
