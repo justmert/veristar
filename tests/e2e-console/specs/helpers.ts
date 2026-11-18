@@ -250,12 +250,16 @@ export const NOT_FOUND = { error: expect.objectContaining({ code: "not_found" })
 
 // opens the web dashboard of a site the way a tenant does: the analytics
 // link of its row in the project overview's sites table
+// opens the web page of a project with one site from the overview, whose
+// link to web names that site
 export async function openDashboard(page: Page, tenantId: string, site: Site): Promise<void> {
   await page.goto(`${APP}/projects/${tenantId}`);
-  const row = page.getByRole("row").filter({ hasText: site.domain });
-  await row.getByRole("link", { name: `Web analytics of ${site.name}` }).click();
+  await page
+    .getByRole("main")
+    .locator(`a[href="/projects/${tenantId}/web?site=${site.id}"]`)
+    .click();
   await page.waitForURL(`${APP}/projects/${tenantId}/web?site=${site.id}`);
-  await expect(page.getByRole("heading", { name: "Web analytics" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Web", exact: true })).toBeVisible();
 }
 
 // registers a login with the oauth fixture, which then answers github's

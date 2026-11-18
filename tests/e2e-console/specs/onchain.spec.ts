@@ -82,10 +82,15 @@ test("an owner declares an account and gets a challenge to prove it", async () =
     expect(p.missing).not.toBeNull();
   }
 
-  // the overview shows the on-chain panel next to web and api
+  // the overview sums the on-chain activity up in one card, next to web
+  // and api, and links to the on-chain page
   await page.goto(`${APP}/projects/${tenant.id}`);
-  await expect(page.getByRole("heading", { name: "On-chain" })).toBeVisible();
-  await expect(page.getByText("0 of 1")).toBeVisible();
+  const card = page.getByRole("region", { name: "On-chain" });
+  await expect(card).toContainText("0 of 1 verified");
+  await expect(card.getByRole("link", { name: "On-chain" })).toHaveAttribute(
+    "href",
+    `/projects/${tenant.id}/onchain`,
+  );
 
   // weekly active accounts: the project has no verified id and the task
   // has not counted a week of it, so every iso week of the range shows its
@@ -102,11 +107,6 @@ test("an owner declares an account and gets a challenge to prove it", async () =
   }
   expect(weekly.body.totals.weekly_active_accounts.average).toBeNull();
   expect(weekly.body.totals.weekly_active_accounts.weeks_missing).toBe(weekly.body.weeks.length);
-  await expect(page.getByRole("heading", { name: "Weekly active accounts" })).toBeVisible();
-  const weeks = page.getByRole("list", { name: "Weekly active accounts per ISO week" });
-  await expect(weeks.locator("[data-week]")).toHaveCount(weekly.body.weeks.length);
-  await expect(weeks.locator("[data-week]").first()).toContainText("No count.");
-  await expect(page.getByTestId("waa-summary")).toContainText("No complete week counted");
 });
 
 test("what scf sees and the overview export answer for the project", async () => {
