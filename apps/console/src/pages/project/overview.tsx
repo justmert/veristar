@@ -532,9 +532,14 @@ function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[];
   // proven id is no card at all, the checklist above offers the step
   const showGrade = sites.length > 0 && (grade.data?.graded_days ?? 0) > 0;
   const showChain = (activity?.verified ?? 0) > 0;
-  if (sites.length === 0 && !showGrade && !showChain) return null;
+  const cards = [sites.length > 0, showGrade, showChain].filter(Boolean).length;
+  if (cards === 0) return null;
+  // the cards that stand share the row evenly, so two leave no hole
   return (
-    <section aria-label="Project" className="grid gap-3 md:grid-cols-3">
+    <section
+      aria-label="Project"
+      className={cn("grid gap-3", cards === 2 && "md:grid-cols-2", cards === 3 && "md:grid-cols-3")}
+    >
       {sites.length > 0 ? (
         <SummaryCard title="Sites" to={`/projects/${tenantId}/sites`} link="Sites">
           <span className="flex flex-wrap items-baseline gap-x-2">
