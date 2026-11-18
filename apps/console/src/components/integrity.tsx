@@ -444,10 +444,7 @@ export function CompareIntegrity({
   projects: { tenant: TenantRef; integrity: IntegrityRow & { reasons: IntegrityRangeReason[] } }[];
 }) {
   return (
-    <Panel
-      title="Integrity"
-      description="The grade over the range; a quarter of graded site days at a grade or worse sets it."
-    >
+    <Panel title="Integrity">
       <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label="Integrity per project">
         {projects.map((p) => (
           <li key={p.tenant.id} className="flex min-w-0 flex-col gap-2" data-tenant={p.tenant.id}>
