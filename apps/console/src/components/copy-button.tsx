@@ -55,11 +55,14 @@ export function CopyButton({
         variant={variant}
         size={iconOnly ? (size === "xs" ? "icon-xs" : "icon-sm") : size}
         onClick={copy}
+        // an icon-only button keeps a name while it shows the check
         aria-label={
-          copied
-            ? undefined
-            : iconOnly
-              ? label
+          iconOnly
+            ? copied
+              ? "Copied"
+              : label
+            : copied
+              ? undefined
               : (accessibleLabel ?? (label !== visibleLabel ? label : undefined))
         }
         className={copied ? "text-success" : undefined}
