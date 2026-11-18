@@ -39,7 +39,7 @@ export function GradeBadge({
   className?: string;
 }) {
   return (
-    <Pill tone={grade === null ? "info" : TONE[grade]} className={className}>
+    <Pill tone={grade === null ? "neutral" : TONE[grade]} className={className}>
       <span data-grade={grade ?? "none"}>{gradeText(grade)}</span>
     </Pill>
   );

@@ -523,7 +523,7 @@ function LastRequest({
 const LOOK: Record<string, { tone: Tone; icon: ReactNode; text: string }> = {
   Running: { tone: "info", icon: null, text: "text-fg" },
   Erased: { tone: "success", icon: <Check aria-hidden />, text: "text-fg" },
-  "Nothing found": { tone: "info", icon: <Minus aria-hidden />, text: "text-fg-2" },
+  "Nothing found": { tone: "neutral", icon: <Minus aria-hidden />, text: "text-fg-2" },
   Failed: { tone: "critical", icon: <X aria-hidden />, text: "text-fg" },
 };
 

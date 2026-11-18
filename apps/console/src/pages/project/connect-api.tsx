@@ -290,7 +290,7 @@ function Guide({ guide }: { guide: OtelGuide }) {
       ))}
       <More title={`Environment variables (${guide.env.length})`}>
         <div className="min-w-0 overflow-x-auto rounded-md border border-line">
-          <table className="w-full min-w-120 text-left text-small">
+          <table className="w-full min-w-120 text-left text-body">
             <thead className="text-caption text-fg-2">
               <tr className="border-b border-line">
                 <th scope="col" className="h-9 px-3 font-medium">

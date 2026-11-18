@@ -13,7 +13,7 @@ import { Breakable } from "@/pages/project/breakable";
 const VERIFY_TONE: Record<Verification, Tone> = {
   verified: "success",
   unverified: "warning",
-  unchecked: "info",
+  unchecked: "neutral",
 };
 
 const VERIFY_TEXT: Record<Verification, string> = {

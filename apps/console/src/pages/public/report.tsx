@@ -520,7 +520,7 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-small" aria-label="Key metrics">
+            <table className="w-full text-left text-body" aria-label="Key metrics">
               <thead>
                 <tr className="text-caption text-fg-2">
                   <th scope="col" className="py-2 pr-3 font-normal">

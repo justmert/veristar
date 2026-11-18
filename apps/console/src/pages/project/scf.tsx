@@ -878,7 +878,7 @@ function ReportRow({
       <span className="flex min-w-48 flex-1 flex-col gap-1">
         <span className="flex flex-wrap items-center gap-2">
           <span className="text-body font-medium text-fg">{formatDateRange(r.from, r.to)}</span>
-          {revoked ? <Pill tone="info">Link revoked</Pill> : null}
+          {revoked ? <Pill tone="neutral">Link revoked</Pill> : null}
         </span>
         <span className="text-caption text-fg-2">
           Generated {formatDateTimeUtc(r.created_at)}, {countOf(r.view_count, "view")}
