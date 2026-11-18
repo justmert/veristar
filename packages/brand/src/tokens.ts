@@ -377,10 +377,13 @@ export const motion = {
   spring: { stiffness: 520, damping: 42, mass: 0.8 },
 } as const;
 
-// stacking layers above the page. a toast sits over menus and the sticky
-// header; a native <dialog> is in the top layer above all of them.
+// stacking layers above the page. a table header that sticks to the top
+// sits over the rows (and their raised controls) and under the shell
+// header. a toast sits over menus and the sticky header; a native <dialog>
+// is in the top layer above all of them.
 export const layer = {
   raised: 10,
+  sticky: 20,
   header: 30,
   overlay: 50,
   toast: 60,
