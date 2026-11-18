@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"net/netip"
 	"net/url"
 	"sort"
 	"strings"
@@ -130,10 +131,18 @@ func SanitizeURL(u string, collectUTM bool) (string, redact.Flags, int) {
 	return out, flags, dropped
 }
 
-// sanRooted returns / for a url that does not start with one.
+// sanRooted returns / for a url that does not start with one, and keeps a
+// path that starts with // or /\ a path: umami resolves the url against
+// https://<hostname> with the whatwg url parser, which reads such a start as
+// a host (//docs/a is stored as /a, //[ fails the whole send). the parser
+// removes the /. segment again, so umami stores the path as the browser
+// reported it.
 func sanRooted(s string) string {
 	if s == "" || s[0] != '/' {
 		return "/"
+	}
+	if len(s) > 1 && (s[1] == '/' || s[1] == '\\') {
+		return "/." + s
 	}
 	return s
 }
@@ -292,7 +301,7 @@ func SanitizeReferrer(r string) (string, redact.Flags) {
 		return "", 0
 	}
 	pu, err := url.Parse(r)
-	if err != nil || pu.Scheme == "" || pu.Opaque != "" || pu.Hostname() == "" {
+	if err != nil || pu.Scheme == "" || pu.Opaque != "" || !sanWHATWGHost(strings.ToLower(pu.Hostname())) {
 		return "", 0
 	}
 	// the port goes with the path: a host is what the referrers metric lists
@@ -302,6 +311,56 @@ func SanitizeReferrer(r string) (string, redact.Flags) {
 		host = "[" + host + "]"
 	}
 	return sanCapURL(strings.ToLower(pu.Scheme)+"://"+host, events.MaxReferrer), flags
+}
+
+// sanWHATWGHost reports whether umami's whatwg url parser accepts h, a lower
+// cased host as url.Hostname gives it. go's parser accepts hosts that the
+// whatwg one refuses (a<b, a%b, 1.2.3.256, a zone), and umami answers 500
+// for a referrer it cannot parse. a browser sends the host in its
+// serialized form: ascii (punycode for an internationalized name), an ipv4
+// address in dotted decimal, an ipv6 literal. only these forms are kept.
+func sanWHATWGHost(h string) bool {
+	if h == "" {
+		return false
+	}
+	if strings.Contains(h, ":") {
+		a, err := netip.ParseAddr(h)
+		return err == nil && a.Is6() && a.Zone() == ""
+	}
+	for i := 0; i < len(h); i++ {
+		c := h[i]
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' && c != '.' && c != '_' {
+			return false
+		}
+	}
+	// a host whose last label is a number is an ipv4 address to the whatwg
+	// parser, which fails on one that is not a valid address
+	last := strings.TrimSuffix(h, ".")
+	last = last[strings.LastIndexByte(last, '.')+1:]
+	if sanNumericLabel(last) {
+		a, err := netip.ParseAddr(strings.TrimSuffix(h, "."))
+		return err == nil && a.Is4()
+	}
+	return true
+}
+
+// sanNumericLabel is the whatwg "ends in a number" test for one label:
+// decimal digits, or 0x followed by hex digits.
+func sanNumericLabel(l string) bool {
+	if l == "" {
+		return false
+	}
+	digits, hexDigits := l, false
+	if rest, ok := strings.CutPrefix(l, "0x"); ok {
+		digits, hexDigits = rest, true
+	}
+	for i := 0; i < len(digits); i++ {
+		c := digits[i]
+		if (c < '0' || c > '9') && (!hexDigits || c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // SanitizeHostname lower cases and redacts a page hostname, then cuts it to

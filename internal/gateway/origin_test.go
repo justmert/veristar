@@ -78,6 +78,10 @@ func TestValidOriginPattern(t *testing.T) {
 		"https://*example.org", "https://example.org/", "https://example.org/path", "ftp://example.org",
 		"https://*.127.0.0.1", "https://bücher.example", "https://-a.example", "https://a_b.example",
 		"https://example.org:", "https://u:p@example.org",
+		// a last label that is a number makes the whatwg parser read the
+		// host as an ipv4 address; these are not valid ones, so no browser
+		// sends them and umami fails on them
+		"https://1.2.3.256", "https://*.10.0.1", "https://a.09", "https://a.0x1",
 	} {
 		require.Error(t, ValidOriginPattern(p), p)
 	}
