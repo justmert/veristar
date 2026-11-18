@@ -297,7 +297,6 @@ export function McpKeyCreateForm({
     mutationFn: create,
     onSuccess: (k) => {
       setForm({ name: "", days: String(MCP_KEY_DEFAULT_DAYS) });
-      toast.success(`${k.name} is created. Copy the key now.`);
       onCreated(k);
     },
     onError: (err) => setErrors(serverErrors(err)),
@@ -366,10 +365,11 @@ export function CreatedKeyPanel({
     <section aria-label="New access key">
       <SecretPanel
         value={created.key}
-        title={`Copy the key ${created.name} now`}
+        noun="key"
+        name={created.name}
         description={`It is shown only once. It expires ${
           created.expires_at ? formatDateTimeUtc(created.expires_at) : "never"
-        }. The commands above now hold it.`}
+        }. The Claude Code and Cursor commands above now hold it.`}
         onDone={onDone}
         copyLabel="Copy key"
       />

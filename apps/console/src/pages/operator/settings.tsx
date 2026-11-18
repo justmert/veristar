@@ -115,7 +115,11 @@ function EnrollmentModeSetting() {
     mutationFn: (m: EnrollmentMode) => api.operator.setEnrollmentMode(m),
     onSuccess: async (r) => {
       queryClient.setQueryData(keys.opMode, r);
-      toast.success(`Enrollment is now ${MODE_TEXT[r.mode].name.toLowerCase()}.`);
+      toast.success(
+        r.mode === "approval"
+          ? "Enrollment now requires approval."
+          : "Enrollment is now open. New projects are active at once.",
+      );
       setTarget(null);
       setChoice(null);
       await queryClient.invalidateQueries({ queryKey: [...keys.operator, "audit"] });

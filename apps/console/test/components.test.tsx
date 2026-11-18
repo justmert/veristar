@@ -181,7 +181,12 @@ describe("secret panel", () => {
   it("masks the secret and needs the stored confirmation before Done", async () => {
     const done = vi.fn();
     const host = await render(
-      <SecretPanel value="sa_otlp_Ab3xSecretValue" title="Token created" onDone={done} />,
+      <SecretPanel
+        value="sa_otlp_Ab3xSecretValue"
+        noun="token"
+        name="Payments API"
+        onDone={done}
+      />,
     );
     expect(host.textContent).not.toContain("Ab3xSecretValue");
     const finish = byRole(host, "button", "Done") as HTMLButtonElement;

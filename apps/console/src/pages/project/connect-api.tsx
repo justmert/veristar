@@ -575,7 +575,6 @@ export function CreateTokenForm({
     onSuccess: async (t) => {
       setValues({ name: "", environment: "" });
       onCreated(t);
-      toast.success(`${t.name} is created. Copy the token now.`);
       await queryClient.invalidateQueries({ queryKey: keys.otlpTokensAll(tenantId) });
     },
     onError: (err) => setErrors(serverTokenErrors(err)),
@@ -644,7 +643,8 @@ export function CreatedToken({ token, onDone }: { token: OtlpTokenCreated; onDon
   return (
     <SecretPanel
       value={token.token}
-      title={`Copy the token ${token.name} now`}
+      noun="token"
+      name={token.name}
       description="Store it as a secret of your app. It is shown only this once. If you lose it, create a new token and revoke this one."
       onDone={onDone}
     />
