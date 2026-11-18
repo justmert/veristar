@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Download } from "lucide-react";
+import { ChevronDown, Download } from "lucide-react";
 import { useState } from "react";
 import {
   type ChainId,
@@ -10,10 +10,11 @@ import {
   type FunctionUsage,
   functionsQuery,
 } from "@/api/onchain";
+import { type Column, DataTable } from "@/components/data-table";
 import { DayStrip } from "@/components/onchain";
 import { ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { formatCount } from "@/lib/format";
+import { countOf, formatCount } from "@/lib/format";
 import { missingText } from "@/lib/onchain";
 
 // how a verified soroban contract is used: its calls per function and
@@ -29,7 +30,7 @@ const CALLER_TEXT: Record<FunctionUsage["caller"], string> = {
 };
 
 const FAILED_NOTE =
-  "Calls of accounts come from successful transactions only: a failed transaction keeps no contract events, so the source does not list it";
+  "Not counted for accounts: a failed transaction keeps no contract events, so the ledger API does not list it.";
 
 export function functionLabel(f: Pick<FunctionUsage, "function">): string {
   return f.function === "{other}" ? "Other functions" : f.function;
@@ -37,64 +38,90 @@ export function functionLabel(f: Pick<FunctionUsage, "function">): string {
 
 // the read state of a range in one line
 export function functionsDaysText(s: FunctionsSummary): string {
-  const parts = [`${formatCount(s.days_read)} ${s.days_read === 1 ? "day" : "days"} read`];
+  const parts = [`${countOf(s.days_read, "day")} read`];
   if (s.days_no_call_tree)
     parts.push(`${formatCount(s.days_no_call_tree)} with calls of accounts only`);
   if (s.days_missing) parts.push(`${formatCount(s.days_missing)} without data`);
   return parts.join(", ");
 }
 
+type Row = Omit<FunctionUsage, "series">;
+
+const COLUMNS: Column<Row>[] = [
+  {
+    key: "function",
+    header: "Function",
+    primary: true,
+    minWidth: "min-w-40",
+    truncate: (f) => functionLabel(f),
+    cell: (f) => <code className="font-mono text-fg">{functionLabel(f)}</code>,
+  },
+  {
+    key: "caller",
+    header: "Called by",
+    mobile: true,
+    cell: (f) => CALLER_TEXT[f.caller],
+  },
+  {
+    key: "successful",
+    header: "Successful",
+    align: "right",
+    numeric: true,
+    mobile: true,
+    cell: (f) => formatCount(f.successful),
+  },
+  {
+    key: "failed",
+    header: "Failed",
+    align: "right",
+    numeric: true,
+    cell: (f) => (f.failed === null ? <Missing reason={FAILED_NOTE} /> : formatCount(f.failed)),
+  },
+  {
+    key: "peak",
+    header: "Peak accounts a day",
+    definition: "The most distinct accounts behind the calls on one UTC day.",
+    align: "right",
+    numeric: true,
+    cell: (f) => formatCount(f.peak_daily_accounts),
+  },
+  {
+    key: "days",
+    header: "Days with calls",
+    align: "right",
+    numeric: true,
+    mobile: true,
+    cell: (f) => formatCount(f.days_with_calls),
+  },
+];
+
 export function FunctionsTable({ summary, label }: { summary: FunctionsSummary; label: string }) {
   const [all, setAll] = useState(false);
-  const rows = all ? summary.functions : summary.functions.slice(0, FIRST_ROWS);
   if (summary.functions.length === 0) {
     return (
       <p className="text-small text-fg-2">
-        No calls found on the days read. Calls are found in the transactions where the contract
-        emits an event.
+        No calls on the days read. Calls show when the contract emits an event in a transaction.
       </p>
     );
   }
+  const rows = all ? summary.functions : summary.functions.slice(0, FIRST_ROWS);
   return (
-    <div className="flex flex-col gap-2">
-      <div className="overflow-x-auto">
-        <table aria-label={label} className="w-full min-w-[34rem] text-small">
-          <thead>
-            <tr className="text-left text-caption text-fg-3">
-              <th className="py-1 pr-3 font-normal">Function</th>
-              <th className="py-1 pr-3 font-normal">Called by</th>
-              <th className="py-1 pr-3 text-right font-normal">Successful</th>
-              <th className="py-1 pr-3 text-right font-normal">Failed</th>
-              <th className="py-1 pr-3 text-right font-normal">Peak accounts a day</th>
-              <th className="py-1 text-right font-normal">Days with calls</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {rows.map((f) => (
-              <tr
-                key={`${f.caller}/${f.function}`}
-                data-function={f.function}
-                data-caller={f.caller}
-              >
-                <td className="py-2 pr-3">
-                  <code className="text-fg">{functionLabel(f)}</code>
-                </td>
-                <td className="py-2 pr-3 text-fg-2">{CALLER_TEXT[f.caller]}</td>
-                <td className="py-2 pr-3 text-right tabular-nums">{formatCount(f.successful)}</td>
-                <td className="py-2 pr-3 text-right tabular-nums">
-                  {f.failed === null ? <Missing reason={FAILED_NOTE} /> : formatCount(f.failed)}
-                </td>
-                <td className="py-2 pr-3 text-right tabular-nums">
-                  {formatCount(f.peak_daily_accounts)}
-                </td>
-                <td className="py-2 text-right tabular-nums">{formatCount(f.days_with_calls)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div className="flex min-w-0 flex-col gap-2">
+      <DataTable<Row>
+        label={label}
+        columns={COLUMNS}
+        rows={rows}
+        getRowKey={(f) => `${f.caller}/${f.function}`}
+        rowLabel={(f) => `${functionLabel(f)}, ${CALLER_TEXT[f.caller].toLowerCase()}`}
+        rowProps={(f) => ({ "data-function": f.function, "data-caller": f.caller })}
+      />
       {summary.functions.length > FIRST_ROWS ? (
-        <Button variant="ghost" size="xs" className="w-fit" onClick={() => setAll(!all)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-fit print:hidden"
+          onClick={() => setAll(!all)}
+        >
           {all ? "Show fewer" : `Show all ${summary.functions.length}`}
         </Button>
       ) : null}
@@ -112,22 +139,26 @@ export function FunctionsDaily({ data }: { data: ContractFunctions }) {
   }
   const partial = data.days.filter((d) => d.state === "no_call_tree").length;
   return (
-    <div className="flex flex-col gap-3">
-      {[...reasons.entries()].map(([code, n]) => (
-        <span key={code} className="text-caption text-fg-2">
-          {n} {n === 1 ? "day" : "days"} without data: {missingText(code)}
-        </span>
-      ))}
-      {partial ? (
-        <span className="text-caption text-fg-2">
-          {partial} {partial === 1 ? "day" : "days"} with the calls of accounts only:{" "}
-          {missingText("no_call_tree")}
-        </span>
+    <div className="flex flex-col gap-4">
+      {reasons.size || partial ? (
+        <ul className="flex flex-col gap-1 text-caption text-fg-2">
+          {[...reasons.entries()].map(([code, n]) => (
+            <li key={code}>
+              {countOf(n, "day")} without data: {missingText(code)}
+            </li>
+          ))}
+          {partial ? (
+            <li>
+              {countOf(partial, "day")} with the calls of accounts only:{" "}
+              {missingText("no_call_tree")}
+            </li>
+          ) : null}
+        </ul>
       ) : null}
       {data.functions.map((f) => (
         <div key={`${f.caller}/${f.function}`} className="flex flex-col gap-1">
-          <span className="text-caption text-fg-3">
-            <code className="text-fg-2">{functionLabel(f)}</code> called by{" "}
+          <span className="text-caption text-fg-2">
+            <code className="font-mono text-fg">{functionLabel(f)}</code> called by{" "}
             {CALLER_TEXT[f.caller].toLowerCase()}, successful calls per day
           </span>
           <DayStrip
@@ -177,30 +208,43 @@ export function ContractFunctionsBlock({ id, source }: { id: ChainId; source?: F
   return (
     <section
       aria-label={`Calls per function of ${id.strkey}`}
-      className="flex flex-col gap-2 rounded-md border border-line bg-sunken px-3 py-3"
+      className="flex min-w-0 flex-col gap-3 rounded-md border border-line bg-sunken p-3 sm:p-4"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h4 className="text-body font-medium text-fg">Calls per function</h4>
         {s ? (
-          <span className="text-caption text-fg-3" data-testid="functions-days">
+          <span className="text-caption text-fg-2" data-testid="functions-days">
             {functionsDaysText(s)}
           </span>
         ) : null}
       </div>
       {s === null ? (
         <p className="text-small text-fg-2">
-          Calls per function show once the contract is verified. Only verified contracts count.
+          Calls per function show when the contract is verified. Only verified contracts count.
         </p>
       ) : (
         <>
           <FunctionsTable summary={s} label={`Calls per function of ${id.strkey}`} />
           {source ? (
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => setOpen(!open)}>
-                {open ? <ChevronDown aria-hidden /> : <ChevronRight aria-hidden />}
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-expanded={open}
+                onClick={() => setOpen(!open)}
+                className="max-lg:h-(--vs-control-touch)"
+              >
+                <ChevronDown
+                  aria-hidden
+                  className={
+                    open
+                      ? "rotate-180 transition-transform duration-(--vs-duration-press) ease-standard"
+                      : "transition-transform duration-(--vs-duration-press) ease-standard"
+                  }
+                />
                 Daily calls
               </Button>
-              <Button asChild variant="outline" size="xs">
+              <Button asChild variant="ghost" size="sm" className="max-lg:h-(--vs-control-touch)">
                 <a href={exportPaths.functions(source, id.id)} download>
                   <Download aria-hidden />
                   Export CSV
@@ -208,7 +252,11 @@ export function ContractFunctionsBlock({ id, source }: { id: ChainId; source?: F
               </Button>
             </div>
           ) : null}
-          {source && open ? <DailyCalls id={id} source={source} /> : null}
+          {source && open ? (
+            <div className="animate-rise-in">
+              <DailyCalls id={id} source={source} />
+            </div>
+          ) : null}
         </>
       )}
     </section>
