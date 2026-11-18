@@ -144,12 +144,19 @@ test("the operator reads the column and the export", async () => {
   await page.goto(`${APP}/operator/projects?view=web&q=${run}`);
   const row = page.locator(`tbody tr[data-tenant="${tenant.id}"]`);
   await expect(row).toBeVisible();
+  // the column is one of the optional ones: the column menu shows it
+  await page.getByRole("button", { name: "Columns" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Not measured" }).click();
+  await page.keyboard.press("Escape");
   const cell = row.locator("[data-col=unmeasured_share]");
   await expect(cell).toHaveText("–no estimate");
   await expect(row.getByTestId("coverage-detail")).toHaveText(
     "too few loads, 1 of 3 loads with GPC",
   );
-  await page.getByRole("button", { name: "Not measured", exact: true }).click();
+  await page
+    .getByRole("columnheader", { name: "Not measured", exact: true })
+    .getByRole("button")
+    .click();
   await page.waitForURL(/sort=unmeasured_share/);
   await page.screenshot({ path: join(shots, "global-web.png") });
 

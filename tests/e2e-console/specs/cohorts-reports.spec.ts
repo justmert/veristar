@@ -99,10 +99,17 @@ test("the owner proposes a cohort and an operator confirms it", async () => {
 
   // the global web view filters by the confirmed program and shows it
   await o.goto(`${APP}/operator/projects?view=web`);
-  await o.getByLabel("Program").selectOption(PROGRAM);
+  await o.getByRole("button", { name: /^Filters/ }).click();
+  const sheet = o.getByRole("dialog", { name: "Filters" });
+  await sheet.getByLabel("SCF program").selectOption(PROGRAM);
   await expect(o).toHaveURL(
     new RegExp(`program=${encodeURIComponent(PROGRAM).replaceAll("%20", "(\\+|%20)")}`),
   );
+  await sheet.getByRole("button", { name: "Show results" }).click();
+  // the cohort is an optional column
+  await o.getByRole("button", { name: "Columns" }).click();
+  await o.getByRole("menuitemcheckbox", { name: "Cohort" }).click();
+  await o.keyboard.press("Escape");
   const row = o.locator(`tr[data-tenant="${tenant.id}"]`);
   await expect(row.locator("[data-cohort]")).toContainText(`${PROGRAM}, SCF #38`);
   await expect(o.locator("tbody tr")).toHaveCount(1);
@@ -114,15 +121,19 @@ test("an operator saves a threshold rule and opens its matches", async () => {
   await o.getByRole("button", { name: "New rule" }).click();
   const form = o.getByRole("region", { name: "New rule" });
   await form.getByLabel("Name").fill(`Steady web ${run}`);
-  await form.getByLabel("At least, per day").fill("1");
-  await form.getByLabel("On days per month").fill("1");
+  await form.getByLabel("Minimum per day").fill("1");
+  await form.getByLabel("Days per month").fill("1");
   await form.getByLabel("Months", { exact: true }).fill("1");
   // the cohort is chosen from the confirmed values
-  await form.getByLabel("Program").selectOption(PROGRAM);
+  await form.getByLabel("SCF program").selectOption(PROGRAM);
   await form.getByRole("button", { name: "Save rule" }).click();
   const matches = o.getByRole("region", { name: "Rule matches" });
   // the project has no traffic, so it is evaluated and does not qualify
-  await expect(matches).toContainText("0 of 1 evaluated projects meet the rule");
+  await expect(matches).toContainText("0 of 1 project meet the rule");
+  // the list of rules says how many projects meet each one
+  await expect(
+    o.getByRole("table", { name: "Rules" }).locator("tr", { hasText: `Steady web ${run}` }),
+  ).toContainText("0 of 1");
   const csv = matches.getByRole("link", { name: "Export CSV" });
   await expect(csv).toHaveAttribute("href", /\/api\/operator\/rules\/[0-9a-f-]{36}\/matches\.csv$/);
 
