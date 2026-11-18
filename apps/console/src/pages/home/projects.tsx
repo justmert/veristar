@@ -11,7 +11,7 @@ import { FilterBar } from "@/components/filter-bar";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
-import { EmptyState, ErrorState, Missing } from "@/components/states";
+import { EmptyState, ErrorState } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -75,7 +75,6 @@ export function ProjectsPage() {
   const header = (
     <PageHeader
       title="My projects"
-      description="A project is one team, with its sites, keys and members."
       primary={me.data && tenants.length > 0 ? <EnrollButton /> : null}
     />
   );
@@ -317,24 +316,12 @@ function ProjectCard({
           )}
         </Metric>
         <Metric label="Page views" pending={sites.isPending || (hasSites && web.isPending)}>
-          {sites.isError || web.isError ? (
-            <NotLoaded />
-          ) : !hasSites ? (
-            <Missing reason="No site yet" />
-          ) : views === null ? (
-            <Missing reason="No data in this range" />
-          ) : (
-            formatCount(views)
-          )}
+          {/* a count with nothing behind it is 0, the same form as the
+              api count beside it */}
+          {sites.isError || web.isError ? <NotLoaded /> : formatCount(hasSites ? (views ?? 0) : 0)}
         </Metric>
         <Metric label="API requests" pending={api.isPending}>
-          {api.isError ? (
-            <NotLoaded />
-          ) : requests === null ? (
-            <Missing reason="No data in this range" />
-          ) : (
-            formatCount(requests)
-          )}
+          {api.isError ? <NotLoaded /> : formatCount(requests ?? 0)}
         </Metric>
       </dl>
     </Link>
