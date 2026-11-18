@@ -10,7 +10,9 @@
 // NPM_PACKAGE is the npm scope that has trusted publishing set up. it is
 // required and never guessed, so nothing can be packed under a made-up name.
 // the version must be a released version in releases/manifest.json, so the
-// sdk.js inside the package is byte-identical to the immutable release.
+// sdk.js inside the package is byte-identical to the immutable release, and
+// it must be the version of package.json, because the javascript is compiled
+// from the current source.
 //
 // the output depends only on the source, the pinned esbuild and typescript and
 // the inputs, and `npm pack` writes fixed timestamps, so two runs give the
@@ -46,6 +48,13 @@ export async function pack(name, version, outRoot = join(ROOT, "npm")) {
   }
   const entry = readManifest().versions.find((v) => v.version === version);
   if (!entry) throw new Error(`${version} is not a released version in releases/manifest.json`);
+  // dist/ is compiled from src/, which is the code of package.json's version
+  // only. packing an older release would label today's code with its number
+  if (version !== packageVersion()) {
+    throw new Error(
+      `the source is at ${packageVersion()}, so only that version can be packed; check out the tag of ${version} to pack it`,
+    );
+  }
 
   const out = join(outRoot, version);
   rmSync(out, { recursive: true, force: true });

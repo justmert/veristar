@@ -108,4 +108,12 @@ describe("npm package", () => {
     await expect(pack("tracker", version, join(work, "c"))).rejects.toThrow(/scoped npm name/);
     await expect(pack(NAME, "9.9.9", join(work, "c"))).rejects.toThrow(/not a released version/);
   });
+
+  // the package's javascript is built from the current source, so an older
+  // release would ship today's code under its version number
+  it("refuses a released version other than the source's own", async () => {
+    const older = readManifest().versions.find((v: { version: string }) => v.version !== version);
+    expect(older).toBeDefined();
+    await expect(pack(NAME, older.version, join(work, "d"))).rejects.toThrow(/source is at/);
+  });
 });
