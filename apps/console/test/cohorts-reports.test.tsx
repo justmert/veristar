@@ -66,33 +66,53 @@ async function select(el: HTMLSelectElement, value: string) {
 
 describe("global views with cohorts (contract 19.1 to 19.3)", () => {
   it("sends the cohort filters and shows change, percentile and cohort per row", async () => {
+    window.localStorage.setItem(
+      "veristar.operator.projects.columns.web",
+      JSON.stringify([
+        "cohort",
+        "visitors_growth",
+        "pageviews_growth",
+        "onchain_operations_growth",
+        "visitors_percentile",
+      ]),
+    );
+    const big = {
+      ...f.webProjectsBody,
+      items: [{ ...f.webProjectA, cohort_size: 12 }, f.webProjectB],
+    };
     const calls = routeFetch((_m, url) =>
       url === "/api/operator/cohorts"
         ? { status: 200, body: f.cohortListBody }
-        : { status: 200, body: f.webProjectsBody },
+        : { status: 200, body: url.includes("program=") ? f.webProjectsBody : big },
     );
     const host = await renderRoutes(
       [{ path: "/operator/projects", element: <OperatorProjectsPage /> }],
       "/operator/projects?view=web",
     );
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
-    const row = host.querySelector<HTMLElement>(`tr[data-tenant="${c.TENANT_ID}"]`);
-    expect(row?.querySelector("[data-cohort]")?.textContent).toBe(
-      "Build Award, SCF #38, DeFi, awarded 2026-11-11",
+    const row = () => host.querySelector<HTMLElement>(`tr[data-tenant="${c.TENANT_ID}"]`);
+    expect(row()?.querySelector("[data-cohort]")?.textContent).toBe(
+      "Build Award, SCF #38, DeFi, awarded Nov 11, 2026",
     );
-    const changes = [...(row?.querySelectorAll("[data-kpi=change]") ?? [])].map(
+    const changes = [...(row()?.querySelectorAll("[data-kpi=change]") ?? [])].map(
       (e) => e.textContent,
     );
-    expect(changes).toEqual(["+100%", "-20%", "-none"]);
-    expect(row?.querySelector("[data-kpi=percentile]")?.textContent).toBe("P75 in cohort");
+    expect(changes).toEqual(["+100%", "-20%", "–No value in the previous range"]);
+    expect(row()?.querySelector("[data-kpi=percentile]")?.textContent).toBe("P75");
 
-    await select(byLabel(host, "Program") as unknown as HTMLSelectElement, "Build Award");
+    await select(byLabel(host, "SCF program") as unknown as HTMLSelectElement, "Build Award");
     await waitFor(() =>
       expect(calls.at(-1)?.url).toBe(
         "/api/operator/web/projects?program=Build%20Award&sort=pageviews&order=desc&limit=50",
       ),
     );
-    await select(byLabel(host, "Round") as unknown as HTMLSelectElement, "SCF #38");
+    // a cohort of four is too small for a percentile
+    await waitFor(() =>
+      expect(row()?.querySelector("[data-kpi=percentile]")?.textContent).toContain(
+        "Fewer than 5 projects in the cohort",
+      ),
+    );
+    await select(byLabel(host, "SCF round") as unknown as HTMLSelectElement, "SCF #38");
     await waitFor(() => expect(calls.at(-1)?.url).toContain("round=SCF%20%2338"));
 
     const header = [...host.querySelectorAll("th button")].find(
@@ -100,7 +120,13 @@ describe("global views with cohorts (contract 19.1 to 19.3)", () => {
     );
     await click(header as HTMLElement);
     await waitFor(() => expect(calls.at(-1)?.url).toContain("sort=visitors_growth&order=desc"));
-    expect(host.textContent).toContain("for the error rate a higher percentile means more errors");
+    const pctHead = [...host.querySelectorAll("th button")].find(
+      (b) => b.textContent === "Visitors percentile",
+    );
+    expect(pctHead?.getAttribute("aria-description")).toContain(
+      "The cohort filters set the cohort",
+    );
+    window.localStorage.clear();
   });
 
   it("marks each compared project's award date on the charts", async () => {
@@ -117,7 +143,7 @@ describe("global views with cohorts (contract 19.1 to 19.3)", () => {
     expect(markers.length).toBeGreaterThan(4);
     expect(markers[0]?.textContent).toContain("Stellar DEX awarded");
     expect(
-      host.querySelector("ul[aria-label='Compared projects'] [data-cohort]")?.textContent,
+      host.querySelector("section[aria-label='Compared projects'] [data-cohort]")?.textContent,
     ).toBe("Build Award, SCF #38, DeFi");
   });
 });
@@ -188,15 +214,15 @@ describe("threshold rules (contract 19.4)", () => {
     expect(calls.some((x) => x.method === "POST")).toBe(false);
 
     await type(byLabel(host, "Name") as HTMLInputElement, " Steady web ");
-    await type(byLabel(host, "At least, per day") as HTMLInputElement, "100");
-    await type(byLabel(host, "On days per month") as HTMLInputElement, "3");
+    await type(byLabel(host, "Minimum per day") as HTMLInputElement, "100");
+    await type(byLabel(host, "Days per month") as HTMLInputElement, "3");
     await type(byLabel(host, "Months") as HTMLInputElement, "2");
     await select(byLabel(host, "Minimum integrity grade") as unknown as HTMLSelectElement, "B");
     // the cohort is chosen from the confirmed values
     await waitFor(() =>
-      expect((byLabel(host, "Program") as unknown as HTMLSelectElement).disabled).toBe(false),
+      expect((byLabel(host, "SCF program") as unknown as HTMLSelectElement).disabled).toBe(false),
     );
-    await select(byLabel(host, "Program") as unknown as HTMLSelectElement, "Build Award");
+    await select(byLabel(host, "SCF program") as unknown as HTMLSelectElement, "Build Award");
     await click(byRole(host, "button", "Save rule"));
     await waitFor(() => expect(calls.find((x) => x.method === "POST")).toBeDefined());
     expect(calls.find((x) => x.method === "POST")?.body).toEqual({
@@ -210,19 +236,30 @@ describe("threshold rules (contract 19.4)", () => {
     });
 
     // saving opens the rule's matches
-    await waitFor(() =>
-      expect(host.textContent).toContain("1 of 3 evaluated projects meet the rule"),
-    );
+    await waitFor(() => expect(host.textContent).toContain("1 of 3 projects meet the rule"));
     expect(host.textContent).toContain("2026-09: 3 qualifying days");
-    expect(host.textContent).toContain("01: 120");
-    expect(host.textContent).toContain("Integrity grade A");
+    expect(host.textContent).toContain("Sep 1, 2026: 120");
+    expect(host.textContent).toContain("Grade A");
+    // the list says how many projects meet each rule
+    await waitFor(() =>
+      expect(host.querySelector(`[data-matches="${rule.id}"]`)?.textContent).toBe("1 of 3"),
+    );
     const csv = [...host.querySelectorAll("a")].find((a) => a.textContent?.includes("Export CSV"));
     expect(csv?.getAttribute("href")).toBe(`/api/operator/rules/${rule.id}/matches.csv`);
     expect(host.textContent).toContain(
       "Verified visitors of at least 100 a day on 3 or more days in each of the last 2 complete months, integrity grade B or better",
     );
 
-    await click(byRole(host, "button", "Delete"));
+    await act(async () => {
+      (
+        host.querySelector(`button[aria-label="Actions for ${rule.name}"]`) as HTMLElement
+      ).dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+    });
+    await click(
+      [...host.ownerDocument.querySelectorAll<HTMLElement>("[role=menuitem]")].find(
+        (m) => m.textContent === "Delete rule",
+      ) as HTMLElement,
+    );
     const dialog = [...host.querySelectorAll("dialog")].find((d) => d.hasAttribute("open"));
     const confirm = [...(dialog?.querySelectorAll("button") ?? [])].find(
       (b) => b.textContent === "Delete rule",

@@ -64,15 +64,29 @@ test.afterAll(async () => {
   await owner?.ctx.close();
 });
 
-// the action buttons of the detail page, then the dialog's reason and confirm
+// suspend, resume and remove sit in the actions menu of the project page;
+// each opens the confirmation with its reason (and for remove the slug)
 async function act(action: string, reason: string | null) {
   const page = op.page;
-  await page.getByRole("region", { name: "Actions" }).getByRole("button", { name: action }).click();
+  await page.getByRole("button", { name: "Actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: `${action} project` }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   if (reason !== null) await dialog.getByLabel("Reason").fill(reason);
-  await dialog.getByRole("button", { name: action, exact: true }).click();
+  if (action === "Remove") await dialog.getByLabel(/^Type .* to confirm$/).fill(tenant.slug);
+  await dialog.getByRole("button", { name: `${action} project`, exact: true }).click();
   await expect(dialog).toBeHidden();
+}
+
+// the actions the menu of the project page offers
+async function menuActions(): Promise<string[]> {
+  const page = op.page;
+  const trigger = page.getByRole("button", { name: "Actions", exact: true });
+  if ((await trigger.count()) === 0) return [];
+  await trigger.click();
+  const items = await page.getByRole("menuitem").allTextContents();
+  await page.keyboard.press("Escape");
+  return items;
 }
 
 async function ownerStatus(): Promise<{ status: number; body: Tenant & Envelope }> {
@@ -165,22 +179,31 @@ test("a new project waits in the review queue and the operator approves it", asy
   await page.goto(`${APP}/operator`);
   // the review workspace: pick the project in the queue, its evidence and
   // the decision show beside it, the project page holds every action
-  const queue = page.getByRole("region", { name: /^Review queue/ });
+  await expect(page.getByRole("heading", { level: 1, name: "Review" })).toBeVisible();
+  const queue = page.getByRole("navigation", { name: "Review queue" });
   await queue.getByRole("button").filter({ hasText: tenant.name }).click();
   const review = page.getByRole("region", { name: `Review ${tenant.name}` });
   await expect(review.getByRole("list", { name: "Evidence" })).toBeVisible();
   await expect(review.getByRole("radiogroup", { name: "Decision" })).toBeVisible();
-  await review.getByRole("link", { name: "Open project page" }).click();
+  // the numbers of the project sit next to the decision
+  await expect(review.getByRole("region", { name: "Numbers" })).toBeVisible();
+  await review.getByRole("link", { name: "Open the project page" }).click();
   await page.waitForURL(`${APP}/operator/projects/${tenant.id}`);
   // enrollment answers and the site with its evidence
   await expect(page.getByText("Soroban contracts on testnet", { exact: true })).toBeVisible();
   await expect(page.getByRole("article", { name: site.name })).toContainText(site.domain);
   await expect(page.getByRole("article", { name: site.name })).toContainText("stellar.toml");
-  const actions = page.getByRole("region", { name: "Actions" });
-  await expect(actions.getByRole("button")).toHaveText(["Approve", "Reject", "Remove"]);
+  // one decision panel for approve and reject; remove waits in the menu
+  const decision = page.getByRole("form", { name: `Decision on ${tenant.name}` });
+  await expect(decision.getByRole("radio")).toHaveText([/Approve/, /Reject/]);
+  expect(await menuActions()).toEqual(["Remove project"]);
 
-  await act("Approve", "Looks good");
-  await expect(actions.getByRole("button")).toHaveText(["Suspend", "Remove"]);
+  await decision.getByRole("radio", { name: /Approve/ }).click();
+  await decision.getByLabel(/^Reason/).fill("Looks good");
+  await decision.getByRole("button", { name: /^Approve project/ }).click();
+  await expect(page.getByText(`${tenant.name} approved.`)).toBeVisible();
+  await expect(decision).toHaveCount(0);
+  expect(await menuActions()).toEqual(["Suspend project", "Remove project"]);
 
   await waitProvisioned(owner.ctx, tenant.id);
   expect((await ownerStatus()).body.status).toBe("active");
@@ -190,15 +213,16 @@ test("a new project waits in the review queue and the operator approves it", asy
 
 test("suspend needs a reason, which the tenant owner then sees", async () => {
   const page = op.page;
-  const actions = page.getByRole("region", { name: "Actions" });
-  await actions.getByRole("button", { name: "Suspend" }).click();
+  await page.getByRole("button", { name: "Actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Suspend project" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Suspend", exact: true }).click();
+  await dialog.getByRole("button", { name: "Suspend project", exact: true }).click();
   await expect(dialog).toContainText("Required.");
   await dialog.getByLabel("Reason").fill("Unusual traffic, contact us");
-  await dialog.getByRole("button", { name: "Suspend", exact: true }).click();
+  await dialog.getByRole("button", { name: "Suspend project", exact: true }).click();
   await expect(dialog).toBeHidden();
-  await expect(actions.getByRole("button")).toHaveText(["Resume", "Remove"]);
+  await expect(page.getByText(`${tenant.name} is suspended.`)).toBeVisible();
+  expect(await menuActions()).toEqual(["Resume project", "Remove project"]);
 
   const t = await ownerStatus();
   expect(t.body.status).toBe("suspended");
@@ -210,10 +234,7 @@ test("suspend needs a reason, which the tenant owner then sees", async () => {
 
 test("resume returns the project to active", async () => {
   await act("Resume", null);
-  await expect(op.page.getByRole("region", { name: "Actions" }).getByRole("button")).toHaveText([
-    "Suspend",
-    "Remove",
-  ]);
+  expect(await menuActions()).toEqual(["Suspend project", "Remove project"]);
   const t = await ownerStatus();
   expect(t.body.status).toBe("active");
   expect(t.body.status_reason).toBeNull();
@@ -225,8 +246,8 @@ test("resume returns the project to active", async () => {
 
 test("remove takes the project away from its members and keeps the audit trail", async () => {
   await act("Remove", "Not a Stellar project");
-  await expect(op.page.getByText("No action is possible from this status.")).toBeVisible();
   await expect(op.page.getByRole("region", { name: "Removal" })).toBeVisible();
+  expect(await menuActions()).toEqual([]);
 
   const t = await ownerStatus();
   expect(t.status).toBe(404);
@@ -249,14 +270,20 @@ test("remove takes the project away from its members and keeps the audit trail",
 
   // the audit log, filtered to this project in the console
   const page = op.page;
-  await page.getByRole("link", { name: "Full audit log of this project" }).click();
+  await page.getByRole("link", { name: "Open the full audit log" }).click();
   const entries = page.getByRole("list", { name: "Audit entries" });
+  // each entry reads as a sentence; the action code stays in its details
+  for (const verb of ["approved", "suspended", "resumed", "removed"])
+    await expect(entries).toContainText(`${OPERATOR.login} ${verb}`);
   for (const action of ["tenant.approve", "tenant.suspend", "tenant.resume", "tenant.remove"])
     await expect(entries).toContainText(action);
   await expect(entries).toContainText("Reason: Unusual traffic, contact us");
   await expect(entries).toContainText("Reason: Not a Stellar project");
-  await page.getByLabel("Action").fill("settings.");
-  await page.getByLabel("Project id").fill("");
-  await page.getByRole("button", { name: "Apply filters" }).click();
-  await expect(entries).toContainText("settings.enrollment_mode");
+  // the filters apply at once, with no apply button
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  const sheet = page.getByRole("dialog", { name: "Filters" });
+  await sheet.getByLabel("Action").selectOption("settings.");
+  await sheet.getByLabel("Project id").fill("");
+  await sheet.getByRole("button", { name: "Show results" }).click();
+  await expect(entries).toContainText("changed the enrollment mode");
 });

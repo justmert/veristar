@@ -43,6 +43,8 @@ export function FilterBar({
   placeholder = "Search",
   filters = [],
   onClearAll,
+  collapsed = false,
+  actions,
   className,
 }: {
   search?: string;
@@ -52,9 +54,15 @@ export function FilterBar({
   filters?: Filter[];
   // clears the search and every filter; shown while anything is active
   onClearAll?: () => void;
+  // every filter sits behind the Filters button on a wide screen too, for a
+  // list with more filters than fit in one row
+  collapsed?: boolean;
+  // controls at the end of the row that are not filters, such as a view
+  // switch or a column chooser
+  actions?: ReactNode;
   className?: string;
 }) {
-  const phone = usePhone();
+  const inSheet = usePhone() || collapsed;
   const [sheet, setSheet] = useState(false);
   const searchId = useId();
   const active = filters.filter((f) => f.active);
@@ -83,7 +91,7 @@ export function FilterBar({
             />
           </div>
         ) : null}
-        {filters.length > 0 && !phone ? (
+        {filters.length > 0 && !inSheet ? (
           <div className="flex flex-wrap items-end gap-3">
             {filters.map((f) => (
               <div key={f.key} className="min-w-0">
@@ -92,13 +100,13 @@ export function FilterBar({
             ))}
           </div>
         ) : null}
-        {filters.length > 0 && phone ? (
+        {filters.length > 0 && inSheet ? (
           <Button
             type="button"
             variant="outline"
             aria-expanded={sheet}
             onClick={() => setSheet(true)}
-            className="h-(--vs-control-touch)"
+            className="max-lg:h-(--vs-control-touch)"
           >
             <SlidersHorizontal aria-hidden />
             Filters
@@ -110,6 +118,7 @@ export function FilterBar({
             ) : null}
           </Button>
         ) : null}
+        {actions ? <div className="flex flex-wrap items-end gap-2">{actions}</div> : null}
       </div>
 
       {anything ? (
@@ -149,7 +158,7 @@ export function FilterBar({
         </div>
       ) : null}
 
-      {phone ? (
+      {inSheet ? (
         <FilterSheet open={sheet} onClose={() => setSheet(false)}>
           {filters.map((f) => (
             <div key={f.key}>{f.control}</div>
@@ -188,7 +197,7 @@ function FilterSheet({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="dialog-motion mx-0 mt-auto mb-0 max-h-[85dvh] w-full max-w-none overflow-y-auto rounded-t-xl border border-line-strong bg-overlay p-0 text-fg shadow-dialog"
+      className="dialog-motion mx-0 mt-auto mb-0 max-h-[85dvh] w-full max-w-none overflow-y-auto rounded-t-xl border border-line-strong bg-overlay p-0 text-fg shadow-dialog sm:m-auto sm:max-w-lg sm:rounded-xl"
     >
       <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
         <h2 id={titleId} className="text-title">

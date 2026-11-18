@@ -180,6 +180,29 @@ describe("time chart", () => {
     expect(host.querySelector("[data-ceiling]")?.textContent).toBe(">10 s above");
     expect(host.querySelector("[data-marker]")?.textContent).toBe("Award date");
   });
+
+  it("draws one marker per compared project and bands the running period of a line", async () => {
+    const host = await render(
+      <TimeChart
+        title="Visitors"
+        kind="line"
+        state="data"
+        buckets={buckets}
+        series={[
+          { key: "a", label: "Lumen Pay", tone: "series-1", values: [3, 4, 1] },
+          { key: "b", label: "Orbit Labs", tone: "series-2", values: [1, 2, 0] },
+        ]}
+        markers={[
+          { at: "2026-11-16", label: "Lumen Pay awarded" },
+          { at: "2026-11-17", label: "Orbit Labs awarded" },
+        ]}
+      />,
+    );
+    const marks = [...host.querySelectorAll("[data-marker]")].map((m) => m.textContent);
+    expect(marks).toEqual(["Lumen Pay awarded", "Orbit Labs awarded"]);
+    expect(host.querySelectorAll("rect[data-partial]")).toHaveLength(1);
+    expect(host.querySelector("[data-legend=partial]")?.textContent).toBe("Partial");
+  });
 });
 
 describe("breakdown list", () => {

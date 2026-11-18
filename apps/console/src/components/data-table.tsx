@@ -19,6 +19,10 @@ import { formatCount } from "@/lib/format";
 export type Column<Row> = {
   key: string;
   header: string;
+  // what the column counts, in one or two sentences: a tooltip on the
+  // header (hover and keyboard focus), so the table carries its own
+  // definitions instead of paragraphs under it
+  definition?: string;
   cell: (row: Row) => ReactNode;
   // the server sort key this header sorts by
   sortKey?: string;
@@ -291,32 +295,53 @@ function HeaderCell<Row>({
   const active = c.sortKey !== undefined && sort?.key === c.sortKey;
   const ariaSort = active ? (sort?.order === "asc" ? "ascending" : "descending") : undefined;
   const right = c.align === "right";
+  const label = c.definition ? (
+    <span className="underline decoration-line-strong decoration-dotted underline-offset-4">
+      {c.header}
+    </span>
+  ) : (
+    c.header
+  );
   if (!c.sortKey || !onSort)
     return (
       <th scope="col" className={cn(HEAD, right && "text-right", c.minWidth)}>
-        {c.header}
+        {c.definition ? (
+          <Tooltip content={c.definition}>
+            {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the definition opens on keyboard focus too */}
+            <span tabIndex={0} className="rounded-sm focus-ring">
+              {label}
+              <span className="sr-only">. {c.definition}</span>
+            </span>
+          </Tooltip>
+        ) : (
+          label
+        )}
       </th>
     );
   const sortKey = c.sortKey;
   const Icon = !active ? ArrowUpDown : sort?.order === "asc" ? ArrowUp : ArrowDown;
+  const button = (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      aria-description={c.definition}
+      className={cn(
+        "-mx-1 inline-flex items-center gap-1 rounded-sm px-1 py-1 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring active:bg-selected",
+        right && "flex-row-reverse",
+        active && "text-fg",
+      )}
+    >
+      {label}
+      <Icon aria-hidden className={cn("size-3", active ? "text-fg" : "text-fg-3")} />
+    </button>
+  );
   return (
     <th
       scope="col"
       aria-sort={ariaSort ?? "none"}
       className={cn(HEAD, right && "text-right", c.minWidth)}
     >
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className={cn(
-          "-mx-1 inline-flex items-center gap-1 rounded-sm px-1 py-1 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring active:bg-selected",
-          right && "flex-row-reverse",
-          active && "text-fg",
-        )}
-      >
-        {c.header}
-        <Icon aria-hidden className={cn("size-3", active ? "text-fg" : "text-fg-3")} />
-      </button>
+      {c.definition ? <Tooltip content={c.definition}>{button}</Tooltip> : button}
     </th>
   );
 }

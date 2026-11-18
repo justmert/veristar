@@ -95,3 +95,18 @@ export function runbookUrl(runbook: string | null): string | null {
   if (runbook === null || !RUNBOOK_PATH.test(runbook)) return null;
   return REPOSITORY_BLOB + runbook;
 }
+
+// alert rules write their summaries in lower case; the page starts each
+// title with a capital letter
+export function sentenceCase(text: string): string {
+  const t = text.trim();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+}
+
+// the group of a severity as a heading that says what to do
+export function groupTitle(key: string): string {
+  if (key === "page") return "Act now";
+  if (key === "ticket") return "Act within a working day";
+  if (key === "") return "No severity";
+  return sentenceCase(key);
+}
