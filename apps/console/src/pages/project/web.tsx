@@ -13,7 +13,7 @@ import { Link, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { sitesQuery } from "@/api/queries";
-import type { Site } from "@/api/schemas";
+import type { Site, TenantStatus } from "@/api/schemas";
 import {
   type WebDimension,
   type WebQuery,
@@ -76,6 +76,15 @@ const METRICS: { metric: WebMetric; definition: string }[] = [
     definition: "Average time from the first to the last page view of a visit.",
   },
 ];
+
+// why a range has no visits, by project status
+const EMPTY_REASON: Partial<Record<TenantStatus, string>> = {
+  active:
+    "No site sent a page view in this range. Choose a longer range, or check that the tracker is on your pages.",
+  pending: "Sites receive traffic after an operator approves the project.",
+  rejected: "Sites receive traffic after an operator approves the project.",
+  suspended: "New events are refused while the project is suspended.",
+};
 
 const CADENCE = "Totals refresh every hour. Pages, events and hours are read live.";
 
@@ -141,6 +150,15 @@ export function WebPage() {
     );
 
   const scope = selected ? [selected] : listed;
+  // a range without one counted page view gets one page-level
+  // empty state that says why, not a row of dashes and empty panels. the
+  // not counted section stays: it says why events did not count
+  const totals = summary.data?.current.totals;
+  const empty =
+    state.band === "primary" &&
+    totals !== undefined &&
+    totals.pageviews === 0 &&
+    !summary.isPlaceholderData;
   const utm = scope.some((s) => s.collect_utm);
   const days = webDays(state, now);
   // one control filters by site, and choosing All sites is the one way to
@@ -216,7 +234,9 @@ export function WebPage() {
         ) : null}
       </div>
 
-      {state.band === "primary" ? <Realtime tenantId={tenant.id} site={q.site} /> : null}
+      {state.band === "primary" && !(empty && tenant.status !== "active") ? (
+        <Realtime tenantId={tenant.id} site={q.site} />
+      ) : null}
 
       {summary.isPending ? (
         <WebSkeleton />
@@ -226,6 +246,20 @@ export function WebPage() {
           error={summary.error}
           onRetry={() => summary.refetch()}
         />
+      ) : empty ? (
+        <EmptyState
+          icon={<Globe aria-hidden strokeWidth={1.75} />}
+          title="No visits in this range"
+          action={
+            tenant.status === "active" ? (
+              <Button asChild variant="outline">
+                <Link to={`/projects/${tenant.id}/sites`}>Check the site setup</Link>
+              </Button>
+            ) : undefined
+          }
+        >
+          {EMPTY_REASON[tenant.status] ?? EMPTY_REASON.active}
+        </EmptyState>
       ) : (
         <Dashboard
           tenantId={tenant.id}
