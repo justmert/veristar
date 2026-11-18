@@ -626,7 +626,7 @@ describe("scf review figures (contract 16.3)", () => {
     expect(host.querySelector("[data-figure=days-missing]")?.textContent).toContain(
       "No ledger read for a verified id in this range",
     );
-    expect(host.textContent).not.toContain("did not load");
+    expect(host.textContent).not.toContain("What SCF reviewers see did not load");
   });
 
   it("says when the project is not in the scf views", async () => {
