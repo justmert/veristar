@@ -115,7 +115,7 @@ test("the admin adds an operator who registers a first passkey", async ({ browse
   const dialog = second.page.getByTestId("passkey-dialog");
   await dialog.getByRole("button", { name: "Create a passkey" }).click();
   await dialog.getByRole("button", { name: "Confirm with your passkey" }).click();
-  await expect(second.page.getByRole("navigation", { name: "Operator sections" })).toBeVisible();
+  await expect(second.page.getByRole("heading", { name: "Review", level: 1 })).toBeVisible();
   await auth.save();
   // a plain operator reads the roster but cannot change it
   const r = await api<{ error: { code: string } }>(second.ctx, "POST", "/api/operator/roster", {

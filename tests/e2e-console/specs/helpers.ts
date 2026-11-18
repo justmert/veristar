@@ -338,6 +338,7 @@ export async function operatorStepUp(page: Page, user: GitHubUser): Promise<void
     await confirm.click();
   }
   await dialog.getByRole("button", { name: "Confirm with your passkey" }).click();
-  await expect(page.getByRole("navigation", { name: "Operator sections" })).toBeVisible();
+  // the gate opens the review page, which the operator area starts on
+  await expect(page.getByRole("heading", { name: "Review", level: 1 })).toBeVisible();
   await auth.save();
 }

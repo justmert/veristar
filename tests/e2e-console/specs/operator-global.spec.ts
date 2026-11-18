@@ -285,7 +285,11 @@ test("a non-operator gets 403 on the global views and the key routes", async () 
       failures.push(`${method} ${path}: ${r.status} ${r.body?.error?.code}`);
   }
   expect(failures, "routes that did not answer 403 operator_required").toEqual([]);
-  for (const path of ["/operator/web", "/operator/api", "/operator/api-keys"]) {
+  for (const path of [
+    "/operator/projects?view=web",
+    "/operator/projects?view=api",
+    "/operator/keys",
+  ]) {
     await owner.page.goto(`${APP}${path}`);
     await expect(owner.page.getByRole("heading", { name: "Operators only" })).toBeVisible();
   }
@@ -301,17 +305,14 @@ test("the operator filters to verified projects, sorts by visitors and compares 
   const page = op.page;
   const [a, b, c, d] = ["A", "B", "C", "D"].map(project) as [Project, Project, Project, Project];
   await page.goto(`${APP}/operator`);
-  // the sidebar picks the place, its tabs pick the view
+  // the sidebar opens Projects, its view control picks the web view
   await page
     .getByRole("navigation", { name: "Operator" })
     .getByRole("link", { name: "Projects" })
     .click();
-  await page.waitForURL(`${APP}/operator/tenants`);
-  await page
-    .getByRole("navigation", { name: "Operator sections" })
-    .getByRole("link", { name: "Global web" })
-    .click();
-  await page.waitForURL(`${APP}/operator/web`);
+  await page.waitForURL(`${APP}/operator/projects`);
+  await page.getByRole("radiogroup", { name: "View" }).getByRole("radio", { name: "Web" }).click();
+  await page.waitForURL(`${APP}/operator/projects?view=web`);
   await expect(page.getByRole("heading", { name: "Global web" })).toBeVisible();
   await expect(page.getByText("IP Geolocation by DB-IP")).toBeVisible();
   await expect(page.getByText("Visitors are unique per UTC day and site")).toBeVisible();
@@ -365,7 +366,9 @@ test("the operator filters to verified projects, sorts by visitors and compares 
 
   // the global api view with the same filter, sorted by requests ascending:
   // the lowest usage project first
-  await page.goto(`${APP}/operator/api?q=${run}&verified=true&sort=requests&order=asc`);
+  await page.goto(
+    `${APP}/operator/projects?view=api&q=${run}&verified=true&sort=requests&order=asc`,
+  );
   await expect.poll(() => rowIds(page)).toEqual([c, a, b].map((p) => p.tenant.id));
   const requests = await page
     .locator("tbody tr[data-tenant] [data-col=requests]")
@@ -379,10 +382,10 @@ test("the pages work at phone width", async () => {
   await page.setViewportSize({ width: 375, height: 800 });
   const ids = ["A", "B", "C"].map((l) => project(l).tenant.id).join(",");
   for (const path of [
-    `/operator/web?q=${run}`,
-    `/operator/api?q=${run}`,
+    `/operator/projects?view=web&q=${run}`,
+    `/operator/projects?view=api&q=${run}`,
     `/operator/compare?tenants=${ids}`,
-    "/operator/api-keys",
+    "/operator/keys",
   ]) {
     await page.goto(`${APP}${path}`);
     await expect(page.getByRole("heading", { level: 2 }).first()).toBeVisible();
@@ -398,7 +401,7 @@ test("the pages work at phone width", async () => {
             .filter(
               (e) =>
                 !e.closest(
-                  "[aria-label='Global web table'], [aria-label='Global API table'], [aria-label='Web totals'], [aria-label='API totals'], nav[aria-label='Operator sections']",
+                  "[aria-label='Global web table'], [aria-label='Global API table'], [aria-label='Web totals'], [aria-label='API totals'], [role='radiogroup'][aria-label='View']",
                 ),
             )
             .slice(0, 5)
@@ -418,7 +421,7 @@ test("an api key is created, read with from a client without a session, and revo
   browser,
 }) => {
   const page = op.page;
-  await page.goto(`${APP}/operator/api-keys`);
+  await page.goto(`${APP}/operator/keys`);
   const form = page.getByRole("form", { name: "Create an API key" });
   const name = `e2e ${run}`;
   await form.getByLabel("Name").fill(name);

@@ -112,10 +112,10 @@ async function latest(): Promise<ErasureRow> {
 async function privacyPage(): Promise<Page> {
   const page = await owner.newPage();
   await page.goto(`${APP}/projects/${tenant.id}/privacy`);
-  // the privacy tab of the project's settings place is the current page
-  await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  // the sidebar marks the privacy page as current
+  await expect(page.getByRole("heading", { name: "Privacy", level: 1 })).toBeVisible();
   await expect(
-    page.getByRole("navigation", { name: "Settings" }).getByRole("link", { name: "Privacy" }),
+    page.getByRole("navigation", { name: "Project" }).getByRole("link", { name: "Privacy" }),
   ).toHaveAttribute("aria-current", "page");
   return page;
 }

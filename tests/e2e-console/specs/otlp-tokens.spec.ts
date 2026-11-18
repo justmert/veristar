@@ -52,17 +52,12 @@ test.afterAll(async () => {
 
 test("the api analytics page shows the endpoint, the guides and what is kept", async () => {
   await page.goto(`${APP}/projects/${tenant.id}`);
-  // the sidebar's API place opens on traffic; its Connect tab is the setup page
+  // the setup page is Connect API in the sidebar's Setup group
   await page
     .getByRole("navigation", { name: "Project" })
-    .getByRole("link", { name: "API", exact: true })
+    .getByRole("link", { name: "Connect API" })
     .click();
-  await page.waitForURL(`${APP}/projects/${tenant.id}/api/traffic`);
-  await page
-    .getByRole("navigation", { name: "API" })
-    .getByRole("link", { name: "Connect" })
-    .click();
-  await page.waitForURL(`${APP}/projects/${tenant.id}/api`);
+  await page.waitForURL(`${APP}/projects/${tenant.id}/connect-api`);
   await expect(page.getByRole("heading", { name: "Connect your API" })).toBeVisible();
   await expect(page.getByText(`https://otlp.${BASE_DOMAIN}`, { exact: true })).toBeVisible();
   await expect(page.getByText("Only HTTP server request duration is kept")).toBeVisible();

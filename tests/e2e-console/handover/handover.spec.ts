@@ -194,7 +194,7 @@ test("@history the same users see their history in environment b", async ({ brow
     );
     expect(routes.status, JSON.stringify(routes.body)).toBe(200);
     expect(routes.body.items.reduce((n, i) => n + i.requests, 0)).toBe(t.requests);
-    await page.goto(`${APP}/projects/${t.id}/api/traffic`);
+    await page.goto(`${APP}/projects/${t.id}/api`);
     await page.screenshot({
       path: `${process.env.CE2E_OUT}/handover-traffic-${t.id}.png`,
       fullPage: true,

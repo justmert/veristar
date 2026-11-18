@@ -111,7 +111,7 @@ test("an owner declares an account and gets a challenge to prove it", async () =
 
 test("what scf sees and the overview export answer for the project", async () => {
   const { page, ctx } = owner;
-  await page.goto(`${APP}/projects/${tenant.id}/scf-view`);
+  await page.goto(`${APP}/projects/${tenant.id}/scf`);
   await expect(page.getByRole("heading", { name: "What SCF sees" })).toBeVisible();
   await expect(page.getByText("The project's on-chain column.")).toBeVisible();
   await expect(page.getByText("Weekly active accounts", { exact: true })).toBeVisible();
@@ -163,7 +163,7 @@ test("another project's member sees none of it", async ({ browser }) => {
     const chainId = view.body.ids[0]?.id ?? "";
     for (const [method, path, body] of [
       ["GET", `/api/tenants/${tenant.id}/onchain`],
-      ["GET", `/api/tenants/${tenant.id}/scf-view`],
+      ["GET", `/api/tenants/${tenant.id}/scf`],
       ["GET", `/api/tenants/${tenant.id}/overview.csv`],
       ["POST", `/api/tenants/${tenant.id}/onchain/ids`, { strkey: ACCOUNT }],
       ["POST", `/api/tenants/${tenant.id}/onchain/ids/${chainId}/challenge`, {}],
@@ -189,7 +189,7 @@ test("an operator sees the column, exports the rows on screen and reads the deta
     const page = await ctx.newPage();
     await signIn(page, OPERATOR);
     await operatorStepUp(page, OPERATOR);
-    await page.goto(`${APP}/operator/web?q=${encodeURIComponent(`On-chain ${run}`)}`);
+    await page.goto(`${APP}/operator/projects?view=web&q=${encodeURIComponent(`On-chain ${run}`)}`);
     await expect(page.getByRole("columnheader", { name: "On-chain", exact: true })).toBeVisible();
     const row = page.locator(`tr[data-tenant="${tenant.id}"]`);
     await expect(row.locator("[data-col=onchain]")).toContainText("0/1 verified");
@@ -215,7 +215,7 @@ test("an operator sees the column, exports the rows on screen and reads the deta
     expect(audit.status).toBe(200);
     expect(audit.body.items.some((e) => e.detail.view === "web_projects")).toBe(true);
 
-    await page.goto(`${APP}/operator/tenants/${tenant.id}`);
+    await page.goto(`${APP}/operator/projects/${tenant.id}`);
     const section = page.locator("section", {
       has: page.getByRole("heading", { name: "On-chain" }),
     });

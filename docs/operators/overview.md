@@ -13,7 +13,7 @@ from the same daily aggregates the operator views read.
 |---|---|
 | [review-and-enrollment.md](review-and-enrollment.md) | The review queue, approving and rejecting projects and sites, suspending and resuming, and the switch between open and approval-required enrollment |
 | [removal.md](removal.md) | Removing a project that is not part of the ecosystem, what is deleted, and the setting that keeps or deletes its aggregates |
-| [global-views.md](global-views.md) | The Global web, Global API and Compare pages: ranges, filters, sorting, growth, cohorts, percentiles and side-by-side comparison |
+| [global-views.md](global-views.md) | The Web and API views of Projects and the Compare page: ranges, filters, sorting, growth, cohorts, percentiles and side-by-side comparison |
 | [threshold-rules.md](threshold-rules.md) | Saved traction rules and the projects that meet them, with the evidence |
 | [reading-the-numbers.md](reading-the-numbers.md) | What bands, daily-unique visitors and span-derived API data mean, and how to compare projects fairly |
 | [api-keys.md](api-keys.md) | Keys for machine consumers of the metrics API: create, use, revoke, usage |
@@ -40,23 +40,23 @@ and the passkeys every operator registers.
 
 ## The operator area
 
-The operator area is at `https://app.<BASE_DOMAIN>/operator`. It has four sections in the
-sidebar, each with tabs:
+The operator area is at `https://app.<BASE_DOMAIN>/operator`. Its pages are in the sidebar's
+Operator group, in two parts:
 
-| Section | Tab | What it does |
-|---|---|---|
-| Attention | Review queue | Projects waiting for approval, and active projects with a site in review, oldest first |
-| Attention | Alerts | The platform's firing alerts from Alertmanager, by severity, refreshed every 30 seconds ([alerts.md](alerts.md)) |
-| Projects | Projects | Every project with search, status filter and sort; opens the project detail with its actions |
-| Projects | Global web | Web numbers of every project over a range, with filters and sort |
-| Projects | Global API | API numbers of every project over a range, with filters and sort |
-| Projects | Rules | Saved threshold rules and the projects that meet them ([threshold-rules.md](threshold-rules.md)) |
-| Compare | | Up to five projects side by side, web and API |
-| Admin | Settings | Enrollment mode, and whether removed projects keep their aggregates |
-| Admin | Operators | The operator roster and your passkeys ([roster.md](roster.md)) |
-| Admin | API keys | Keys for machine access to the metrics API ([api-keys.md](api-keys.md)) |
-| Admin | AI / MCP | Operator keys for AI clients ([mcp.md](mcp.md)) |
-| Admin | Audit log | Every recorded change, filterable by project, action, actor, target and time |
+| Part | Page | Address | What it does |
+|---|---|---|---|
+| Work | Review | `/operator` | Projects waiting for approval, and active projects with a site in review, oldest first |
+| Work | Alerts | `/operator/alerts` | The platform's firing alerts from Alertmanager, by severity, refreshed every 30 seconds ([alerts.md](alerts.md)) |
+| Work | Projects | `/operator/projects` | Every project in three views: Status (search, status filter, sort), Web and API (numbers over a range, with filters and sort). A project opens its detail page with its actions at `/operator/projects/<id>` |
+| Work | Compare | `/operator/compare` | Up to five projects side by side, web and API |
+| Work | Rules | `/operator/rules` | Saved threshold rules and the projects that meet them ([threshold-rules.md](threshold-rules.md)) |
+| Admin | Settings | `/operator/settings` | Enrollment mode, and whether removed projects keep their aggregates |
+| Admin | Operators | `/operator/operators` | The operator roster and your passkeys ([roster.md](roster.md)) |
+| Admin | Access keys | `/operator/keys` | Keys for machine access to the metrics API ([api-keys.md](api-keys.md)) and operator keys for AI clients ([mcp.md](mcp.md)) |
+| Admin | Audit log | `/operator/audit` | Every recorded change, filterable by project, action, actor, target and time |
+
+While a paging alert fires, every operator page shows one line at the top with a link to
+Alerts. Press `Ctrl K` (`Cmd K` on a Mac) on any page to go to a page or a project by name.
 
 Every operator action is written to the audit log with the operator's id. Actions that require a
 reason (listed in [review-and-enrollment.md](review-and-enrollment.md)) show that reason to the

@@ -123,10 +123,6 @@ test("the operator switches enrollment to approval after a confirmation", async 
   await page.goto(`${APP}/operator`);
   await page
     .getByRole("navigation", { name: "Operator" })
-    .getByRole("link", { name: "Admin" })
-    .click();
-  await page
-    .getByRole("navigation", { name: "Operator sections" })
     .getByRole("link", { name: "Settings" })
     .click();
   // the enrollment mode is a radio group; change setting asks for confirmation
@@ -175,7 +171,7 @@ test("a new project waits in the review queue and the operator approves it", asy
   await expect(review.getByRole("list", { name: "Evidence" })).toBeVisible();
   await expect(review.getByRole("radiogroup", { name: "Decision" })).toBeVisible();
   await review.getByRole("link", { name: "Open project page" }).click();
-  await page.waitForURL(`${APP}/operator/tenants/${tenant.id}`);
+  await page.waitForURL(`${APP}/operator/projects/${tenant.id}`);
   // enrollment answers and the site with its evidence
   await expect(page.getByText("Soroban contracts on testnet", { exact: true })).toBeVisible();
   await expect(page.getByRole("article", { name: site.name })).toContainText(site.domain);

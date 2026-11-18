@@ -4,7 +4,8 @@ description: "Compare every enrolled project on the core web and API metrics."
 ---
 
 The global views compare every enrolled project on the core web and API metrics, for funding and
-ecosystem-visibility decisions. They read daily aggregates only, never raw events or sessions.
+ecosystem-visibility decisions. They are the **Web** and **API** views of the operator
+**Projects** page (`/operator/projects?view=web` and `?view=api`). They read daily aggregates only, never raw events or sessions.
 What the numbers mean, and how to compare projects fairly, is in
 [reading-the-numbers.md](reading-the-numbers.md); read it before drawing conclusions. The HTTP
 routes are section 8 of the [control plane API reference](../reference/control-plane-api.md).
@@ -16,7 +17,7 @@ days ending today, or **Custom** with a from and to day. The longest range is 36
 is included and holds what the hourly aggregation has read so far, so today's numbers grow
 during the day. Without a choice the range is the last 30 days.
 
-## Global web
+## Web view
 
 One row per project, summed over its sites, for the primary band unless a column says
 quarantined.
@@ -46,7 +47,7 @@ those graded B or C, **Graded** every project with a grade. Sort by any column,
 largest or smallest first; projects without a value for the sort column (a rate with no
 visits) come last either way.
 
-## Global API
+## API view
 
 One row per project.
 
@@ -115,7 +116,7 @@ the evidence. See [threshold rules](threshold-rules.md).
 
 ## Compare
 
-Tick up to five projects on Global web or Global API, then choose **Compare**. The compare
+Tick up to five projects in the Web or API view, then choose **Compare**. The compare
 page shows, for the same range:
 
 - web: daily charts of page views, visitors, bounce rate and average visit duration, a totals

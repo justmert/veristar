@@ -75,7 +75,7 @@ test.beforeAll(async ({ browser }) => {
   const snip = await api<{ tag: string; version: string }>(
     owner.ctx,
     "GET",
-    `/api/sites/${site.id}/snippet`,
+    `/api/sites/${site.id}`,
   );
   expect(snip.status).toBe(200);
   expect(snip.body.version, "the console recommends the newest release").toBe("1.3.1");
@@ -119,7 +119,7 @@ test("the edge counted every load of the tracker file and the gpc one", async ()
 
 test("the snippet offers the title opt-in from 1.3.0", async () => {
   const page = owner.page;
-  await page.goto(`${APP}/projects/${tenant.id}/sites/${site.id}/snippet`);
+  await page.goto(`${APP}/projects/${tenant.id}/sites/${site.id}`);
   // the newest release, which reads the title choice like every release from 1.3.0
   await expect(page.getByText("tracker 1.3.1").first()).toBeVisible();
   await page.getByLabel("Send the page title").check();
@@ -134,14 +134,14 @@ test("the project reads the estimate on its overview and in what scf sees", asyn
   await expect(note).toContainText("Too few loads of the tracker file (3 of 100)");
   await expect(note).toContainText("Of 3 loads of the tracker file, 1 carried the signal.");
   await page.screenshot({ path: join(shots, "overview.png"), fullPage: true });
-  await page.goto(`${APP}/projects/${tenant.id}/scf-view`);
+  await page.goto(`${APP}/projects/${tenant.id}/scf`);
   const scf = page.getByRole("region", { name: "Visits not measured" });
   await expect(scf.getByTestId("coverage")).toContainText("Of 3 loads of the tracker file");
 });
 
 test("the operator reads the column and the export", async () => {
   const page = op.page;
-  await page.goto(`${APP}/operator/web?q=${run}`);
+  await page.goto(`${APP}/operator/projects?view=web&q=${run}`);
   const row = page.locator(`tbody tr[data-tenant="${tenant.id}"]`);
   await expect(row).toBeVisible();
   const cell = row.locator("[data-col=unmeasured_share]");
