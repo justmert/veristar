@@ -53,7 +53,7 @@ func TestWalletsKit(t *testing.T) {
 	s.AddCountry(t, "DE", countrySubnets(t, "DE")["DE"])
 	s.StartForwarder(t, fwdBin, "DE")
 	waitChallenge(t, s.FwdAddr, siteWallets)
-	b := startBrowsersWith(t, s.FwdAddr, []siteRun{{Site: siteWallets, Version: "1.1.0", Build: "build:test"}})
+	b := startBrowsersWith(t, s.FwdAddr, []siteRun{{Site: siteWallets, Version: currentTracker(t), Build: "build:test"}})
 
 	// a fresh secret seed per run, so a hit can only come from this run
 	kp, err := keypair.Random()

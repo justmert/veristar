@@ -17,6 +17,7 @@ function siteServer(site: (typeof SITES)[number]) {
     SA_PUBLIC_HOST: site.host,
     PORT: String(site.port),
     HOST: "127.0.0.1",
+    ...(site.sendTitle ? { SA_SEND_TITLE: "true" } : {}),
   };
   // a standalone npm example installs from its own lockfile first
   const command = site.npmDir

@@ -50,6 +50,6 @@ Each full page load is one pageview.
 ## What the browser tests check
 
 One pageview per server-rendered page load, the page title from the layout's `<title>` (the
-matrix runs tracker 1.0.0, which always sends it; from 1.3.0 only with `data-send-title="true"`), both kinds
+matrix runs the current tracker release with `data-send-title="true"` on this site), both kinds
 of custom event, an external referrer on the first pageview, Global Privacy Control and a tampered
 tracker refused (`tests/e2e/specs`).

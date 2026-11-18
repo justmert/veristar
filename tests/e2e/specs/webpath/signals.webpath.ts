@@ -1,4 +1,5 @@
-// page signals and counting rules of tracker 1.3.0 in chromium, firefox and
+// page signals and counting rules (tracker 1.3.0 and later, run on the
+// current release, TRACKER_VERSION) in chromium, firefox and
 // webkit through the real gateway (tests/webpath TestPageSignals, which
 // counts what the gateway reported). every test checks the browser side:
 // which events the page sent and that the gateway answered each with 202.
@@ -18,7 +19,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, expect, test } from "@playwright/test";
-import { PORTS, siteByKey } from "../../sites.ts";
+import { PORTS, siteByKey, TRACKER_VERSION } from "../../sites.ts";
 import {
   eventsFor,
   expectContract,
@@ -86,7 +87,7 @@ test("a background tab counts when it is first shown @signals", async ({ page })
   expect(pv?.s).toBeUndefined();
   expect(pv?.l).toBeUndefined();
   expect(pv?.fr).toBeUndefined();
-  expect(pv?.sv).toBe("1.3.0");
+  expect(pv?.sv).toBe(TRACKER_VERSION);
   await expectContract(staticSite);
 });
 
@@ -251,7 +252,7 @@ test("a prerendered page counts on activation and fetches nothing before @signal
   }
 });
 
-// tracker 1.3.1, consent mode: code that calls umami.track() before the
+// consent mode (tracker 1.3.1 and later): code that calls umami.track() before the
 // visitor answered the banner sends nothing and fetches no challenge; the
 // accept click starts the tracker and the pageview goes out as usual
 // (tests/webpath TestConsentGatedTrack)
@@ -273,5 +274,5 @@ test("track() before start() sends nothing @consent", async ({ page }) => {
     .poll(async () => (await byType(staticSite, "ev")).map((e) => e.n))
     .toEqual(["after-consent"]);
   for (const r of await sent(staticSite)) expect(r.verdict.status).toBe(202);
-  expect((await sent(staticSite)).map(wire).every((e) => e.sv === "1.3.1")).toBe(true);
+  expect((await sent(staticSite)).map(wire).every((e) => e.sv === TRACKER_VERSION)).toBe(true);
 });
