@@ -7,6 +7,7 @@ import { Skeleton as Bone } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { errorDetails, errorMessage } from "@/lib/errors";
 import { MISSING } from "@/lib/format";
+import { siblingUrl } from "@/lib/hosts";
 
 // the states every page and section shares: empty, error and loading. each
 // says what happened, then what to do. the page header is never part of a
@@ -95,17 +96,19 @@ export function EmptyState({
   );
 }
 
-// a request failed: one sentence of what happened (no request id, path or
-// code in it), Try again, and Copy details with what the logs need
+// a request failed: the title names what failed ("The sites did not load"),
+// one sentence of what happened (no request id, path or code in it), Try
+// again, Copy details with what the logs need, and where to look if it
+// keeps failing
 export function ErrorState({
   error,
-  title = "This did not load",
+  title,
   onRetry,
   compact,
   className,
 }: {
   error: unknown;
-  title?: string;
+  title: string;
   onRetry?: () => void;
   compact?: boolean;
   className?: string;
@@ -131,7 +134,29 @@ export function ErrorState({
       }
     >
       {errorMessage(error)}
+      <StatusHint />
     </StateFrame>
+  );
+}
+
+// the way on when a retry fails too: the service status page, where it
+// exists
+function StatusHint() {
+  const status = siblingUrl(window.location.hostname, "status");
+  if (!status) return null;
+  return (
+    <span className="mt-1 block">
+      If this continues, see{" "}
+      <a
+        href={status}
+        target="_blank"
+        rel="noopener"
+        className="rounded-sm text-fg underline decoration-line-strong underline-offset-4 hover:decoration-fg focus-ring"
+      >
+        Service status
+      </a>
+      .
+    </span>
   );
 }
 

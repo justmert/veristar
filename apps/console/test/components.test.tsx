@@ -62,7 +62,9 @@ describe("states", () => {
     expect(details).toContain("Time: 2026-11-18T01:49:00.000Z");
 
     const retry = vi.fn();
-    const host = await render(<ErrorState error={apiError} onRetry={retry} />);
+    const host = await render(
+      <ErrorState title="The sites did not load" error={apiError} onRetry={retry} />,
+    );
     const alert = host.querySelector("[role=alert]") as HTMLElement;
     expect(alert.textContent).not.toContain("req-42");
     expect(alert.textContent).not.toContain("0193a6f3");

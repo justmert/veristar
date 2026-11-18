@@ -117,7 +117,11 @@ export function WebPage() {
   if (sites.error)
     return (
       <Page header={header}>
-        <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
+        <ErrorState
+          title="The sites did not load"
+          error={sites.error}
+          onRetry={() => sites.refetch()}
+        />
       </Page>
     );
   if (listed.length === 0)
@@ -219,7 +223,11 @@ export function WebPage() {
       {summary.isPending ? (
         <WebSkeleton />
       ) : summary.error ? (
-        <ErrorState error={summary.error} onRetry={() => summary.refetch()} />
+        <ErrorState
+          title="The web numbers did not load"
+          error={summary.error}
+          onRetry={() => summary.refetch()}
+        />
       ) : (
         <Dashboard
           tenantId={tenant.id}
@@ -671,6 +679,7 @@ function NotCounted({
       ) : failed ? (
         <ErrorState
           compact
+          title="The outcome counts did not load"
           error={failed.error}
           onRetry={() => {
             for (const a of answers) if (a.error) a.refetch();

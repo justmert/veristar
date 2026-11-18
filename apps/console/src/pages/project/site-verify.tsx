@@ -71,7 +71,15 @@ export function VerifyDomain({ site, current = false }: { site: Site; current?: 
         <Skeleton className="h-24 w-full" />
       </div>
     );
-  if (info.error) return <ErrorState error={info.error} onRetry={() => info.refetch()} compact />;
+  if (info.error)
+    return (
+      <ErrorState
+        title="The domain check did not load"
+        error={info.error}
+        onRetry={() => info.refetch()}
+        compact
+      />
+    );
   return <Verify v={info.data} tenantId={site.tenant_id} current={current} />;
 }
 

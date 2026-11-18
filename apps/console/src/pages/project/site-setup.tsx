@@ -55,7 +55,11 @@ export function SiteSetupPage() {
       <div className="flex flex-col gap-6">
         <SitesBackLink tenantId={tenant.id} />
         <PageHeader title="Site setup" />
-        <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
+        <ErrorState
+          title="The site did not load"
+          error={sites.error}
+          onRetry={() => sites.refetch()}
+        />
       </div>
     );
   if (!site) return <SitePageLoading tenantId={tenant.id} page="setup" />;
@@ -127,7 +131,12 @@ function SiteSetup({ site }: { site: Site }) {
                 <Skeleton className="h-32 w-full" />
               </div>
             ) : snippet.error ? (
-              <ErrorState error={snippet.error} onRetry={() => snippet.refetch()} compact />
+              <ErrorState
+                title="The tag did not load"
+                error={snippet.error}
+                onRetry={() => snippet.refetch()}
+                compact
+              />
             ) : (
               <Install
                 snippet={snippet.data}

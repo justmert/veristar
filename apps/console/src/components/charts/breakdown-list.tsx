@@ -79,7 +79,15 @@ export function BreakdownList({
       </div>
     );
   if (state === "error")
-    return <ErrorState compact error={error} onRetry={onRetry} className={className} />;
+    return (
+      <ErrorState
+        compact
+        title={`${label} did not load`}
+        error={error}
+        onRetry={onRetry}
+        className={className}
+      />
+    );
   if (state === "empty" || items.length === 0)
     return (
       <EmptyState compact title={emptyTitle} className={className}>
