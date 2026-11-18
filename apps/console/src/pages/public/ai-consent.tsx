@@ -62,27 +62,27 @@ export function AiConsentPage() {
   const [req] = useState(() => (error ? null : takeRequest()));
 
   return (
-    <PublicFrame center={false} className="items-center">
-      <div className="w-full max-w-dialog-sm">
-        {error ? (
-          <Stop tone="critical" title="The connection was not set up">
-            <p role="alert">
-              {AUTHORIZE_ERRORS[error] ??
-                params.get("error_description") ??
-                "The AI client sent a request this server cannot accept. Start again from the AI client."}
-            </p>
-          </Stop>
-        ) : req ? (
-          <Signed request={req} />
-        ) : (
-          <Stop tone="info" title="No connection request">
-            <p>
-              Start from your AI client. Add the Veristar server URL as a connector, and the client
-              opens this page.
-            </p>
-          </Stop>
-        )}
-      </div>
+    // the same frame and place as every other full-page message; only the
+    // consent form itself is narrower
+    <PublicFrame>
+      {error ? (
+        <Stop tone="critical" title="The connection was not set up">
+          <p role="alert">
+            {AUTHORIZE_ERRORS[error] ??
+              params.get("error_description") ??
+              "The AI client sent a request this server cannot accept. Start again from the AI client."}
+          </p>
+        </Stop>
+      ) : req ? (
+        <Signed request={req} />
+      ) : (
+        <Stop tone="info" title="No connection request">
+          <p>
+            Start from your AI client. Add the Veristar server URL as a connector, and the client
+            opens this page.
+          </p>
+        </Stop>
+      )}
     </PublicFrame>
   );
 }
@@ -123,13 +123,18 @@ function Signed({ request }: { request: string }) {
   });
   if (me.isPending || (me.isSuccess && inspect.isPending))
     return (
-      <LoadingState label="Loading the request">
+      <LoadingState label="Loading the request" className="w-full max-w-dialog-sm">
         <Skeleton.Table rows={3} columns={1} />
       </LoadingState>
     );
   if (me.error)
     return (
-      <ErrorState title="Your account did not load" error={me.error} onRetry={() => me.refetch()} />
+      <ErrorState
+        title="Your account did not load"
+        error={me.error}
+        onRetry={() => me.refetch()}
+        className="w-full max-w-prose"
+      />
     );
   if (inspect.error)
     return (
@@ -139,7 +144,11 @@ function Signed({ request }: { request: string }) {
       </Stop>
     );
   if (!inspect.data) return null;
-  return <Consent request={request} info={inspect.data} login={me.data?.user.display_name ?? ""} />;
+  return (
+    <div className="w-full max-w-dialog-sm">
+      <Consent request={request} info={inspect.data} login={me.data?.user.display_name ?? ""} />
+    </div>
+  );
 }
 
 // an expired or changed sealed request is a validation error of the whole
