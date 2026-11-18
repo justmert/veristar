@@ -271,8 +271,8 @@ test("the tenant sees its own endpoints with the numbers that were sent", async 
       .getByRole("navigation", { name: "Project" })
       .getByRole("link", { name: "API", exact: true }),
   ).toHaveAttribute("aria-current", "page");
-  // exact: the project is named "API traffic <run>", and its name is the page's h1
-  await expect(page.getByRole("heading", { name: "API traffic", exact: true })).toBeVisible();
+  // exact: the project is named "API traffic <run>"
+  await expect(page.getByRole("heading", { name: "API", exact: true })).toBeVisible();
 
   await pickRange(page, "1h");
   await page.waitForURL(/range=1h/);
@@ -300,9 +300,9 @@ test("the tenant sees its own endpoints with the numbers that were sent", async 
     codes.set(Number(status), (codes.get(Number(status)) ?? 0) + v);
   }
   for (const [code, n] of codes)
-    await expect(page.locator(`tr[data-code="${code}"] td`).nth(1)).toHaveText(
-      n.toLocaleString("en"),
-    );
+    await expect(
+      page.getByRole("list", { name: "Status codes" }).locator(`li[data-key="${code}"]`),
+    ).toContainText(n.toLocaleString("en"));
 
   // the other tenant's endpoints answer 404, as every tenant route does
   for (const kind of ["overview", "timeseries", "routes", "status", "services", "warnings"]) {
@@ -347,7 +347,7 @@ test("the routes table sorts by a column and reverses", async () => {
     expect(r[i - 1]?.requests ?? 0).toBeGreaterThanOrEqual(r[i]?.requests ?? 0);
 
   const head = (name: string) =>
-    page.getByRole("region", { name: "Routes table" }).getByRole("columnheader", { name });
+    page.getByRole("region", { name: "Routes" }).getByRole("columnheader", { name });
   await head("Route").getByRole("button").click();
   await page.waitForURL(/sort=route/);
   await expect(head("Route")).toHaveAttribute("aria-sort", "ascending");
@@ -458,7 +458,7 @@ test("the page works at phone width", async () => {
           .filter(
             (e) =>
               !e.closest(
-                "[aria-label='Routes table'], nav[aria-label='Project'], [role='radiogroup'][aria-label='Range']",
+                "[aria-label='Routes'], nav[aria-label='Project'], [role='radiogroup'][aria-label='Range']",
               ),
           )
           .slice(0, 5)
