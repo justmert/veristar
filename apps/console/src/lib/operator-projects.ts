@@ -136,9 +136,10 @@ const sorted = (id: string, label: string, shown = false): ColumnSpec => ({
   shown,
 });
 
+// the status has its own column right after the name in every view
 export const WEB_COLUMNS: ColumnSpec[] = [
   sorted("name", "Project", true),
-  sorted("status", "Status"),
+  sorted("status", "Status", true),
   sorted("created_at", "Enrolled"),
   { id: "cohort", label: "Cohort", shown: false },
   sorted("integrity", "Grade", true),
@@ -166,7 +167,7 @@ export const WEB_COLUMNS: ColumnSpec[] = [
 
 export const API_COLUMNS: ColumnSpec[] = [
   sorted("name", "Project", true),
-  sorted("status", "Status"),
+  sorted("status", "Status", true),
   sorted("created_at", "Enrolled"),
   { id: "cohort", label: "Cohort", shown: false },
   sorted("requests", "Requests", true),
@@ -191,6 +192,8 @@ export const STATUS_COLUMNS: ColumnSpec[] = [
   sorted("name", "Project", true),
   { id: "status", label: "Status", shown: true },
   { id: "sites", label: "Sites", shown: true },
+  { id: "sites_verified", label: "Verified sites", shown: true },
+  { id: "sites_with_stellar_toml", label: "Sites with stellar.toml", shown: true },
   sorted("created_at", "Enrolled", true),
   sorted("status_changed_at", "Status since", true),
 ];
