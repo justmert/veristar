@@ -301,7 +301,8 @@ func (h *SCFAwards) load(ctx context.Context, f scfFilter) (SCFAwardList, error)
 			if row.Match.SharedWith == nil {
 				row.Match.SharedWith = []uuid.UUID{}
 			}
-			if m.State == scfawards.StateMatched {
+			switch m.State {
+			case scfawards.StateMatched:
 				t := tenants[m.Tenant()]
 				r := ref(t)
 				row.Match.Tenant, row.Match.Evidence = &r, m.Candidates[0].Evidence
@@ -310,7 +311,7 @@ func (h *SCFAwards) load(ctx context.Context, f scfFilter) (SCFAwardList, error)
 				c := cohorts[t.ID]
 				row.Cohort = &SCFCohort{State: scfawards.CohortState(c, a), Award: scfawards.CohortOf(a),
 					Confirmed: c.Confirmed, Proposal: c.Proposal, ProposalSource: c.ProposalSource}
-			} else if m.State == scfawards.StateAmbiguous {
+			case scfawards.StateAmbiguous:
 				for _, c := range m.Candidates {
 					row.Match.Candidates = append(row.Match.Candidates, SCFCandidate{Tenant: ref(tenants[c.TenantID]), Evidence: c.Evidence})
 				}
@@ -531,10 +532,11 @@ func (h *SCFAwards) imports(w http.ResponseWriter, r *http.Request) error {
 	if len(r.URL.Query()) > 0 {
 		return httpx.BadQuery("this route takes no query parameters")
 	}
+	ctx := r.Context()
 	var items []SCFImport
-	err := h.db.WithOperator(r.Context(), func(tx pgx.Tx) error {
+	err := h.db.WithOperator(ctx, func(tx pgx.Tx) error {
 		var err error
-		items, err = readImports(r.Context(), tx, 100)
+		items, err = readImports(ctx, tx, 100)
 		return err
 	})
 	if err != nil {

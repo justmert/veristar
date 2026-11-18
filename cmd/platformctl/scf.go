@@ -86,7 +86,7 @@ func runSCF(ctx context.Context, args []string, env *config.Env, stdin io.Reader
 func readExport(path string, stdin io.Reader) ([]byte, error) {
 	r := stdin
 	if path != "-" {
-		f, err := os.Open(path)
+		f, err := os.Open(path) //nolint:gosec // the operator names the export to import
 		if err != nil {
 			return nil, err
 		}
