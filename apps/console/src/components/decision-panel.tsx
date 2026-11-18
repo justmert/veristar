@@ -192,7 +192,7 @@ export function DecisionPanel({
                   setFieldError(null);
                 }}
                 className={cn(
-                  "h-7 rounded-full border px-2 text-caption transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-9",
+                  "min-h-7 rounded-full border px-2 py-0.5 text-left text-caption transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:min-h-9",
                   on
                     ? "border-fg bg-selected text-fg"
                     : "border-line-strong text-fg-2 hover:bg-hover hover:text-fg",
