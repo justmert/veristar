@@ -113,11 +113,14 @@ describe("access keys", () => {
       calls.some((x) => x.url.includes("status=active%2Cpending%2Csuspended%2Crejected")),
     ).toBe(true);
 
-    // the header button opens the form, as on the other operator pages
-    expect(host.querySelector("form[aria-label='Create a key']")).toBeNull();
+    // the header button opens the form in a dialog, which shows the new
+    // key once too
+    expect(host.querySelector("dialog[open]")).toBeNull();
     await click(byRole(host, "button", "Create key"));
-    await type(byLabel(host, "Name") as HTMLInputElement, "warehouse");
-    await click(byRole(host, "button", "Create key"));
+    const form = host.querySelector("dialog[open] form") as HTMLElement;
+    expect(form).not.toBeNull();
+    await type(byLabel(form, "Name") as HTMLInputElement, "warehouse");
+    await click(byRole(form, "button", "Create key"));
     // the one-time secret is masked until it is revealed, and the curl
     // example shows it masked too; only its copy holds the key
     await waitFor(() => expect(host.querySelector('button[aria-label="Copy key"]')).not.toBeNull());
@@ -136,7 +139,7 @@ describe("access keys", () => {
 
     // done stays disabled until the operator says the key is stored
     expect(byRole(host, "button", "Done").hasAttribute("disabled")).toBe(true);
-    const stored = host.querySelector("section[aria-label='New secret'] [role=checkbox]");
+    const stored = host.querySelector("dialog[open] [role=checkbox]");
     await click(stored as HTMLElement);
     await click(byRole(host, "button", "Done"));
     await waitFor(() => expect(host.querySelector(`[data-key-id="${f.KEY_ID}"]`)).not.toBeNull());

@@ -5,8 +5,8 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Download, ListChecks, MoreHorizontal, Plus, Trash2 } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { Download, ListChecks, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
 import {
@@ -21,16 +21,14 @@ import {
   ruleMatchesQuery,
   rulesQuery,
 } from "@/api/cohorts";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CreateDialog } from "@/components/create-dialog";
 import { type Column, DataTable } from "@/components/data-table";
-import { FormMessage } from "@/components/error-panel";
 import { SelectField, TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
 import { DateField, isIsoDay } from "@/components/range-control";
 import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
-import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { countOf, formatCount, formatDate, formatDateRange } from "@/lib/format";
 import { isDay } from "@/lib/global";
 import { fieldMessage } from "@/lib/validate";
@@ -158,17 +156,12 @@ export function RulesPage() {
   const counts = useQueries({ queries: items.map((r) => ruleMatchesQuery(r.id, "")) });
   const qc = useQueryClient();
   const [editing, setEditing] = useState<{ id: string | null; form: RuleForm } | null>(null);
-  const [deleting, setDeleting] = useState<Rule | null>(null);
-  const remove = useMutation({
-    mutationFn: (id: string) => ruleApi.remove(id),
-    onSuccess: async (_d, id) => {
-      const name = deleting?.name ?? "The rule";
-      setDeleting(null);
-      if (id === selected) setParams({}, { replace: true });
-      toast.success(`${name} is deleted.`);
-      await refreshRules(qc);
-    },
-  });
+  async function remove(r: Rule) {
+    await ruleApi.remove(r.id);
+    if (r.id === selected) setParams({}, { replace: true });
+    toast.success(`${r.name} is deleted.`);
+    await refreshRules(qc);
+  }
   const open = (id: string) => setParams({ rule: id }, { replace: true });
   const current = items.find((r) => r.id === selected) ?? null;
 
@@ -211,52 +204,29 @@ export function RulesPage() {
         );
       },
     },
-    {
-      key: "actions",
-      mobile: true,
-      header: "Actions",
-      align: "right",
-      cell: (r) => (
-        <RowMenu
-          name={r.name}
-          onEdit={() => setEditing({ id: r.id, form: formOf(r) })}
-          onDelete={() => {
-            remove.reset();
-            setDeleting(r);
-          }}
-        />
-      ),
-    },
   ];
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title="Rules"
-        description="Save a traction rule once. See the projects that meet it, with the days that qualify them."
         primary={
-          editing ? null : (
-            <Button
-              onClick={() => setEditing({ id: null, form: EMPTY_RULE })}
-              className="max-lg:h-(--vs-control-touch)"
-            >
-              <Plus aria-hidden />
-              New rule
-            </Button>
-          )
+          <RuleDialog
+            key={editing?.id ?? (editing ? "new" : "closed")}
+            id={editing?.id ?? null}
+            initial={editing?.form ?? EMPTY_RULE}
+            open={editing !== null}
+            onOpenChange={(o) => {
+              if (o) setEditing((e) => e ?? { id: null, form: EMPTY_RULE });
+              else setEditing(null);
+            }}
+            onDone={(saved) => {
+              setEditing(null);
+              if (saved) open(saved.id);
+            }}
+          />
         }
       />
-
-      {editing ? (
-        <RuleEditor
-          id={editing.id}
-          initial={editing.form}
-          onDone={(saved) => {
-            setEditing(null);
-            if (saved) open(saved.id);
-          }}
-        />
-      ) : null}
 
       {rules.isPending ? (
         <LoadingState label="Loading the rules">
@@ -269,9 +239,7 @@ export function RulesPage() {
           onRetry={() => rules.refetch()}
         />
       ) : items.length === 0 ? (
-        <EmptyState icon={<ListChecks aria-hidden />} title="No rule is saved yet">
-          Save a rule. Then the projects that meet it show here.
-        </EmptyState>
+        <EmptyState icon={<ListChecks aria-hidden />} title="No rule is saved yet" />
       ) : (
         <DataTable
           label="Rules"
@@ -284,6 +252,22 @@ export function RulesPage() {
             "data-rule": r.id,
             ...(r.id === selected ? { "data-current": "" } : {}),
           })}
+          rowActions={(r) => [
+            { label: "Edit rule", onSelect: () => setEditing({ id: r.id, form: formOf(r) }) },
+            {
+              label: "Delete rule",
+              icon: <Trash2 aria-hidden />,
+              destructive: true,
+              confirm: {
+                title: `Delete the rule “${r.name}”?`,
+                description:
+                  "The rule goes away for every operator, the machine API and the AI tools. The audit log keeps its definition.",
+                confirmLabel: "Delete rule",
+                pendingLabel: "Deleting",
+                run: () => remove(r),
+              },
+            },
+          ]}
         />
       )}
 
@@ -296,60 +280,7 @@ export function RulesPage() {
           }
         />
       ) : null}
-
-      <ConfirmDialog
-        open={deleting !== null}
-        onOpenChange={(o) => {
-          if (!o) {
-            setDeleting(null);
-            // a refusal shown for one rule must not greet the next
-            remove.reset();
-          }
-        }}
-        title={deleting ? `Delete the rule “${deleting.name}”?` : "Delete the rule?"}
-        description="The rule goes away for every operator, the machine API and the AI tools. The audit log keeps its definition."
-        confirmLabel="Delete rule"
-        pendingLabel="Deleting"
-        pending={remove.isPending}
-        error={remove.error}
-        onConfirm={() => deleting && remove.mutate(deleting.id)}
-      />
     </div>
-  );
-}
-
-function RowMenu({
-  name,
-  onEdit,
-  onDelete,
-}: {
-  name: string;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    // above the row link, so the menu opens instead of the rule
-    <span className="relative z-(--vs-layer-raised) inline-flex">
-      <Menu>
-        <MenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Actions for ${name}`}
-            className="max-lg:size-(--vs-control-touch)"
-          >
-            <MoreHorizontal aria-hidden />
-          </Button>
-        </MenuTrigger>
-        <MenuContent align="end">
-          <MenuItem onSelect={onEdit}>Edit rule</MenuItem>
-          <MenuItem tone="critical" onSelect={onDelete}>
-            <Trash2 aria-hidden />
-            Delete rule
-          </MenuItem>
-        </MenuContent>
-      </Menu>
-    </span>
   );
 }
 
@@ -385,6 +316,7 @@ function CohortSelect({
       onChange={onChange}
       error={error}
       disabled={loading}
+      className="w-full"
     >
       <option value="">{loading ? "Loading" : "Any"}</option>
       {opts.map((o) => (
@@ -396,13 +328,19 @@ function CohortSelect({
   );
 }
 
-function RuleEditor({
+// the header button and the rule form in its dialog, for a new rule or
+// for one picked from a row menu
+function RuleDialog({
   id,
   initial,
+  open,
+  onOpenChange,
   onDone,
 }: {
   id: string | null;
   initial: RuleForm;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onDone: (saved: Rule | null) => void;
 }) {
   const qc = useQueryClient();
@@ -431,82 +369,86 @@ function RuleEditor({
   const set = (k: keyof RuleForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  function submit(e: FormEvent) {
-    e.preventDefault();
+  function submit() {
     const v = validateRule(form);
     setErrors(v.errors);
     if (v.body) save.mutate(v.body);
   }
 
-  const title = id ? "Edit rule" : "New rule";
+  // two fields to a row, each row the same height: the labels are short
+  // enough never to wrap, and a hint sits under both fields of a row or
+  // under neither. the optional fields are one group, marked once.
   return (
-    <section
-      aria-labelledby="rule-editor-h"
-      className="flex animate-rise-in flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5"
+    <CreateDialog
+      label="New rule"
+      title={id ? "Edit rule" : "New rule"}
+      submitLabel="Save rule"
+      pendingLabel="Saving"
+      pending={save.isPending}
+      error={
+        save.error instanceof ApiError && save.error.code === "validation_failed"
+          ? null
+          : save.error
+      }
+      onSubmit={submit}
+      open={open}
+      onOpenChange={onOpenChange}
+      onClosed={() => onDone(null)}
     >
-      <h2 id="rule-editor-h" className="text-title text-fg">
-        {title}
-      </h2>
-      <form
-        onSubmit={submit}
-        noValidate
-        aria-label={title}
-        className="max-w-prose flex flex-col gap-4"
-      >
+      <TextField
+        label="Name"
+        value={form.name}
+        onChange={set("name")}
+        error={errors.name}
+        maxLength={100}
+      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SelectField
+          label="Metric"
+          value={form.metric}
+          onChange={set("metric")}
+          error={errors.metric}
+          className="w-full"
+        >
+          {(Object.keys(METRIC_TEXT) as RuleMetric[]).map((m) => (
+            <option key={m} value={m}>
+              {METRIC_TEXT[m]}
+            </option>
+          ))}
+        </SelectField>
         <TextField
-          label="Name"
-          value={form.name}
-          onChange={set("name")}
-          error={errors.name}
-          maxLength={100}
-          required
+          label="Minimum per day"
+          inputMode="numeric"
+          value={form.minPerDay}
+          onChange={set("minPerDay")}
+          error={errors.minPerDay}
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <TextField
+          label="Days per month"
+          inputMode="numeric"
+          hint="1 to 28"
+          value={form.minDays}
+          onChange={set("minDays")}
+          error={errors.minDays}
+        />
+        <TextField
+          label="Complete months"
+          inputMode="numeric"
+          hint="1 to 12"
+          value={form.months}
+          onChange={set("months")}
+          error={errors.months}
+        />
+      </div>
+      <fieldset className="flex flex-col gap-3 border-t border-line pt-4">
+        <legend className="float-left mb-3 text-small text-fg-2">Optional</legend>
+        <div className="clear-left grid gap-4 sm:grid-cols-2">
           <SelectField
-            label="Metric"
-            value={form.metric}
-            onChange={set("metric")}
-            error={errors.metric}
-          >
-            {(Object.keys(METRIC_TEXT) as RuleMetric[]).map((m) => (
-              <option key={m} value={m}>
-                {METRIC_TEXT[m]}
-              </option>
-            ))}
-          </SelectField>
-          <TextField
-            label="Minimum per day"
-            inputMode="numeric"
-            value={form.minPerDay}
-            onChange={set("minPerDay")}
-            error={errors.minPerDay}
-            required
-          />
-          <TextField
-            label="Days per month"
-            inputMode="numeric"
-            hint="1 to 28"
-            value={form.minDays}
-            onChange={set("minDays")}
-            error={errors.minDays}
-            required
-          />
-          <TextField
-            label="Months"
-            inputMode="numeric"
-            hint="1 to 12 complete months"
-            value={form.months}
-            onChange={set("months")}
-            error={errors.months}
-            required
-          />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <SelectField
-            label="Minimum integrity grade"
+            label="Integrity grade"
             value={form.minGrade}
             onChange={set("minGrade")}
             error={errors.minGrade}
+            className="w-full"
           >
             <option value="">Any grade</option>
             <option value="A">A</option>
@@ -528,28 +470,8 @@ function RuleEditor({
             />
           ))}
         </div>
-        <FormMessage
-          error={
-            save.error instanceof ApiError && save.error.code === "validation_failed"
-              ? null
-              : save.error
-          }
-        />
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" pending={save.isPending} className="max-lg:h-(--vs-control-touch)">
-            {save.isPending ? "Saving" : "Save rule"}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => onDone(null)}
-            className="max-lg:h-(--vs-control-touch)"
-          >
-            Cancel
-          </Button>
-        </div>
-      </form>
-    </section>
+      </fieldset>
+    </CreateDialog>
   );
 }
 

@@ -26,11 +26,12 @@ import { countOf, formatCount } from "@/lib/format";
 import { ReviewSkeleton } from "@/pages/operator/page-frame";
 import { useNow } from "./alerts";
 import { ageText, DecisionSection, enrolledLine, Waiting } from "./decision";
-import { ProjectNumbers } from "./numbers";
+import { ProjectNumbers, useProjectNumbers, withNumbers } from "./numbers";
+import { Answers } from "./project";
 
 // contract 5.3 review=true: pending projects and active projects with a site
 // in review, oldest first so nobody waits longest
-const QUEUE: TenantListQuery = {
+export const REVIEW_QUEUE: TenantListQuery = {
   status: [],
   review: true,
   q: "",
@@ -39,11 +40,13 @@ const QUEUE: TenantListQuery = {
 };
 
 // the operator's queue: the projects that wait on the left, the selected one
-// with its numbers, evidence and the decision on the right. on a phone the
+// in the middle with its evidence and enrollment answers first (the facts a
+// decision on a new project rests on) and its figures only when it has
+// data, and the decision in a column that stays in view. on a phone the
 // selected project is its own screen with the decision at the bottom. the
 // selection is in the address (?project=), so a project can be shared.
 export function ReviewQueuePage() {
-  const list = useInfiniteQuery(operatorTenantsQuery(QUEUE));
+  const list = useInfiniteQuery(operatorTenantsQuery(REVIEW_QUEUE));
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   const [params, setParams] = useSearchParams();
   const picked = params.get("project");
@@ -91,7 +94,6 @@ export function ReviewQueuePage() {
             </span>
           ) : null
         }
-        description="Projects that wait for a decision, oldest first."
         freshness={list.dataUpdatedAt > 0 ? { at: new Date(list.dataUpdatedAt) } : null}
         className={picked ? "max-lg:hidden" : undefined}
       />
@@ -109,7 +111,7 @@ export function ReviewQueuePage() {
           New projects show here. Sites on a domain of a removed project show here too.
         </EmptyState>
       ) : (
-        <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] xl:grid-cols-[22rem_minmax(0,1fr)]">
+        <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
           <nav
             aria-label="Review queue"
             className={cn(
@@ -271,13 +273,13 @@ function SelectedProject({
   onDecided: () => void;
 }) {
   const detail = useQuery(operatorTenantQuery(summary.id));
+  const numbers = useProjectNumbers(summary.id);
   return (
     <section aria-label={`Review ${summary.name}`} className="flex min-w-0 flex-col">
       <AnimatePresence initial={false} mode="wait">
         {detail.isPending ? (
           <motion.div key="loading" {...fade}>
             <LoadingState label={`Loading ${summary.name}`}>
-              <Skeleton.StatRow count={3} />
               <Skeleton.Table rows={5} columns={2} />
             </LoadingState>
           </motion.div>
@@ -290,87 +292,77 @@ function SelectedProject({
             />
           </motion.div>
         ) : (
-          <motion.div key="data" {...fade} className="flex min-w-0 flex-col gap-6">
-            <header className="flex min-w-0 flex-col gap-1">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                {detail.data.tenant.status === "pending" ? (
-                  <Waiting since={detail.data.tenant.status_changed_at} now={now} />
-                ) : (
-                  <StatusBadge kind="project" status={detail.data.tenant.status} operator />
-                )}
-                <Link
-                  to={`/operator/projects/${summary.id}`}
-                  className="inline-flex items-center gap-1 rounded-sm text-small text-fg underline-offset-4 hover:underline focus-ring"
-                >
-                  Open the project page
-                  <ArrowRight aria-hidden className="size-3.5" />
-                </Link>
-              </div>
-              <h2 className="text-heading break-words text-fg">{detail.data.tenant.name}</h2>
-              <p className="text-small break-words text-fg-2">
-                {enrolledLine(detail.data.tenant)}{" "}
-                <span className="break-all">{detail.data.tenant.enrollment_answers.website}</span>
-              </p>
-            </header>
+          <motion.div
+            key="data"
+            {...fade}
+            className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]"
+          >
+            <div className="flex min-w-0 flex-col gap-6">
+              <header className="flex min-w-0 flex-col gap-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {detail.data.tenant.status === "pending" ? (
+                    <Waiting since={detail.data.tenant.status_changed_at} now={now} />
+                  ) : (
+                    <StatusBadge kind="project" status={detail.data.tenant.status} operator />
+                  )}
+                  <Link
+                    to={`/operator/projects/${summary.id}`}
+                    className="inline-flex items-center gap-1 rounded-sm text-small text-fg underline-offset-4 hover:underline focus-ring"
+                  >
+                    Open the project page
+                    <ArrowRight aria-hidden className="size-3.5" />
+                  </Link>
+                </div>
+                <h2 className="text-heading break-words text-fg">{detail.data.tenant.name}</h2>
+                <p className="text-small break-words text-fg-2">
+                  {enrolledLine(detail.data.tenant)}
+                </p>
+              </header>
 
-            <ProjectNumbers tenantId={summary.id} />
-
-            <div className="grid min-w-0 gap-6 xl:grid-cols-2">
               <section aria-labelledby="evidence-h" className="flex min-w-0 flex-col gap-2">
                 <h2 id="evidence-h" className="text-title text-fg">
                   Evidence
                 </h2>
-                <EvidenceList items={evidenceOf(detail.data)} stacked />
+                <EvidenceList items={withNumbers(evidenceOf(detail.data), numbers)} />
               </section>
-              <section aria-labelledby="usage-h" className="flex min-w-0 flex-col gap-2">
-                <h2 id="usage-h" className="text-title text-fg">
-                  How it uses Stellar
-                </h2>
-                <p className="whitespace-pre-wrap break-words text-body text-fg">
-                  {detail.data.tenant.enrollment_answers.stellar_usage}
-                </p>
-                {detail.data.tenant.description ? (
-                  <p className="whitespace-pre-wrap break-words text-small text-fg-2">
-                    {detail.data.tenant.description}
-                  </p>
-                ) : null}
-              </section>
+
+              <Answers detail={detail.data} />
+
+              {detail.data.sites.some((s) => s.in_review) ? (
+                <section aria-labelledby="sites-review-h" className="flex flex-col gap-3">
+                  <h2 id="sites-review-h" className="text-title text-fg">
+                    Sites in review
+                  </h2>
+                  <ul className="flex flex-col gap-3">
+                    {detail.data.sites
+                      .filter((s) => s.in_review)
+                      .map((s) => (
+                        <li key={s.id}>
+                          <SiteReview site={s} />
+                        </li>
+                      ))}
+                  </ul>
+                </section>
+              ) : null}
+
+              <ProjectNumbers tenantId={summary.id} numbers={numbers} />
             </div>
 
-            {detail.data.sites.some((s) => s.in_review) ? (
-              <section aria-labelledby="sites-review-h" className="flex flex-col gap-3">
-                <h2 id="sites-review-h" className="text-title text-fg">
-                  Sites in review
-                </h2>
-                <ul className="flex flex-col gap-3">
-                  {detail.data.sites
-                    .filter((s) => s.in_review)
-                    .map((s) => (
-                      <li key={s.id}>
-                        <SiteReview site={s} />
-                      </li>
-                    ))}
-                </ul>
-              </section>
-            ) : null}
-
             {detail.data.allowed_actions.some((a) => a === "approve" || a === "reject") ? (
-              <DecisionSection>
-                <DecisionPanel
-                  subject={{
-                    kind: "project",
-                    id: detail.data.tenant.id,
-                    name: detail.data.tenant.name,
-                    allowed: detail.data.allowed_actions,
-                  }}
-                  onDecided={onDecided}
-                />
-              </DecisionSection>
-            ) : (
-              <p className="text-small text-fg-2">
-                The project is active. Only its sites in review wait for a decision.
-              </p>
-            )}
+              <div className="min-w-0 xl:sticky xl:top-4">
+                <DecisionSection>
+                  <DecisionPanel
+                    subject={{
+                      kind: "project",
+                      id: detail.data.tenant.id,
+                      name: detail.data.tenant.name,
+                      allowed: detail.data.allowed_actions,
+                    }}
+                    onDecided={onDecided}
+                  />
+                </DecisionSection>
+              </div>
+            ) : null}
           </motion.div>
         )}
       </AnimatePresence>
@@ -384,11 +376,11 @@ function SiteReview({ site }: { site: OperatorSite }) {
     <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4">
       <div className="flex min-w-0 flex-col gap-1">
         <span className="font-mono text-small break-all text-fg">{site.domain}</span>
-        <span className="text-caption text-fg-2">
-          {site.domain_previously_removed
-            ? "This domain, or a parent or subdomain of it, belonged to a removed project."
-            : "This site waits for a decision."}
-        </span>
+        {site.domain_previously_removed ? (
+          <span className="text-caption text-warning">
+            This domain, or a parent or subdomain of it, belonged to a removed project.
+          </span>
+        ) : null}
       </div>
       <DecisionPanel subject={{ kind: "site", id: site.id, name: site.domain }} />
     </div>

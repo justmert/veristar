@@ -27,6 +27,7 @@ import { StellarTomlSummary, VerificationDetail } from "@/components/evidence";
 import { EvidenceList, evidenceOf } from "@/components/evidence-list";
 import { IntegrityReportView } from "@/components/integrity";
 import { PageHeader } from "@/components/page-header";
+import { Section } from "@/components/panel";
 import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
@@ -41,7 +42,7 @@ import { termsVersionLabel } from "@/lib/terms";
 import { NotFoundPage } from "@/pages/public/not-found";
 import { AuditEntries } from "./audit";
 import { DecisionSection, refreshOperator } from "./decision";
-import { ProjectNumbers } from "./numbers";
+import { ProjectNumbers, useProjectNumbers, withNumbers } from "./numbers";
 import { TenantOnchainSection } from "./onchain-parts";
 
 type ActionSpec = {
@@ -147,13 +148,15 @@ export function OperatorProjectPage() {
 }
 
 // the operator's page of one project: the status, then the same order as
-// the review queue at every width (numbers, evidence, the decision), then
-// the sites and the record around it. a removed project shows its record
+// the review queue at every width (evidence and enrollment answers, the
+// decision, the figures when there are any), then the sites and the record
+// around it. a removed project shows its record
 // only: its data is deleted and no action applies.
 export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
   const t = detail.tenant;
   const removed = t.status === "removed";
   const decides = detail.allowed_actions.some((a) => a === "approve" || a === "reject");
+  const numbers = useProjectNumbers(t.id, !removed);
   return (
     <div className="flex min-w-0 flex-col gap-8">
       <PageHeader
@@ -189,14 +192,15 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
 
       <div className="grid min-w-0 items-start gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="flex min-w-0 flex-col gap-8">
-          {removed ? null : <ProjectNumbers tenantId={t.id} />}
-
-          <section aria-labelledby="evidence-h" className="flex min-w-0 flex-col gap-2">
-            <h2 id="evidence-h" className="text-title text-fg">
-              Evidence
-            </h2>
-            <EvidenceList items={evidenceOf(detail)} />
-          </section>
+          <div className="grid min-w-0 items-start gap-8 lg:grid-cols-2">
+            <section aria-labelledby="evidence-h" className="flex min-w-0 flex-col gap-2">
+              <h2 id="evidence-h" className="text-title text-fg">
+                Evidence
+              </h2>
+              <EvidenceList items={withNumbers(evidenceOf(detail), numbers)} />
+            </section>
+            <Answers detail={detail} />
+          </div>
 
           {decides ? (
             <DecisionSection>
@@ -210,6 +214,8 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
               />
             </DecisionSection>
           ) : null}
+
+          {removed ? null : <ProjectNumbers tenantId={t.id} numbers={numbers} />}
 
           <Sites sites={detail.sites} decides={!removed} project={t.status} />
 
@@ -229,9 +235,6 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
               </Fold>
 
               <Fold id="events" title="Tracker requests by outcome">
-                <p className="mb-3 text-small text-fg-2">
-                  What the gateway did with each tracker request. The counts roll up every hour.
-                </p>
                 <div className="grid gap-5 sm:grid-cols-2">
                   <Counts title="Last 24 full hours, UTC" counts={detail.ingest.last_24h} />
                   <Counts title="Last 30 full days, UTC" counts={detail.ingest.last_30d} />
@@ -266,7 +269,6 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
 
         <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-4">
           <OperatorCohortPanel tenantId={t.id} readOnly={removed} />
-          <Answers detail={detail} />
           <Box id="members-h" title="Members">
             <ul className="flex flex-col gap-2 text-small">
               {detail.members.map((m) => (
@@ -316,42 +318,38 @@ function Fold({ id, title, children }: { id: string; title: string; children: Re
   );
 }
 
-function Answers({ detail }: { detail: OperatorTenantDetail }) {
+// the enrollment answers beside the evidence, label over value like the
+// evidence list. the scf round link is one of the evidence facts.
+export function Answers({ detail }: { detail: OperatorTenantDetail }) {
   const t = detail.tenant;
   const a = t.enrollment_answers;
   const rows: [string, ReactNode][] = [
     ["Website", <span className="break-all">{a.website}</span>],
     ["How it uses Stellar", <Clamped text={a.stellar_usage} />],
-    [
-      "SCF round",
-      a.scf_round_url ? <span className="break-all">{a.scf_round_url}</span> : "Not given",
-    ],
-    ["Description", t.description ? <Clamped text={t.description} /> : "Not given"],
-    [
-      "Terms",
-      t.accepted_terms_version ? termsVersionLabel(t.accepted_terms_version) : "Not accepted",
-    ],
-    ["Dashboards", t.provisioning === "ready" ? "Set up" : "Not set up yet"],
+    ...(t.description
+      ? [["Description", <Clamped text={t.description} />] as [string, ReactNode]]
+      : []),
   ];
   return (
-    <Box id="answers-h" title="Enrollment answers">
-      <dl className="flex flex-col gap-3 text-small">
+    <section aria-labelledby="answers-h" className="flex min-w-0 flex-col gap-2">
+      <h2 id="answers-h" className="text-title text-fg">
+        Enrollment answers
+      </h2>
+      <dl className="flex flex-col gap-2 text-small">
         {rows.map(([k, v]) => (
-          <div key={k} className="flex min-w-0 flex-col gap-1">
-            <dt className="text-caption text-fg-2">{k}</dt>
+          <div key={k} className="flex min-w-0 flex-col">
+            <dt className="text-fg-2">{k}</dt>
             <dd className="text-fg">{v}</dd>
           </div>
         ))}
-        <div className="flex min-w-0 flex-col gap-1">
-          <dt className="text-caption text-fg-2">Account and contract IDs</dt>
-          <dd>
-            {detail.stellar_ids.length === 0 ? (
-              <span className="text-fg">Not given</span>
-            ) : (
+        {detail.stellar_ids.length > 0 ? (
+          <div className="flex min-w-0 flex-col">
+            <dt className="text-fg-2">Account and contract IDs</dt>
+            <dd>
               <ul className="flex flex-col gap-1" aria-label="Account and contract IDs">
                 {detail.stellar_ids.map((s) => (
-                  <li key={s.id} className="flex min-w-0 flex-col">
-                    <code className="font-mono text-caption break-all text-fg">{s.id}</code>
+                  <li key={s.id} className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                    <code className="min-w-0 font-mono text-caption break-all text-fg">{s.id}</code>
                     <span
                       className={s.valid ? "text-caption text-fg-2" : "text-caption text-warning"}
                     >
@@ -360,11 +358,27 @@ function Answers({ detail }: { detail: OperatorTenantDetail }) {
                   </li>
                 ))}
               </ul>
-            )}
-          </dd>
-        </div>
+            </dd>
+          </div>
+        ) : null}
       </dl>
-    </Box>
+      <div className="flex min-w-0 flex-wrap gap-x-6 gap-y-1 text-caption text-fg-2">
+        <span>
+          Terms:{" "}
+          <span className="text-fg">
+            {t.accepted_terms_version
+              ? termsVersionLabel(t.accepted_terms_version)
+              : "Not accepted"}
+          </span>
+        </span>
+        <span>
+          Dashboards:{" "}
+          <span className="text-fg">
+            {t.provisioning === "ready" ? "Set up" : "Not set up yet"}
+          </span>
+        </span>
+      </div>
+    </section>
   );
 }
 
@@ -559,32 +573,9 @@ function Sites({
       numeric: true,
       cell: (x) => formatCount(x.origins.length),
     },
-    {
-      key: "details",
-      header: "Actions",
-      align: "right",
-      action: true,
-      cell: (x) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="relative z-(--vs-layer-raised) max-lg:h-(--vs-control-touch)"
-          aria-label={`Checks of ${x.domain}`}
-          onClick={() => setOpen(x)}
-        >
-          Checks
-        </Button>
-      ),
-    },
   ];
   return (
-    <section aria-labelledby="sites-h" className="flex min-w-0 flex-col gap-3">
-      <h2 id="sites-h" className="text-title text-fg">
-        Sites{" "}
-        {sites.length > 0 ? (
-          <span className="font-normal text-fg-2">({formatCount(sites.length)})</span>
-        ) : null}
-      </h2>
+    <Section title="Sites" count={sites.length > 0 ? sites.length : null}>
       {waiting.length > 0 ? (
         <ul className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-raised">
           {waiting.map((x) => (
@@ -604,6 +595,7 @@ function Sites({
           getRowKey={(x) => x.id}
           rowLabel={(x) => x.name}
           rowProps={(x) => ({ "data-site": x.id })}
+          rowActions={(x) => [{ label: "Show checks", onSelect: () => setOpen(x) }]}
           footer={paged.footer}
         />
       )}
@@ -616,7 +608,7 @@ function Sites({
       >
         {open ? <SiteChecks site={open} /> : null}
       </Dialog>
-    </section>
+    </Section>
   );
 }
 

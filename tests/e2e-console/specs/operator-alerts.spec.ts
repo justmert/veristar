@@ -134,7 +134,7 @@ test("an operator admin sees firing alerts by severity and the badge", async () 
   // the watchdog is the pipeline's heartbeat, never a listed alert
   await expect(page.locator('[data-alert="Watchdog"]')).toHaveCount(0);
   await expect(page.getByText("The alert checks do not run", { exact: true })).toHaveCount(0);
-  await expect(page.getByText(/^Last checked \d\d:\d\d:\d\d UTC$/)).toBeVisible();
+  await expect(page.locator("[data-freshness]")).toBeVisible();
 
   const nav = page.getByRole("navigation", { name: "Operator" });
   // the badge counts the alerts the page lists
@@ -157,7 +157,7 @@ test("all clear once the alerts resolve, with the time of the check", async () =
   await page.goto(alertsUrl);
   await expect(page.getByText("All clear", { exact: true })).toBeVisible();
   await expect(page.getByText(/^No alert fires\./)).toBeVisible();
-  await expect(page.getByText(/^Last checked \d\d:\d\d:\d\d UTC$/)).toBeVisible();
+  await expect(page.locator("[data-freshness]")).toBeVisible();
   await expect(page.locator("[data-alert]")).toHaveCount(0);
   await expect(page.getByText("critical alert")).toHaveCount(0);
   await page.screenshot({ path: join(shots, "all-clear.png"), fullPage: true });

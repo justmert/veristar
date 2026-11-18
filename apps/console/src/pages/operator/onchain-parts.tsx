@@ -11,69 +11,85 @@ import { SeriesSwatch } from "./shared";
 // the operator's on-chain parts (contract 15.7): the compare section and the
 // per id detail of a project
 
-// the on-chain section of the compare page: totals and one strip of daily
-// operations per project
+// the on-chain section of the compare page: the totals and a strip of
+// daily operations for each project with a verified id, and one row for
+// every project without on-chain data, so empty strips are never drawn
 export function CompareOnchainSection({
   projects,
 }: {
   projects: { tenant: TenantRef; onchain?: CompareOnchain }[];
 }) {
+  const slotted = projects.map((p, i) => ({ ...p, slot: i }));
+  const measured = slotted.filter((p) => (p.onchain?.totals.ids_verified ?? 0) > 0);
+  const none = slotted.filter((p) => (p.onchain?.totals.ids_verified ?? 0) === 0);
   return (
     <section aria-labelledby="compare-onchain" className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 id="compare-onchain" className="text-section text-fg">
-          On-chain
-        </h2>
-        <p className="text-small text-fg-2">
-          Operations of the declared accounts and contracts per UTC day. A dashed day has no data.
-        </p>
-      </div>
-      <ul className="flex flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5">
-        {projects.map((p, i) => {
-          const s = p.onchain;
-          const declared = !!s && s.totals.ids > 0;
+      <h2 id="compare-onchain" className="text-section text-fg">
+        On-chain
+      </h2>
+      <ul className="flex flex-col divide-y divide-line-subtle rounded-lg border border-line bg-raised">
+        {measured.map((p) => {
+          const s = p.onchain as CompareOnchain;
           return (
-            <li key={p.tenant.id} data-tenant={p.tenant.id} className="flex min-w-0 flex-col gap-2">
+            <li
+              key={p.tenant.id}
+              data-tenant={p.tenant.id}
+              className="flex min-w-0 flex-col gap-2 px-4 py-4 sm:px-5"
+            >
               <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-                <SeriesSwatch slot={i} />
+                <SeriesSwatch slot={p.slot} />
                 <span className="min-w-0 truncate text-body font-medium text-fg">
                   {p.tenant.name}
                 </span>
-                {declared && s.totals.ids_verified === 0 ? (
-                  // nothing is measured without a verified id, so no 0 shows
-                  <span className="text-small text-fg-2">
-                    No verified account or contract, 0 of {countOf(s.totals.ids, "ID")} verified
-                  </span>
-                ) : declared ? (
-                  <span className="text-small text-fg-2">
-                    <span className="text-fg tabular">{formatCount(s.totals.operations)}</span>{" "}
-                    operations, {countOf(s.totals.transactions, "transaction")},{" "}
-                    {s.totals.ids_verified} of {countOf(s.totals.ids, "ID")} verified. Weekly active
-                    accounts: {weeklyActiveText(s.totals.weekly_active_accounts)}.
-                  </span>
-                ) : (
-                  <span className="text-small text-fg-2">No accounts or contracts declared</span>
-                )}
+                <span className="text-small text-fg-2">
+                  <span className="text-fg tabular">{formatCount(s.totals.operations)}</span>{" "}
+                  operations, {countOf(s.totals.transactions, "transaction")},{" "}
+                  {s.totals.ids_verified} of {countOf(s.totals.ids, "ID")} verified. Weekly active
+                  accounts: {weeklyActiveText(s.totals.weekly_active_accounts)}.
+                </span>
               </div>
-              {declared ? (
-                <>
-                  <DayStrip
-                    label={`Daily operations of ${p.tenant.name}`}
-                    points={s.series.map((d) => ({
-                      day: d.day,
-                      value: d.operations,
-                      missing: d.operations === null ? "not_read_yet" : null,
-                    }))}
-                  />
-                  <WeeklyActiveList
-                    weeks={s.weeks}
-                    label={`Weekly active accounts of ${p.tenant.name}`}
-                  />
-                </>
-              ) : null}
+              <DayStrip
+                label={`Daily operations of ${p.tenant.name}`}
+                points={s.series.map((d) => ({
+                  day: d.day,
+                  value: d.operations,
+                  missing: d.operations === null ? "not_read_yet" : null,
+                }))}
+              />
+              <WeeklyActiveList
+                weeks={s.weeks}
+                label={`Weekly active accounts of ${p.tenant.name}`}
+              />
             </li>
           );
         })}
+        {none.length > 0 ? (
+          <li
+            data-onchain-none=""
+            className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-small sm:px-5"
+          >
+            <span className="text-fg-2">No on-chain data</span>
+            {none.map((p) => {
+              const ids = p.onchain?.totals.ids ?? 0;
+              return (
+                <span
+                  key={p.tenant.id}
+                  data-tenant={p.tenant.id}
+                  className="inline-flex min-w-0 items-center gap-2"
+                  title={
+                    ids > 0
+                      ? `0 of ${countOf(ids, "ID")} verified`
+                      : "No accounts or contracts declared"
+                  }
+                >
+                  <SeriesSwatch slot={p.slot} />
+                  <span className="truncate text-fg">{p.tenant.name}</span>
+                  {ids > 0 ? <span className="text-fg-2 tabular">0 of {ids}</span> : null}
+                </span>
+              );
+            })}
+          </li>
+        ) : null}
       </ul>
     </section>
   );

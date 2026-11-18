@@ -111,7 +111,6 @@ export function ComparePage() {
     <div className="flex min-w-0 flex-col gap-8">
       <PageHeader
         title="Compare"
-        description="Up to 5 projects side by side, from their daily totals."
         freshness={
           web.dataUpdatedAt > 0
             ? {
@@ -374,6 +373,11 @@ export function chartState(
   return "data";
 }
 
+// one series per compared project with data, in the project's slot, so a
+// project keeps its colour when another one has no data and is left out.
+// a range whose data sits in one day draws the chart's first-data state.
+type Slotted = { tenant: TenantRef; slot: number };
+
 function CompareChart({
   title,
   description,
@@ -385,17 +389,20 @@ function CompareChart({
   markers,
   ceiling,
   higherIsBetter = true,
+  rate = false,
 }: {
   title: string;
-  description: string;
+  description?: string;
   buckets: TimeBucket[];
-  projects: TenantRef[];
+  projects: Slotted[];
   values: (number | null)[][];
   format: (n: number) => string;
   axisFormat: (n: number) => string;
   markers: { at: string; label: string }[];
   ceiling?: { value: number; label: string };
   higherIsBetter?: boolean;
+  // a rate's zero is a real reading, so its line starts at it
+  rate?: boolean;
 }) {
   const st = chartState(buckets, values);
   return (
@@ -405,10 +412,10 @@ function CompareChart({
       headingLevel={3}
       kind="line"
       buckets={buckets}
-      series={projects.map((t, i) => ({
-        key: t.id,
-        label: t.name,
-        tone: SERIES_TONES[i] ?? "series-1",
+      series={projects.map((p, i) => ({
+        key: p.tenant.id,
+        label: p.tenant.name,
+        tone: SERIES_TONES[p.slot] ?? "series-1",
         values: values[i] ?? [],
       }))}
       format={format}
@@ -416,16 +423,35 @@ function CompareChart({
       higherIsBetter={higherIsBetter}
       markers={markers}
       ceiling={ceiling}
-      state={st === "data" ? "data" : "empty"}
+      state={st === "empty" ? "empty" : "data"}
       legend={false}
-      emptyTitle={st === "no-complete" ? "No complete day yet" : "No data in this range"}
-      emptyText={
-        st === "no-complete"
-          ? "Only today has data. Today is still running. The totals below hold its value."
-          : "Choose a longer range, or wait for the first data."
-      }
+      leadingZeros={rate ? "keep" : "gap"}
       height={180}
     />
+  );
+}
+
+// the projects of a section without any data in the range, as one row of
+// names in their colours, in place of empty lines and rows
+function NoData({ label, projects }: { label: string; projects: Slotted[] }) {
+  if (projects.length === 0) return null;
+  return (
+    <p
+      data-no-data=""
+      className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-line bg-raised px-4 py-3 text-small sm:px-5"
+    >
+      <span className="text-fg-2">{label}</span>
+      {projects.map((p) => (
+        <span
+          key={p.tenant.id}
+          data-tenant={p.tenant.id}
+          className="inline-flex min-w-0 items-center gap-2"
+        >
+          <SeriesSwatch slot={p.slot} />
+          <span className="truncate text-fg">{p.tenant.name}</span>
+        </span>
+      ))}
+    </p>
   );
 }
 
@@ -433,18 +459,22 @@ function CompareChart({
 
 function WebSection({ data }: { data: WebCompare }) {
   const buckets = bucketsOf(data.days);
-  const projects = data.projects.map((p) => p.tenant);
-  const markers = markersOf(data.projects);
+  const all = data.projects.map((p, slot) => ({ ...p, slot }));
+  const withData = all.filter((p) => p.totals.pageviews > 0 || p.totals.visits > 0);
+  const without = all.filter((p) => !withData.includes(p));
+  const projects = withData;
+  const markers = markersOf(withData);
   const col = (k: "pageviews" | "visitors" | "bounce_rate" | "avg_visit_duration") =>
-    data.projects.map((p) => p.series.map((s) => s[k]));
-  const notRead = data.projects.some((p) => p.series.some((s) => !s.aggregated));
-  const gaps = notRead ? " A gap is a day that is not read yet." : "";
+    withData.map((p) => p.series.map((s) => s[k]));
+  const notRead = withData.some((p) => p.series.some((s) => !s.aggregated));
+  const gaps = notRead ? "A gap is a day that is not read yet." : undefined;
+  if (withData.length === 0) return <NoData label="No web data" projects={without} />;
   return (
     <>
       <div className="grid gap-4 lg:grid-cols-2">
         <CompareChart
           title="Page views"
-          description={`Page views per UTC day.${gaps}`}
+          description={gaps}
           buckets={buckets}
           projects={projects}
           values={col("pageviews")}
@@ -454,7 +484,7 @@ function WebSection({ data }: { data: WebCompare }) {
         />
         <CompareChart
           title="Visitors"
-          description={`Visitors per UTC day, unique per site.${gaps}`}
+          description={gaps}
           buckets={buckets}
           projects={projects}
           values={col("visitors")}
@@ -464,7 +494,6 @@ function WebSection({ data }: { data: WebCompare }) {
         />
         <CompareChart
           title="Bounce rate"
-          description="Visits with one page view and no event. A gap is a day without visits."
           buckets={buckets}
           projects={projects}
           values={col("bounce_rate")}
@@ -472,10 +501,10 @@ function WebSection({ data }: { data: WebCompare }) {
           axisFormat={percentAxis(col("bounce_rate"))}
           markers={markers}
           higherIsBetter={false}
+          rate
         />
         <CompareChart
           title="Average visit"
-          description="Time from the first to the last page view, on average."
           buckets={buckets}
           projects={projects}
           values={col("avg_visit_duration")}
@@ -486,7 +515,7 @@ function WebSection({ data }: { data: WebCompare }) {
       </div>
       <TotalsTable
         label="Web totals"
-        projects={data.projects}
+        projects={withData}
         columns={[
           { key: "pageviews", header: "Page views", value: (p) => formatCount(p.totals.pageviews) },
           { key: "visitors", header: "Visitors", value: (p) => formatCount(p.totals.visitors) },
@@ -526,7 +555,8 @@ function WebSection({ data }: { data: WebCompare }) {
         ]}
         mobile={["pageviews", "visitors", "bounce_rate"]}
       />
-      <CompareIntegrity projects={data.projects} />
+      <NoData label="No web data" projects={without} />
+      <CompareIntegrity projects={withData} />
       <Disclosure summary="Referrers, countries, devices, browsers and systems">
         <div className="flex flex-col gap-6">
           {DIMENSIONS.map((d) => (
@@ -534,12 +564,12 @@ function WebSection({ data }: { data: WebCompare }) {
               <h3 className="text-title text-fg">{d.label}</h3>
               {d.dim === "country" ? <DbIpAttribution /> : null}
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {data.projects.map((p, i) => {
+                {withData.map((p) => {
                   const b = p.breakdowns[d.dim];
                   return (
                     <div key={p.tenant.id} className="flex min-w-0 flex-col gap-2">
                       <p className="flex min-w-0 items-center gap-2 text-small font-medium text-fg">
-                        <SeriesSwatch slot={i} />
+                        <SeriesSwatch slot={p.slot} />
                         <span className="truncate">{p.tenant.name}</span>
                       </p>
                       <BreakdownList
@@ -601,17 +631,20 @@ function rateCell(v: number | null) {
 
 function ApiSection({ data }: { data: ApiCompare }) {
   const buckets = bucketsOf(data.days);
-  const projects = data.projects.map((p) => p.tenant);
-  const markers = markersOf(data.projects);
+  const all = data.projects.map((p, slot) => ({ ...p, slot }));
+  const withData = all.filter((p) => p.totals.requests > 0);
+  const without = all.filter((p) => !withData.includes(p));
+  const projects = withData;
+  const markers = markersOf(withData);
   const col = (f: (s: ApiCompareProject["series"][number]) => number | null) =>
-    data.projects.map((p) => p.series.map(f));
+    withData.map((p) => p.series.map(f));
   const p95 = col((s) => pct(s, "p95"));
+  if (withData.length === 0) return <NoData label="No API data" projects={without} />;
   return (
     <>
       <div className="grid gap-4 lg:grid-cols-2">
         <CompareChart
           title="Requests"
-          description="Requests per UTC day over every service."
           buckets={buckets}
           projects={projects}
           values={col((s) => s.requests)}
@@ -621,7 +654,6 @@ function ApiSection({ data }: { data: ApiCompare }) {
         />
         <CompareChart
           title="p95 latency"
-          description="The duration that 95% of requests stay under. A gap is a day without requests."
           buckets={buckets}
           projects={projects}
           values={p95}
@@ -633,7 +665,6 @@ function ApiSection({ data }: { data: ApiCompare }) {
         />
         <CompareChart
           title="4xx rate"
-          description="Requests answered with a 4xx status. A gap is a day without requests."
           buckets={buckets}
           projects={projects}
           values={col((s) => s.rate_4xx)}
@@ -641,10 +672,10 @@ function ApiSection({ data }: { data: ApiCompare }) {
           axisFormat={percentAxis(col((s) => s.rate_4xx))}
           markers={markers}
           higherIsBetter={false}
+          rate
         />
         <CompareChart
           title="5xx rate"
-          description="Requests answered with a 5xx status. A gap is a day without requests."
           buckets={buckets}
           projects={projects}
           values={col((s) => s.rate_5xx)}
@@ -652,11 +683,12 @@ function ApiSection({ data }: { data: ApiCompare }) {
           axisFormat={percentAxis(col((s) => s.rate_5xx))}
           markers={markers}
           higherIsBetter={false}
+          rate
         />
       </div>
       <TotalsTable
         label="API totals"
-        projects={data.projects}
+        projects={withData}
         columns={[
           { key: "requests", header: "Requests", value: (p) => formatCount(p.totals.requests) },
           {
@@ -676,10 +708,11 @@ function ApiSection({ data }: { data: ApiCompare }) {
         ]}
         mobile={["requests", "rate_5xx", "p95"]}
       />
+      <NoData label="No API data" projects={without} />
       <Disclosure summary="Services of each project">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {data.projects.map((p, i) => (
-            <ServicesCard key={p.tenant.id} project={p} slot={i} />
+          {withData.map((p) => (
+            <ServicesCard key={p.tenant.id} project={p} slot={p.slot} />
           ))}
         </div>
       </Disclosure>
@@ -741,7 +774,7 @@ function latencyText(n: ApiNumbers): string {
 
 // ---- shared
 
-type TotalsRow = { tenant: TenantRef };
+type TotalsRow = { tenant: TenantRef; slot: number };
 
 // the range totals: one row per project in its series slot, one column per
 // metric, so a column reads down across the projects
@@ -756,7 +789,6 @@ function TotalsTable<R extends TotalsRow>({
   columns: { key: string; header: string; definition?: string; value: (p: R) => ReactNode }[];
   mobile: string[];
 }) {
-  const slots = new Map(projects.map((p, i) => [p.tenant.id, i]));
   const cols: Column<R>[] = [
     {
       key: "name",
@@ -766,7 +798,7 @@ function TotalsTable<R extends TotalsRow>({
       className: "max-w-72",
       cell: (p) => (
         <span className="flex min-w-0 items-center gap-2">
-          <SeriesSwatch slot={slots.get(p.tenant.id) ?? -1} />
+          <SeriesSwatch slot={p.slot} />
           <span className="truncate">{p.tenant.name}</span>
         </span>
       ),

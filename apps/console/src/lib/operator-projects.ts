@@ -30,8 +30,10 @@ export const VIEWS: readonly { value: ProjectsView; label: string }[] = [
   { value: "api", label: "API" },
 ];
 
+// the web view is the default: sorted by page views, the projects with
+// data come first
 export function readView(v: string | null): ProjectsView {
-  return v === "web" || v === "api" ? v : "status";
+  return v === "status" || v === "api" ? v : "web";
 }
 
 export const DEFAULT_WEB_SORT: WebSort = "pageviews";
@@ -59,7 +61,7 @@ export function statusQuery(p: URLSearchParams): TenantListQuery {
 }
 
 export function statusParams(q: TenantListQuery): URLSearchParams {
-  const p = new URLSearchParams();
+  const p = new URLSearchParams({ view: "status" });
   if (q.status.length) p.set("status", q.status.join(","));
   if (q.review) p.set("review", "true");
   if (q.q.trim()) p.set("q", q.q.trim());
@@ -94,7 +96,7 @@ export function switchView(params: URLSearchParams, to: ProjectsView): URLSearch
     }
     return out;
   };
-  if (to === "status") return keepCommon(new URLSearchParams());
+  if (to === "status") return keepCommon(new URLSearchParams({ view: "status" }));
   const sorts = to === "web" ? webSort.options : apiSort.options;
   const fallback = to === "web" ? DEFAULT_WEB_SORT : DEFAULT_API_SORT;
   if (from === "status") {
@@ -148,9 +150,9 @@ export const WEB_COLUMNS: ColumnSpec[] = [
   sorted("visits", "Visits"),
   sorted("bounces", "Bounces"),
   sorted("totaltime", "Total visit time"),
-  sorted("bounce_rate", "Bounce rate", true),
+  sorted("bounce_rate", "Bounce rate"),
   sorted("avg_visit_duration", "Average visit"),
-  sorted("quarantine_share", "Held back", true),
+  sorted("quarantine_share", "Held back"),
   sorted("quarantine_pageviews", "Held back page views"),
   sorted("quarantine_visitors", "Held back visitors"),
   sorted("ingest_requests", "Gateway requests"),
@@ -173,7 +175,7 @@ export const API_COLUMNS: ColumnSpec[] = [
   sorted("requests", "Requests", true),
   sorted("requests_4xx", "4xx responses"),
   sorted("requests_5xx", "5xx responses"),
-  sorted("rate_4xx", "4xx rate", true),
+  sorted("rate_4xx", "4xx rate"),
   sorted("rate_5xx", "5xx rate", true),
   sorted("p50", "p50 latency"),
   sorted("p95", "p95 latency", true),
@@ -184,7 +186,7 @@ export const API_COLUMNS: ColumnSpec[] = [
   ...growth.map((g) =>
     sorted(g.id, g.label, g.id === "requests_growth" || g.id === "error_rate_change"),
   ),
-  { id: "source", label: "Data source", shown: true },
+  { id: "source", label: "Data source", shown: false },
   { id: "onchain", label: "On-chain", shown: false },
 ];
 

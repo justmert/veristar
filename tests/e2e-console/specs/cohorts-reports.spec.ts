@@ -121,11 +121,12 @@ test("an operator saves a threshold rule and opens its matches", async () => {
   const o = op.page;
   await o.goto(`${APP}/operator/rules`);
   await o.getByRole("button", { name: "New rule" }).click();
-  const form = o.getByRole("region", { name: "New rule" });
+  // the form opens in a dialog
+  const form = o.getByRole("dialog", { name: "New rule" });
   await form.getByLabel("Name").fill(`Steady web ${run}`);
   await form.getByLabel("Minimum per day").fill("1");
   await form.getByLabel("Days per month").fill("1");
-  await form.getByRole("textbox", { name: /^Months( \(required\))?$/ }).fill("1");
+  await form.getByLabel("Complete months").fill("1");
   // the cohort is chosen from the confirmed values
   await form.getByLabel("SCF program").selectOption(PROGRAM);
   await form.getByRole("button", { name: "Save rule" }).click();
