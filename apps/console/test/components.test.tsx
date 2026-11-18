@@ -108,18 +108,27 @@ describe("toast", () => {
     const host = await render(<Toaster />);
     await act(async () => {
       toast.success("Site added.");
-      toast.error("The key was not revoked. Try again.", {
-        action: { label: "Retry", onClick: () => {} },
-      });
     });
     const live = host.querySelector("[aria-live=polite]") as HTMLElement;
     expect(live.textContent).toContain("Site added.");
-    expect(host.querySelector("[data-toast=error]")?.textContent).toContain("Retry");
     const dismiss = host.querySelector("[data-toast=success] button") as HTMLButtonElement;
     await click(dismiss);
     expect(live.textContent).not.toContain("Site added.");
     await act(async () => toast.clear());
     expect(live.textContent).toBe("");
+  });
+
+  it("shows one toast at a time: a new one replaces the last", async () => {
+    const host = await render(<Toaster />);
+    await act(async () => {
+      toast.success("Site added.");
+      toast.error("The key was not revoked. Try again.", {
+        action: { label: "Retry", onClick: () => {} },
+      });
+    });
+    expect(host.querySelectorAll("[data-toast]")).toHaveLength(1);
+    expect(host.querySelector("[data-toast=error]")?.textContent).toContain("Retry");
+    await act(async () => toast.clear());
   });
 });
 
