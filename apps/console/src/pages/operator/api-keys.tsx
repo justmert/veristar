@@ -13,7 +13,7 @@ import { ErrorPanel, FormMessage, Loading, StateBlock } from "@/components/error
 import { SelectField, TextField } from "@/components/form-field";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { Panel } from "@/components/panel";
-import { OneTimeSecret } from "@/components/secret";
+import { SecretPanel } from "@/components/secret-panel";
 import { Pill, type Tone } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import {
@@ -300,7 +300,7 @@ function CreatedKey({
   const curl = `curl -H "Authorization: Bearer ${created.key}" \\\n  "${origin}/api/metrics/v1/tenants"`;
   return (
     <section aria-label="New key">
-      <OneTimeSecret
+      <SecretPanel
         value={created.key}
         title={`Copy the key now: ${created.name}`}
         description={`It is shown only once; only its hash is stored. It reads ${
@@ -315,7 +315,7 @@ function CreatedKey({
           </summary>
           <CodeBlock code={curl} label="curl" copyLabel="Copy command" wrap className="mt-2" />
         </details>
-      </OneTimeSecret>
+      </SecretPanel>
     </section>
   );
 }

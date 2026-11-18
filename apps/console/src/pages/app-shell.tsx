@@ -1,42 +1,63 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Mark } from "@veristar/brand/mark";
-import { Menu as MenuIcon, X } from "lucide-react";
+import { Menu as MenuIcon, Search, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import { api } from "@/api/endpoints";
-import { meQuery } from "@/api/queries";
+import { stepUpQuery } from "@/api/operators";
+import { meQuery, operatorAlertsQuery } from "@/api/queries";
+import { CommandPalette, isPaletteKey } from "@/components/command-palette";
 import { FormMessage } from "@/components/error-panel";
 import { PageMotion } from "@/components/motion";
+import { areaOf, pageTitle } from "@/components/nav/nav-items";
 import { Sidebar } from "@/components/nav/sidebar";
+import { Kbd } from "@/components/panel";
+import { Toaster, toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { criticalCount } from "@/lib/alerts";
 import { queryClient } from "@/query-client";
 
-// the signed-in frame: the sidebar on a wide screen, a top bar with a drawer
-// on a phone, and the page, which settles in when the route changes
+// the signed-in frame: the sidebar on a wide screen, a top bar with the
+// page title and a drawer on a phone, the toasts, the command palette
+// (ctrl k) and, on operator pages while a paging alert fires, one slim line
+// that links to Alerts. the page settles in when the route changes.
 export function AppShell() {
   const me = useQuery(meQuery);
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [drawer, setDrawer] = useState(false);
+  const [palette, setPalette] = useState(false);
   const signOut = useMutation({
     mutationFn: api.logout,
     onSuccess: () => {
       queryClient.clear();
+      toast.clear();
       navigate("/sign-in", { replace: true });
     },
   });
 
-  // a navigation closes the drawer and starts the page at its top
-  // focus moves to the new page's content: a screen reader announces the
-  // page, and the link that was clicked does not keep a focus ring
+  // a navigation closes the drawer and starts the page at its top. focus
+  // moves to the new page's content: a screen reader announces the page,
+  // and the link that was clicked does not keep a focus ring
   useEffect(() => {
     setDrawer(false);
     window.scrollTo({ top: 0 });
     document.getElementById("main")?.focus({ preventScroll: true });
   }, [pathname]);
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!isPaletteKey(e)) return;
+      e.preventDefault();
+      setPalette((o) => !o);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   if (!me.data) return null;
+  const operatorArea = me.data.user.is_operator && areaOf(pathname).kind === "operator";
   const side = (
     <Sidebar me={me.data} onSignOut={() => signOut.mutate()} onNavigate={() => setDrawer(false)} />
   );
@@ -64,29 +85,49 @@ export function AppShell() {
           >
             <MenuIcon aria-hidden />
           </Button>
-          <Link
-            to="/"
-            className="flex items-center gap-2 rounded-md px-1 py-1 focus-ring"
-            aria-label="Veristar, your projects"
-          >
+          <Link to="/" className="rounded-md p-1 focus-ring" aria-label="Veristar, your projects">
             <Mark className="size-5" />
-            <span className="text-title tracking-tight">Veristar</span>
           </Link>
+          <span className="min-w-0 flex-1 truncate text-title text-fg" data-testid="page-title">
+            {pageTitle(pathname)}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon-lg"
+            aria-label="Search pages and projects"
+            onClick={() => setPalette(true)}
+          >
+            <Search aria-hidden />
+          </Button>
         </header>
         <Drawer open={drawer} onClose={() => setDrawer(false)}>
           {side}
         </Drawer>
 
         <div className="flex min-w-0 flex-col">
+          {operatorArea ? <OperatorAlertLine linked={pathname !== "/operator/alerts"} /> : null}
+          <div className="hidden justify-end px-6 pt-4 lg:flex xl:px-10">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPalette(true)}
+              className="text-fg-2"
+              aria-keyshortcuts="Control+K Meta+K"
+            >
+              <Search aria-hidden />
+              Go to
+              <Kbd>Ctrl K</Kbd>
+            </Button>
+          </div>
           {signOut.error ? (
-            <div className="px-4 pt-4 sm:px-8">
+            <div className="px-4 pt-4 sm:px-6">
               <FormMessage error={signOut.error} />
             </div>
           ) : null}
           <main
             id="main"
             tabIndex={-1}
-            className="mx-auto w-full max-w-content flex-1 px-4 pt-6 pb-16 outline-none sm:px-8 sm:pt-8 xl:px-10"
+            className="mx-auto w-full max-w-content flex-1 px-4 pt-6 pb-16 outline-none sm:px-6 lg:pt-2 xl:px-10"
           >
             <PageMotion key={pathname}>
               <Outlet />
@@ -94,7 +135,41 @@ export function AppShell() {
           </main>
         </div>
       </div>
+      <CommandPalette me={me.data} open={palette} onOpenChange={setPalette} />
+      <Toaster />
     </TooltipProvider>
+  );
+}
+
+// one slim line over every operator page while a paging (critical) alert
+// fires; the details are on Alerts. it reads the alerts only once the
+// session holds a step-up, as the operator area does
+function OperatorAlertLine({ linked }: { linked: boolean }) {
+  const stepUp = useQuery(stepUpQuery);
+  const live = stepUp.data?.stepped_up === true;
+  const alerts = useQuery({ ...operatorAlertsQuery, enabled: live });
+  const current = alerts.error ? undefined : alerts.data;
+  const critical = current ? criticalCount(current.alerts) : 0;
+  if (!live || critical === 0) return null;
+  return (
+    <div
+      role="alert"
+      className="flex min-h-10 flex-wrap items-center gap-x-3 gap-y-1 border-b border-critical-line bg-critical-soft px-4 py-2 text-small text-fg sm:px-6 xl:px-10"
+    >
+      <TriangleAlert aria-hidden className="size-4 shrink-0 text-critical" />
+      <span className="min-w-0 flex-1">
+        {critical === 1 ? "A critical alert is firing." : `${critical} critical alerts are firing.`}{" "}
+        Act now.
+      </span>
+      {linked ? (
+        <Link
+          to="/operator/alerts"
+          className="rounded-sm font-medium text-fg underline decoration-line-strong underline-offset-4 hover:decoration-fg focus-ring max-sm:py-2"
+        >
+          Open alerts
+        </Link>
+      ) : null}
+    </div>
   );
 }
 

@@ -14,11 +14,9 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
 import { StaggerItem } from "@/components/motion";
-import { projectTabs } from "@/components/nav/nav-items";
-import { NavTabs } from "@/components/nav/nav-tabs";
 import { Notice } from "@/components/notice";
 import { PageHeader, Panel } from "@/components/panel";
-import { OneTimeSecret } from "@/components/secret";
+import { SecretPanel } from "@/components/secret-panel";
 import { Pill, StatusDot } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,8 +24,8 @@ import { formatDate, formatDateTimeUtc } from "@/lib/format";
 import { inline } from "@/lib/markdown";
 import { type OtelGuide, otelGuides, otlpEndpoint } from "@/lib/otel-guides";
 import * as v from "@/lib/validate";
+import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
-import { useProject } from "./project-layout";
 
 export type TokenValues = { name: string; environment: string };
 export type TokenErrors = Partial<Record<keyof TokenValues, string>>;
@@ -70,7 +68,7 @@ function waiting(tokens: OtlpToken[] | undefined): boolean {
   return active.length > 0 && active.every((t) => t.last_seen_at === null);
 }
 
-export function ApiSetupPage() {
+export function ConnectApiPage() {
   const { tenant, termsCurrent } = useProject();
   const endpoint = otlpEndpoint(window.location.hostname);
   const [showRevoked, setShowRevoked] = useState(false);
@@ -92,7 +90,6 @@ export function ApiSetupPage() {
           title="Connect your API"
           description="Your app keeps exporting to your own backend; a second OpenTelemetry exporter sends a copy here with a token from this page. Only request counts, status codes and latency are kept."
         />
-        <NavTabs label="API" items={projectTabs(tenant.id, "api") ?? []} />
       </div>
 
       <div className="grid items-start gap-x-10 gap-y-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
@@ -238,7 +235,7 @@ function FirstData({
               {formatDateTimeUtc(lastUsed.last_seen_at ?? "")}.
             </p>
             <Button asChild variant="outline" size="sm" className="self-start">
-              <Link to={`/projects/${tenantId}/api/traffic`}>
+              <Link to={`/projects/${tenantId}/api`}>
                 See the traffic
                 <ArrowRight aria-hidden />
               </Link>
@@ -441,7 +438,7 @@ export function CreateTokenForm({
 // cache, and is gone once the panel is closed (contract 6.2: shown once)
 export function CreatedToken({ token, onDone }: { token: OtlpTokenCreated; onDone: () => void }) {
   return (
-    <OneTimeSecret
+    <SecretPanel
       value={token.token}
       title={`Token ${token.name} was created`}
       description="Copy it now and store it as a secret of your app. It is shown only this once; if it is lost, create a new one and revoke this one."

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { Mark } from "@veristar/brand/mark";
 import { transition } from "@veristar/brand/motion";
@@ -15,16 +15,18 @@ import {
   Moon,
   Plus,
   ScrollText,
+  Search,
   Sun,
   UserRound,
 } from "lucide-react";
 import { LayoutGroup, motion } from "motion/react";
-import { type ReactNode, useId } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
+import type { TenantListQuery } from "@/api/endpoints";
 import { stepUpQuery } from "@/api/operators";
-import { operatorAlertsQuery, tenantQuery } from "@/api/queries";
+import { operatorAlertsQuery, operatorTenantsQuery, tenantQuery } from "@/api/queries";
 import type { Me } from "@/api/schemas";
-import { StatusDot, statusTone } from "@/components/status";
+import { StatusDot, statusEntry } from "@/components/status";
 import {
   Menu,
   MenuContent,
@@ -36,27 +38,29 @@ import {
   MenuTrigger,
 } from "@/components/ui/menu";
 import { criticalCount } from "@/lib/alerts";
+import { formatCount } from "@/lib/format";
 import { siblingUrl } from "@/lib/hosts";
-import { type NavItem, OPERATOR_NAV, projectNav } from "./nav-items";
+import {
+  areaOf,
+  HOME_NAV,
+  type NavGroup,
+  type NavItem,
+  OPERATOR_NAV,
+  projectNav,
+} from "./nav-items";
 
-const STATUS_WORD: Record<string, string> = {
-  active: "Active",
-  pending: "Pending review",
-  suspended: "Suspended",
-  rejected: "Not approved",
-  removed: "Deleted",
+// the review queue as the review page reads it, so the badge and the page
+// share one cached answer
+export const REVIEW_QUEUE: TenantListQuery = {
+  status: [],
+  review: true,
+  q: "",
+  sort: "created_at",
+  order: "asc",
 };
 
-// where the browser is, read from the path: a project, the operator area or
-// the project list
-export function useArea() {
-  const { pathname } = useLocation();
-  const p = pathname.match(/^\/projects\/([^/]+)(?:\/(.*))?$/);
-  if (p?.[1] && p[1] !== "new") return { kind: "project" as const, id: p[1], rest: p[2] ?? "" };
-  const o = pathname.match(/^\/operator(?:\/(.*))?$/);
-  if (o) return { kind: "operator" as const, rest: o[1] ?? "" };
-  return { kind: "home" as const, rest: pathname.replace(/^\//, "") };
-}
+// from this many projects on, the switcher has a search field
+const SWITCHER_SEARCH_FROM = 8;
 
 export function Sidebar({
   me,
@@ -67,65 +71,57 @@ export function Sidebar({
   onSignOut: () => void;
   onNavigate?: () => void;
 }) {
-  const area = useArea();
-  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const area = areaOf(pathname);
   const docs = siblingUrl(window.location.hostname, "docs");
   const status = siblingUrl(window.location.hostname, "status");
   // the desktop sidebar and the phone drawer are two instances; each needs
   // its own group, or their current-item markers would crossfade
   const group = useId();
-  const theme = useTheme();
+  const projectId = area.kind === "project" ? area.id : null;
   return (
     <LayoutGroup id={group}>
-      <div className="flex h-full flex-col gap-3 px-2 py-3">
+      <div className="flex h-full flex-col gap-4 overflow-y-auto px-3 py-4">
         <Link
           to="/"
           onClick={onNavigate}
           aria-label="Veristar, your projects"
           className="flex items-center gap-2 self-start rounded-md px-2 py-1 text-fg focus-ring"
         >
-          <Mark className="size-5.5" />
-          <span className="text-title tracking-tight">Veristar</span>
+          <Mark className="size-5" />
+          <span className="text-title">Veristar</span>
         </Link>
 
-        {area.kind === "project" ? (
-          <ProjectSection me={me} id={area.id} rest={area.rest} onNavigate={onNavigate} />
+        <ProjectSwitcher me={me} id={projectId} onNavigate={onNavigate} />
+
+        {projectId ? (
+          <Groups
+            label="Project"
+            groups={projectNav(projectId)}
+            rest={area.rest}
+            onNavigate={onNavigate}
+          />
         ) : (
-          <nav aria-label="Projects" className="flex flex-col gap-px">
-            <Item
-              item={{
-                key: "projects",
-                label: "Your projects",
-                to: "/",
-                icon: FolderOpen,
-                match: () => true,
-              }}
-              current={area.kind === "home" && area.rest !== "projects/new"}
-              onNavigate={onNavigate}
-            />
-            <Item
-              item={{
-                key: "new",
-                label: "Enroll a project",
-                to: "/projects/new",
-                icon: Plus,
-                match: () => true,
-              }}
-              current={area.kind === "home" && area.rest === "projects/new"}
-              onNavigate={onNavigate}
-            />
+          <nav aria-label="Console" className="flex flex-col gap-px">
+            {HOME_NAV.filter((i) => i.key === "projects").map((i) => (
+              <Item
+                key={i.key}
+                item={i}
+                current={area.kind === "home" && i.match(area.rest)}
+                onNavigate={onNavigate}
+              />
+            ))}
           </nav>
         )}
 
         {me.user.is_operator ? (
-          <OperatorSection
-            inOperator={area.kind === "operator"}
+          <OperatorGroups
             rest={area.kind === "operator" ? area.rest : null}
             onNavigate={onNavigate}
           />
         ) : null}
 
-        <div className="mt-auto flex flex-col gap-px border-t border-line pt-2">
+        <div className="mt-auto flex flex-col gap-px border-t border-line pt-3">
           {docs ? (
             <FooterLink href={docs} icon={<BookOpen aria-hidden />}>
               Docs
@@ -139,203 +135,283 @@ export function Sidebar({
           <FooterLink to="/terms" icon={<ScrollText aria-hidden />}>
             Terms
           </FooterLink>
-          <Menu>
-            <MenuTrigger asChild>
-              <button
-                type="button"
-                className="mt-1 flex items-center gap-2 rounded-md px-2 py-1 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-selected"
-              >
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-line-strong text-caption font-semibold text-fg uppercase">
-                  {me.user.display_name.slice(0, 2)}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-small">{me.user.display_name}</span>
-                <Ellipsis aria-hidden className="size-3.5 text-fg-3" />
-                <span className="sr-only">, account menu</span>
-              </button>
-            </MenuTrigger>
-            <MenuContent
-              side="top"
-              align="start"
-              className="w-(--radix-dropdown-menu-trigger-width)"
-            >
-              <MenuLabel>Signed in as {me.user.display_name}</MenuLabel>
-              <MenuItem
-                onSelect={() => {
-                  onNavigate?.();
-                  navigate("/account");
-                }}
-              >
-                <UserRound aria-hidden />
-                Account
-              </MenuItem>
-              <MenuSeparator />
-              <MenuLabel>Theme</MenuLabel>
-              <MenuRadioGroup
-                value={theme.choice}
-                onValueChange={(v) => theme.setChoice(v as ThemeChoice)}
-              >
-                <MenuRadioItem value="system">
-                  <Monitor aria-hidden />
-                  System
-                </MenuRadioItem>
-                <MenuRadioItem value="light">
-                  <Sun aria-hidden />
-                  Light
-                </MenuRadioItem>
-                <MenuRadioItem value="dark">
-                  <Moon aria-hidden />
-                  Dark
-                </MenuRadioItem>
-              </MenuRadioGroup>
-              <MenuSeparator />
-              <MenuItem onSelect={onSignOut}>
-                <LogOut aria-hidden />
-                Sign out
-              </MenuItem>
-            </MenuContent>
-          </Menu>
+          <FooterLink
+            to="/account"
+            icon={<UserRound aria-hidden />}
+            current={area.kind === "home" && area.rest === "account"}
+            onNavigate={onNavigate}
+          >
+            Account
+          </FooterLink>
+          <AccountMenu me={me} onSignOut={onSignOut} onNavigate={onNavigate} />
         </div>
       </div>
     </LayoutGroup>
   );
 }
 
-function ProjectSection({
+function AccountMenu({
   me,
-  id,
-  rest,
+  onSignOut,
   onNavigate,
 }: {
   me: Me;
-  id: string;
-  rest: string;
+  onSignOut: () => void;
   onNavigate?: () => void;
 }) {
-  const tenant = useQuery(tenantQuery(id));
   const navigate = useNavigate();
-  const listed = me.tenants.find((t) => t.id === id);
-  const name = tenant.data?.name ?? listed?.name ?? "Project";
-  const st = tenant.data?.status ?? listed?.status;
+  const theme = useTheme();
   return (
-    <>
-      <Menu>
-        <MenuTrigger asChild>
-          <button
-            type="button"
-            className="grid grid-cols-[28px_minmax(0,1fr)_14px] items-center gap-2 rounded-md border border-line bg-raised p-2 text-left text-fg transition-colors duration-(--vs-duration-press) hover:border-line-strong hover:bg-hover focus-ring aria-expanded:border-line-strong"
-          >
-            <span className="flex size-7 items-center justify-center rounded-md bg-selected text-caption font-semibold uppercase">
-              {name.slice(0, 1)}
-            </span>
-            <span className="flex min-w-0 flex-col">
-              <span className="truncate text-body font-semibold">{name}</span>
-              {st ? (
-                <span className="flex items-center gap-1 text-caption font-normal text-fg-2">
-                  <StatusDot tone={statusTone(st)} />
-                  {STATUS_WORD[st] ?? st}
-                </span>
-              ) : null}
-            </span>
-            <ChevronsUpDown aria-hidden className="size-3.5 text-fg-3" />
-            <span className="sr-only">, switch project</span>
-          </button>
-        </MenuTrigger>
-        <MenuContent className="w-(--radix-dropdown-menu-trigger-width) min-w-60">
-          <MenuLabel>Your projects</MenuLabel>
-          {me.tenants.map((t) => (
-            <MenuItem
-              key={t.id}
-              onSelect={() => {
-                navigate(`/projects/${t.id}`);
-                onNavigate?.();
-              }}
-            >
-              <StatusDot tone={statusTone(t.status)} />
-              <span className="min-w-0 flex-1 truncate">{t.name}</span>
-              {t.id === id ? <Check aria-hidden /> : null}
-            </MenuItem>
-          ))}
-          <MenuSeparator />
-          <MenuItem
-            onSelect={() => {
-              navigate("/");
-              onNavigate?.();
-            }}
-          >
-            <FolderOpen aria-hidden />
-            All projects
-          </MenuItem>
-          <MenuItem
-            onSelect={() => {
-              navigate("/projects/new");
-              onNavigate?.();
-            }}
-          >
-            <Plus aria-hidden />
-            Enroll a project
-          </MenuItem>
-        </MenuContent>
-      </Menu>
-      <nav aria-label="Project" className="flex flex-col gap-px">
-        {projectNav(id).map((n) => (
-          <Item key={n.key} item={n} current={n.match(rest)} onNavigate={onNavigate} />
-        ))}
-      </nav>
-    </>
+    <Menu>
+      <MenuTrigger asChild>
+        <button
+          type="button"
+          className="mt-1 flex items-center gap-2 rounded-md px-2 py-2 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-selected max-lg:min-h-(--vs-control-touch)"
+        >
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-line-strong text-caption font-semibold text-fg">
+            {me.user.display_name.slice(0, 2)}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-small">{me.user.display_name}</span>
+          <Ellipsis aria-hidden className="size-4 text-fg-3" />
+          <span className="sr-only">, account menu</span>
+        </button>
+      </MenuTrigger>
+      <MenuContent side="top" align="start" className="w-(--radix-dropdown-menu-trigger-width)">
+        <MenuLabel>Signed in as {me.user.display_name}</MenuLabel>
+        <MenuItem
+          onSelect={() => {
+            onNavigate?.();
+            navigate("/account");
+          }}
+        >
+          <UserRound aria-hidden />
+          Account
+        </MenuItem>
+        <MenuSeparator />
+        <MenuLabel>Theme</MenuLabel>
+        <MenuRadioGroup
+          value={theme.choice}
+          onValueChange={(v) => theme.setChoice(v as ThemeChoice)}
+        >
+          <MenuRadioItem value="system">
+            <Monitor aria-hidden />
+            System
+          </MenuRadioItem>
+          <MenuRadioItem value="light">
+            <Sun aria-hidden />
+            Light
+          </MenuRadioItem>
+          <MenuRadioItem value="dark">
+            <Moon aria-hidden />
+            Dark
+          </MenuRadioItem>
+        </MenuRadioGroup>
+        <MenuSeparator />
+        <MenuItem onSelect={onSignOut}>
+          <LogOut aria-hidden />
+          Sign out
+        </MenuItem>
+      </MenuContent>
+    </Menu>
   );
 }
 
-function OperatorSection({
-  inOperator,
-  rest,
+// the project in view and the way to the others. with many projects the
+// menu has a search field.
+function ProjectSwitcher({
+  me,
+  id,
   onNavigate,
 }: {
-  inOperator: boolean;
-  rest: string | null;
+  me: Me;
+  id: string | null;
   onNavigate?: () => void;
 }) {
-  // alerts are polled only inside the operator area (contract 5.13), and
-  // only once the session holds a step-up: before it every operator route
-  // answers 401 step_up_required, which is not an unreachable alert source
+  const tenant = useQuery({ ...tenantQuery(id ?? ""), enabled: id !== null });
+  const navigate = useNavigate();
+  const [q, setQ] = useState("");
+  const listed = id ? me.tenants.find((t) => t.id === id) : undefined;
+  const name = id ? (tenant.data?.name ?? listed?.name ?? "Project") : "Choose a project";
+  const st = id ? (tenant.data?.status ?? listed?.status) : undefined;
+  const word = st ? statusEntry({ kind: "project", status: st }) : null;
+  const shown = me.tenants.filter((t) => t.name.toLowerCase().includes(q.trim().toLowerCase()));
+  const go = (to: string) => {
+    navigate(to);
+    onNavigate?.();
+  };
+  return (
+    <Menu
+      onOpenChange={(o) => {
+        if (o) setQ("");
+      }}
+    >
+      <MenuTrigger asChild>
+        <button
+          type="button"
+          className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-line bg-raised p-2 text-left text-fg transition-colors duration-(--vs-duration-press) hover:border-line-strong hover:bg-hover focus-ring aria-expanded:border-line-strong max-lg:min-h-(--vs-control-touch)"
+        >
+          <span className="flex size-7 items-center justify-center rounded-md bg-selected text-caption font-semibold">
+            {id ? name.slice(0, 1) : <FolderOpen aria-hidden className="size-4" />}
+          </span>
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-body font-semibold">{name}</span>
+            {word ? (
+              <span className="flex items-center gap-1 text-caption font-normal text-fg-2">
+                <StatusDot tone={word.tone} />
+                {word.word}
+              </span>
+            ) : null}
+          </span>
+          <ChevronsUpDown aria-hidden className="size-4 text-fg-3" />
+          <span className="sr-only">, switch project</span>
+        </button>
+      </MenuTrigger>
+      <MenuContent className="w-(--radix-dropdown-menu-trigger-width) min-w-60">
+        {me.tenants.length >= SWITCHER_SEARCH_FROM ? (
+          <div className="flex items-center gap-2 border-b border-line px-2 pb-1">
+            <Search aria-hidden className="size-4 shrink-0 text-fg-3" />
+            <input
+              aria-label="Search projects"
+              placeholder="Search projects"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              // the menu moves focus by typed letters; the field keeps them
+              onKeyDown={(e) => e.stopPropagation()}
+              className="h-8 min-w-0 flex-1 bg-transparent text-body text-fg outline-none placeholder:text-fg-3"
+            />
+          </div>
+        ) : null}
+        <MenuLabel>Your projects</MenuLabel>
+        {shown.map((t) => (
+          <MenuItem key={t.id} onSelect={() => go(`/projects/${t.id}`)}>
+            <StatusDot tone={statusEntry({ kind: "project", status: t.status }).tone} />
+            <span className="min-w-0 flex-1 truncate">{t.name}</span>
+            {t.id === id ? <Check aria-hidden /> : null}
+          </MenuItem>
+        ))}
+        {shown.length === 0 ? (
+          <p className="px-2 py-2 text-small text-fg-2">
+            {me.tenants.length === 0 ? "No project yet." : "No project matches."}
+          </p>
+        ) : null}
+        <MenuSeparator />
+        <MenuItem onSelect={() => go("/")}>
+          <FolderOpen aria-hidden />
+          All projects
+        </MenuItem>
+        <MenuItem onSelect={() => go("/projects/new")}>
+          <Plus aria-hidden />
+          Enroll a project
+        </MenuItem>
+      </MenuContent>
+    </Menu>
+  );
+}
+
+function Groups({
+  label,
+  groups,
+  rest,
+  onNavigate,
+  badges,
+}: {
+  label: string;
+  groups: NavGroup[];
+  rest: string | null;
+  onNavigate?: () => void;
+  badges?: Record<string, ReactNode>;
+}) {
+  return (
+    <nav aria-label={label} className="flex flex-col gap-3">
+      {groups.map((g) => (
+        <div key={g.key} className="flex flex-col gap-px">
+          <span className="px-2 pb-1 text-caption text-fg-2">{g.label}</span>
+          {g.items.map((n) => (
+            <Item
+              key={n.key}
+              item={n}
+              current={rest !== null && n.match(rest)}
+              onNavigate={onNavigate}
+              badge={badges?.[n.key]}
+            />
+          ))}
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+// the operator groups. the review and alert badges are read only inside
+// the operator area and once the session holds a step-up (contract 5.13,
+// 5.15): before it every operator route answers step_up_required
+function OperatorGroups({ rest, onNavigate }: { rest: string | null; onNavigate?: () => void }) {
+  const inOperator = rest !== null;
   const stepUp = useQuery({ ...stepUpQuery, enabled: inOperator });
   const live = inOperator && stepUp.data?.stepped_up === true;
   const alerts = useQuery({ ...operatorAlertsQuery, enabled: live });
+  const queue = useInfiniteQuery({ ...operatorTenantsQuery(REVIEW_QUEUE), enabled: live });
   const current = live && !alerts.error ? alerts.data : undefined;
   const critical = current ? criticalCount(current.alerts) : 0;
   const count = current?.alerts.length ?? 0;
   const failed = live && alerts.error !== null;
+  const first = queue.data?.pages[0];
+  const waiting = first ? first.items.length : 0;
+  const more = first ? first.next_cursor !== null : false;
   return (
-    <nav aria-label="Operator" className="flex flex-col gap-px">
-      <span className="px-2 pt-2 pb-1 text-caption tracking-wide text-fg-2">OPERATOR</span>
-      {OPERATOR_NAV.map((n) => (
-        <Item
-          key={n.key}
-          item={n}
-          current={rest !== null && n.match(rest)}
-          onNavigate={onNavigate}
-          badge={
-            n.key === "attention" && (failed || count > 0) ? (
-              <span
-                className={cn(
-                  "flex items-center gap-1 font-mono text-axis",
-                  failed || critical ? "text-critical" : "text-warning",
-                )}
-              >
-                <StatusDot tone={failed || critical ? "critical" : "warning"} live={critical > 0} />
-                {failed ? "!" : count}
-                <span className="sr-only">
-                  {failed
-                    ? ", alert source unreachable"
-                    : count === 1
-                      ? " alert firing"
-                      : " alerts firing"}
-                </span>
+    <Groups
+      label="Operator"
+      groups={OPERATOR_NAV}
+      rest={rest}
+      onNavigate={onNavigate}
+      badges={{
+        review:
+          waiting > 0 ? (
+            <Badge tone="neutral">
+              {formatCount(waiting)}
+              {more ? "+" : ""}
+              <span className="sr-only">
+                {waiting === 1 && !more ? " project waits" : " projects wait"} for review
               </span>
-            ) : null
-          }
-        />
-      ))}
-    </nav>
+            </Badge>
+          ) : null,
+        alerts:
+          failed || count > 0 ? (
+            <Badge tone={failed || critical > 0 ? "critical" : "warning"}>
+              {failed ? "!" : formatCount(count)}
+              <span className="sr-only">
+                {failed
+                  ? ", alert source unreachable"
+                  : count === 1
+                    ? " alert firing"
+                    : " alerts firing"}
+              </span>
+            </Badge>
+          ) : null,
+      }}
+    />
+  );
+}
+
+function Badge({
+  tone,
+  children,
+}: {
+  tone: "neutral" | "warning" | "critical";
+  children: ReactNode;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 font-mono text-axis tabular",
+        tone === "critical"
+          ? "bg-critical-solid text-on-critical"
+          : tone === "warning"
+            ? "border border-warning-line text-warning"
+            : "bg-selected text-fg",
+      )}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -357,7 +433,7 @@ function Item({
       onClick={onNavigate}
       aria-current={current ? "page" : undefined}
       className={cn(
-        "relative flex h-8 items-center gap-2 rounded-md px-2 text-body transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-(--vs-control-touch)",
+        "relative flex h-8 items-center gap-2 rounded-md px-2 text-body transition-colors duration-(--vs-duration-press) ease-standard focus-ring active:bg-selected max-lg:h-(--vs-control-touch)",
         current ? "font-medium text-fg" : "text-fg-2 hover:bg-hover hover:text-fg",
       )}
     >
@@ -380,17 +456,23 @@ function FooterLink({
   href,
   to,
   icon,
+  current,
+  onNavigate,
   children,
 }: {
   href?: string;
   to?: string;
   icon: ReactNode;
+  current?: boolean;
+  onNavigate?: () => void;
   children: ReactNode;
 }) {
-  const cls =
-    "flex h-7.5 items-center gap-2 rounded-md px-2 text-small text-fg-2 transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring [&_svg]:size-3.75 max-lg:h-(--vs-control-touch)";
+  const cls = cn(
+    "flex h-8 items-center gap-2 rounded-md px-2 text-small transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring [&_svg]:size-4 max-lg:h-(--vs-control-touch)",
+    current ? "bg-selected text-fg" : "text-fg-2",
+  );
   return to ? (
-    <Link to={to} className={cls}>
+    <Link to={to} onClick={onNavigate} aria-current={current ? "page" : undefined} className={cls}>
       {icon}
       {children}
     </Link>

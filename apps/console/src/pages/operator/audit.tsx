@@ -454,7 +454,7 @@ function verbOf(e: AuditEntry): string {
 
 function targetLink(target: string): string | null {
   const m = /^tenant:([0-9a-f-]{36})$/.exec(target);
-  return m ? `/operator/tenants/${m[1]}` : null;
+  return m ? `/operator/projects/${m[1]}` : null;
 }
 
 // a person by their login; an ai client by what it is (its credential id

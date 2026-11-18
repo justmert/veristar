@@ -19,7 +19,7 @@ import {
   readListState,
   writeListState,
 } from "@/lib/global";
-import { SPAN_NOTE } from "@/pages/api-traffic";
+import { SPAN_NOTE } from "@/pages/project/api";
 import {
   AGGREGATE_NOTE,
   COHORT_NOTE,
@@ -104,8 +104,12 @@ export function GlobalApiPage() {
   const read = readListState(params, apiSort.options, DEFAULT_SORT);
   // the api list has no integrity grade, so the filter is never sent
   const state = { ...read, filters: { ...read.filters, integrity: "" as const } };
-  const set = (next: ListState<ApiSort>) =>
-    setParams(writeListState(next, DEFAULT_SORT), { replace: true });
+  // the view stays in the address with the list state
+  const set = (next: ListState<ApiSort>) => {
+    const out = writeListState(next, DEFAULT_SORT);
+    out.set("view", "api");
+    setParams(out, { replace: true });
+  };
   // a day pair that ends before it starts is refused by the server; the
   // filters say so and nothing is asked
   const badDays = dayPairError(state.filters) !== null;

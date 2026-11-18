@@ -14,9 +14,9 @@ import {
   webTrend,
   writeWebState,
 } from "@/lib/web-dashboard";
-import { SessionFinder } from "@/pages/privacy";
+import { SessionFinder } from "@/pages/project/privacy";
+import { WebPage } from "@/pages/project/web";
 import type { ProjectContext } from "@/pages/project-layout";
-import { WebPage } from "@/pages/web";
 import * as f from "./fixtures/contract";
 import { byRole, click, render, renderRoutes, stubFetch, waitFor } from "./helpers";
 

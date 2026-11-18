@@ -23,8 +23,7 @@ import {
 } from "@/lib/global";
 import { ApiKeysPage, validateKeyForm } from "@/pages/operator/api-keys";
 import { ComparePage } from "@/pages/operator/compare";
-import { GlobalApiPage } from "@/pages/operator/global-api";
-import { GlobalWebPage } from "@/pages/operator/global-web";
+import { OperatorProjectsPage } from "@/pages/operator/projects";
 import * as c from "./fixtures/contract";
 import * as f from "./fixtures/global";
 import {
@@ -200,10 +199,9 @@ function routeFetch(
 }
 
 const operatorRoutes = [
-  { path: "/operator/web", element: <GlobalWebPage /> },
-  { path: "/operator/api", element: <GlobalApiPage /> },
+  { path: "/operator/projects", element: <OperatorProjectsPage /> },
   { path: "/operator/compare", element: <ComparePage /> },
-  { path: "/operator/api-keys", element: <ApiKeysPage /> },
+  { path: "/operator/keys", element: <ApiKeysPage /> },
 ];
 
 function rowOf(host: HTMLElement, tenantId: string): HTMLElement {
@@ -221,7 +219,7 @@ describe("global web view", () => {
       { status: 200, body: f.webProjectsBody },
       { status: 200, body: f.webProjectsPage2Body },
     ]);
-    const host = await renderRoutes(operatorRoutes, "/operator/web");
+    const host = await renderRoutes(operatorRoutes, "/operator/projects?view=web");
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     const a = rowOf(host, c.TENANT_ID);
     for (const want of ["1,200", "410", "530", "49%", "1 min 31 s", "3.2%", "4.0%", "Germany"])
@@ -267,7 +265,7 @@ describe("global web view", () => {
       { status: 200, body: f.cohortListBody },
       { status: 200, body: f.webProjectsBody },
     ]);
-    const host = await renderRoutes(operatorRoutes, "/operator/web");
+    const host = await renderRoutes(operatorRoutes, "/operator/projects?view=web");
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     for (const id of [c.TENANT_ID, f.TENANT_B]) {
       const box = rowOf(host, id).querySelector<HTMLElement>("[role=checkbox]");
@@ -287,7 +285,7 @@ describe("global api view", () => {
       { status: 200, body: f.cohortListBody },
       { status: 200, body: f.apiProjectsBody },
     ]);
-    const host = await renderRoutes(operatorRoutes, "/operator/api");
+    const host = await renderRoutes(operatorRoutes, "/operator/projects?view=api");
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     const a = rowOf(host, c.TENANT_ID);
     for (const want of [
@@ -426,7 +424,7 @@ describe("api keys", () => {
         };
       return { status: 500 };
     });
-    const host = await renderRoutes(operatorRoutes, "/operator/api-keys");
+    const host = await renderRoutes(operatorRoutes, "/operator/keys");
     await waitFor(() => expect(host.textContent).toContain("No key has been created yet."));
     expect(
       calls.some((x) => x.url.includes("status=active%2Cpending%2Csuspended%2Crejected")),
@@ -479,7 +477,7 @@ describe("api keys", () => {
       if (url.endsWith("/usage")) return { status: 200, body: f.apiKeyUsageBody };
       return { status: 500 };
     });
-    const host = await renderRoutes(operatorRoutes, "/operator/api-keys");
+    const host = await renderRoutes(operatorRoutes, "/operator/keys");
     await waitFor(() => expect(host.textContent).toContain("sa_op_Ab3x..."));
     await click(byRole(host, "button", "Usage"));
     await waitFor(() =>

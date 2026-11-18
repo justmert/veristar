@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { type McpCredentialCreated, mcpApi, mcpKeys, operatorMcpQuery } from "@/api/mcp";
 import { Panel } from "@/components/panel";
-import { Connect, CreatedKeyPanel, CredentialSection, McpKeyCreateForm } from "@/pages/mcp";
+import { Connect, CreatedKeyPanel, CredentialSection, McpKeyCreateForm } from "@/pages/project/ai";
 
 // the operator area's "AI / MCP" section (contract 12.8): keys that open the
 // operator tools (global web and api views, project search and compare)
@@ -24,9 +24,9 @@ export function OperatorMcpPage() {
         <p className="max-w-prose text-body text-fg-2">
           An operator key gives an AI client the global view: search projects, rank every project on
           web and API metrics, and compare up to five side by side. It reads the same daily
-          aggregates as the Global web, Global API and Compare pages, never sessions, and changes
-          nothing. It stops working when its operator loses operator rights. Connectors can also be
-          approved for the operator view on the consent page.
+          aggregates as the Projects and Compare pages, never sessions, and changes nothing. It
+          stops working when its operator loses operator rights. Connectors can also be approved for
+          the operator view on the consent page.
         </p>
       </header>
       <Connect created={created} />

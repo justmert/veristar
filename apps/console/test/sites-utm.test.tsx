@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type Site, site } from "@/api/schemas";
-import { CampaignParams } from "@/pages/sites";
+import { CampaignParams } from "@/pages/project/site-settings";
 import * as f from "./fixtures/contract";
 import { click, render, stubFetch, waitFor } from "./helpers";
 

@@ -23,8 +23,14 @@ import {
 import { latencyText, percentileChange, relativeChange } from "@/lib/api-metrics";
 import { formatCount } from "@/lib/format";
 import { webPath } from "@/lib/web-dashboard";
-import { useProject } from "./project-layout";
-import { AddSiteButton, firstEvent, SitesTable, setupDone, snippetPath } from "./sites";
+import {
+  AddSiteButton,
+  firstEvent,
+  SitesTable,
+  setupDone,
+  siteSetupPath,
+} from "@/pages/project/sites";
+import { useProject } from "@/pages/project-layout";
 
 export type HourSlot = { at: string; accepted: number; quarantined: number };
 
@@ -176,7 +182,7 @@ function SetupBanner({ site, answer }: { site: Site; answer: Ingest | undefined 
   const done = setupDone(site, event);
   return (
     <Link
-      to={snippetPath(site)}
+      to={siteSetupPath(site)}
       className="group flex animate-rise-in flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-line bg-raised px-4 py-3 transition-colors duration-(--vs-duration-press) ease-standard hover:border-line-strong hover:bg-hover focus-ring"
     >
       <span className="flex size-5 items-center justify-center">
@@ -242,7 +248,7 @@ function ApiTiles({
   const prev = overview.previous.summary;
   const link = (
     <Link
-      to={`/projects/${tenantId}/api/traffic?range=${range}`}
+      to={`/projects/${tenantId}/api?range=${range}`}
       className="mt-1 inline-flex w-fit items-center gap-1 rounded-sm text-caption text-fg-2 transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring"
     >
       API traffic

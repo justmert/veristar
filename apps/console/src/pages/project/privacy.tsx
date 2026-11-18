@@ -14,8 +14,6 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ErrorPanel, FormMessage, Loading, StateBlock } from "@/components/error-panel";
 import { SelectField, TextAreaField, TextField } from "@/components/form-field";
 import { Stagger, StaggerItem } from "@/components/motion";
-import { projectTabs } from "@/components/nav/nav-items";
-import { NavTabs } from "@/components/nav/nav-tabs";
 import { Notice } from "@/components/notice";
 import { PageHeader, Panel } from "@/components/panel";
 import { Segmented } from "@/components/segmented";
@@ -34,8 +32,8 @@ import { countOf, formatCount, formatDate, formatDateTimeUtc } from "@/lib/forma
 import { siblingUrl } from "@/lib/hosts";
 import { fieldMessage } from "@/lib/validate";
 import { keyLabel } from "@/lib/web-dashboard";
+import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
-import { useProject } from "./project-layout";
 
 // the form's values. ip and userAgent are personal data the owner types on
 // behalf of a visitor: they live only in this react state, are sent once in
@@ -155,7 +153,6 @@ export function PrivacyPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Settings" />
-      <NavTabs label="Settings" items={projectTabs(tenant.id, "settings") ?? []} />
       {sites.isPending ? (
         <Loading label="Loading the privacy page" />
       ) : sites.error ? (

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/api/client";
 import { errorEnvelope } from "@/api/schemas";
-import { AccountPage, blockingProjects, confirmsLogin } from "@/pages/account";
+import { AccountPage, blockingProjects, confirmsLogin } from "@/pages/home/account";
 import * as f from "./fixtures/contract";
 import { byLabel, byRole, click, renderRoutes, stubFetch, type, waitFor } from "./helpers";
 

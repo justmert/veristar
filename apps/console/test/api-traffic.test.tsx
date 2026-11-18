@@ -23,7 +23,7 @@ import {
   validateCustom,
   writeState,
 } from "@/lib/api-metrics";
-import { ApiTrafficPage, IGNORED_NOTE } from "@/pages/api-traffic";
+import { ApiPage, IGNORED_NOTE } from "@/pages/project/api";
 import * as f from "./fixtures/contract";
 import { byLabel, click, renderRoutes, type, waitFor } from "./helpers";
 
@@ -237,7 +237,7 @@ const full = {
   routes: f.apiRoutesBody,
 };
 
-const path = `/projects/${f.TENANT_ID}/api/traffic`;
+const path = `/projects/${f.TENANT_ID}/api`;
 
 function routes() {
   const ctx = { tenant: f.tenantBody as Tenant, me: f.meBody, isOwner: true, termsCurrent: true };
@@ -251,8 +251,8 @@ function routes() {
         </TooltipProvider>
       ),
       children: [
-        { path: "api/traffic", element: <ApiTrafficPage /> },
-        { path: "api", element: <p>setup page</p> },
+        { path: "api", element: <ApiPage /> },
+        { path: "connect-api", element: <p>setup page</p> },
       ],
     },
   ];
@@ -297,7 +297,7 @@ describe("api traffic page", () => {
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.textContent).toContain("No API requests in this range"));
     const link = [...host.querySelectorAll("a")].find((a) => text(a) === "Set up API analytics");
-    expect(link?.getAttribute("href")).toBe(`/projects/${f.TENANT_ID}/api`);
+    expect(link?.getAttribute("href")).toBe(`/projects/${f.TENANT_ID}/connect-api`);
     // no summary is asked for when no service sent anything
     expect(net.calls.map((u) => u.pathname.split("/").pop()).sort()).toEqual([
       "services",

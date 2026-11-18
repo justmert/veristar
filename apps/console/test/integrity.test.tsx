@@ -8,7 +8,7 @@ import {
   IntegrityPanel,
   IntegrityReportView,
 } from "@/components/integrity";
-import { GlobalWebPage } from "@/pages/operator/global-web";
+import { OperatorProjectsPage } from "@/pages/operator/projects";
 import * as c from "./fixtures/contract";
 import * as f from "./fixtures/global";
 import { type Call, click, render, renderRoutes, waitFor } from "./helpers";
@@ -213,8 +213,8 @@ describe("integrity in the global web view", () => {
       [`/api/operator/tenants/${c.TENANT_ID}`]: c.operatorDetailBody,
     });
     const host = await renderRoutes(
-      [{ path: "/operator/web", element: <GlobalWebPage /> }],
-      "/operator/web",
+      [{ path: "/operator/projects", element: <OperatorProjectsPage /> }],
+      "/operator/projects?view=web",
     );
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     const row = host.querySelector<HTMLElement>(`tr[data-tenant="${c.TENANT_ID}"]`);
@@ -249,8 +249,8 @@ describe("integrity in the global web view", () => {
   it("filters to a grade and below and sends the filter", async () => {
     const calls = stubByPath({ "/api/operator/web/projects": f.webProjectsBody });
     const host = await renderRoutes(
-      [{ path: "/operator/web", element: <GlobalWebPage /> }],
-      "/operator/web?integrity_at_or_below=C",
+      [{ path: "/operator/projects", element: <OperatorProjectsPage /> }],
+      "/operator/projects?view=web&integrity_at_or_below=C",
     );
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     expect(calls.map((x) => x.url)).toContain(

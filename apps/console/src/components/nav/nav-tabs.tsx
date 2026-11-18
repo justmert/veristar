@@ -4,8 +4,9 @@ import { LayoutGroup, motion } from "motion/react";
 import { useId } from "react";
 import { Link, useLocation } from "react-router";
 
-// the second level of a place as tabs of links; the marker slides between
-// them. aria-current marks the page, as for any navigation.
+// tabs of links. the sidebar lists every page, so no page draws a second
+// level any more: an empty list draws nothing. the on-chain and scf pages
+// still render it until they move to the new layout.
 export function NavTabs({
   label,
   items,
@@ -17,7 +18,8 @@ export function NavTabs({
 }) {
   const { pathname } = useLocation();
   const group = useId();
-  // the longest matching prefix wins, so /api/traffic is not also /api
+  if (items.length === 0) return null;
+  // the longest matching prefix wins, so a nested path is not also its parent
   const current = items
     .filter((i) => pathname === i.to || pathname.startsWith(`${i.to}/`))
     .sort((a, b) => b.to.length - a.to.length)[0]?.to;

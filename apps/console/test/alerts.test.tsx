@@ -162,12 +162,6 @@ describe("operator alerts page", () => {
     );
     expect(host.textContent).toContain("Last checked 12:00:05 UTC");
     expect(host.textContent).not.toContain("All clear");
-
-    // the nav badge counts the alerts and the banner names the critical one
-    const nav = host.querySelector('nav[aria-label="Operator sections"]') as HTMLElement;
-    const link = [...nav.querySelectorAll("a")].find((a) => a.textContent?.startsWith("Alerts"));
-    expect(link?.textContent).toBe("Alerts2 alerts firing");
-    expect(host.textContent).toContain("A critical alert is firing.");
   });
 
   it("says all clear with the time of the check when nothing fires", async () => {
@@ -235,8 +229,6 @@ describe("operator alerts page", () => {
     await waitFor(() => expect(host.textContent).toContain("Alert source unreachable"));
     expect(host.textContent).not.toContain("All clear");
     expect(host.querySelector("[data-alert]")).toBeNull();
-    const nav = host.querySelector('nav[aria-label="Operator sections"]') as HTMLElement;
-    expect(nav.textContent).toContain("alert source unreachable");
   });
 
   it("says when no alert source is configured", async () => {
@@ -272,31 +264,7 @@ describe("operator alerts page", () => {
   });
 });
 
-describe("operator banner and tenants", () => {
-  it("shows the critical banner on the other operator pages", async () => {
-    stubFetch([
-      { status: 200, body: f.operatorMeBody },
-      { status: 200, body: f.steppedUpBody },
-      { status: 200, body: body({ alerts: [alert(), alert({ fingerprint: "g", name: "X" })] }) },
-    ]);
-    const host = await renderRoutes(alertsRoute(), "/operator");
-    await waitFor(() => expect(host.textContent).toContain("2 critical alerts are firing."));
-    expect(host.textContent).toContain("queue");
-    const open = [...host.querySelectorAll("a")].find((a) => a.textContent === "Open alerts");
-    expect(open?.getAttribute("href")).toBe("/operator/alerts");
-  });
-
-  it("shows no banner for ticket alerts", async () => {
-    stubFetch([
-      { status: 200, body: f.operatorMeBody },
-      { status: 200, body: f.steppedUpBody },
-      { status: 200, body: body({ alerts: [ticket] }) },
-    ]);
-    const host = await renderRoutes(alertsRoute(), "/operator");
-    await waitFor(() => expect(host.textContent).toContain("1 alert firing"));
-    expect(host.textContent).not.toContain("critical alert");
-  });
-
+describe("operator area for tenants", () => {
   it("never asks for alerts in a tenant's browser", async () => {
     const calls = stubFetch([{ status: 200, body: f.meBody }]);
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");

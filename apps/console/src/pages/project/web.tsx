@@ -79,7 +79,8 @@ import {
   webTrend,
   writeWebState,
 } from "@/lib/web-dashboard";
-import { useProject } from "./project-layout";
+import { useProject } from "@/pages/project-layout";
+import { SiteOutcomes } from "./site-outcomes";
 
 const INTEGRITY_MAX_DAYS = 366;
 
@@ -194,7 +195,7 @@ export function WebPage() {
           title="No sites yet"
           action={
             <Button asChild variant="outline">
-              <Link to={`/projects/${tenant.id}`}>Add a site on the overview</Link>
+              <Link to={`/projects/${tenant.id}/sites`}>Add a site</Link>
             </Button>
           }
         >
@@ -205,6 +206,7 @@ export function WebPage() {
           <RangeBar state={state} set={set} now={now} />
           {state.band === "primary" ? <Realtime tenantId={tenant.id} site={q.site} /> : null}
           <Dashboard tenantId={tenant.id} state={state} set={set} q={q} sites={listed} utm={utm} />
+          {selected ? <SiteOutcomes site={selected} /> : null}
           <IntegrityReportView
             scope="tenant"
             tenantId={tenant.id}

@@ -8,7 +8,7 @@ import {
   sessionField,
   userAgentField,
 } from "@/lib/erasure";
-import { PrivacyPage } from "@/pages/privacy";
+import { PrivacyPage } from "@/pages/project/privacy";
 import * as f from "./fixtures/contract";
 import { byLabel, byRole, type Call, click, renderRoutes, type, waitFor } from "./helpers";
 

@@ -11,14 +11,12 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
 import { NativeSelect, SelectField, TextField } from "@/components/form-field";
 import { Stagger, StaggerItem } from "@/components/motion";
-import { projectTabs } from "@/components/nav/nav-items";
-import { NavTabs } from "@/components/nav/nav-tabs";
 import { PageHeader, Panel } from "@/components/panel";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
 import * as v from "@/lib/validate";
+import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
-import { useProject } from "./project-layout";
 
 export type AddMemberValues = { login: string; role: Role };
 export type AddMemberErrors = Partial<Record<keyof AddMemberValues, string>>;
@@ -98,7 +96,6 @@ export function MembersPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Settings" />
-      <NavTabs label="Settings" items={projectTabs(tenant.id, "settings") ?? []} />
       <MembersBody
         tenantId={tenant.id}
         tenantName={tenant.name}

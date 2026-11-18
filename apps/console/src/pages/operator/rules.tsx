@@ -514,7 +514,7 @@ function MatchList({ data }: { data: RuleMatches }) {
             <li key={m.tenant.id} data-tenant={m.tenant.id} className="flex flex-col gap-1 py-3">
               <span className="flex flex-wrap items-baseline gap-x-3">
                 <Link
-                  to={`/operator/tenants/${m.tenant.id}`}
+                  to={`/operator/projects/${m.tenant.id}`}
                   className="rounded-sm text-body font-medium text-fg underline-offset-4 hover:underline focus-ring"
                 >
                   {m.tenant.name}

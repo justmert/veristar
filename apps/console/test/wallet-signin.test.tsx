@@ -31,9 +31,9 @@ vi.mock("@/lib/stellar-wallet/modules", () => ({
 }));
 
 const { resetWalletModulesForTest } = await import("@/lib/stellar-wallet");
-const { SignInPage } = await import("@/pages/sign-in");
-const { AccountPage, confirmationText } = await import("@/pages/account");
-const { memberIdentity, validateAddMember } = await import("@/pages/members");
+const { SignInPage } = await import("@/pages/public/sign-in");
+const { AccountPage, confirmationText } = await import("@/pages/home/account");
+const { memberIdentity, validateAddMember } = await import("@/pages/project/members");
 
 afterEach(() => {
   resetWalletModulesForTest();

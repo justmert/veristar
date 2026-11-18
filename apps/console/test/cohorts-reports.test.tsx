@@ -9,13 +9,13 @@ import { describe, expect, it, vi } from "vitest";
 import { reportDocument } from "@/api/reports";
 import { OperatorCohortPanel } from "@/components/cohort";
 import { canonicalize, crc16xmodem } from "@/lib/report-verify";
-import { withCohort } from "@/pages/enroll";
+import { withCohort } from "@/pages/home/enroll";
 import { ComparePage } from "@/pages/operator/compare";
-import { GlobalWebPage } from "@/pages/operator/global-web";
+import { OperatorProjectsPage } from "@/pages/operator/projects";
 import { RulesPage } from "@/pages/operator/rules";
 import type { ProjectContext } from "@/pages/project-layout";
 import { PublicReportPage } from "@/pages/public-report";
-import { ReportsPage } from "@/pages/reports";
+import { SignedReports } from "@/pages/reports";
 import { SCFViewPage } from "@/pages/scf-view";
 import * as c from "./fixtures/contract";
 import * as f from "./fixtures/global";
@@ -72,8 +72,8 @@ describe("global views with cohorts (contract 19.1 to 19.3)", () => {
         : { status: 200, body: f.webProjectsBody },
     );
     const host = await renderRoutes(
-      [{ path: "/operator/web", element: <GlobalWebPage /> }],
-      "/operator/web",
+      [{ path: "/operator/projects", element: <OperatorProjectsPage /> }],
+      "/operator/projects?view=web",
     );
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     const row = host.querySelector<HTMLElement>(`tr[data-tenant="${c.TENANT_ID}"]`);
@@ -521,8 +521,8 @@ describe("the reports page (contract 20.3 and 20.4)", () => {
       };
     });
     const host = await renderRoutes(
-      projectRoutes(<ReportsPage />, "reports"),
-      `/projects/${c.TENANT_ID}/reports`,
+      projectRoutes(<SignedReports />, "scf"),
+      `/projects/${c.TENANT_ID}/scf`,
     );
     await waitFor(() => expect(host.textContent).toContain("3 views"));
 
@@ -568,8 +568,8 @@ describe("the reports page (contract 20.3 and 20.4)", () => {
         : { status: 200, body: { items: [] } },
     );
     const host = await renderRoutes(
-      projectRoutes(<ReportsPage />, "reports"),
-      `/projects/${c.TENANT_ID}/reports`,
+      projectRoutes(<SignedReports />, "scf"),
+      `/projects/${c.TENANT_ID}/scf`,
     );
     await type(byLabel(host, "From") as HTMLInputElement, "2026-10-01");
     await type(byLabel(host, "To") as HTMLInputElement, "2026-10-31");
@@ -587,8 +587,8 @@ describe("revoking a report link", () => {
       return { status: 200, body: { items: [summary] } };
     });
     const host = await renderRoutes(
-      projectRoutes(<ReportsPage />, "reports"),
-      `/projects/${c.TENANT_ID}/reports`,
+      projectRoutes(<SignedReports />, "scf"),
+      `/projects/${c.TENANT_ID}/scf`,
     );
     await waitFor(() => expect(host.textContent).toContain("3 views"));
     const open = () => [...host.querySelectorAll("dialog")].find((d) => d.hasAttribute("open"));
