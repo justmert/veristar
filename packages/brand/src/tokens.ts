@@ -319,8 +319,8 @@ export const font = {
 } as const;
 
 // the type scale: size / line height, weight, tracking. numbers are set in
-// mono at small and metric only. `heading` is the console's page title;
-// `page` stays for the website.
+// the sans with tabular figures; mono is for code, ids, keys and routes.
+// `heading` is the console's page title; `page` stays for the website.
 export const type = {
   axis: { size: "11px", line: "14px", weight: 400, tracking: "0" },
   caption: { size: "12px", line: "16px", weight: 500, tracking: "0.01em" },
