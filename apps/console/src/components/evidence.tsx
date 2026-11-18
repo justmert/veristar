@@ -1,5 +1,5 @@
 import { cn } from "@veristar/brand/cn";
-import { Check, CircleAlert, Minus } from "lucide-react";
+import { CircleAlert, CircleCheck, CircleDashed, CircleX } from "lucide-react";
 import type { ReactNode } from "react";
 import type { StellarToml, Verification, VerifyMethod } from "@/api/schemas";
 import { Pill, type Tone } from "@/components/status";
@@ -126,12 +126,24 @@ const NETWORK_TEXT: Record<NonNullable<StellarToml["network"]>, string> = {
   other: "Another network",
 };
 
-type Mark = "ok" | "warn" | "none";
+// one state per checklist row, the same vocabulary as the evidence list:
+// ok (proven), partial (part of it, or a risk), missing (given, and the
+// check failed), absent (nothing given to check). each is an icon, a tone
+// and a word for screen readers; the row's text says the state too
+type Mark = "ok" | "partial" | "missing" | "absent";
 
 const MARK_ICON: Record<Mark, ReactNode> = {
-  ok: <Check aria-hidden className="size-3.5 text-success" strokeWidth={2.5} />,
-  warn: <CircleAlert aria-hidden className="size-3.5 text-warning" />,
-  none: <Minus aria-hidden className="size-3.5 text-fg-3" />,
+  ok: <CircleCheck aria-hidden className="size-3.5 text-success" strokeWidth={2.4} />,
+  partial: <CircleAlert aria-hidden className="size-3.5 text-warning" strokeWidth={2.4} />,
+  missing: <CircleX aria-hidden className="size-3.5 text-critical" strokeWidth={2.4} />,
+  absent: <CircleDashed aria-hidden className="size-3.5 text-fg-3" strokeWidth={2.4} />,
+};
+
+const MARK_WORD: Record<Mark, string> = {
+  ok: "Passed",
+  partial: "Partly passed",
+  missing: "Failed",
+  absent: "Not given",
 };
 
 // what to do about a stellar.toml check that did not pass, in one sentence
@@ -162,11 +174,14 @@ function EvidenceRow({
 }) {
   return (
     <div className="grid grid-cols-[1rem_minmax(0,8rem)_minmax(0,1fr)] items-start gap-x-2 py-1">
-      <span className="mt-1 flex">{MARK_ICON[mark]}</span>
+      <span className="mt-1 flex" data-mark={mark}>
+        {MARK_ICON[mark]}
+        <span className="sr-only">{MARK_WORD[mark]}: </span>
+      </span>
       <dt className="text-fg-2">{label}</dt>
       <dd className="min-w-0 break-words text-fg">
         {children}
-        {mark === "warn" && advice ? (
+        {(mark === "partial" || mark === "missing") && advice ? (
           <span className="block text-fg-2" data-advice="">
             {advice}
           </span>
@@ -220,28 +235,36 @@ export function StellarTomlSummary({
     <div className={cn("flex flex-col gap-1 text-small", className)}>
       {head}
       <dl className="flex flex-col divide-y divide-line-subtle">
-        <EvidenceRow mark={found ? "ok" : "warn"} label="File" advice={tomlAdvice(toml.status)}>
+        <EvidenceRow mark={found ? "ok" : "missing"} label="File" advice={tomlAdvice(toml.status)}>
           {TOML_STATUS[toml.status]}
           {toml.http_status !== null && !found ? ` (HTTP ${toml.http_status})` : ""}
           {found ? null : <span className="block break-all font-mono text-fg-3">{where}</span>}
         </EvidenceRow>
         {found ? (
           <>
-            <EvidenceRow mark={toml.network ? "ok" : "none"} label="Network">
-              {toml.network ? NETWORK_TEXT[toml.network] : "Not stated"}
+            <EvidenceRow mark={toml.network ? "ok" : "absent"} label="Network">
+              {toml.network ? NETWORK_TEXT[toml.network] : "Not given"}
             </EvidenceRow>
-            <EvidenceRow mark={toml.version ? "ok" : "none"} label="Version">
-              {toml.version ?? "Not stated"}
+            <EvidenceRow mark={toml.version ? "ok" : "absent"} label="Version">
+              {toml.version ?? "Not given"}
             </EvidenceRow>
             <EvidenceRow
-              mark={accounts === 0 ? "none" : (toml.accounts_valid ?? 0) < accounts ? "warn" : "ok"}
+              mark={
+                accounts === 0
+                  ? "absent"
+                  : (toml.accounts_valid ?? 0) === 0
+                    ? "missing"
+                    : (toml.accounts_valid ?? 0) < accounts
+                      ? "partial"
+                      : "ok"
+              }
               label="Accounts"
               advice="List each account in ACCOUNTS as a valid G address."
             >
               {accounts} listed, {toml.accounts_valid ?? 0} valid
             </EvidenceRow>
             <EvidenceRow
-              mark={toml.signing_key_present ? (toml.signing_key_valid ? "ok" : "warn") : "none"}
+              mark={toml.signing_key_present ? (toml.signing_key_valid ? "ok" : "missing") : "absent"}
               label="Signing key"
               advice="Set SIGNING_KEY to a valid G address."
             >
@@ -249,14 +272,14 @@ export function StellarTomlSummary({
                 ? toml.signing_key_valid
                   ? "Present and valid"
                   : "Present, not a valid key"
-                : "None"}
+                : "Not given"}
             </EvidenceRow>
             <EvidenceRow
-              mark={toml.org_url ? (toml.org_url_same_domain ? "ok" : "warn") : "none"}
+              mark={toml.org_url ? (toml.org_url_same_domain ? "ok" : "partial") : "absent"}
               label="Organization URL"
               advice="Set ORG_URL to an address on this domain."
             >
-              <span className="break-all">{toml.org_url ?? "None"}</span>
+              <span className="break-all">{toml.org_url ?? "Not given"}</span>
               {toml.org_url
                 ? toml.org_url_same_domain
                   ? " (same domain)"
@@ -264,7 +287,15 @@ export function StellarTomlSummary({
                 : ""}
             </EvidenceRow>
             <EvidenceRow
-              mark={total === 0 ? "none" : invalidCurrencies > 0 ? "warn" : "ok"}
+              mark={
+                total === 0
+                  ? "absent"
+                  : invalidCurrencies >= total
+                    ? "missing"
+                    : invalidCurrencies > 0
+                      ? "partial"
+                      : "ok"
+              }
               label="Currencies"
               advice="Give each currency a valid issuer or contract."
             >
