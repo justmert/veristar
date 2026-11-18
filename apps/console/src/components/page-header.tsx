@@ -79,7 +79,7 @@ export function PageHeader({
         ) : null}
       </div>
       {actions ? (
-        <div className="flex flex-wrap items-center gap-2 max-sm:w-full sm:justify-end [&>*]:max-sm:h-(--vs-control-touch)">
+        <div className="flex flex-wrap items-center gap-2 max-sm:w-full sm:justify-end [&>*:not(dialog)]:max-sm:h-(--vs-control-touch)">
           {secondary}
           {primary}
         </div>
