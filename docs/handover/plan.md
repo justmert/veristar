@@ -98,7 +98,7 @@ before the delegation changes.
    _acme-challenge.app.<domain>   CNAME  <sa_acme_challenge_domain>
    ```
 
-   `<sa_acme_challenge_domain>` is a name in a Cloudflare zone the new operator's token may
+   `<sa_acme_challenge_domain>` is a name in a Cloudflare zone the new operator's token can
    edit (for example `_acme-challenge.<a domain the new operator owns>`).
    The new nodes' Caddy (`sa_tls_cloudflare-delegated` in `deploy/caddy/assemble.sh`, Caddy's
    `dns_challenge_override_domain`) writes the answer there, and Let's Encrypt follows the
