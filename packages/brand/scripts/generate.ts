@@ -158,8 +158,9 @@ function roleBlock(name: ThemeName) {
 }
 
 // the docs (mintlify) take the accent and both grounds; edited in place so
-// the rest of docs.json keeps its formatting. mintlify's "light" colour is
-// the one it draws on the dark theme and "dark" the one on the light theme.
+// the rest of docs.json keeps its formatting. mintlify's "primary" is the
+// emphasis on its light theme, "light" the emphasis on its dark theme and
+// "dark" the fill of its buttons in both.
 {
   const d: Roles = themes.dark;
   const l: Roles = themes.light;
@@ -168,7 +169,7 @@ function roleBlock(name: ThemeName) {
   const up = (v: string) => v.toUpperCase();
   text = text.replace(
     /("colors":\s*\{\s*"primary":\s*")[^"]*(",\s*"light":\s*")[^"]*(",\s*"dark":\s*")[^"]*(")/,
-    `$1${up(d.accent)}$2${up(d["accent-text"])}$3${up(l["accent-text"])}$4`,
+    `$1${up(l["accent-text"])}$2${up(d["accent-text"])}$3${up(l.accent)}$4`,
   );
   text = text.replace(
     /("background":\s*\{\s*"color":\s*\{)[^}]*(\})/,

@@ -28,7 +28,7 @@
     font-family: var(--vs-font-mono);
   }
   ::selection {
-    background: var(--vs-accent-soft);
+    background: var(--vs-selection);
     color: var(--vs-fg);
   }
   :focus-visible {
@@ -132,7 +132,7 @@
   /* a changed value flashes its text once */
   @keyframes vs-flash {
     from {
-      color: var(--vs-accent-text);
+      color: var(--vs-fg-3);
     }
   }
 }
@@ -157,7 +157,8 @@
   white-space: nowrap;
 }
 
-/* the focus halo every control shares: accent border plus a soft ring */
+/* the focus ring every control shares: a 2 px ink ring set 2 px off the
+   control, at least 3:1 on every surface in both themes */
 @utility focus-ring {
   &:focus-visible {
     outline: 2px solid var(--vs-accent-text);
@@ -167,9 +168,8 @@
 @utility field-ring {
   &:focus-visible,
   &:focus {
-    outline: 3px solid var(--vs-accent-soft);
-    outline-offset: 0;
-    border-color: var(--vs-accent-text);
+    outline: 2px solid var(--vs-accent-text);
+    outline-offset: 2px;
   }
 }
 
