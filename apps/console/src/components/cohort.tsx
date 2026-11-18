@@ -15,6 +15,7 @@ import {
 import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
 import { Fact, Panel } from "@/components/panel";
+import { DateField } from "@/components/range-control";
 import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
@@ -113,13 +114,12 @@ export function CohortFields({
         onChange={set("category")}
         error={errors.category}
       />
-      <TextField
+      <DateField
         label="Award date"
         name={`${idPrefix}-award_date`}
         optional
-        type="date"
         value={values.award_date}
-        onChange={set("award_date")}
+        onChange={(v) => onChange({ ...values, award_date: v })}
         error={errors.award_date}
       />
     </div>

@@ -36,12 +36,13 @@ import {
 } from "@/api/web";
 import { DbIpAttribution } from "@/components/dbip-attribution";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
-import { NativeSelect, TextField } from "@/components/form-field";
+import { NativeSelect } from "@/components/form-field";
 import { IntegrityReportView } from "@/components/integrity";
 import { StaggerItem } from "@/components/motion";
 import { Notice } from "@/components/notice";
 import { ProjectOnchainSection } from "@/components/onchain";
 import { PageHeader, Panel } from "@/components/panel";
+import { DateField } from "@/components/range-control";
 import { Segmented } from "@/components/segmented";
 import { StatTile } from "@/components/stat-tile";
 import { Pill } from "@/components/status";
@@ -299,21 +300,19 @@ function RangeBar({
           className="flex animate-reveal-in flex-wrap items-end gap-3"
         >
           <div className="w-40">
-            <TextField
+            <DateField
               label="From (UTC day)"
-              type="date"
               value={draft.from}
               error={errors.from}
-              onChange={(e) => setDraft({ ...draft, from: e.target.value })}
+              onChange={(v) => setDraft({ ...draft, from: v })}
             />
           </div>
           <div className="w-40">
-            <TextField
+            <DateField
               label="To (UTC day)"
-              type="date"
               value={draft.to}
               error={errors.to}
-              onChange={(e) => setDraft({ ...draft, to: e.target.value })}
+              onChange={(v) => setDraft({ ...draft, to: v })}
             />
           </div>
           <Button type="submit" variant="outline">

@@ -8,6 +8,7 @@ import { auditQuery } from "@/api/queries";
 import type { AuditEntry } from "@/api/schemas";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
+import { DateField } from "@/components/range-control";
 import { Button } from "@/components/ui/button";
 import { formatCount, formatDate, formatDateTimeUtc, formatTimeUtc, MISSING } from "@/lib/format";
 
@@ -238,23 +239,19 @@ export function AuditPage() {
           value={draft.target}
           onChange={set("target")}
         />
-        <TextField
+        <DateField
           label="From (UTC day)"
           name="from"
           optional
-          type="date"
-          className="max-lg:h-(--vs-control-touch)"
           value={draft.from}
-          onChange={set("from")}
+          onChange={(v) => setDraft((s) => ({ ...s, from: v }))}
         />
-        <TextField
+        <DateField
           label="To (UTC day, included)"
           name="to"
           optional
-          type="date"
-          className="max-lg:h-(--vs-control-touch)"
           value={draft.to}
-          onChange={set("to")}
+          onChange={(v) => setDraft((s) => ({ ...s, to: v }))}
           error={dayError}
         />
         <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-3">
