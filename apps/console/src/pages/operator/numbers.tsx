@@ -87,9 +87,14 @@ export function ProjectNumbers({ tenantId, className }: { tenantId: string; clas
         <StatCard
           label="On-chain operations"
           definition="Operations of the declared accounts and contracts in the range."
-          value={onchain && onchain.totals.ids > 0 ? onchain.totals.operations : null}
+          // nothing is measured without a verified id, so no 0 shows
+          value={onchain && onchain.totals.ids_verified > 0 ? onchain.totals.operations : null}
           format={formatCount}
-          missingReason="No accounts or contracts declared"
+          missingReason={
+            onchain && onchain.totals.ids > 0
+              ? "No verified account or contract"
+              : "No accounts or contracts declared"
+          }
           state={webState === "data" || apiState === "data" ? "data" : webState}
           data-stat="onchain"
         />
