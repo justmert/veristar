@@ -90,9 +90,7 @@ export function OperatorsPage() {
           }}
         />
       ) : me.data && roster.data ? (
-        <>
-          <RosterSection items={roster.data.items} admin={admin} me={me.data.user} />
-        </>
+        <RosterSection items={roster.data.items} admin={admin} me={me.data.user} />
       ) : null}
     </div>
   );
