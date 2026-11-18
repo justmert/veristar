@@ -467,7 +467,8 @@ describe("the public report page (contract 20.5)", () => {
     expect(host.querySelector("footer")?.textContent).toContain("Route rules2");
     expect(host.textContent).toContain("4,321");
     expect(host.textContent).toContain("Grade A");
-    expect(host.textContent).toContain("+116%");
+    // the figures lead, each with its change
+    expect(host.querySelector("[data-hero=visitors]")?.textContent).toContain("+116%");
     expect(host.textContent).toContain("P75");
     expect(byRole(host, "button", "Download JSON")).toBeTruthy();
     expect(host.textContent).not.toContain(EM_DASH);
@@ -487,14 +488,16 @@ describe("the public report page (contract 20.5)", () => {
     expect(host.textContent).toContain("1, 2");
     // the members version 2 adds are shown
     expect(host.textContent).toContain("About 10% of visits are not measured");
-    expect(host.textContent).toContain("No API traffic was recorded in this period.");
-    expect(host.textContent).toContain("Infrastructure requests12");
+    // a part with no data is left out, not listed as zeros and dashes
+    expect(host.querySelector('section[aria-label="API"]')).toBeNull();
+    expect(host.querySelector("[data-hero=requests]")).toBeNull();
     expect(host.textContent).toContain("15 a week on average over 2 weeks, 2 missing");
+    // a cohort of three keeps its percentiles back: no column of dashes
     expect(host.textContent).not.toContain("P75");
-    expect(host.querySelector("tr[data-kpi=visitors] [data-missing]")).not.toBeNull();
-    expect(host.querySelector("[data-testid=percentile-hidden]")?.textContent).toContain(
-      "This cohort has 3 projects",
+    expect([...host.querySelectorAll("th")].some((th) => th.textContent === "Percentile")).toBe(
+      false,
     );
+    expect(host.querySelector("[data-missing]")).toBeNull();
   });
 
   it("reads a version 3 report with the calls per contract function", async () => {
