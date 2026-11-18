@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { termsQuery } from "@/api/queries";
+import { Disclosure } from "@/components/disclosure";
 import { PublicFrame } from "@/components/public-frame";
 import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { Markdown, outline } from "@/lib/markdown";
@@ -53,14 +53,12 @@ export function TermsPage() {
         )}
         <div className="flex min-w-0 max-w-prose flex-col gap-6">
           {sections.length > 0 ? (
-            <details className="group rounded-lg border border-line lg:hidden">
-              <summary className="flex min-h-(--vs-control-touch) cursor-pointer list-none items-center gap-2 rounded-lg px-4 text-body text-fg focus-ring [&::-webkit-details-marker]:hidden">
-                <ChevronRight
-                  aria-hidden
-                  className="size-4 text-fg-2 transition-transform duration-(--vs-duration-press) ease-standard group-open:rotate-90"
-                />
-                On this page
-              </summary>
+            <Disclosure
+              summary="On this page"
+              className="lg:hidden"
+              summaryClassName="font-normal"
+              bodyClassName="border-t-0 px-2 pt-0 pb-2"
+            >
               <nav aria-label="Sections on this page" className="flex flex-col gap-px px-2 pb-2">
                 {sections.map((s) => (
                   <a
@@ -73,7 +71,7 @@ export function TermsPage() {
                   </a>
                 ))}
               </nav>
-            </details>
+            </Disclosure>
           ) : null}
           {terms.isPending ? (
             <LoadingState label="Loading the terms">

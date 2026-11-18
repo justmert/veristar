@@ -269,9 +269,10 @@ test("an unverified contract shows no calls per function, and the routes keep to
   const accountId = view.body.ids.find((x) => x.strkey === ACCOUNT)?.id ?? "";
 
   await page.goto(`${APP}/projects/${tenant.id}/onchain`);
-  const block = page.getByRole("region", { name: `Calls per function of ${CONTRACT}` });
-  await expect(block).toContainText("Calls per function show when the contract is verified");
-  await expect(block.getByRole("table")).toHaveCount(0);
+  // an unverified contract has no calls per function to show
+  await expect(page.getByRole("region", { name: `Calls per function of ${CONTRACT}` })).toHaveCount(
+    0,
+  );
 
   const fns = await api<Functions>(
     ctx,
@@ -341,7 +342,7 @@ test("an unverified contract shows no calls per function, and the routes keep to
     await opPage.getByText("On-chain IDs", { exact: true }).click();
     await expect(
       opPage.getByRole("region", { name: `Calls per function of ${CONTRACT}` }),
-    ).toContainText("Calls per function show when the contract is verified");
+    ).toHaveCount(0);
   } finally {
     await op.close();
   }

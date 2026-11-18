@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OperatorPasskeys, passkeyNameError } from "@/components/operator-passkeys";
 import { toast } from "@/components/toast";
-import { byRole, click, render, stubFetch, waitFor } from "./helpers";
+import { byRole, click, pickRowAction, render, stubFetch, waitFor } from "./helpers";
 
 const KEY = {
   id: "0b8d7c1e-3f2a-4e5b-9c6d-7e8f9a0b1c2d",
@@ -30,7 +30,7 @@ describe("your passkeys", () => {
     const host = await render(<OperatorPasskeys userName="octocat" />);
     await waitFor(() => expect(host.textContent).toContain("Laptop"));
     expect(host.textContent).toContain("Your sign-in passkey");
-    await click(byRole(host, "button", "Delete"));
+    await pickRowAction(host, "Laptop", "Delete");
     const dialog = document.body.querySelector<HTMLElement>("dialog[open]");
     if (!dialog) throw new Error("no dialog");
     await click(byRole(dialog, "button", "Delete passkey"));
