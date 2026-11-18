@@ -64,7 +64,7 @@ if INTERVAL_MS <= 0:
     raise SystemExit("METRICS_EXPORT_INTERVAL_MS must be a positive integer")
 SEMCONV = os.environ.get("OTEL_SEMCONV_STABILITY_OPT_IN", "")
 
-# the console's api analytics setup page shows the lines between each
+# the console's api connect page shows the lines between each
 # docs:start and docs:end marker pair (apps/console/src/lib/otel-guides.ts),
 # so the instructions are this code and cannot drift from it.
 

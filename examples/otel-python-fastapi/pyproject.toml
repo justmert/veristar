@@ -3,7 +3,7 @@ name = "otel-python-fastapi"
 version = "1.0.0"
 description = "fastapi example that dual-exports opentelemetry data to a tenant backend and veristar"
 requires-python = "==3.14.10"
-# docs:start dependencies (shown on the console's api analytics setup page)
+# docs:start dependencies (shown on the console's api connect page)
 dependencies = [
     "fastapi==0.161.1",
     "uvicorn==0.54.0",
