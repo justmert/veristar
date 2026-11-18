@@ -141,6 +141,12 @@ func (h *Routes) verify(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	// a check marks the domain verified, which counts toward the project's
+	// standing, so it needs the current terms like every other change
+	// (contract 4.2.6)
+	if err := a.RequireTerms(); err != nil {
+		return err
+	}
 	var b verifyBody
 	if err := httpx.DecodeJSON(r, &b); err != nil {
 		return err

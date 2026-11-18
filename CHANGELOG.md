@@ -144,6 +144,11 @@ here, before they take effect, as the processing terms require
 
 ### Fixed
 
+- The domain check (`POST /api/sites/{site_id}/verify`) needs the current terms
+  like every other change to a project, and answers 403 `terms_not_accepted`
+  without them. The control plane API reference lists the exceptions
+  (accepting the terms, removing a member, revocations, erasure and MCP access
+  keys) with the reason for each.
 - API analytics, the operator lists and compares, the scf view and the machine
   API answer for any range again when a project's request counts over the range
   pass the 64-bit limit: request totals stop at the largest 64-bit value and
