@@ -120,20 +120,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)
 	defer signal.Stop(hup)
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-hup:
-				if err := node.Reload(); err != nil {
-					log.Error("reload failed, the files that did not load keep their previous version", "error", err.Error())
-					continue
-				}
-				log.Info("geo file, network data and revoked tracker list reloaded")
-			}
-		}
-	}()
+	go reloadOnHUP(ctx, hup, node.Reload, log)
 
 	// one listener failing stops the other, so the process exits
 	serveCtx, stopServe := context.WithCancel(ctx)
@@ -158,6 +145,24 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	}
 	stopLoops()
 	return errors.Join(serveErr, <-loopDone)
+}
+
+// reloadOnHUP runs reload on every signal from hup until ctx ends. a failed
+// reload is logged at error level: the files that did not load keep their
+// previous version, so the gateway still serves last month's geo file.
+func reloadOnHUP(ctx context.Context, hup <-chan os.Signal, reload func() error, log *slog.Logger) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-hup:
+			if err := reload(); err != nil {
+				log.Error("reload failed, the files that did not load keep their previous version", "error", err.Error())
+				continue
+			}
+			log.Info("geo file, network data and revoked tracker list reloaded")
+		}
+	}
 }
 
 // edgeHealth is the composite health of an edge node. both

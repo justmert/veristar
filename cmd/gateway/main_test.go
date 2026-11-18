@@ -3,7 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"log/slog"
+	"os"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
 
 	"github.com/justmert/veristar/internal/config"
@@ -22,4 +27,54 @@ func TestMissingConfigReportedOnce(t *testing.T) {
 			t.Errorf("%s reported %d times: %s", key, n, stderr.String())
 		}
 	}
+}
+
+// SIGHUP runs the node's reload, which covers the geo file, the network
+// data and the revoked tracker list; a failure is logged and the loop keeps
+// answering later signals
+func TestReloadOnHUP(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hup := make(chan os.Signal)
+	results := []error{errors.New("bad file"), nil}
+	calls := make(chan struct{}, 2)
+	var logs syncBuffer
+	log := slog.New(slog.NewJSONHandler(&logs, nil))
+	done := make(chan struct{})
+	go func() {
+		reloadOnHUP(ctx, hup, func() error {
+			err := results[0]
+			results = results[1:]
+			calls <- struct{}{}
+			return err
+		}, log)
+		close(done)
+	}()
+	hup <- syscall.SIGHUP
+	<-calls
+	hup <- syscall.SIGHUP
+	<-calls
+	cancel()
+	<-done
+	out := logs.String()
+	if !strings.Contains(out, "reload failed") || !strings.Contains(out, "bad file") || !strings.Contains(out, "list reloaded") {
+		t.Fatalf("logs: %s", out)
+	}
+}
+
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
 }
