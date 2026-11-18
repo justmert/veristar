@@ -8,6 +8,23 @@ import { Button } from "./button";
 // page, focus inside and Escape to close. radix dialog injects a <style>
 // element for its scroll lock, which the console's csp (style-src 'self')
 // refuses. it grows in over a fading scrim with css only (dialog-motion).
+const PANEL = "flex flex-col rounded-xl border border-line-strong bg-overlay shadow-dialog";
+const WIDTH = { sm: "max-w-dialog-sm", md: "max-w-dialog" } as const;
+
+// the first focus inside an opened dialog: a field the caller marked, else
+// the first field of the body, else the first button of the footer (Cancel
+// in a confirmation), never the close button, so a ring does not land on
+// the corner and Enter never confirms by accident
+function initialFocus(d: HTMLDialogElement) {
+  const target =
+    d.querySelector<HTMLElement>("[data-autofocus]") ??
+    d.querySelector<HTMLElement>(
+      "[data-dialog-body] :is(input:not([type=hidden]), textarea, select):not(:disabled)",
+    ) ??
+    d.querySelector<HTMLElement>("[data-dialog-footer] button:not(:disabled)");
+  target?.focus();
+}
+
 export function Dialog({
   open,
   onOpenChange,
@@ -45,7 +62,10 @@ export function Dialog({
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) d.showModal();
+    if (open && !d.open) {
+      d.showModal();
+      initialFocus(d);
+    }
     if (!open && d.open) d.close();
   }, [open]);
 
@@ -73,9 +93,16 @@ export function Dialog({
           <X aria-hidden />
         </Button>
       </div>
-      {children ? <div className="px-5 pt-4 pb-1">{children}</div> : null}
+      {children ? (
+        <div data-dialog-body="" className="px-5 pt-4 pb-1">
+          {children}
+        </div>
+      ) : null}
       {footer ? (
-        <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-line px-5 py-3">
+        <div
+          data-dialog-footer=""
+          className="mt-4 flex flex-wrap justify-end gap-2 border-t border-line px-5 py-3"
+        >
           {footer}
         </div>
       ) : (
@@ -104,30 +131,26 @@ export function Dialog({
         }, 0);
       }}
       onClick={(e) => {
-        // a click on the scrim (the dialog box itself, outside its panel)
-        if (e.target === e.currentTarget) onOpenChange(false);
+        // a click on the scrim: the dialog box or the gutter around the panel
+        const t = e.target as HTMLElement;
+        if (t === e.currentTarget || t.dataset.dialogGutter !== undefined) onOpenChange(false);
       }}
-      className={cn(
-        // the transparent dialog box pads the panel away from the viewport
-        // edge on a phone and scrolls when the panel is taller than it
-        "dialog-motion m-auto max-h-dvh w-full overflow-y-auto bg-transparent p-4 text-fg",
-        size === "sm" ? "max-w-dialog-sm" : "max-w-dialog",
-        className,
-      )}
+      // the transparent dialog box covers the whole viewport and scrolls when
+      // the panel is taller than it. the box is never smaller than the
+      // viewport, so its own edge (which clips) never cuts the panel's
+      // shadow into a visible rectangle. the panel sits centred in a frame
+      // that keeps the 16 px gutter on a phone
+      className="dialog-motion fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none overflow-y-auto overscroll-contain bg-transparent p-0 text-fg open:flex"
     >
-      {onSubmit ? (
-        <form
-          noValidate
-          onSubmit={onSubmit}
-          className="flex flex-col rounded-xl border border-line-strong bg-overlay shadow-dialog"
-        >
-          {body}
-        </form>
-      ) : (
-        <div className="flex flex-col rounded-xl border border-line-strong bg-overlay shadow-dialog">
-          {body}
-        </div>
-      )}
+      <div data-dialog-gutter="" className={cn("m-auto w-full p-4", WIDTH[size], className)}>
+        {onSubmit ? (
+          <form noValidate onSubmit={onSubmit} className={PANEL}>
+            {body}
+          </form>
+        ) : (
+          <div className={PANEL}>{body}</div>
+        )}
+      </div>
     </dialog>
   );
 }
