@@ -57,15 +57,15 @@ temporality has no first export problem.
 Work through these in order:
 
 1. **The empty request above answers 200.** If not, fix the token first.
-2. **The project is active** and the token is listed as active on the **API analytics setup**
-   page. Revoked tokens and suspended projects are refused with 401.
+2. **The project is active** and the token is listed as active under **API**, **Connect**.
+   Revoked tokens and suspended projects are refused with 401.
 3. **Endpoint URL.** The examples give each exporter the full URL, base plus `/v1/metrics` or
    `/v1/traces`. Some SDK options take only the base and add the path themselves; the standard
    `OTEL_EXPORTER_OTLP_ENDPOINT` variable does, `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` does not.
    A doubled or missing `/v1/metrics` ends in 404.
 4. **Wait for an export.** Metrics leave the SDK once per export interval. The OpenTelemetry
-   default is 60 seconds. An app that exits before its first interval exports nothing unless it shuts the
-   SDK down cleanly; the language guides show how.
+   default is 60 seconds. An app that exits before its first interval exports nothing unless it
+   shuts the SDK down cleanly; the language guides show how.
 5. **Your SDK's own errors.** Every SDK logs failed exports. The examples print them to standard
    error; look there for 401, 404 or TLS errors.
 6. **The metric exists.** Only the HTTP server request duration is kept. An app without an HTTP
@@ -82,7 +82,7 @@ Work through these in order:
 | Percentiles marked approximate | the app sends exponential histograms or custom bucket bounds; the default explicit buckets of OpenTelemetry's HTTP instrumentations give exact percentiles |
 | Percentiles marked not reliable | the histogram's buckets are much wider than the standard ones, often an SDK's millisecond default bounds on a metric in seconds, so every request under 5 s lands in the 2.5 to 5 s bucket. Record `http.server.request.duration` in seconds with the default bounds of the HTTP instrumentation |
 | p95 shown as "> 10 s" | more than 5 % of the requests took longer than 10 seconds, the largest bucket bound |
-| Health checks or probes in the counts | the platform counts health and probe routes, CORS preflights and known health checkers apart as infrastructure requests and leaves them out of the figures ([what gets dropped](what-gets-dropped.md#changed-before-storing)). A health checker that calls an application route is recognised by its user agent only in traces: the `http.server.request.duration` metric carries no user agent, so a metric point is classified by route and method, or by `user_agent.synthetic.type` where the instrumentation sets it ([collector reference](../../reference/collector.md#traffic-classes)). To keep such checks out of the metric, exclude them in the instrumentation, as each example does |
+| Health checks or probes in the counts | the platform counts known health and probe routes, CORS preflights and known health checkers apart as infrastructure requests and leaves them out of the figures ([what gets dropped](what-gets-dropped.md#changed-before-storing)). Two cases stay in the counts: a health route with a name outside the [rule set](../../reference/collector.md#traffic-classes), and a health checker that calls an application route, because the `http.server.request.duration` metric carries no user agent by default. Exclude those checks in the instrumentation, as the Node.js, Go, Python and Rust examples do for `/healthz` |
 | Some series missing while the rest of the same export is stored | their data points have values that cannot be counted, such as no timestamp, a start after the end, or bucket counts that do not match the bounds; such points are dropped one by one ([what gets dropped](what-gets-dropped.md#dropped)). Check the SDK version and any custom aggregation |
 | A service name you do not recognise | `service.name` is missing and the SDK's default (`unknown_service:...`) is used; set `OTEL_SERVICE_NAME` |
 
