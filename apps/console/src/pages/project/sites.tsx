@@ -379,7 +379,10 @@ export function sortRows(rows: Row[], sort: Sort): Row[] {
   return [...rows].sort((a, b) => {
     const x = by(a);
     const y = by(b);
-    return (x < y ? -1 : x > y ? 1 : 0) * dir || a.site.name.localeCompare(b.site.name);
+    return (
+      (x < y ? -1 : x > y ? 1 : 0) * dir ||
+      a.site.name.localeCompare(b.site.name, "en", { numeric: true })
+    );
   });
 }
 

@@ -426,6 +426,7 @@ function TokensSection({
               {t.environment}
             </span>
           ) : null}
+          {t.status === "active" ? null : <StatusBadge kind="key" status="revoked" />}
         </span>
       ),
     },
@@ -433,7 +434,9 @@ function TokensSection({
       key: "prefix",
       header: "Token",
       mobile: true,
-      cell: (t) => <code className="font-mono text-small text-fg">{t.prefix}...</code>,
+      cell: (t) => (
+        <code className="font-mono text-small whitespace-nowrap text-fg">{t.prefix}...</code>
+      ),
     },
     {
       key: "created",
@@ -450,11 +453,6 @@ function TokensSection({
         ) : (
           <Missing reason="The token was not used yet" />
         ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      cell: (t) => <StatusBadge kind="key" status={t.status === "active" ? "active" : "revoked"} />,
     },
     {
       key: "action",

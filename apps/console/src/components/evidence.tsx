@@ -136,7 +136,7 @@ const MARK_ICON: Record<Mark, ReactNode> = {
 
 // what to do about a stellar.toml check that did not pass, in one sentence
 const TOML_ADVICE: Record<Exclude<StellarToml["status"], "found">, string> = {
-  not_found: "Serve the file at the address below with status 200.",
+  not_found: "Serve the file at this address with status 200.",
   invalid: "Fix the TOML syntax of the file. A TOML validator shows the line.",
   too_large: "Make the file smaller than 100 KB.",
   refused: "Serve the file from the domain itself on a public address, without a redirect.",
