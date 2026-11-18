@@ -31,13 +31,17 @@ import { countOf, formatCount, formatPercent } from "@/lib/format";
 import { type DayRange, lastDays } from "@/lib/global";
 import {
   apiRangeOfDays,
-  nextSetupStep,
   type OverviewPreset,
   overviewDays,
   readOverviewPreset,
-  type SetupStep,
-  siteFirstEvent,
 } from "@/lib/overview";
+import {
+  combineFirstEvent,
+  firstEvent,
+  nextSetupStep,
+  type SetupNext,
+  siteSetupPath,
+} from "@/lib/site-setup";
 import {
   dayCount,
   formatMetric,
@@ -134,7 +138,7 @@ function OverviewSkeleton() {
 
 // ---- the next setup step: one line, one action
 
-const STEP_TEXT: Record<SetupStep["step"], { text: string; action: string }> = {
+const STEP_TEXT: Record<SetupNext["step"], { text: string; action: string }> = {
   install: {
     text: "has no page view yet. Add the tracker to its pages.",
     action: "Continue setup",
@@ -147,11 +151,14 @@ function NextStep({ sites, tenantId }: { sites: Site[]; tenantId: string }) {
   const range = lastDays(30, new Date());
   const active = sites.filter((s) => s.status === "active" && !s.in_review);
   const ingest = useQueries({ queries: active.map((s) => ingestMonthQuery(s.id)) });
-  const fromEdge = active.map((_, i) => siteFirstEvent(ingest[i]?.data, undefined));
+  const fromEdge = active.map((_, i) => {
+    const d = ingest[i]?.data;
+    return d ? firstEvent(d) : null;
+  });
   // the edge counts lag by minutes, the web totals by an hour: either one
-  // with a counted event completes the step. the web totals of a site are
-  // asked only when the edge has none.
-  const unsure = active.filter((_, i) => fromEdge[i] !== undefined && fromEdge[i] !== "received");
+  // with a counted event completes the step (lib/site-setup.ts). the web
+  // totals of a site are asked only when the edge has none.
+  const unsure = active.filter((_, i) => fromEdge[i] !== null && fromEdge[i] !== "received");
   const web = useQueries({
     queries: unsure.map((s) => ({
       ...webSummaryQuery(tenantId, { ...range, site: s.id, band: "primary" as const }),
@@ -161,10 +168,11 @@ function NextStep({ sites, tenantId }: { sites: Site[]; tenantId: string }) {
   const step = nextSetupStep(active, (s) => {
     const i = active.indexOf(s);
     const j = unsure.indexOf(s);
-    if (j < 0) return fromEdge[i];
+    if (j < 0) return fromEdge[i] ?? null;
     const w = web[j];
-    if (w?.isPending) return undefined;
-    return siteFirstEvent(ingest[i]?.data, w?.data?.current.totals.pageviews);
+    if (w?.isPending) return null;
+    const views = w?.data?.current.totals.pageviews;
+    return combineFirstEvent(fromEdge[i] ?? null, views === undefined ? null : views > 0);
   });
   if (!step) return null;
   const t = STEP_TEXT[step.step];
@@ -180,7 +188,7 @@ function NextStep({ sites, tenantId }: { sites: Site[]; tenantId: string }) {
         <span className="text-caption">Step {step.done + 1} of 3.</span>
       </p>
       <Link
-        to={`/projects/${step.site.tenant_id}/sites/${step.site.id}`}
+        to={siteSetupPath(step.site)}
         className="group inline-flex items-center gap-1 rounded-sm text-body font-medium text-fg hover:underline focus-ring max-lg:min-h-(--vs-control-touch)"
       >
         {t.action}

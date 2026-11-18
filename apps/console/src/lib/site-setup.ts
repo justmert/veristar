@@ -160,6 +160,32 @@ export function setupRank(status: SetupStatus): number {
   return RANK[status];
 }
 
+export type SetupNext = {
+  site: Site;
+  step: "install" | "refused" | "verify";
+  // of the three steps: site added, first event, domain verified
+  done: number;
+};
+
+// the one setup step to do next, of the first active site that is not set
+// up, for the overview. a site in review waits for an operator, not for its
+// project. null when every site is set up, or while an answer is missing.
+export function nextSetupStep(
+  sites: Site[],
+  eventOf: (s: Site) => FirstEvent | null,
+): SetupNext | null {
+  for (const site of sites) {
+    if (site.status !== "active" || site.in_review) continue;
+    const event = eventOf(site);
+    const status = setupStatus(site, event);
+    if (status === "checking") return null;
+    if (status === "done") continue;
+    const step = status === "waiting" ? "install" : status === "refused" ? "refused" : "verify";
+    return { site, step, done: setupDone(site, event) };
+  }
+  return null;
+}
+
 // a site's own pages: its setup and its settings
 export const siteSetupPath = (s: Pick<Site, "id" | "tenant_id">) =>
   `/projects/${s.tenant_id}/sites/${s.id}`;
