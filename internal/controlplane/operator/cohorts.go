@@ -456,6 +456,11 @@ func (h *TenantCohort) propose(w http.ResponseWriter, r *http.Request) error {
 	c := r.Context()
 	var out CohortRecord
 	err = h.scope.InTenant(c, a, func(tx pgx.Tx) error {
+		// the row lock an operator's cohort change takes too, so the audit's
+		// old proposal is the one this write replaces
+		if _, err := tx.Exec(c, `select 1 from cp.tenant_cohorts where tenant_id = $1 for update`, a.TenantID); err != nil {
+			return err
+		}
 		before, err := readCohort(c, tx, a.TenantID)
 		if err != nil {
 			return err

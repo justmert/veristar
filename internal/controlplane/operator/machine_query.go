@@ -369,7 +369,7 @@ func (k keyset) validAfter(p machinePage) error {
 		return httpx.BadCursor()
 	}
 	for i, v := range p.After {
-		ok := true
+		var ok bool
 		switch k.casts[i] {
 		case "uuid":
 			ok = canonicalUUID.MatchString(v)
