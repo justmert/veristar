@@ -8,7 +8,7 @@ import { CopyButton } from "@/components/copy-button";
 import { FormMessage } from "@/components/error-panel";
 import { PublicFrame } from "@/components/public-frame";
 import { Button } from "@/components/ui/button";
-import { errorDetails, errorMessage } from "@/lib/errors";
+import { errorDetails } from "@/lib/errors";
 import { queryClient } from "@/query-client";
 
 // a whole page that stands in for the one asked for (not found, removed,
@@ -60,10 +60,18 @@ export function ProjectsButton() {
   );
 }
 
-export function NotFoundPage() {
+export function NotFoundPage({ project = false }: { project?: boolean }) {
   return (
-    <StopPage icon={<SearchX aria-hidden />} title="Page not found" actions={<ProjectsButton />}>
-      <p>This address does not exist in the console, or the project behind it is not yours.</p>
+    <StopPage
+      icon={<SearchX aria-hidden />}
+      title={project ? "Project not found" : "Page not found"}
+      actions={<ProjectsButton />}
+    >
+      <p>
+        {project
+          ? "This project does not exist, or you are not a member of it."
+          : "This address does not exist in the console, or the project behind it is not yours."}
+      </p>
     </StopPage>
   );
 }
@@ -111,17 +119,18 @@ export function RouteErrorPage() {
   const error = useRouteError();
   if (isRouteErrorResponse(error) && error.status === 404) {
     return (
-      <PublicFrame footer={false}>
+      <PublicFrame>
         <NotFoundPage />
       </PublicFrame>
     );
   }
+  // one way on: reload. the details go to the operators when it stays
   return (
-    <PublicFrame footer={false}>
+    <PublicFrame>
       <StopPage
         icon={<TriangleAlert aria-hidden />}
         tone="critical"
-        title="The console hit an error"
+        title="The console did not load"
         actions={
           <>
             <Button
@@ -130,9 +139,6 @@ export function RouteErrorPage() {
             >
               <RotateCcw aria-hidden />
               Reload
-            </Button>
-            <Button asChild variant="outline" className="max-sm:h-(--vs-control-touch)">
-              <Link to="/">Go to your projects</Link>
             </Button>
             <CopyButton
               text={errorDetails(error)}
@@ -143,8 +149,9 @@ export function RouteErrorPage() {
           </>
         }
       >
-        <p role="alert">{errorMessage(error)}</p>
-        <p>Reload the page. If the error stays, send the copied details to the operators.</p>
+        <p role="alert">
+          Reload the page. If the error stays, send the copied details to the operators.
+        </p>
       </StopPage>
     </PublicFrame>
   );

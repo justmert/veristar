@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import { api } from "@/api/endpoints";
 import { stepUpQuery } from "@/api/operators";
-import { meQuery, operatorAlertsQuery } from "@/api/queries";
+import { meQuery, operatorAlertsQuery, tenantQuery } from "@/api/queries";
 import { CommandPalette, isPaletteKey } from "@/components/command-palette";
 import { FormMessage } from "@/components/error-panel";
 import { PageMotion } from "@/components/motion";
@@ -16,6 +16,7 @@ import { Toaster, toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { criticalCount } from "@/lib/alerts";
+import { isNotFound } from "@/lib/errors";
 import { queryClient } from "@/query-client";
 
 // the signed-in frame: the sidebar on a wide screen, a top bar with the
@@ -28,6 +29,11 @@ export function AppShell() {
   const { pathname } = useLocation();
   const [drawer, setDrawer] = useState(false);
   const [palette, setPalette] = useState(false);
+  // a project that answers 404 names that in the top bar, not a page of it
+  const area = areaOf(pathname);
+  const asked = area.kind === "project" ? area.id : null;
+  const tenant = useQuery({ ...tenantQuery(asked ?? ""), enabled: asked !== null });
+  const gone = asked !== null && isNotFound(tenant.error);
   const signOut = useMutation({
     mutationFn: api.logout,
     onSuccess: () => {
@@ -57,6 +63,11 @@ export function AppShell() {
   }, []);
 
   if (!me.data) return null;
+  const title = gone
+    ? me.data.removed_tenants.some((r) => r.id === asked)
+      ? "Project removed"
+      : "Project not found"
+    : pageTitle(pathname);
   const operatorArea = me.data.user.is_operator && areaOf(pathname).kind === "operator";
   const side = (
     <Sidebar me={me.data} onSignOut={() => signOut.mutate()} onNavigate={() => setDrawer(false)} />
@@ -89,7 +100,7 @@ export function AppShell() {
             <Mark className="size-5" />
           </Link>
           <span className="min-w-0 flex-1 truncate text-title text-fg" data-testid="page-title">
-            {pageTitle(pathname)}
+            {title}
           </span>
           <Button
             variant="ghost"

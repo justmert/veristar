@@ -37,7 +37,7 @@ export function ProjectLayout() {
     return removed ? (
       <RemovedNotice name={removed.name} reason={removed.status_reason} />
     ) : (
-      <NotFoundPage />
+      <NotFoundPage project />
     );
   }
   if (tenant.error)
