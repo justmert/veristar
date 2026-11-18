@@ -98,7 +98,7 @@ one goes to `API_DLQ` alone, before anything of the batch is written.
 
 | Table | Key | Columns | Written by | Removed by |
 |---|---|---|---|---|
-| `api.series_state` | `(tenant_id, series_hash, start_unix_nano)` | `last_unix_nano`, `last_count`, `last_sum`, `last_counts bigint[15]` (canonical), `last_seen_at`, `baseline` (the last point is the baseline of a stream first met past the threshold) | writer | retention, `last_seen_at` older than 7 days |
+| `api.series_state` | `(tenant_id, series_hash, start_unix_nano)` | `last_unix_nano`, `last_count`, `last_sum`, `last_counts bigint[15]` (canonical), `last_seen_at`, `baseline` (the last point is the baseline of a stream first met past the threshold) | writer | retention, `last_seen_at` older than 7 days, and the longest idle streams of a tenant above 500,000 rows (see "Writer state bounds") |
 | `api.resource_seen` | `(tenant_id, resource_hash, start_unix_nano)` | `first_seen_at`, `last_seen_at` | writer | retention, `last_seen_at` older than 7 days |
 | `api.ingest_dedup` | `msg_id` (the `Nats-Msg-Id`, 1 to 256 bytes) | `tenant_id` (from the subject), `applied_at` | writer | retention, `applied_at` older than 8 days |
 | `api.route_registry` | `(tenant_id, day, service, route)` | `created_at` | writer | retention, days before a cutoff |
@@ -185,6 +185,10 @@ without its state).
   23514 ("no partition of relation ... found for row"); the writer must
   treat that as a permanent error for the point (time far outside the
   window), not retry it forever.
+- Dropping a partition takes an access exclusive lock on the parent for a
+  moment, so the retention job runs it in its own short transaction.
+- 24-month minimum for hourly data: enforced by the retention job's
+  configuration (`API_HOURLY_RETENTION_MONTHS`), not by the drop function.
 
 ## Poison messages
 
@@ -210,10 +214,6 @@ queue:
    database fault that fails everything is never mistaken for poison.
    `TestMetricsWriterPoisonMessages` (build tag `metricswriterit`) covers
    all three.
-- Dropping a partition takes an access exclusive lock on the parent for a
-  moment, so the retention job runs it in its own short transaction.
-- 24-month minimum for hourly data: enforced by the retention job's
-  configuration (`API_HOURLY_RETENTION_MONTHS`), not by the drop function.
 
 ## Rights
 
@@ -247,7 +247,7 @@ also serves to call `api.purge_tenant` (migration 00017). Functions:
 | `RecordIngestMessage` | execrows | dedup by `Nats-Msg-Id`; 0 rows = already applied, skip the message |
 | `GetSeriesStates` | many | known streams of a tenant's series hashes, all start times |
 | `UpsertSeriesState` | batchexec | store the last cumulative point |
-| `CountSeriesStates` | one | streams of a tenant, for the stream cap (only when a batch has a new stream) |
+| `CountActiveSeriesStates` | one | streams of a tenant with a point in the last hour, for the stream cap (only when a batch has a new stream) |
 | `LockRollupHour` | exec | shared hour lock before the first minute row of the hour |
 | `GetResourcesSeen` | many | resources seen before, for the first-point rule |
 | `TouchResource` | batchexec | record a resource (keeps `first_seen_at`) |
@@ -265,6 +265,8 @@ also serves to call `api.purge_tenant` (migration 00017). Functions:
 | `ClaimRollupHours` | many | delete and return up to N pending hours, oldest first (`skip locked`) |
 | `TryLockRollupHour` | one | exclusive hour lock without waiting; false while a writer has the hour open |
 | `RestoreRollupMark` | exec | put back the mark of an hour that was not recomputed |
+| `ParkRollupHour` | exec | put back the mark of an hour the database refused to recompute, with `parked_at` and the error |
+| `CountParkedRollupHours` | one | hours parked now, for the `jobs_api_rollup_parked_hours` gauge |
 | `MarkDriftedHours` | many | consistency check: mark hours whose hourly rows disagree with their minutes on the count of any traffic class |
 | `TrafficClassRulesFrom` | one | when the first traffic class rule set took effect; how far back a process's first consistency check reaches |
 | `DeleteHourlyRows` + `RollupHour` | execrows | recompute one tenant's hour from minutes |
@@ -273,6 +275,7 @@ also serves to call `api.purge_tenant` (migration 00017). Functions:
 | `DropMinutePartition`, `DropHourlyPartition` | one | drop expired; false when absent |
 | `ListMinutePartitions`, `ListHourlyPartitions` | many | existing days and months |
 | `PruneIngestDedup`, `PruneSeriesState`, `PruneResourceSeen` | execrows | rows older or idle before a cutoff |
+| `EvictIdleSeriesStates` | one | evict the longest idle streams of each tenant above the stored cap (`api.evict_idle_series_states`, migration 00029) |
 | `PruneRouteRegistry` | execrows | cap state of days before a given day |
 
 The rollup sums floats in time order (`sum(sum order by bucket_start)`), so
@@ -286,7 +289,7 @@ insert a row with the same key.
 |---|---|---|---|
 | `api-rollup` | 5 min | `internal/jobs/apirollup` | claims up to 500 pending hours per transaction until none is left; recomputes each hour whose lock it gets, then each day containing one, then runs the consistency check. A pending hour whose minute partition is gone keeps its hourly rows: the mark is dropped, logged as an error and counted in `jobs_api_rollup_orphaned_marks_total`, and the other hours carry on. Each hour and each day is recomputed in its own savepoint: one the database refuses with a data error (a request count sum past the 64-bit range) is parked, its mark kept in `api.rollup_pending` with `parked_at` and `parked_error` (migration 00046), counted in `jobs_api_rollup_parked_hours_total`, and left out of later runs until an operator clears it, while every other hour commits. Days are 24 hours, never a calendar day of the session time zone |
 | `api-partition` | 1 h | `internal/jobs/apipartition` | creates minute partitions for today and 7 days ahead, hourly partitions for this month and 3 ahead |
-| `api-retention` | 1 h | `internal/jobs/apiretention` | drops minute partitions of days before today minus `API_MINUTE_RETENTION_DAYS` and hourly partitions of months before this month minus `API_HOURLY_RETENTION_MONTHS` (each drop its own transaction); an expired day with hours still in `rollup_pending` waits for the rollup (`RollupPendingInDay`, `db/queries/jobs/apiretention.sql`). Prunes `ingest_dedup` after 8 days, `series_state` and `resource_seen` after 7 idle days, `route_registry` days older than 8 days (a backlog can deliver points up to 7 days old) |
+| `api-retention` | 1 h | `internal/jobs/apiretention` | drops minute partitions of days before today minus `API_MINUTE_RETENTION_DAYS` and hourly partitions of months before this month minus `API_HOURLY_RETENTION_MONTHS` (each drop its own transaction); an expired day with hours still in `rollup_pending` waits for the rollup (`RollupPendingInDay`, `db/queries/jobs/apiretention.sql`). Prunes `ingest_dedup` after 8 days, `series_state` and `resource_seen` after 7 idle days, evicts the longest idle `series_state` rows of a tenant above 500,000, prunes `route_registry` days older than 8 days (a backlog can deliver points up to 7 days old) |
 
 Both retention keys are required. `API_HOURLY_RETENTION_MONTHS` below 24 is
 refused at startup by `config.LoadAPIRetention` and by `apiretention.New`;
@@ -315,13 +318,23 @@ policy on `cp.tenants` limited to removed tenants.
 The route and service caps bound the rows a tenant gets per day. They do not
 bound the writer's state: every process restart is a new resource, and every
 distinct route, status or `error.type` of a cumulative SDK is its own stream
-with a `series_state` row. `metricswriter.MaxSeriesPerTenant` (100,000) caps
-the streams per tenant. A new cumulative stream beyond it is
-refused, counted as a rejected point and as `cardinality_overflow`, and
-logged; known streams and delta points carry on. Streams idle for 7 days
-are pruned, which frees room. The caps cannot be applied before the stream
-identity instead: merging two cumulative streams into one would interleave
-two counters and turn every difference into a reset.
+with a `series_state` row. Two limits bound it:
+
+- `metricswriter.MaxSeriesPerTenant` (100,000) caps the active streams of a
+  tenant: those with a stored point within the last hour
+  (`metricswriter.ActiveSeriesWindow`). The streams of a process that ended
+  or restarted stop counting an hour after its last export, so restarts,
+  deploys and autoscaling do not reach the cap. A new cumulative stream
+  beyond it is refused, counted as a rejected point and as
+  `cardinality_overflow`, and logged; known streams and delta points carry on.
+- `metricswriter.MaxStoredSeriesPerTenant` (500,000) caps the stored rows of
+  a tenant, active or idle. Every hour `api-retention` evicts the longest
+  idle streams (idle for more than an hour) above it, and removes every
+  stream idle for 7 days.
+
+The caps cannot be applied before the stream identity instead: merging two
+cumulative streams into one would interleave two counters and turn every
+difference into a reset.
 
 ## First-point rule and long export intervals
 
