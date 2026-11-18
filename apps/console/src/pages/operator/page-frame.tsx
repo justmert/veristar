@@ -24,7 +24,7 @@ export function ReviewSkeleton() {
             </div>
           ))}
         </div>
-        <div className="grid items-start gap-6 max-lg:hidden xl:grid-cols-[minmax(0,1fr)_19rem]">
+        <div className="grid items-start gap-6 max-lg:hidden xl:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="flex flex-col gap-6">
             <div aria-hidden className="flex flex-col gap-2">
               <Bone className="h-6 w-1/3" />

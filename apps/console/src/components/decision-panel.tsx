@@ -169,7 +169,7 @@ export function DecisionPanel({
                 )}
                 {c === "approve" ? "Approve" : "Reject"}
               </span>
-              <span aria-hidden className="max-lg:hidden">
+              <span aria-hidden className="shrink-0 max-lg:hidden">
                 <Kbd>{c === "approve" ? "A" : "R"}</Kbd>
               </span>
             </button>
@@ -226,10 +226,12 @@ export function DecisionPanel({
           }}
         />
         <span id={`${ids}-h`} className="flex justify-between gap-3 text-caption">
-          <span className={fieldError ? "text-critical" : "text-fg-3"}>
+          <span className={cn("min-w-0", fieldError ? "text-critical" : "text-fg-3")}>
             {fieldError ?? "The project's members see this text."}
           </span>
-          <span className="font-mono text-fg-3">{reason.length} / 1000</span>
+          <span className="shrink-0 text-right font-mono whitespace-nowrap text-fg-3">
+            {reason.length} / 1000
+          </span>
         </span>
       </div>
 
