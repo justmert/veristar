@@ -15,7 +15,7 @@ import { connectWallet, signTransaction } from "@/lib/stellar-wallet";
 const SIGN_IN_ERRORS: Record<string, string> = {
   state_mismatch:
     "The sign-in link expired or was opened in another browser. Start again from this page.",
-  access_denied: "GitHub sign-in was cancelled. Nothing was shared.",
+  access_denied: "GitHub sign-in was canceled. Nothing was shared.",
   github_error: "GitHub refused the sign-in request. Try again in a moment.",
   rate_limited: "Too many sign-ins right now. Wait a few seconds and start again.",
   exchange_failed: "GitHub did not confirm the sign-in. Start again from this page.",
