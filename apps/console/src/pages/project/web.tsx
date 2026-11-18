@@ -1,79 +1,58 @@
-// the project's web dashboard (contract 18): the seven web metrics of the
-// rfp for any range of utc days against the previous period, breakdowns,
-// the hours of one day and the visitors right now, for the whole project or
-// one site. totals, days and the referrer, country and environment
-// breakdowns come from the daily aggregates operators read too; pages,
-// events, utm values, hours and the last minutes come from the analytics
-// engine, read as the member.
+// the project's web numbers: the seven web metrics for a range of utc days
+// against the previous period, one chart, the breakdowns, the visitors right
+// now and what the totals leave out, for the whole project or one site.
+// totals, days and the referrer, country and environment breakdowns come
+// from the daily totals operators read too; pages, events, utm values, hours
+// and the last minutes are read live.
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { fade, stagger } from "@veristar/brand/motion";
-import { ChevronDown, Globe } from "lucide-react";
-import { motion } from "motion/react";
-import {
-  type FormEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { Globe } from "lucide-react";
+import { type ReactNode, useCallback, useState, useSyncExternalStore } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
+import { api } from "@/api/endpoints";
 import { sitesQuery } from "@/api/queries";
 import type { Site } from "@/api/schemas";
 import {
-  type WebBreakdown,
   type WebDimension,
   type WebQuery,
   type WebSummary,
   webBreakdownQuery,
-  webHourlyQuery,
   webKeys,
   webRealtimeQuery,
   webSummaryQuery,
 } from "@/api/web";
+import { BreakdownList } from "@/components/charts";
 import { DbIpAttribution } from "@/components/dbip-attribution";
-import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
-import { NativeSelect } from "@/components/form-field";
-import { IntegrityReportView } from "@/components/integrity";
-import { StaggerItem } from "@/components/motion";
+import { type Filter, FilterBar } from "@/components/filter-bar";
 import { Notice } from "@/components/notice";
-import { ProjectOnchainSection } from "@/components/onchain";
-import { PageHeader, Panel } from "@/components/panel";
-import { DateField } from "@/components/range-control";
+import { PageHeader } from "@/components/page-header";
+import { RangeControl } from "@/components/range-control";
 import { Segmented } from "@/components/segmented";
-import { StatTile } from "@/components/stat-tile";
-import { Pill } from "@/components/status";
+import { Sparkline, StatCard } from "@/components/stat-card";
+import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
+import { StatusDot } from "@/components/status";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { type ChartBucket, TimeChart } from "@/components/web-charts";
-import { errorText } from "@/lib/errors";
-import {
-  formatCount,
-  formatDate,
-  formatDateRange,
-  formatDateTimeUtc,
-  formatPercent,
-  formatShareOf,
-  formatTick,
-} from "@/lib/format";
+import { Skeleton as Bone } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
+import { formatCount, formatPercent, formatTimeUtc } from "@/lib/format";
+import { rejectionRows, sumRejected, sumUnclassified } from "@/lib/outcomes";
 import {
   DIMENSION_LABEL,
   formatMetric,
-  higherIsBetter,
+  ingestWindow,
   isSingleDay,
   keyLabel,
-  lastDaysOf,
   metricValue,
-  pointValue,
   readWebState,
+  sparkOf,
+  sumOutcomes,
   UTM_DIMENSIONS,
   validateWebDays,
+  WEB_MAX_DAYS,
   WEB_PRESETS,
   type WebMetric,
-  type WebPreset,
   type WebState,
   webDays,
   webQuery,
@@ -81,29 +60,24 @@ import {
   writeWebState,
 } from "@/lib/web-dashboard";
 import { useProject } from "@/pages/project-layout";
-import { SiteOutcomes } from "./site-outcomes";
+import { SelectFilter } from "./select-filter";
+import { METRIC_LABEL, WebTrendChart } from "./web-chart";
 
-const INTEGRITY_MAX_DAYS = 366;
-
-const METRIC_TILES: { metric: WebMetric; label: string; hint: string }[] = [
-  { metric: "pageviews", label: "Page views", hint: "Pages loaded in a browser" },
+const METRICS: { metric: WebMetric; definition: string }[] = [
+  { metric: "pageviews", definition: "Pages loaded in a browser." },
   {
     metric: "visitors",
-    label: "Unique visitors",
-    hint: "Distinct visitors per UTC day, added up over the range; no visitor is followed from one day to the next",
+    definition: "Distinct visitors per UTC day, added up over the range.",
   },
-  { metric: "visits", label: "Visits", hint: "A visit ends after 30 minutes without activity" },
-  {
-    metric: "bounce_rate",
-    label: "Bounce rate",
-    hint: "Visits with one page view and no custom event",
-  },
+  { metric: "visits", definition: "A visit ends after 30 minutes without activity." },
+  { metric: "bounce_rate", definition: "Visits with one page view and no custom event." },
   {
     metric: "avg_visit_duration",
-    label: "Visit duration",
-    hint: "Average time from the first to the last page view of a visit",
+    definition: "Average time from the first to the last page view of a visit.",
   },
 ];
+
+const CADENCE = "Totals refresh every hour. Pages, events and hours are read live.";
 
 export function WebPage() {
   const { tenant } = useProject();
@@ -115,83 +89,40 @@ export function WebPage() {
   const provisioning = useProvisioningPending(tenant.id);
   const now = new Date();
 
-  if (sites.isPending) return <Loading label="Loading sites" />;
-  if (sites.error) return <ErrorPanel error={sites.error} onRetry={() => sites.refetch()} />;
-  const listed = sites.data.filter((s) => s.status !== "removed");
+  const listed = sites.data?.filter((s) => s.status !== "removed") ?? [];
   const selected = state.site ? listed.find((s) => s.id === state.site) : undefined;
   // a site in the address that is deleted or not one of this project's: the
-  // select shows all sites, so the figures are those of all sites too
-  const unknownSite = state.site !== null && !selected;
+  // numbers are those of all sites, and a notice says so
+  const unknownSite = sites.data !== undefined && state.site !== null && !selected;
   const q = webQuery(unknownSite ? { ...state, site: null } : state, now);
-  // the integrity report covers at most 366 days (17.2)
-  const graded = lastDaysOf(q, INTEGRITY_MAX_DAYS);
-  const scopeSites = selected ? [selected] : listed;
-  const utm = scopeSites.some((s) => s.collect_utm);
+  const summary = useQuery({
+    ...webSummaryQuery(tenant.id, q),
+    enabled: listed.length > 0,
+  });
 
-  return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        title="Web analytics"
-        description="Page views, visitors, visits, bounce rate, visit duration, sources, countries and devices of your sites. Days are UTC."
-        actions={
-          listed.length > 0 ? (
-            <>
-              <label className="sr-only" htmlFor="web-site">
-                Site
-              </label>
-              <NativeSelect
-                id="web-site"
-                size="sm"
-                value={state.site ?? ""}
-                onChange={(e) => set({ site: e.target.value || null })}
-              >
-                <option value="">All sites</option>
-                {listed.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.domain})
-                  </option>
-                ))}
-              </NativeSelect>
-              <Segmented
-                label="Traffic"
-                value={state.band}
-                options={[
-                  { value: "primary", label: "Counted" },
-                  { value: "quarantine", label: "Quarantined" },
-                ]}
-                onChange={(band) => set({ band })}
-              />
-            </>
-          ) : null
-        }
-      />
+  const header = (
+    <PageHeader
+      title="Web"
+      freshness={summary.data?.read_at ? { at: summary.data.read_at, cadence: CADENCE } : null}
+    />
+  );
 
-      {provisioning ? (
-        <Notice tone="info" title="Your access is being set up">
-          Your access to the live figures of this project (pages, events, hours and visitors right
-          now) is being created. They load on their own once it is ready; the daily totals show
-          already.
-        </Notice>
-      ) : null}
-
-      {unknownSite && listed.length > 0 ? (
-        <Notice
-          tone="warning"
-          title="That site is not part of this project"
-          actions={
-            <Button variant="outline" size="sm" onClick={() => set({ site: null })}>
-              Clear the site
-            </Button>
-          }
-        >
-          The address names a site that was deleted or belongs to another project. The figures below
-          cover all sites of this project.
-        </Notice>
-      ) : null}
-
-      {listed.length === 0 ? (
-        <StateBlock
-          kind="empty"
+  if (sites.isPending)
+    return (
+      <Page header={header}>
+        <WebSkeleton />
+      </Page>
+    );
+  if (sites.error)
+    return (
+      <Page header={header}>
+        <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
+      </Page>
+    );
+  if (listed.length === 0)
+    return (
+      <Page header={header}>
+        <EmptyState
           icon={<Globe aria-hidden strokeWidth={1.75} />}
           title="No sites yet"
           action={
@@ -200,36 +131,146 @@ export function WebPage() {
             </Button>
           }
         >
-          The dashboard fills once a site sends its first page view.
-        </StateBlock>
-      ) : (
-        <>
-          <RangeBar state={state} set={set} now={now} />
-          {state.band === "primary" ? <Realtime tenantId={tenant.id} site={q.site} /> : null}
-          <Dashboard tenantId={tenant.id} state={state} set={set} q={q} sites={listed} utm={utm} />
-          {selected ? <SiteOutcomes site={selected} /> : null}
-          <IntegrityReportView
-            scope="tenant"
-            tenantId={tenant.id}
-            range={graded}
-            siteNames={Object.fromEntries(sites.data.map((s) => [s.id, s.name]))}
-            intro={
-              graded.from === q.from
-                ? "The integrity grade of your web traffic over this range, with the reasons behind it. SCF operators see the same report."
-                : `The integrity grade of your web traffic over the last ${INTEGRITY_MAX_DAYS} days of this range (${formatDateRange(graded.from, graded.to)}), with the reasons behind it. SCF operators see the same report.`
-            }
+          The numbers show here after a site sends its first page view.
+        </EmptyState>
+      </Page>
+    );
+
+  const scope = selected ? [selected] : listed;
+  const utm = scope.some((s) => s.collect_utm);
+  const days = webDays(state, now);
+  const siteFilter: Filter = {
+    key: "site",
+    label: "Site",
+    control: (
+      <SelectFilter
+        label="Site"
+        value={selected?.id ?? ""}
+        onChange={(v) => set({ site: v || null })}
+      >
+        <option value="">All sites</option>
+        {listed.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name} ({s.domain})
+          </option>
+        ))}
+      </SelectFilter>
+    ),
+    active: selected ? { label: selected.name, onClear: () => set({ site: null }) } : null,
+  };
+
+  return (
+    <Page header={header}>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <RangeControl
+            value={state.preset}
+            presets={WEB_PRESETS}
+            onPreset={(preset) => set({ preset })}
+            custom={state.preset === "custom" ? state.custom : null}
+            onCustom={(custom) => set({ preset: "custom", custom })}
+            range={days}
+            maxDays={WEB_MAX_DAYS}
+            validate={(r) => validateWebDays(r, new Date())}
           />
-          <ProjectOnchainSection tenantId={tenant.id} range={{ from: q.from, to: q.to }} />
-          <DbIpAttribution />
-        </>
+          {listed.length > 1 ? (
+            <FilterBar filters={[siteFilter]} onClearAll={() => set({ site: null })} />
+          ) : null}
+        </div>
+
+        {provisioning ? (
+          <Notice tone="info" title="Live figures are being set up">
+            Pages, events, hours and visitors right now show when your access is ready. The daily
+            totals show now.
+          </Notice>
+        ) : null}
+        {unknownSite ? (
+          <Notice
+            tone="warning"
+            title="That site is not part of this project"
+            actions={
+              <Button variant="outline" size="sm" onClick={() => set({ site: null })}>
+                Show all sites
+              </Button>
+            }
+          >
+            The address names a deleted site or a site of another project. The numbers show all
+            sites.
+          </Notice>
+        ) : null}
+        {state.band === "quarantine" ? (
+          <Notice
+            tone="info"
+            title="You see quarantined traffic"
+            actions={
+              <Button variant="outline" size="sm" onClick={() => set({ band: "primary" })}>
+                Show counted traffic
+              </Button>
+            }
+          >
+            The totals leave this traffic out. It is likely automated.
+          </Notice>
+        ) : null}
+      </div>
+
+      {state.band === "primary" ? <Realtime tenantId={tenant.id} site={q.site} /> : null}
+
+      {summary.isPending ? (
+        <WebSkeleton />
+      ) : summary.error ? (
+        <ErrorState error={summary.error} onRetry={() => summary.refetch()} />
+      ) : (
+        <Dashboard
+          tenantId={tenant.id}
+          state={state}
+          set={set}
+          q={q}
+          summary={summary.data}
+          stale={summary.isPlaceholderData}
+          sites={listed}
+          utm={utm}
+        />
       )}
+
+      <NotCounted
+        sites={scope}
+        q={q}
+        summary={summary.data ?? null}
+        band={state.band}
+        onBand={(band) => set({ band })}
+      />
+
+      <DbIpAttribution />
+    </Page>
+  );
+}
+
+function Page({ header, children }: { header: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-8">
+      {header}
+      {children}
     </div>
   );
 }
 
-// whether a web read of the project is waiting for its analytics access
-// (409 provisioning_pending, 18.9). the query client keeps asking; this only
-// tells people why a panel is still loading.
+// the layout of the dashboard while it loads, so nothing moves when it lands
+function WebSkeleton() {
+  return (
+    <LoadingState label="Loading the web numbers">
+      <Skeleton.StatRow count={5} />
+      <Skeleton.Chart />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Skeleton.Table rows={5} columns={2} />
+        <Skeleton.Table rows={5} columns={2} />
+      </div>
+    </LoadingState>
+  );
+}
+
+// whether a live read of the project waits for its analytics access (409
+// provisioning_pending). the query client keeps asking; this only says why
+// a section still loads.
 function useProvisioningPending(tenantId: string): boolean {
   const cache = useQueryClient().getQueryCache();
   const read = useCallback(
@@ -244,107 +285,26 @@ function useProvisioningPending(tenantId: string): boolean {
   return useSyncExternalStore(subscribe, read, read);
 }
 
-// ---- range
-
-function RangeBar({
-  state,
-  set,
-  now,
-}: {
-  state: WebState;
-  set: (s: Partial<WebState>) => void;
-  now: Date;
-}) {
-  const days = webDays(state, now);
-  const [custom, setCustom] = useState(state.preset === "custom");
-  const [draft, setDraft] = useState(days);
-  const [errors, setErrors] = useState<{ from?: string; to?: string }>({});
-  useEffect(() => {
-    if (state.preset === "custom") setCustom(true);
-  }, [state.preset]);
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    const v = validateWebDays(draft, new Date());
-    setErrors(v);
-    if (v.from || v.to) return;
-    set({ preset: "custom", custom: draft });
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <Segmented<WebPreset>
-          label="Range"
-          value={custom ? "custom" : state.preset}
-          options={WEB_PRESETS}
-          onChange={(v) => {
-            if (v === "custom") {
-              setDraft(days);
-              setCustom(true);
-              return;
-            }
-            setCustom(false);
-            set({ preset: v });
-          }}
-        />
-        <span className="text-caption text-fg-3" aria-live="polite">
-          {formatDateRange(days.from, days.to)}
-        </span>
-      </div>
-      {custom ? (
-        <form
-          aria-label="Custom range"
-          onSubmit={submit}
-          noValidate
-          className="flex animate-reveal-in flex-wrap items-end gap-3"
-        >
-          <div className="w-40">
-            <DateField
-              label="From (UTC day)"
-              value={draft.from}
-              error={errors.from}
-              onChange={(v) => setDraft({ ...draft, from: v })}
-            />
-          </div>
-          <div className="w-40">
-            <DateField
-              label="To (UTC day)"
-              value={draft.to}
-              error={errors.to}
-              onChange={(v) => setDraft({ ...draft, to: v })}
-            />
-          </div>
-          <Button type="submit" variant="outline">
-            Apply range
-          </Button>
-        </form>
-      ) : null}
-    </div>
-  );
-}
-
-// ---- right now
+// ---- right now: the last 5 minutes, asked for every 30 seconds
 
 function Realtime({ tenantId, site }: { tenantId: string; site: string | null }) {
   const rt = useQuery(webRealtimeQuery(tenantId, site));
-  const max = Math.max(1, ...(rt.data?.minutes.map((m) => m.pageviews) ?? [0]));
+  const minutes = rt.data?.minutes ?? [];
+  const max = Math.max(1, ...minutes.map((m) => m.pageviews));
   return (
     <section
       aria-label="Right now"
-      className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-lg border border-line bg-raised px-4 py-3 sm:px-5"
+      className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-lg border border-line bg-raised px-4 py-3 sm:px-5"
     >
-      <div className="flex items-center gap-3">
-        <Pill tone={rt.data && rt.data.visitors > 0 ? "success" : "info"} live={!!rt.data}>
-          Right now
-        </Pill>
+      <div className="flex min-h-8 items-center gap-3">
+        <StatusDot tone={rt.data && rt.data.visitors > 0 ? "success" : "info"} live={!!rt.data} />
         {rt.isPending ? (
-          <Skeleton className="h-6 w-28" />
+          <Bone className="h-6 w-48" />
         ) : rt.error ? (
-          <span className="text-small text-fg-2">{errorText(rt.error)}</span>
+          <span className="text-small text-fg-2">Visitors right now did not load.</span>
         ) : (
-          <span className="text-body text-fg">
-            <span className="text-title tabular-nums" data-testid="web-active">
+          <span className="text-body text-fg-2">
+            <span className="font-mono text-title text-fg tabular" data-testid="web-active">
               {formatCount(rt.data.visitors)}
             </span>{" "}
             {rt.data.visitors === 1 ? "visitor" : "visitors"} in the last 5 minutes
@@ -355,12 +315,10 @@ function Realtime({ tenantId, site }: { tenantId: string; site: string | null })
         <figure className="flex min-w-48 flex-1 flex-col gap-1">
           <div
             role="img"
-            aria-label={`Page views per minute over the last 30 minutes: ${rt.data.minutes
-              .map((m) => m.pageviews)
-              .join(", ")}`}
+            aria-label={`Page views per minute, last 30 minutes: ${minutes.map((m) => m.pageviews).join(", ")}`}
             className="flex h-8 items-end gap-px"
           >
-            {rt.data.minutes.map((m) => (
+            {minutes.map((m) => (
               <span
                 key={m.at}
                 className={cn("flex-1 rounded-t-bar", m.pageviews > 0 ? "bg-series-1" : "bg-line")}
@@ -369,10 +327,15 @@ function Realtime({ tenantId, site }: { tenantId: string; site: string | null })
               />
             ))}
           </div>
-          <figcaption className="text-caption text-fg-3">
+          <figcaption className="text-caption text-fg-2">
             Page views per minute, last 30 minutes
           </figcaption>
         </figure>
+      ) : null}
+      {rt.data ? (
+        <time dateTime={rt.data.at} className="text-caption text-fg-2">
+          Checked {formatTimeUtc(rt.data.at, { seconds: true })}, every 30 s
+        </time>
       ) : null}
     </section>
   );
@@ -385,6 +348,8 @@ function Dashboard({
   state,
   set,
   q,
+  summary,
+  stale,
   sites,
   utm,
 }: {
@@ -392,186 +357,86 @@ function Dashboard({
   state: WebState;
   set: (s: Partial<WebState>) => void;
   q: WebQuery;
+  summary: WebSummary;
+  stale: boolean;
   sites: Site[];
   utm: boolean;
 }) {
-  const summary = useQuery(webSummaryQuery(tenantId, q));
   const single = isSingleDay(q);
-  if (summary.isPending) return <Loading label="Loading web analytics" />;
-  if (summary.error) return <ErrorPanel error={summary.error} onRetry={() => summary.refetch()} />;
-  const s = summary.data;
-  const cur = s.current.totals;
-  const prev = s.previous.totals;
-  const hasData = cur.pageviews > 0;
+  const cur = summary.current;
+  const prev = summary.previous;
   // a single day is drawn per hour, which only page views and visitors have
-  const metric: WebMetric =
-    single && state.metric !== "pageviews" && state.metric !== "visitors"
-      ? "pageviews"
-      : state.metric;
-
-  // keepPreviousData shows the last range's figures while the next loads;
-  // they are dimmed and marked busy so they do not read as the new range
-  const stale = summary.isPlaceholderData;
+  const chartable = (m: WebMetric) => !single || m === "pageviews" || m === "visitors";
+  const metric: WebMetric = chartable(state.metric) ? state.metric : "pageviews";
 
   return (
     <div
+      // the last range's numbers stay while the next loads, dimmed and busy
       className={cn(
-        "flex flex-col gap-5 transition-opacity duration-(--vs-duration-press)",
+        "flex flex-col gap-8 transition-opacity duration-(--vs-duration-change) ease-standard",
         stale && "opacity-60",
       )}
       aria-busy={stale || undefined}
       data-testid="web-dashboard"
     >
-      <FreshnessNote summary={s} band={state.band} onBand={(band) => set({ band })} />
-      <motion.section
-        aria-label="Totals"
-        variants={stagger}
-        initial="hidden"
-        animate="show"
-        className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5"
-      >
-        {METRIC_TILES.map((t) => {
-          const v = metricValue(cur, t.metric);
-          const chartable = !single || t.metric === "pageviews" || t.metric === "visitors";
+      <section aria-label="Totals" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        {METRICS.map((t) => {
+          const v = metricValue(cur.totals, t.metric);
+          const spark = sparkOf(cur.series, t.metric);
           return (
-            <StaggerItem key={t.metric} className="flex">
-              <StatTile
-                className="w-full"
-                label={t.label}
-                hint={t.hint}
-                value={formatMetric(t.metric, v)}
-                numeric={v ?? undefined}
-                format={(n) => formatMetric(t.metric, n)}
-                state={v === null || !hasData ? "empty" : "data"}
-                emptyText="No page views in this range"
-                trend={webTrend(t.metric, v, metricValue(prev, t.metric), s.current.range.days)}
-                pressed={chartable ? metric === t.metric : undefined}
-                onPress={chartable ? () => set({ metric: t.metric }) : undefined}
-              />
-            </StaggerItem>
+            <StatCard
+              key={t.metric}
+              data-metric={t.metric}
+              className={t.metric === "pageviews" ? "max-md:col-span-2" : undefined}
+              label={METRIC_LABEL[t.metric]}
+              definition={t.definition}
+              value={v}
+              format={(n) => formatMetric(t.metric, n)}
+              missingReason="No visits in this range"
+              change={webTrend(t.metric, v, metricValue(prev.totals, t.metric), cur.range.days)}
+              spark={
+                spark ? (
+                  <Sparkline values={spark} previous={prev.series.map((p) => p[t.metric] ?? 0)} />
+                ) : null
+              }
+              selected={chartable(t.metric) ? metric === t.metric : undefined}
+              onSelect={chartable(t.metric) ? () => set({ metric: t.metric }) : undefined}
+            />
           );
         })}
-      </motion.section>
+      </section>
 
-      {single ? (
-        <HourChart tenantId={tenantId} q={q} metric={metric} />
-      ) : (
-        <DayChart summary={s} metric={metric} />
-      )}
+      <WebTrendChart tenantId={tenantId} q={q} summary={summary} metric={metric} />
 
-      <Breakdowns tenantId={tenantId} q={q} visitors={cur.visitors} sites={sites} utm={utm} />
+      <Breakdowns
+        tenantId={tenantId}
+        q={q}
+        visitors={cur.totals.visitors}
+        sites={sites}
+        utm={utm}
+      />
     </div>
-  );
-}
-
-function FreshnessNote({
-  summary,
-  band,
-  onBand,
-}: {
-  summary: WebSummary;
-  band: "primary" | "quarantine";
-  onBand: (b: "primary" | "quarantine") => void;
-}) {
-  const share = summary.quarantine_share;
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-caption text-fg-3">
-      <span>
-        {summary.read_at
-          ? `Totals updated ${formatDateTimeUtc(summary.read_at)}; they are read every hour.`
-          : "No totals for this range yet; they are read every hour."}
-      </span>
-      {share !== null && share > 0 ? (
-        <button
-          type="button"
-          className="rounded-sm text-fg-2 underline-offset-2 hover:text-fg hover:underline focus-ring"
-          onClick={() => onBand(band === "primary" ? "quarantine" : "primary")}
-        >
-          {formatPercent(share)} of page views were quarantined as likely automated.{" "}
-          {band === "primary" ? "Show them" : "Show counted traffic"}
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function DayChart({ summary, metric }: { summary: WebSummary; metric: WebMetric }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const buckets: ChartBucket[] = summary.current.series.map((p) => {
-    const d = new Date(`${p.day}T00:00:00Z`);
-    return {
-      at: d.toISOString(),
-      tick: formatTick(d, "day"),
-      label: formatDate(d),
-      // today is still counting, and a day not read yet is not a zero
-      partial: p.day === today || !p.aggregated,
-    };
-  });
-  const label = METRIC_TILES.find((t) => t.metric === metric)?.label ?? metric;
-  const values = summary.current.series.map((p) => pointValue(p, metric) ?? 0);
-  const previous = summary.previous.series.map((p) => pointValue(p, metric) ?? 0);
-  const chartState = summary.current.totals.pageviews === 0 ? "empty" : "data";
-  return (
-    <TimeChart
-      // a remount from empty to data gives the reveal observer the plot
-      key={chartState}
-      title={`${label} per day`}
-      buckets={buckets}
-      series={[{ key: metric, label, tone: "series-1", values }]}
-      previous={previous}
-      previousLabel="Previous period"
-      format={(n) => formatMetric(metric, n)}
-      higherIsBetter={higherIsBetter(metric)}
-      state={chartState}
-      emptyTitle="No page views in this range"
-      emptyText="Numbers appear here within an hour of the first page view."
-    />
-  );
-}
-
-function HourChart({ tenantId, q, metric }: { tenantId: string; q: WebQuery; metric: WebMetric }) {
-  const h = useQuery(webHourlyQuery(tenantId, q.from, q.site, q.band));
-  const buckets: ChartBucket[] = useMemo(
-    () =>
-      (h.data?.points ?? []).map((p) => {
-        const d = new Date(p.at);
-        return {
-          at: p.at,
-          tick: formatTick(d, "hour"),
-          label: formatDateTimeUtc(d),
-          partial: d.getTime() + 3_600_000 > Date.now(),
-        };
-      }),
-    [h.data],
-  );
-  const pv = metric === "pageviews";
-  const values = (h.data?.points ?? []).map((p) => (pv ? p.pageviews : p.visitors));
-  const total = (h.data?.points ?? []).reduce((a, p) => a + p.pageviews, 0);
-  const state = h.isPending ? "loading" : h.error ? "error" : total === 0 ? "empty" : "data";
-  return (
-    <TimeChart
-      // the plot reveals itself once it is in view; a remount on a new state
-      // gives the observer the plot element, which loading did not render
-      key={state}
-      title={`${pv ? "Page views" : "Visitors"} per hour`}
-      description="Read live from the analytics engine; the totals above follow within the hour."
-      buckets={buckets}
-      series={[{ key: metric, label: pv ? "Page views" : "Visitors", tone: "series-1", values }]}
-      state={state}
-      error={h.error}
-      onRetry={() => h.refetch()}
-      emptyTitle="No page views on this day"
-      emptyText="Page views appear here a few minutes after they happen."
-    />
   );
 }
 
 // ---- breakdowns
 
-const LIMIT = 10;
-const MORE = 100;
+type Group = { title: string; options: WebDimension[]; wide?: boolean };
 
-type Group = { title: string; options: WebDimension[] };
+const SHORT: Partial<Record<WebDimension, string>> = {
+  page: "Pages",
+  entry_page: "Entry",
+  exit_page: "Exit",
+  referrer: "Referrers",
+  utm_source: "Source",
+  utm_medium: "Medium",
+  utm_campaign: "Campaign",
+  utm_content: "Content",
+  utm_term: "Term",
+  browser: "Browsers",
+  os: "OS",
+  device: "Devices",
+};
 
 function Breakdowns({
   tenantId,
@@ -591,45 +456,28 @@ function Breakdowns({
     { title: "Sources", options: ["referrer", ...(utm ? UTM_DIMENSIONS : [])] },
     { title: "Countries", options: ["country"] },
     { title: "Environment", options: ["browser", "os", "device"] },
-    { title: "Custom events", options: ["event"] },
+    // events count events, not visitors, so they take their own full row
+    { title: "Custom events", options: ["event"], wide: true },
   ];
-  const names = Object.fromEntries(sites.map((s) => [s.id, s.name]));
+  const names = q.site ? null : Object.fromEntries(sites.map((s) => [s.id, s.name]));
   return (
-    <motion.div
-      variants={stagger}
-      initial="hidden"
-      animate="show"
-      className="grid gap-4 lg:grid-cols-2"
-    >
+    <div className="grid gap-4 lg:grid-cols-2">
       {groups.map((g) => (
-        <StaggerItem key={g.title}>
-          <BreakdownPanel
-            tenantId={tenantId}
-            q={q}
-            group={g}
-            visitors={visitors}
-            siteNames={q.site ? null : names}
-          />
-        </StaggerItem>
+        <BreakdownPanel
+          key={g.title}
+          tenantId={tenantId}
+          q={q}
+          group={g}
+          visitors={visitors}
+          siteNames={names}
+        />
       ))}
-    </motion.div>
+    </div>
   );
 }
 
-const SHORT: Partial<Record<WebDimension, string>> = {
-  page: "Pages",
-  entry_page: "Entry",
-  exit_page: "Exit",
-  referrer: "Referrers",
-  utm_source: "Source",
-  utm_medium: "Medium",
-  utm_campaign: "Campaign",
-  utm_content: "Content",
-  utm_term: "Term",
-  browser: "Browsers",
-  os: "OS",
-  device: "Devices",
-};
+const LIMIT = 10;
+const MORE = 100;
 
 function BreakdownPanel({
   tenantId,
@@ -646,16 +494,26 @@ function BreakdownPanel({
 }) {
   const first = group.options[0] ?? "page";
   const [dim, setDim] = useState<WebDimension>(first);
-  const [more, setMore] = useState(false);
+  const [limit, setLimit] = useState(LIMIT);
   // a utm choice that went away with the site selection falls back
   const active = group.options.includes(dim) ? dim : first;
-  const b = useQuery(webBreakdownQuery(tenantId, q, active, more ? MORE : LIMIT));
+  const b = useQuery(webBreakdownQuery(tenantId, q, active, limit));
+  const data = b.data;
+  const events = data?.unit === "events";
+  const headingId = `breakdown-${group.title.toLowerCase().replace(/\s+/g, "-")}`;
   return (
-    <Panel
-      title={group.title}
-      className="h-full"
-      actions={
-        group.options.length > 1 ? (
+    <section
+      aria-labelledby={headingId}
+      className={cn(
+        "flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5",
+        group.wide && "lg:col-span-2",
+      )}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <h2 id={headingId} className="text-title text-fg">
+          {group.title}
+        </h2>
+        {group.options.length > 1 ? (
           <Segmented<WebDimension>
             label={`${group.title} by`}
             value={active}
@@ -665,126 +523,215 @@ function BreakdownPanel({
             }))}
             onChange={(v) => {
               setDim(v);
-              setMore(false);
+              setLimit(LIMIT);
             }}
+            className="max-w-full overflow-x-auto"
           />
-        ) : null
-      }
-    >
-      {b.isPending ? (
-        <div className="flex flex-col gap-2" aria-busy>
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-7 w-full" />
-          ))}
-        </div>
-      ) : b.error ? (
-        <ErrorPanel error={b.error} onRetry={() => b.refetch()} />
-      ) : (
-        <div
-          className={cn(
-            "transition-opacity duration-(--vs-duration-press)",
-            b.isPlaceholderData && "opacity-60",
-          )}
-          aria-busy={b.isPlaceholderData || undefined}
-        >
-          <BreakdownList
-            data={b.data}
-            visitors={visitors}
-            siteNames={siteNames}
-            onMore={b.data.total_keys > b.data.items.length && !more ? () => setMore(true) : null}
-          />
-        </div>
-      )}
-    </Panel>
+        ) : null}
+      </div>
+      <div
+        className={cn(
+          "transition-opacity duration-(--vs-duration-change) ease-standard",
+          b.isPlaceholderData && "opacity-60",
+        )}
+        aria-busy={b.isPlaceholderData || undefined}
+      >
+        <BreakdownList
+          label={DIMENSION_LABEL[active]}
+          state={b.isPending ? "loading" : b.error ? "error" : undefined}
+          error={b.error}
+          onRetry={() => b.refetch()}
+          items={(data?.items ?? []).map((it) => {
+            const text = keyLabel(active, it.key);
+            const site = siteNames && it.site_id ? siteNames[it.site_id] : undefined;
+            return {
+              key: `${it.site_id ?? ""}|${it.key}`,
+              text: site ? `${text}, ${site}` : text,
+              label: (
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="truncate">{text}</span>
+                  {site ? (
+                    <span className="shrink-0 truncate text-caption text-fg-2">{site}</span>
+                  ) : null}
+                </span>
+              ),
+              value: it.value,
+            };
+          })}
+          total={events ? null : visitors}
+          valueLabel={events ? "Events" : "Visitors"}
+          emptyTitle={
+            active === "event"
+              ? "No custom events in this range"
+              : `No ${DIMENSION_LABEL[active].toLowerCase()} in this range`
+          }
+          onShowMore={
+            data && data.total_keys > data.items.length && limit < MORE
+              ? () => setLimit(MORE)
+              : undefined
+          }
+          showMoreLabel={
+            (data?.total_keys ?? 0) <= MORE
+              ? `Show all ${formatCount(data?.total_keys ?? 0)}`
+              : `Show the top ${MORE}`
+          }
+          showMorePending={b.isFetching && b.isPlaceholderData}
+        />
+      </div>
+    </section>
   );
 }
 
-function BreakdownList({
-  data,
-  visitors,
-  siteNames,
-  onMore,
+// ---- not counted: what the totals leave out, and why
+
+const OUTCOMES: { key: string; label: string; definition: string }[] = [
+  { key: "accepted", label: "Counted", definition: "Events the totals include." },
+  {
+    key: "quarantined",
+    label: "Quarantined",
+    definition: "Many visitors from one network, or very many events from one visitor.",
+  },
+  { key: "bot", label: "Bots", definition: "The browser is a known bot." },
+  { key: "rejected", label: "Rejected", definition: "Refused at the edge. The reasons are below." },
+  { key: "dlq", label: "Not stored", definition: "Accepted, but the write to storage failed." },
+];
+
+// a term with its definition in a tooltip: dotted underline, focusable
+const DEFINED =
+  "rounded-sm underline decoration-line-strong decoration-dotted underline-offset-4 focus-ring";
+
+const OTHER_OUTCOME = {
+  key: "other",
+  label: "Other",
+  definition: "An outcome that this page does not name yet.",
+};
+
+function NotCounted({
+  sites,
+  q,
+  summary,
+  band,
+  onBand,
 }: {
-  data: WebBreakdown;
-  visitors: number;
-  siteNames: Record<string, string> | null;
-  onMore: (() => void) | null;
+  sites: Site[];
+  q: WebQuery;
+  summary: WebSummary | null;
+  band: "primary" | "quarantine";
+  onBand: (b: "primary" | "quarantine") => void;
 }) {
-  if (data.items.length === 0) {
-    return (
-      <p className="py-6 text-center text-small text-fg-2">
-        {data.dimension === "event"
-          ? "No custom events in this range."
-          : `No ${DIMENSION_LABEL[data.dimension].toLowerCase()} in this range.`}
-      </p>
-    );
-  }
-  const top = data.items[0]?.value ?? 1;
-  const unit = data.unit === "events" ? "Events" : "Visitors";
+  const span = ingestWindow(q, new Date());
+  const answers = useQueries({
+    queries: sites.map((s) => ({
+      queryKey: ["ingest", s.id, span?.from ?? "", span?.to ?? ""] as const,
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        span ? api.ingest(s.id, span, signal) : Promise.reject(new Error("no complete hour")),
+      enabled: span !== null,
+      // rows are folded every few minutes; asking more often shows nothing new
+      staleTime: 2 * 60_000,
+    })),
+  });
+  const pending = answers.some((a) => a.isPending);
+  const failed = answers.find((a) => a.error);
+  const totals = sumOutcomes(answers.map((a) => a.data));
+  const other = sumUnclassified(totals);
+  const value = (k: string) =>
+    k === "rejected" ? sumRejected(totals) : k === "other" ? other : (totals[k] ?? 0);
+  const reasons = rejectionRows(totals);
+  const share = summary?.quarantine_share ?? null;
+  const quarantined = summary
+    ? band === "primary"
+      ? summary.other_band.pageviews
+      : summary.current.totals.pageviews
+    : null;
+  const rows = other > 0 ? [...OUTCOMES, OTHER_OUTCOME] : OUTCOMES;
+
   return (
-    <div className="flex flex-col gap-2">
-      <table className="w-full table-fixed text-small">
-        <caption className="sr-only">
-          {DIMENSION_LABEL[data.dimension]} by {unit.toLowerCase()}
-        </caption>
-        <thead>
-          <tr className="text-caption text-fg-3">
-            <th scope="col" className="pb-1 text-left font-normal">
-              {DIMENSION_LABEL[data.dimension]}
-            </th>
-            <th scope="col" className="w-20 pb-1 text-right font-normal">
-              {unit}
-            </th>
-            {data.unit === "visitors" ? (
-              <th scope="col" className="w-16 pb-1 text-right font-normal">
-                Share
-              </th>
-            ) : null}
-          </tr>
-        </thead>
-        <motion.tbody variants={stagger} initial="hidden" animate="show">
-          {data.items.map((it) => (
-            <motion.tr key={`${it.site_id ?? ""} ${it.key}`} variants={fade} className="group">
-              <td className="relative py-1 pr-2">
-                <span
-                  aria-hidden
-                  className="absolute inset-y-0.5 left-0 rounded-bar bg-series-1/15 transition-colors group-hover:bg-series-1/25"
-                  // the width is data; react writes it through the cssom
-                  style={{ width: `${(it.value / top) * 100}%` }}
-                />
-                <span className="relative flex min-w-0 items-baseline gap-2 px-1">
-                  <span className="truncate text-fg" title={it.key}>
-                    {keyLabel(data.dimension, it.key)}
-                  </span>
-                  {siteNames && it.site_id ? (
-                    <span className="shrink-0 truncate text-caption text-fg-3">
-                      {siteNames[it.site_id] ?? ""}
-                    </span>
-                  ) : null}
-                </span>
-              </td>
-              <td className="py-1 text-right tabular-nums text-fg">{formatCount(it.value)}</td>
-              {data.unit === "visitors" ? (
-                <td className="py-1 text-right tabular-nums text-fg-2">
-                  {formatShareOf(it.value, visitors)}
-                </td>
-              ) : null}
-            </motion.tr>
-          ))}
-        </motion.tbody>
-      </table>
-      <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-fg-3">
-        <span>
-          {formatCount(data.items.length)} of {formatCount(data.total_keys)}
-          {data.source === "engine" ? " · read live" : " · daily totals"}
-        </span>
-        {onMore ? (
-          <Button variant="ghost" size="sm" onClick={onMore}>
-            Show up to {MORE}
-            <ChevronDown aria-hidden />
-          </Button>
-        ) : null}
+    <section aria-labelledby="not-counted" className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 id="not-counted" className="text-section text-fg">
+          Not counted
+        </h2>
+        <p className="text-small text-fg-2">
+          Events your sites sent that the totals leave out. These counts refresh every few minutes.
+        </p>
       </div>
-    </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-raised px-4 py-3 sm:px-5">
+        <p className="text-body text-fg-2" data-testid="quarantined-pageviews">
+          {quarantined === null ? (
+            <Missing reason="The totals did not load" />
+          ) : (
+            <span className="font-mono text-fg tabular">{formatCount(quarantined)}</span>
+          )}{" "}
+          quarantined page views
+          {share !== null && share > 0 ? `, ${formatPercent(share)} of all page views` : ""}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="max-lg:h-(--vs-control-touch)"
+          onClick={() => onBand(band === "primary" ? "quarantine" : "primary")}
+        >
+          {band === "primary" ? "Show quarantined traffic" : "Show counted traffic"}
+        </Button>
+      </div>
+
+      {span === null ? (
+        <EmptyState compact title="No complete hour yet">
+          Outcome counts show after the first hour of the day ends.
+        </EmptyState>
+      ) : failed ? (
+        <ErrorState
+          compact
+          error={failed.error}
+          onRetry={() => {
+            for (const a of answers) if (a.error) a.refetch();
+          }}
+        />
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5">
+            <h3 className="text-title text-fg">Every event, by outcome</h3>
+            <dl aria-label="Outcomes" className="flex flex-col">
+              {rows.map((o) => (
+                <div
+                  key={o.key}
+                  data-outcome={o.key}
+                  className="flex h-(--vs-control-sm) items-center justify-between gap-3 border-b border-line-subtle last:border-b-0 max-lg:h-(--vs-control-touch)"
+                >
+                  <dt className="text-body text-fg-2">
+                    <Tooltip content={o.definition}>
+                      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the definition opens on focus too */}
+                      <span tabIndex={0} className={DEFINED}>
+                        {o.label}
+                      </span>
+                    </Tooltip>
+                    <span className="sr-only">. {o.definition}</span>
+                  </dt>
+                  <dd className="font-mono text-small text-fg tabular">
+                    {pending ? <Bone className="h-3 w-12" /> : formatCount(value(o.key))}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+          <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5">
+            <h3 className="text-title text-fg">Why events were rejected</h3>
+            <BreakdownList
+              label="Reasons"
+              state={pending ? "loading" : undefined}
+              items={reasons.map((r) => ({
+                key: r.key,
+                label: r.label,
+                text: r.label,
+                value: r.count,
+              }))}
+              valueLabel="Events"
+              emptyTitle="No rejected events in this range"
+            />
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
