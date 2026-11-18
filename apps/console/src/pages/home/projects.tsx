@@ -10,10 +10,10 @@ import {
   Plus,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { Link } from "react-router";
+import { Link, redirect } from "react-router";
 import type { ApiFilters } from "@/api/endpoints";
 import { apiOverviewQuery, ingestMonthQuery, meQuery, sitesQuery } from "@/api/queries";
-import type { MeTenant, RemovedTenant } from "@/api/schemas";
+import type { Me, MeTenant, RemovedTenant } from "@/api/schemas";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { Notice } from "@/components/notice";
@@ -22,6 +22,21 @@ import { StatusPill, type Tone, toneText } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCount } from "@/lib/format";
+import { queryClient } from "@/query-client";
+
+// an operator who is a member of no project starts on the operator review
+// page; the project list would only offer to enroll one
+export function homeRedirect(me: Me): string | null {
+  return me.user.is_operator && me.tenants.length === 0 && me.removed_tenants.length === 0
+    ? "/operator"
+    : null;
+}
+
+export async function projectsLoader() {
+  const to = homeRedirect(await queryClient.ensureQueryData(meQuery));
+  if (to) throw redirect(to);
+  return null;
+}
 
 export function ProjectsPage() {
   const me = useQuery(meQuery);

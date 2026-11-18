@@ -2,6 +2,7 @@ import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { areaOf, currentItem, pageTitle } from "@/components/nav/nav-items";
 import { AppShell } from "@/pages/app-shell";
+import { homeRedirect } from "@/pages/home/projects";
 import * as f from "./fixtures/contract";
 import { click, renderRoutes, waitFor } from "./helpers";
 
@@ -86,6 +87,11 @@ describe("navigation model", () => {
     expect(currentItem("/operator/keys")?.key).toBe("keys");
     expect(currentItem("/account")?.key).toBe("account");
     expect(currentItem(`/projects/${id}/unknown`)).toBeNull();
+  });
+
+  it("starts an operator without projects on the review page", () => {
+    expect(homeRedirect(f.operatorMeBody as never)).toBe("/operator");
+    expect(homeRedirect(f.meBody as never)).toBeNull();
   });
 
   it("names the page for the phone top bar", () => {
