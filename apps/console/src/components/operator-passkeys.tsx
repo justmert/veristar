@@ -7,6 +7,7 @@ import { keys } from "@/api/queries";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { TextField } from "@/components/form-field";
 import { PasskeyDialog } from "@/components/passkey-dialog";
+import { RowMenu } from "@/components/row-menu";
 import { ErrorState } from "@/components/states";
 import { AddPasskeyDialog, steppedUp } from "@/components/step-up";
 import { toast } from "@/components/toast";
@@ -131,18 +132,20 @@ export function OperatorPasskeys({ userName }: { userName: string }) {
                     </span>
                   </span>
                 </span>
-                <Button
-                  size="sm"
-                  variant="destructive-outline"
-                  className="max-lg:h-(--vs-control-touch)"
-                  onClick={() => {
-                    del.reset();
-                    setDeleting(p);
-                  }}
-                >
-                  <Trash2 aria-hidden />
-                  Delete
-                </Button>
+                <RowMenu
+                  name={p.name}
+                  actions={[
+                    {
+                      label: "Delete",
+                      icon: <Trash2 aria-hidden />,
+                      destructive: true,
+                      onSelect: () => {
+                        del.reset();
+                        setDeleting(p);
+                      },
+                    },
+                  ]}
+                />
               </li>
             ))}
             {list.data.items.length === 0 && !list.data.sign_in_passkey ? (
