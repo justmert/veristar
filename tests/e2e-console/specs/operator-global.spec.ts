@@ -403,6 +403,10 @@ test("the operator filters to verified projects, sorts by visitors and compares 
     .locator("tbody tr[data-tenant] [data-col=requests]")
     .allTextContents();
   expect(requests).toEqual(["2", "4", "8"]);
+  // the data source is one of the optional columns: the column menu shows it
+  await page.getByRole("button", { name: "Columns" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Data source" }).click();
+  await page.keyboard.press("Escape");
   await expect(page.locator(`tr[data-tenant='${a.tenant.id}']`)).toContainText("Metrics");
 });
 
