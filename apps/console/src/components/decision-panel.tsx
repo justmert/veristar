@@ -256,10 +256,7 @@ export function DecisionPanel({
         <FormMessage error={run.error} />
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-caption text-fg-3">
-          Members see the reason. Recorded in the audit log.
-        </span>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <Button
           type="submit"
           variant={choice === "reject" ? "destructive-outline" : "default"}
