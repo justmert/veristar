@@ -312,7 +312,7 @@ export function McpKeyCreateForm({
       aria-label={label}
       onSubmit={submit}
       noValidate
-      className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
+      className="max-w-prose flex flex-col gap-3 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
     >
       <h3 className="text-body font-medium text-fg">{label}</h3>
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_11rem_auto] sm:items-start">

@@ -590,7 +590,12 @@ export function CreateTokenForm({
   }
 
   return (
-    <form noValidate onSubmit={submit} aria-label="Create a token" className="flex flex-col gap-3">
+    <form
+      noValidate
+      onSubmit={submit}
+      aria-label="Create a token"
+      className="max-w-prose flex flex-col gap-3"
+    >
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-start">
         <TextField
           label="Token name"

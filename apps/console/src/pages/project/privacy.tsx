@@ -308,7 +308,7 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
         autoComplete="off"
         onSubmit={submit}
         aria-label="Request erasure"
-        className="flex min-w-0 flex-col gap-6 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
+        className="max-w-prose flex min-w-0 flex-col gap-6 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
       >
         <div className="max-w-sm">
           <SelectField
