@@ -37,6 +37,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { isNotFound } from "@/lib/errors";
 import { formatCount, formatDate, formatDateTimeUtc } from "@/lib/format";
 import { outcomeLabel } from "@/lib/outcomes";
+import { termsVersionLabel } from "@/lib/terms";
 import { NotFoundPage } from "@/pages/public/not-found";
 import { AuditEntries } from "./audit";
 import { DecisionSection, refreshOperator } from "./decision";
@@ -319,7 +320,10 @@ function Answers({ detail }: { detail: OperatorTenantDetail }) {
       a.scf_round_url ? <span className="break-all">{a.scf_round_url}</span> : "Not given",
     ],
     ["Description", t.description ? <Clamped text={t.description} /> : "Not given"],
-    ["Terms version", t.accepted_terms_version ?? "Not accepted"],
+    [
+      "Terms",
+      t.accepted_terms_version ? termsVersionLabel(t.accepted_terms_version) : "Not accepted",
+    ],
     ["Dashboards", t.provisioning === "ready" ? "Set up" : "Not set up yet"],
   ];
   return (
@@ -332,7 +336,7 @@ function Answers({ detail }: { detail: OperatorTenantDetail }) {
           </div>
         ))}
         <div className="flex min-w-0 flex-col gap-1">
-          <dt className="text-caption text-fg-2">Account and contract ids</dt>
+          <dt className="text-caption text-fg-2">Account and contract IDs</dt>
           <dd>
             {detail.stellar_ids.length === 0 ? (
               <span className="text-fg">Not given</span>
@@ -530,18 +534,16 @@ function Sites({
       ),
     },
     {
-      key: "domain",
-      header: "Domain check",
+      key: "checks",
+      header: "Checks",
       mobile: true,
-      minWidth: "min-w-40",
-      cell: (x) => <DomainFact site={x} />,
-    },
-    {
-      key: "toml",
-      header: "stellar.toml",
-      mobile: true,
-      minWidth: "min-w-40",
-      cell: (x) => <TomlFact site={x} />,
+      minWidth: "min-w-44",
+      cell: (x) => (
+        <span className="flex flex-col gap-0.5 py-1 text-small">
+          <DomainFact site={x} />
+          <TomlFact site={x} />
+        </span>
+      ),
     },
     {
       key: "origins",
@@ -552,7 +554,7 @@ function Sites({
     },
     {
       key: "details",
-      header: "Details",
+      header: "Actions",
       align: "right",
       action: true,
       cell: (x) => (
