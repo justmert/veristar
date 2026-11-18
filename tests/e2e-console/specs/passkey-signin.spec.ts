@@ -193,7 +193,8 @@ test("a github account adds a passkey, which then signs in to the same account",
   await dialog.getByRole("button", { name: "Create a passkey" }).click();
   await expect(dialog.getByText("Your passkey is created")).toBeVisible();
   await dialog.getByRole("button", { name: "Confirm with your passkey" }).click();
-  await expect(methods.getByRole("button", { name: "Unlink" })).toHaveCount(2);
+  // each linked method has its row menu once another method exists
+  await expect(methods.locator("[data-row-menu]")).toHaveCount(2);
   const linked = (await api<Me>(ctx, "GET", "/api/me")).body.user;
   expect(linked.github_login).toBe(gh.login);
   expect(linked.passkey_address).toMatch(/^C[A-Z2-7]{55}$/);
@@ -213,7 +214,8 @@ test("a github account adds a passkey, which then signs in to the same account",
   expect((await api<Me>(other, "GET", "/api/me")).body.user.id).toBe(linked.id);
 
   // with github linked, the passkey can go; it no longer signs in then
-  await methods.getByRole("button", { name: "Unlink" }).nth(1).click();
+  await methods.getByRole("button", { name: "Actions for Your passkey" }).click();
+  await page.getByRole("menuitem", { name: "Unlink" }).click();
   await page
     .getByRole("dialog", { name: "Unlink your passkey?" })
     .getByRole("button", { name: "Unlink" })

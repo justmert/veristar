@@ -2,7 +2,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { me as meSchema } from "@/api/schemas";
 import type { WalletModule } from "@/lib/stellar-wallet/modules";
 import * as f from "./fixtures/contract";
-import { byLabel, byRole, click, renderRoutes, stubFetch, type, waitFor } from "./helpers";
+import {
+  byLabel,
+  byRole,
+  click,
+  pickRowAction,
+  renderRoutes,
+  stubFetch,
+  type,
+  waitFor,
+} from "./helpers";
 
 // one fake extension wallet, so the pages run their real wallet code paths
 const ADDRESS = "GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQN";
@@ -136,8 +145,9 @@ describe("linked sign-in methods (contract 4.1.8)", () => {
     const host = await renderRoutes([{ path: "/account", element: <AccountPage /> }], "/account");
     await waitFor(() => expect(host.textContent).toContain("Sign-in methods"));
     // the only method cannot be unlinked
-    const unlink = byRole(host, "button", "Unlink") as HTMLButtonElement;
-    expect(unlink.disabled).toBe(true);
+    expect(host.querySelectorAll("ul[aria-label='Sign-in methods'] [data-row-menu]")).toHaveLength(
+      0,
+    );
     const gh = host.querySelector<HTMLAnchorElement>("a[href='/api/auth/github/start?link=1']");
     expect(gh).toBeNull();
 
@@ -151,10 +161,9 @@ describe("linked sign-in methods (contract 4.1.8)", () => {
     expect(calls[2]?.method).toBe("POST");
     expect(calls[2]?.body).toEqual({ transaction: "signed:AAAAchallenge" });
     // with two methods both can be unlinked
-    const buttons = [
-      ...host.querySelectorAll<HTMLButtonElement>("ul[aria-label='Sign-in methods'] button"),
-    ].filter((b) => b.textContent === "Unlink");
-    expect(buttons.map((b) => b.disabled)).toEqual([false, false]);
+    expect(host.querySelectorAll("ul[aria-label='Sign-in methods'] [data-row-menu]")).toHaveLength(
+      2,
+    );
   });
 
   it("offers github linking to a wallet-only account and unlinks the wallet", async () => {
@@ -174,10 +183,7 @@ describe("linked sign-in methods (contract 4.1.8)", () => {
     ]);
     const host = await renderRoutes([{ path: "/account", element: <AccountPage /> }], "/account");
     await waitFor(() => expect(host.textContent).toContain("GCB6…WOQN"));
-    const unlinks = [
-      ...host.querySelectorAll<HTMLButtonElement>("ul[aria-label='Sign-in methods'] button"),
-    ].filter((b) => b.textContent === "Unlink");
-    await click(unlinks[1] as HTMLButtonElement);
+    await pickRowAction(host, "Your Stellar wallet", "Unlink");
     await waitFor(() => expect(dialog().textContent).toContain("Unlink your Stellar wallet?"));
     await click(byRole(dialog(), "button", "Unlink"));
     await waitFor(() => expect(calls[1]?.url).toBe("/api/me/identities/stellar"));

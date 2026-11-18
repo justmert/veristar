@@ -6,7 +6,7 @@ import { AccountPage, confirmationText } from "@/pages/home/account";
 import { memberIdentity, validateAddMember } from "@/pages/project/members";
 import { SignInPage } from "@/pages/public/sign-in";
 import * as f from "./fixtures/contract";
-import { byRole, click, renderRoutes, stubFetch, waitFor } from "./helpers";
+import { byRole, click, pickRowAction, renderRoutes, stubFetch, waitFor } from "./helpers";
 
 // a soropass passkey account address (C...), the identity of contract 4.1.9
 const C_ACCOUNT = "CBH2J5X4WBV2KT6NSUE47DRFBUHTVJOBJTBGGNELJ2DZXTDB3AYRAXAO";
@@ -313,10 +313,9 @@ describe("passkey identities (contract 4.1.8, 4.2.5)", () => {
     expect(calls[2]?.method).toBe("POST");
     expectValidAnswer(calls[2]?.body as Answer);
     // with two methods both can be unlinked
-    const buttons = [
-      ...host.querySelectorAll<HTMLButtonElement>("ul[aria-label='Sign-in methods'] button"),
-    ].filter((b) => b.textContent === "Unlink");
-    expect(buttons.map((b) => b.disabled)).toEqual([false, false]);
+    expect(host.querySelectorAll("ul[aria-label='Sign-in methods'] [data-row-menu]")).toHaveLength(
+      2,
+    );
   });
 
   it("keeps the only passkey and unlinks it once another method exists", async () => {
@@ -336,11 +335,10 @@ describe("passkey identities (contract 4.1.8, 4.2.5)", () => {
     ]);
     const host = await renderRoutes([{ path: "/account", element: <AccountPage /> }], "/account");
     await waitFor(() => expect(host.textContent).toContain("CBH2…AXAO"));
-    const unlinks = [
-      ...host.querySelectorAll<HTMLButtonElement>("ul[aria-label='Sign-in methods'] button"),
-    ].filter((b) => b.textContent === "Unlink");
-    expect(unlinks.length).toBe(2);
-    await click(unlinks[1] as HTMLButtonElement);
+    expect(host.querySelectorAll("ul[aria-label='Sign-in methods'] [data-row-menu]")).toHaveLength(
+      2,
+    );
+    await pickRowAction(host, "Your passkey", "Unlink");
     await waitFor(() => expect(dialog().textContent).toContain("Unlink your passkey?"));
     await click(byRole(dialog(), "button", "Unlink"));
     await waitFor(() => expect(calls[1]?.url).toBe("/api/me/identities/passkey"));
@@ -377,10 +375,7 @@ describe("passkey identities (contract 4.1.8, 4.2.5)", () => {
     ]);
     const host = await renderRoutes([{ path: "/account", element: <AccountPage /> }], "/account");
     await waitFor(() => expect(host.textContent).toContain("CBH2…AXAO"));
-    const unlinks = [
-      ...host.querySelectorAll<HTMLButtonElement>("ul[aria-label='Sign-in methods'] button"),
-    ].filter((b) => b.textContent === "Unlink");
-    await click(unlinks[1] as HTMLButtonElement);
+    await pickRowAction(host, "Your passkey", "Unlink");
     await click(byRole(dialog(), "button", "Unlink"));
     const top = () => {
       const open = [...document.body.querySelectorAll<HTMLElement>("dialog[open]")];
@@ -403,15 +398,14 @@ describe("passkey identities (contract 4.1.8, 4.2.5)", () => {
     expect(calls[4]?.method).toBe("DELETE");
   });
 
-  it("disables unlinking the only passkey", async () => {
+  it("offers no unlink for the only passkey", async () => {
     stubFetch([{ status: 200, body: passkeyMe }]);
     const host = await renderRoutes([{ path: "/account", element: <AccountPage /> }], "/account");
     await waitFor(() => expect(host.textContent).toContain("CBH2…AXAO"));
-    const unlink = byRole(host, "button", "Unlink") as HTMLButtonElement;
-    expect(unlink.disabled).toBe(true);
-    // the reason is shown, not left to a hover title
-    expect(host.textContent).toContain("Unlink is off while this is your only sign-in method.");
-    expect(unlink.getAttribute("aria-describedby")).toBe("unlink-note");
+    // the only method has no row menu: nothing can be done with it
+    expect(host.querySelectorAll("ul[aria-label='Sign-in methods'] [data-row-menu]")).toHaveLength(
+      0,
+    );
   });
 
   it("invites a passkey account by its C-address", () => {

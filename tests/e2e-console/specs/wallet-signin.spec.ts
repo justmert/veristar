@@ -199,8 +199,8 @@ test("the wallet account links github, which then signs in to the same account",
   await page.goto(`${APP}/account`);
   const methods = page.getByRole("list", { name: "Sign-in methods" });
   await expect(methods).toContainText(me.display_name);
-  // the only method cannot be unlinked
-  await expect(methods.getByRole("button", { name: "Unlink" })).toBeDisabled();
+  // the only method has no row menu: it cannot be unlinked
+  await expect(methods.locator("[data-row-menu]")).toHaveCount(0);
   await methods.getByRole("link", { name: "Link GitHub" }).click();
   await page.waitForURL(`${OAUTH}/login/oauth/authorize?**`);
   const gh = newUser("wallet-linked");
@@ -209,7 +209,7 @@ test("the wallet account links github, which then signs in to the same account",
   await page.click("#fixture-authorize");
   await page.waitForURL(`${APP}/account?linked=github`);
   await expect(page.getByText("GitHub is linked.")).toBeVisible();
-  await expect(methods.getByRole("button", { name: "Unlink" })).toHaveCount(2);
+  await expect(methods.locator("[data-row-menu]")).toHaveCount(2);
 
   const other = await browser.newContext({ ignoreHTTPSErrors: true });
   const p2 = await other.newPage();

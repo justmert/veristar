@@ -333,10 +333,10 @@ function Detail({ id, summary, children }: { id: string; summary: string; childr
   return (
     <Disclosure
       id={id}
-      variant="inline"
+      variant="row"
       summary={summary}
-      summaryClassName="w-full py-3 text-body font-medium text-fg"
-      bodyClassName="pt-0 pb-5"
+      summaryClassName="py-3 text-body font-medium"
+      bodyClassName="pb-5 pl-0"
     >
       {children}
     </Disclosure>
