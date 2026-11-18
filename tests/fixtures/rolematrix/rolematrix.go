@@ -141,11 +141,16 @@ var Want = map[string]map[db.Role]string{
 	"cp.tenant_cohorts": {
 		db.RoleCPSystem: "rawd",
 		db.RoleCPTenant: "r a(proposed_at,proposed_award_date,proposed_by,proposed_category,proposed_program," +
-			"proposed_round,tenant_id,updated_at) w(proposed_at,proposed_award_date,proposed_by,proposed_category," +
-			"proposed_program,proposed_round,updated_at)",
+			"proposed_round,proposed_source,tenant_id,updated_at) w(proposed_at,proposed_award_date,proposed_by," +
+			"proposed_category,proposed_program,proposed_round,proposed_source,updated_at)",
 		db.RoleCPOperator: "r",
 	},
 	"cp.threshold_rules": {db.RoleCPSystem: "rawd", db.RoleCPOperator: "r"},
+	// the scf award directory (00050): organisation data without a tenant,
+	// written by platformctl scf import under cp_system and read by
+	// operators; a project has no right on it
+	"cp.scf_awards":        {db.RoleCPSystem: "raw", db.RoleCPOperator: "r"},
+	"cp.scf_award_imports": {db.RoleCPSystem: "ra", db.RoleCPOperator: "r"},
 	// signed usage reports (00036): a member stores and revokes its
 	// project's reports; the public route reads one and counts its views
 	"cp.usage_reports": {

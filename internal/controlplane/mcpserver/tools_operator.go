@@ -27,6 +27,9 @@ How to work:
 	`compares carry an onchain summary per project.
 5. list_threshold_rules and get_threshold_rule_matches list the saved traction rules and the projects that meet ` +
 	`each, with the qualifying days and the integrity grade as evidence.
+6. list_scf_awards lists the imported SCF awards with the enrolled project each one matches, whether Veristar ` +
+	`measures that project (web, API or on-chain data in the range) and how its cohort compares with the award, ` +
+	`with counts by round and category.
 
 Integrity: every row of get_global_web_overview and compare_tenants_web carries the project's integrity grade (A, B ` +
 	`or C) over the range and its coverage (the estimated share of visits not measured because of privacy signals, ` +
@@ -432,5 +435,45 @@ func (s *Server) addCohortOperatorTools(srv *mcp.Server) {
 			q.Set("as_of", d)
 		}
 		return s.operatorRead(ctx, p, "/rules/"+id.String()+"/matches", q)
+	})
+	type scfAwardsIn struct {
+		dayRangeIn
+		State    string `json:"state,omitempty" jsonschema:"only awards in this match state: matched (one enrolled project), ambiguous (the evidence is not one to one) or not_enrolled"`
+		Round    string `json:"round,omitempty" jsonschema:"only this round, such as SCF #38"`
+		Category string `json:"category,omitempty" jsonschema:"only this category, such as Developer Tooling"`
+		Search   string `json:"q,omitempty" jsonschema:"case-insensitive text in the project name, 1 to 100 characters"`
+		Measured *bool  `json:"measured,omitempty" jsonschema:"only awards whose matched project has (true) or lacks (false) web, API or on-chain data in the range"`
+	}
+	addTool(s, srv, &mcp.Tool{
+		Name:  "list_scf_awards",
+		Title: "SCF awards and which are measured",
+		Description: "Every SCF award operators imported (project, round, category, award date and amount, tranche, " +
+			"website host, declared Stellar ids) with its match to an enrolled project on exact evidence (website host or " +
+			"verified on-chain id, never the name), the evidence, whether Veristar measures the project in the range and " +
+			"how its confirmed or proposed cohort compares with the award. The summary counts awards, matches and " +
+			"measured projects by round and category.",
+	}, func(props map[string]*jsonschema.Schema) {
+		enum(props, "state", "matched", "ambiguous", "not_enrolled")
+		maxLen(props, "round", 80)
+		maxLen(props, "category", 80)
+		maxLen(props, "q", 100)
+	}, func(ctx context.Context, p Principal, in scfAwardsIn) (any, error) {
+		q := url.Values{}
+		if err := in.values(q); err != nil {
+			return nil, err
+		}
+		for _, kv := range []struct{ k, v string }{{"state", in.State}, {"round", in.Round}, {"category", in.Category}, {"q", in.Search}} {
+			if kv.v == "" {
+				continue
+			}
+			if err := text(kv.k, kv.v, 400); err != nil {
+				return nil, err
+			}
+			q.Set(kv.k, kv.v)
+		}
+		if in.Measured != nil {
+			q.Set("measured", strconv.FormatBool(*in.Measured))
+		}
+		return s.operatorRead(ctx, p, "/scf/awards", q)
 	})
 }

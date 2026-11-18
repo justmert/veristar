@@ -28,7 +28,7 @@ commands:
   umami rotate-admin
                     replace the umami admin password UMAMI_ADMIN_PASSWORD_PREVIOUS with
                     UMAMI_ADMIN_PASSWORD and prove the previous one is refused
-` + dbUsage + natsUsage + dlqUsage + forwardUsage + probeUsage + verifyUsage + rotationUsage + reportUsage + `  version           print the build version
+` + dbUsage + natsUsage + dlqUsage + forwardUsage + probeUsage + scfUsage + verifyUsage + rotationUsage + reportUsage + `  version           print the build version
 `
 
 func main() {
@@ -83,6 +83,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	case len(args) >= 1 && args[0] == "probe-tenant":
 		if err := runProbeTenant(ctx, args[1:], config.FromEnviron(), stdout); err != nil {
 			log.Error("probe-tenant command failed", "error", err.Error())
+			return 1
+		}
+		return 0
+	case len(args) >= 1 && args[0] == "scf":
+		if err := runSCF(ctx, args[1:], config.FromEnviron(), stdout); err != nil {
+			log.Error("scf command failed", "error", err.Error())
 			return 1
 		}
 		return 0

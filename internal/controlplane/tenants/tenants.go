@@ -64,10 +64,27 @@ func toTenant(t row, role string) Tenant {
 }
 
 // Routes are the tenant routes. every route needs a session.
-type Routes struct{ s *Scope }
+type Routes struct {
+	s       *Scope
+	onEnrol []EnrollHook
+}
 
 // NewRoutes returns the tenant routes over a scope.
 func NewRoutes(s *Scope) *Routes { return &Routes{s: s} }
+
+// EnrollHook runs inside the enrollment transaction (cp_system), after the
+// project, its owner and the audit row are written; an error rolls the
+// enrollment back. scfawards.Hooks matches the new project to the scf
+// award directory and writes its cohort proposal.
+type EnrollHook interface {
+	AfterEnroll(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) error
+}
+
+// OnEnroll adds hooks that run in each enrollment's transaction.
+func (h *Routes) OnEnroll(hooks ...EnrollHook) *Routes {
+	h.onEnrol = append(h.onEnrol, hooks...)
+	return h
+}
 
 // Routes registers the paths under a router mounted at /api.
 func (h *Routes) Routes(r chi.Router) {
@@ -231,9 +248,17 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 			}
 			detail["cohort_proposal"] = cohort.AuditDetail()
 		}
-		return audit.InSystem(ctx, tx, audit.Entry{
+		if err := audit.InSystem(ctx, tx, audit.Entry{
 			Actor: audit.User(u.ID), Action: audit.TenantCreate, Target: audit.TenantTarget(t.ID), Detail: detail,
-		})
+		}); err != nil {
+			return err
+		}
+		for _, hook := range h.onEnrol {
+			if err := hook.AfterEnroll(ctx, tx, t.ID); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return err

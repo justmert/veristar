@@ -58,6 +58,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/otlptokens"
 	"github.com/justmert/veristar/internal/controlplane/provision"
 	"github.com/justmert/veristar/internal/controlplane/reports"
+	"github.com/justmert/veristar/internal/controlplane/scfawards"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/sites"
 	"github.com/justmert/veristar/internal/controlplane/tenants"
@@ -320,6 +321,13 @@ func start(t *testing.T) *env {
 	require.NoError(t, err)
 	ruleRoutes, err := operator.NewRules(e.conn, time.Now)
 	require.NoError(t, err)
+	// the scf award directory (contract 19.4) and its matching on
+	// enrollment and site creation
+	scfAwards, err := operator.NewSCFAwards(e.conn, time.Now)
+	require.NoError(t, err)
+	scfHooks, err := scfawards.NewHooks(e.conn, log)
+	require.NoError(t, err)
+	t.Cleanup(scfHooks.Wait)
 	reportKey := keypair.MustRandom()
 	signing, err := config.LoadReportSigning(config.FromMap(map[string]string{
 		"REPORT_SIGNING_SEED": reportKey.Seed(), "REPORT_SIGNING_KEY": reportKey.Address(),
@@ -335,7 +343,7 @@ func start(t *testing.T) *env {
 		Guard: guard,
 		Reads: []mcpserver.Routes{
 			tenants.NewRoutes(scope), sites.NewRoutes(scope), metricRoutes, onchainRoutes, scfView, tenantCohort,
-			controlplane.RoutesFunc(guard.Mount(review, global, onchainOperator, cohortRoutes, ruleRoutes)),
+			controlplane.RoutesFunc(guard.Mount(review, global, onchainOperator, cohortRoutes, ruleRoutes, scfAwards)),
 		},
 		Web:      webReader,
 		Issuer:   e.srv.URL,
@@ -358,9 +366,9 @@ func start(t *testing.T) *env {
 		Private: []controlplane.Routes{
 			controlplane.RoutesFunc(ah.Private),
 			accountRoutes,
-			tenants.NewRoutes(scope),
+			tenants.NewRoutes(scope).OnEnroll(scfHooks),
 			memberRoutes,
-			sites.NewRoutes(scope).OnCreate(checks),
+			sites.NewRoutes(scope).OnCreate(checks, scfHooks),
 			checks,
 			ingest.NewRoutes(scope),
 			otlpRoutes,
@@ -376,7 +384,7 @@ func start(t *testing.T) *env {
 			e.mcp.TenantRoutes(scope),
 			e.mcp.ConsentRoutes(),
 			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys,
-				e.mcp.OperatorRoutes(), onchainOperator, operatorExports, cohortRoutes, ruleRoutes, roster)),
+				e.mcp.OperatorRoutes(), onchainOperator, operatorExports, cohortRoutes, ruleRoutes, scfAwards, roster)),
 		},
 		Mounts: []controlplane.Mount{
 			{Path: operator.MachinePath, Handler: machine.Handler()},
