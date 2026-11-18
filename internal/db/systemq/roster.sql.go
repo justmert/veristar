@@ -221,7 +221,8 @@ func (q *Queries) DeleteRosterEntry(ctx context.Context, id uuid.UUID) (CpOperat
 
 const listRoster = `-- name: ListRoster :many
 select o.id, o.github_id, o.github_login, o.stellar_address, o.role, o.status, o.status_reason, o.enroll_opened_at, o.enroll_until, o.created_by, o.created_at, o.updated_at, u.id as user_id, u.github_login as account_github_login, u.last_login_at,
-       (select count(*) from cp.operator_passkeys k where k.user_id = u.id)::bigint as passkeys
+       ((select count(*) from cp.operator_passkeys k where k.user_id = u.id)
+        + coalesce((u.passkey_public_key is not null and u.passkey_address = o.stellar_address)::int, 0))::bigint as passkeys
 from cp.operators o
 left join cp.users u
   on u.deleted_at is null
@@ -250,7 +251,10 @@ type ListRosterRow struct {
 	Passkeys           int64
 }
 
-// every row with the live account that holds its identity, if one exists
+// every row with the live account that holds its identity, if one exists.
+// passkeys counts what can step up, as RosterIdentityPasskeys and the
+// step-up status do: the added passkeys, and the sign-in passkey when this
+// row names its address
 func (q *Queries) ListRoster(ctx context.Context) ([]ListRosterRow, error) {
 	rows, err := q.db.Query(ctx, listRoster)
 	if err != nil {

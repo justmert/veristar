@@ -132,11 +132,11 @@ ks as (
 ),
 ka as (
   select kr.tenant_id,
-         coalesce(sum(kr.count) filter (where kr.app and kr.cur), 0)::bigint as requests,
-         coalesce(sum(kr.count) filter (where kr.app and kr.cur and kr.status_code between 500 and 599), 0)::bigint
+         least(coalesce(sum(kr.count) filter (where kr.app and kr.cur), 0), 9223372036854775807)::bigint as requests,
+         least(coalesce(sum(kr.count) filter (where kr.app and kr.cur and kr.status_code between 500 and 599), 0), 9223372036854775807)::bigint
            as requests_5xx,
-         coalesce(sum(kr.count) filter (where kr.app and not kr.cur), 0)::bigint as prev_requests,
-         coalesce(sum(kr.count) filter (where kr.app and not kr.cur and kr.status_code between 500 and 599), 0)::bigint
+         least(coalesce(sum(kr.count) filter (where kr.app and not kr.cur), 0), 9223372036854775807)::bigint as prev_requests,
+         least(coalesce(sum(kr.count) filter (where kr.app and not kr.cur and kr.status_code between 500 and 599), 0), 9223372036854775807)::bigint
            as prev_requests_5xx
   from kr
   join ks on ks.tenant_id = kr.tenant_id and ks.service = kr.service and ks.cur = kr.cur and ks.source = kr.source

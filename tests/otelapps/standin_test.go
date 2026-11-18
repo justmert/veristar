@@ -123,7 +123,7 @@ func checkStandinAuth(t *testing.T) {
 		var res *http.Response
 		var err error
 		for i := 0; i < 50; i++ {
-			req, _ := http.NewRequest(http.MethodPost, "http://127.0.0.1:47210/v1/metrics", bytes.NewReader(body))
+			req, _ := http.NewRequest(http.MethodPost, "http://127.0.0.1:27210/v1/metrics", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			if h != "" {
 				req.Header.Set("Authorization", h)

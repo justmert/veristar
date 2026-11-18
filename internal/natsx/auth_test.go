@@ -184,6 +184,24 @@ func TestPermissions(t *testing.T) {
 			require.NoError(t, l.Release(ctx))
 		}
 
+		// the replayer announces itself with a member key, lists the
+		// members, removes its key on the way out and checks whether the
+		// legacy consumer still exists
+		rLocks, err := replayer.js.KeyValue(ctx, natsx.BucketLocks)
+		require.NoError(t, err)
+		_, err = rLocks.Put(ctx, natsx.LockReplayer+"-member.node-1", []byte("h"))
+		require.NoError(t, err)
+		lister, err := rLocks.ListKeysFiltered(ctx, natsx.LockReplayer+"-member.*")
+		require.NoError(t, err)
+		var members []string
+		for k := range lister.Keys() {
+			members = append(members, k)
+		}
+		require.Equal(t, []string{natsx.LockReplayer + "-member.node-1"}, members)
+		require.NoError(t, rLocks.Delete(ctx, natsx.LockReplayer+"-member.node-1"))
+		_, err = replayer.js.Consumer(ctx, natsx.StreamWebEvents, natsx.ConsumerReplayer)
+		require.ErrorIs(t, err, jetstream.ErrConsumerNotFound)
+
 		// replayer keeps visit state and dead-letters to WEB_DLQ
 		vs, err := replayer.js.KeyValue(ctx, natsx.BucketVisitState)
 		require.NoError(t, err)

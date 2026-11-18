@@ -774,6 +774,23 @@ func testMCPOAuthFlow(t *testing.T, e *env, alice, bob *client, ta, tb uuid.UUID
 	// another client cannot refresh or revoke it
 	_, m2 := e.registerClient(t, map[string]any{"redirect_uris": []string{testRedirect}})
 	other := m2["client_id"].(string)
+
+	// a client with one registered uri may leave redirect_uri out of the
+	// authorization request, and then out of the token request too
+	verifier, challenge = pkce(t)
+	u = e.authorize(t, url.Values{"response_type": {"code"}, "client_id": {other},
+		"code_challenge": {challenge}, "code_challenge_method": {"S256"}, "state": {"st-2"}})
+	require.Equal(t, mcpserver.ConsentPath, u.Path)
+	r = alice.consent(t, u.Query().Get("request"), "tenant", &ta)
+	require.Equal(t, http.StatusOK, r.status, string(r.body))
+	back, err = url.Parse(r.json(t)["redirect_to"].(string))
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(back.String(), testRedirect+"?"), back.String())
+	status, tok = e.tokenRequest(t, url.Values{"grant_type": {"authorization_code"}, "client_id": {other},
+		"code": {back.Query().Get("code")}, "code_verifier": {verifier}})
+	require.Equal(t, http.StatusOK, status, tok)
+	e.mustConnect(t, tok["access_token"].(string))
+
 	tok = e.grant(t, alice, clientID, "tenant", &ta)
 	_, m = e.tokenRequest(t, url.Values{"grant_type": {"refresh_token"}, "client_id": {other}, "refresh_token": {tok["refresh_token"].(string)}})
 	require.Equal(t, "invalid_grant", m["error"])

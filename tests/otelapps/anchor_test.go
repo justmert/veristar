@@ -79,7 +79,7 @@ func TestAnchorPlatform(t *testing.T) {
 
 	d := &anchorDriver{client: &http.Client{Timeout: 10 * time.Second}, sent: map[string]map[requestKey]int64{}}
 	const sep, platform = "anchor-sep-server", "anchor-platform-server"
-	sepURL, platformURL := "http://127.0.0.1:47206", "http://127.0.0.1:47207"
+	sepURL, platformURL := "http://127.0.0.1:27206", "http://127.0.0.1:27207"
 	d.waitFor(t, sep, sepURL+"/.well-known/stellar.toml", "/.well-known/stellar.toml")
 	d.waitFor(t, platform, platformURL+"/health", "/health")
 

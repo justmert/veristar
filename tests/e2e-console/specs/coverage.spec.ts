@@ -1,5 +1,5 @@
 // the estimate of visits not measured because of privacy signals, end to
-// end. a project pastes the console's snippet, which pins tracker 1.3.1 as
+// end. a project pastes the console's snippet, which pins tracker 1.3.2 as
 // the recommended release. three browsers load the site; one of them sends
 // Sec-GPC: 1 on every request. the gateway attributes each request for the
 // tracker file to the site by the page's origin in the Referer header and
@@ -78,7 +78,7 @@ test.beforeAll(async ({ browser }) => {
     `/api/sites/${site.id}/snippet`,
   );
   expect(snip.status).toBe(200);
-  expect(snip.body.version, "the console recommends the newest release").toBe("1.3.1");
+  expect(snip.body.version, "the console recommends the newest release").toBe("1.3.2");
   tag = snip.body.tag;
   await pasteSnippet(site.domain, tag);
 
@@ -91,7 +91,7 @@ test.beforeAll(async ({ browser }) => {
     });
     try {
       const page = await ctx.newPage();
-      const loaded = page.waitForResponse((r) => r.url().endsWith("/v/1.3.1/sdk.js"));
+      const loaded = page.waitForResponse((r) => r.url().endsWith("/v/1.3.2/sdk.js"));
       await page.goto(`https://${site.domain}/`);
       expect((await loaded).status()).toBe(200);
     } finally {
@@ -134,7 +134,7 @@ test("the snippet offers the title opt-in from 1.3.0", async () => {
     .getByRole("button", { name: "Show" })
     .click();
   // the newest release, which reads the title choice like every release from 1.3.0
-  await expect(page.getByText("tracker 1.3.1").first()).toBeVisible();
+  await expect(page.getByText("tracker 1.3.2").first()).toBeVisible();
   await page.getByLabel("Send the page title").check();
   await expect(page.locator("pre code").first()).toContainText('data-send-title="true"');
   expect(tag).not.toContain("data-send-title");

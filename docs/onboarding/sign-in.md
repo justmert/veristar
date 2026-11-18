@@ -35,10 +35,11 @@ the first and last four characters of the address, such as `GCB6…WOQN`.
 Sign with the account's own key. An account whose master key has no weight
 (a multisig setup where only other signers can sign) cannot sign in this way.
 
-Wallets that open a web page in a pop-up (Albedo, xBull's web wallet),
-connect through WalletConnect, or are hardware wallets (Ledger, Trezor) are
-not offered: the console's security headers refuse messages from pop-ups of
-other sites, connections to other servers, frames and USB access.
+The console offers browser extension wallets only. Its security headers
+refuse messages from pop-ups of other sites, connections to other servers,
+frames and USB access, so wallets that work through a web page pop-up
+(Albedo, xBull's web wallet), WalletConnect or a hardware device (Ledger,
+Trezor) are not in the list.
 
 ## Sign in with a passkey
 
@@ -86,7 +87,7 @@ version of Chrome, Edge, Firefox or Safari.
 
 ## Link GitHub, a wallet and a passkey
 
-Open the account menu at the bottom of the sidebar and choose **Account**.
+Open the account menu at the bottom of the sidebar (your name) and choose **Account**.
 Under **Sign-in methods**:
 
 - **Link a wallet** signs a challenge with the wallet you choose and adds its

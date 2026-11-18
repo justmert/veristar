@@ -3,7 +3,7 @@
 // security policy of docs/onboarding/web/content-security-policy.md, and an
 // external referrer kept on the first pageview of every example site
 import { expect, test } from "@playwright/test";
-import { SDK_PATH, SITES, siteByKey } from "../sites.ts";
+import { SDK_PATH, SITES, siteByKey, TRACKER_VERSION } from "../sites.ts";
 import {
   expectContract,
   expectCustomEvents,
@@ -74,7 +74,7 @@ test("self-hosted sdk.js: loaded from the site, events go to the gateway", async
   await trackerReady(page);
   const [pv] = await expectPageviews(staticSite, 1);
   expect(pv?.u).toBe("/self-hosted.html");
-  expect(sdk).toEqual([`200 ${staticSite.origin}/sdk/1.0.0/sdk.js`]);
+  expect(sdk).toEqual([`200 ${staticSite.origin}/sdk/${TRACKER_VERSION}/sdk.js`]);
   // the gateway never served the file for this page
   expect((await recorded()).filter((r) => r.path === SDK_PATH)).toEqual([]);
   await expectContract(staticSite);

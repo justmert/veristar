@@ -90,13 +90,14 @@ job_containers() {
 job_js() {
 	skip "pnpm/action-setup and actions/setup-node (pnpm and node are taken from PATH: node $(node --version))"
 	pnpm install --frozen-lockfile
-	# --with-deps installs system packages with apt as root, which a runner
-	# may do and a shared host must not; the browsers' libraries are already
-	# present here, or the install below fails
-	skip "playwright --with-deps (system packages)"
-	pnpm --filter ./tests/e2e exec playwright install chromium firefox webkit
+	# the browsers come with the playwright image of the browser container
+	skip "playwright install --with-deps (the matrix below runs in the browser container)"
 	pnpm check
 	pnpm test
+	# the browser matrix: here in the browser container, out of reach of the
+	# shared host's network changes (ci.yml runs it with the runner's browsers)
+	heavy "browser matrix"
+	make e2e-matrix
 }
 
 job_integration() {

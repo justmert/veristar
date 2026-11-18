@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -64,8 +65,20 @@ func loadInventory(t *testing.T) inventory {
 	require.NoError(t, err)
 	var inv inventory
 	require.NoError(t, json.Unmarshal(b, &inv))
+	// the first core node by name runs the queries of sql: sa-lc-core-1 in
+	// the default and minimal topologies, sa-lc-node-1 in the node topology
+	names := make([]string, 0, len(inv.All.Children["core"].Hosts))
+	for name := range inv.All.Children["core"].Hosts {
+		names = append(names, name)
+	}
+	require.NotEmpty(t, names, "no core node in the inventory")
+	sort.Strings(names)
+	sqlNode = names[0]
 	return inv
 }
+
+// sqlNode is the node container whose postgresql sql queries
+var sqlNode string
 
 // transport resolves every platform hostname to the given address, as the
 // traffic manager's answers would, and trusts caddy's local ca without checking
@@ -166,7 +179,7 @@ func signIn(t *testing.T, inv inventory, core host, githubID int, login string) 
 // output. it reads the stored result; nothing is written through it.
 func sql(t *testing.T, db, q string) string {
 	t.Helper()
-	out, err := exec.Command("docker", "exec", "sa-lc-core-1", "docker", "exec", "veristar-core-postgres-1",
+	out, err := exec.Command("docker", "exec", sqlNode, "docker", "exec", "veristar-core-postgres-1",
 		"psql", "-U", "postgres", "-d", db, "-tAX", "-c", q).CombinedOutput()
 	require.NoError(t, err, string(out))
 	return strings.TrimSpace(string(out))

@@ -34,7 +34,7 @@ import (
 	"github.com/justmert/veristar/internal/db/tenantq"
 )
 
-// the two bands of a site (docs/reference/umami-contract.md item 14)
+// the two bands of a site (docs/reference/web-metrics.md, "bands")
 const (
 	BandPrimary    = "primary"
 	BandQuarantine = "quarantine"

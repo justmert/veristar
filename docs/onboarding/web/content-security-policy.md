@@ -56,8 +56,8 @@ directives are the example site's own.
 - **Self-hosted `sdk.js`** ([self-hosting.md](self-hosting.md)): `script-src` then needs your own
   origin (`'self'`) instead of the gateway, and `connect-src` still needs the gateway.
 - **Nonces and `'strict-dynamic'`.** With a nonce-based policy, give the tag your nonce attribute;
-  with `'strict-dynamic'`, host entries in `script-src` are ignored, so the nonce is required. These
-  variants were not tested.
+  with `'strict-dynamic'`, the browser ignores host entries in `script-src`, so the nonce is
+  required. The browser tests cover the host-based policy above.
 - **Page code that calls `umami.track()`** must itself be allowed by the policy. The example keeps
   it in a file of its own ([`page.js`](https://github.com/justmert/veristar/blob/main/examples/static-html/src/page.js)) so that no
   inline script is needed.

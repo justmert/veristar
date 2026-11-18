@@ -143,7 +143,7 @@ after a 20 ms wait (`motion.stagger`); layout moves use one spring (`motion.spri
 `<dialog>` sits in the browser's top layer above all of them.
 
 **Mark.** An orbit circle crossed by a meridian with the accent star at its top
-(`src/mark.tsx`, `docs/logo/veristar.svg`, the favicons).
+(`src/mark.tsx`, `docs/logo/veristar.svg`, the favicons and `assets/mark.svg`).
 
 ## Changing the brand
 

@@ -27,7 +27,7 @@ proposals sets the frame:
 | Probe (prober, Gatus and the SLO collector as a Compose bundle, `status.<BASE_DOMAIN>`), on a separate virtual machine in Azure East US | rendered again from `playbooks/probe-bundle.yml` on the new operator's server ([../deploy/probe.md](../deploy/probe.md)) |
 | Secrets (`infra/secrets/<env>/secrets.enc.yaml`, SOPS with age, encrypted to `infra/secrets/recipients/<env>.txt`) | new operator's keys added, then every value rotated, then the old keys removed (section 4) |
 | GitHub OAuth Apps for console sign-in | new apps under the new owner, new client ids and secrets |
-| Operator roster and the bootstrap list `OPERATOR_GITHUB_IDS` (SCF's operators) | unchanged unless SCF changes it |
+| Operator roster and the bootstrap lists `OPERATOR_GITHUB_IDS` and `OPERATOR_STELLAR_ADDRESSES` (SCF's operators) | unchanged unless SCF changes it |
 | npm scope for the tracker package | scope ownership transfer, trusted publishing reconfigured for the new repository |
 | Alert receiver (the console's operator Alerts page, plus an optional Discord webhook) | the Alerts page moves with the environment; a webhook, if used, is replaced by one the new operator owns |
 | Container images and tracker release files (`release-images.yml`, `release-tracker.yml`) | rebuilt from the repository; image paths follow the new owner |
@@ -98,7 +98,7 @@ before the delegation changes.
    _acme-challenge.app.<domain>   CNAME  <sa_acme_challenge_domain>
    ```
 
-   `<sa_acme_challenge_domain>` is a name in a Cloudflare zone the new operator's token may
+   `<sa_acme_challenge_domain>` is a name in a Cloudflare zone the new operator's token can
    edit (for example `_acme-challenge.<a domain the new operator owns>`).
    The new nodes' Caddy (`sa_tls_cloudflare-delegated` in `deploy/caddy/assemble.sh`, Caddy's
    `dns_challenge_override_domain`) writes the answer there, and Let's Encrypt follows the
@@ -172,8 +172,8 @@ After the cutover is confirmed working:
   every value they could read is rotated (section 4).
 - Their GitHub access to the repository, their cloud, DNS, probe and registrar access, their
   alert receiver and any operator API keys they created are removed or revoked.
-- Their GitHub id is removed from `OPERATOR_GITHUB_IDS` if it is there, the control plane is
-  restarted, and an SCF operator admin removes their row from the roster, which ends their access
+- Their GitHub id and Stellar addresses are removed from `OPERATOR_GITHUB_IDS` and
+  `OPERATOR_STELLAR_ADDRESSES` if they are there, the control plane is restarted, and an SCF operator admin removes their row from the roster, which ends their access
   at once ([../operators/roster.md](../operators/roster.md)).
 - The old environment is torn down after the advisory tail (section 6) or when SCF says so,
   and its backups are deleted at the end of their retention. Tenants are told when.
@@ -212,6 +212,13 @@ Cloudflare token, Discord) are replaced at their providers and passed in; the pl
 kept its value, and asks GitHub whether the previous OAuth client secret is refused. The
 pgBackRest cipher passphrase is the exception: a rebuilt environment has its own, an in-place
 handover needs a new repository.
+
+The usage report signing key is kept by `rotate-secrets.py`, because every report already shared
+names its account id. A rebuilt environment has its own pair from `new-secrets.py`: add the old
+account id to `sa_report_signing_retired_keys` of the new environment, so the reports moved with
+the data still verify against the domain's `stellar.toml`. In place, replace the pair with the
+retirement step of [the usage report signing key](../runbooks/secret-rotation.md#the-usage-report-signing-key).
+Either way, update the key on [signed usage reports](../reference/usage-reports.md).
 
 Effects that tenants notice:
 

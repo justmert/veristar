@@ -51,8 +51,9 @@ A project reads all seven in the console's web dashboard (**Web** in each projec
 show page views, unique visitors, visits, bounce rate and visit duration, and the Sources,
 Countries and Environment panels show referrers, countries, and browsers, OS and devices. Which
 figure the dashboard reads from the daily aggregates and which from Umami directly is in
-[control-plane-api.md](control-plane-api.md) section 18.2; a project's view-only Umami user
-reads all seven for its team's websites only ([umami-contract.md](umami-contract.md) item 11).
+[control-plane-api.md](control-plane-api.md) section 18.2. The figures the dashboard reads from
+Umami directly, it reads as the member's own view-only Umami user, which reads the websites of the
+project's team only ([umami-contract.md](umami-contract.md) item 11).
 
 ## Unique visitors are unique per UTC day
 
@@ -103,10 +104,12 @@ delivery.
 
 ## Bands
 
-Each site has a primary website (id equals the site id) and a quarantine website. Events
-from an address prefix go to the quarantine website from the event that brings the prefix to
-`IPCLUSTER_THRESHOLD` distinct visitor tokens for the site within an hour
-(`internal/gateway/ipcluster.go`). Every metric above is
+Each site has a primary website (id equals the site id) and a quarantine website. Two gateway
+checks send events to the quarantine website: events from an address prefix from the event that
+brings the prefix to its same-network threshold of distinct visitor tokens for the site within an
+hour (`internal/gateway/ipcluster.go`), and a visitor's events past `VISITOR_EVENTS_PER_HOUR` in
+an hour (`internal/gateway/volume.go`); both are in [gateway-limits.md](gateway-limits.md). Every
+metric above is
 computed per website, so quarantined traffic is counted separately and never mixed into the
 primary numbers.
 
@@ -116,7 +119,12 @@ primary numbers.
   `{"beep":"boop"}`, stores nothing and is counted as `bot` on `EDGE_STATS` and in
   `replayer_outcomes_total`.
 - Events the gateway refused (`Sec-GPC: 1`, bad proof, wrong origin, rate limits); they are
-  counted on `EDGE_STATS` by outcome.
+  counted on `EDGE_STATS` by outcome. Visitors whose browser sends `Sec-GPC: 1` are estimated
+  separately as the share of visits not measured because of privacy signals
+  ([control-plane-api.md](control-plane-api.md) section 17.5).
+- Page signals of tracker 1.3.0 and later (views, framed views, never-visible pages) are counted
+  by the gateway for the integrity grade and never reach Umami ([wire-v1.md](wire-v1.md), "Pages
+  a person can see (1.3.0)").
 - Visits that hold only custom events: they have no pageview, so Umami's `/stats` does not
   count them as visits, visitors or bounces.
 - Events whose timestamp is not after a website reset: Umami clamps every read to the
@@ -158,7 +166,7 @@ by `TestAggregateWeb` (`internal/jobs/aggregateweb`) on every run.
 | Unknown values | A null or empty value (country without a `cf-ipcountry` header) is left out of `/metrics`; the visitor still counts in `/stats`. | `and <column> != ''` |
 | Day boundaries | `startAt` and `endAt` are both included (`created_at between start and end`). With the next midnight as `endAt`, an event at exactly 00:00:00 counts on two days (measured: 8 page views instead of 7). The task reads a day as `[00:00:00.000, 23:59:59.999]` UTC. | `getWebsiteStats.ts`, `getPageviewMetrics.ts` |
 | Visitors over a range | Equal to the sum of daily visitors. Measured over three days: page views 13 = 7 + 3 + 3, visitors 10 = 5 + 3 + 2, visits 10 = 5 + 3 + 2, bounces 7 = 3 + 3 + 1, total time 1560 s = 360 + 0 + 1200; every `/metrics` value of the range equals the sum of its daily values (for example `github.com` 4 = 2 + 2, `DE` 5 = 2 + 2 + 1). The same client salt on three days gave three sessions, because Umami's daily salt changes with the event's day even before the gateway's visitor token rotates. | `lib/crypto.ts` `getSalt`, `lib/collection-session.ts` |
-| Paging | `/metrics` takes `limit` (default 500) and `offset`, and orders only by `y desc`, so values with equal counts have no stable order across pages. The task asks for one page of 1,000 values, doubles the limit while a page comes back full, and fails the site day above 64,000 values instead of paging. | `getPageviewMetrics.ts`, `getSessionMetrics.ts` |
+| Paging | `/metrics` takes `limit` (default 500) and `offset`, and orders only by `y desc`, so values with equal counts have no stable order across pages. The task asks for one page of 1,000 values, doubles the limit while a page comes back full, and fails the site day when a page of 64,000 values comes back full, instead of paging. | `getPageviewMetrics.ts`, `getSessionMetrics.ts` |
 | Unknown website | `/stats` and `/metrics` of a website id that does not exist answer 200 with zeros for the admin. The task therefore checks that both websites of a site exist before it reads, and reports a missing one as an error rather than storing a day without traffic. | `canViewWebsite` passes for an admin |
 | `type=url` | Not a type in 3.5.0 (400); `path` and `fullPath` replaced it. The aggregates do not store paths; the web dashboard reads `path`, `entry` and `exit` from Umami over the whole range (control-plane-api.md 18.2). | `lib/constants.ts` |
 

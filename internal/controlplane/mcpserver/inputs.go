@@ -159,8 +159,8 @@ type webFilters struct {
 	OS          string `json:"os,omitempty" jsonschema:"operating system, for example Mac OS"`
 	Device      string `json:"device,omitempty" jsonschema:"device type: desktop, laptop, tablet or mobile"`
 	Country     string `json:"country,omitempty" jsonschema:"ISO 3166-1 alpha-2 country code, for example DE"`
-	Region      string `json:"region,omitempty" jsonschema:"region code, for example DE-BE"`
-	City        string `json:"city,omitempty" jsonschema:"city name"`
+	Region      string `json:"region,omitempty" jsonschema:"region code; the platform records no region, so this filter matches nothing"`
+	City        string `json:"city,omitempty" jsonschema:"city name; the platform records no city, so this filter matches nothing"`
 	Language    string `json:"language,omitempty" jsonschema:"browser language, for example en-US"`
 	UTMSource   string `json:"utm_source,omitempty" jsonschema:"utm_source (only when the site collects UTM parameters)"`
 	UTMMedium   string `json:"utm_medium,omitempty" jsonschema:"utm_medium"`

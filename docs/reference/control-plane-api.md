@@ -13,7 +13,7 @@ Database names are those of the migrations in `db/migrations/`
 response field maps to a column, the field has the column's name.
 
 Sections 1 to 3 hold the conventions every route follows: transport,
-authentication, errors, shared objects and the audit log. Sections 4 to 18 hold
+authentication, errors, shared objects and the audit log. Sections 4 to 20 hold
 the routes by area:
 
 | Section | Area |
@@ -31,6 +31,8 @@ the routes by area:
 | 16 | CSV exports and "What SCF sees" |
 | 17 | the integrity grade of web traffic |
 | 18 | a project's web dashboard: totals, days, breakdowns, hours and visitors right now |
+| 19 | SCF cohorts, growth and percentiles in the global views, and threshold rules |
+| 20 | signed usage reports and their public verification |
 
 A new route adds its error codes to section 2.4 and its audit actions to section
 3.3. The meaning of an existing field never changes.
@@ -42,7 +44,7 @@ A new route adds its error codes to section 2.4 and its audit actions to section
 | Item | Rule |
 |---|---|
 | Base URL | `https://app.<BASE_DOMAIN>/api`. Caddy (`deploy/caddy/app.Caddyfile`) serves the console and proxies `/api/*` to the control plane unchanged. |
-| Dev base URL | `http://localhost:8085/api` (the GitHub OAuth App callback is `http://localhost:8085/api/auth/github/callback`). 8080 is the dev gateway, so the control plane listens on 8085 and is also the dev console origin. |
+| Dev base URL | `http://localhost:8085/api` for direct API calls (8080 is the dev gateway, so the control plane listens on 8085). The dev console runs on the Vite dev server at `http://localhost:5173`, which proxies `/api` to the control plane; it is the dev console origin, and the GitHub OAuth App callback is `http://localhost:5173/api/auth/github/callback`. |
 | Media type | Request and response bodies are `application/json; charset=utf-8`. A body on a request with another `Content-Type` is refused with 415. |
 | Body size | Request bodies are limited to 64 KiB (413). |
 | Unknown fields | A request body with a field this document does not list is refused with 400 `invalid_body`, so a typo never passes silently. |
@@ -104,7 +106,7 @@ Every request with method `POST`, `PUT`, `PATCH` or `DELETE` must carry both:
    only such header is `Access-Control-Allow-Origin: *` on the two public OAuth
    discovery documents of 12.3).
 2. `Origin` equal to `CONSOLE_ORIGIN` (`https://app.<BASE_DOMAIN>`; dev
-   `http://localhost:8085`). Missing or different: 403 `origin_mismatch`.
+   `http://localhost:5173`). Missing or different: 403 `origin_mismatch`.
 
 `GET` and `HEAD` never change state. The only `GET` route with side effects outside
 the database is the browser redirect `/api/auth/github/start`, covered in its
@@ -220,7 +222,7 @@ List routes answer:
 | 400 | `ceremony_expired` | a passkey answer without matching options of this session, after they expired or were used (5.15) |
 | 400 | `step_up_failed` | a passkey answer that does not verify (5.15) |
 | 401 | `unauthenticated` | no session, expired session |
-| 401 | `step_up_required` | an `/api/operator` route, or a change to the sign-in methods of an operator account (4.1.8), without a recent passkey step-up on the session (5.1, 5.15); the session itself stays valid |
+| 401 | `step_up_required` | an `/api/operator` route, a change to the sign-in methods of an operator account (4.1.8) or the deletion of one (4.1.6), without a recent passkey step-up on the session (5.1, 5.15); the session itself stays valid |
 | 401 | `enrollment_closed` | a first passkey from a session whose sign-in is older than the enrollment window (5.15) |
 | 403 | `csrf_header_missing` | see 1.2 |
 | 403 | `origin_mismatch` | see 1.2 |
@@ -254,15 +256,19 @@ List routes answer:
 | 409 | `tenant_suspended` | site create or update while the tenant is `suspended` (5.11); OTLP token create while `suspended` (6.2) |
 | 409 | `tenant_not_active` | OTLP token create while the tenant is `pending` or `rejected` (6.2) |
 | 409 | `erasure_in_progress` | an erasure request while another one runs for the same site (10.2) |
+| 409 | `provisioning_pending` | a web dashboard read from Umami (18.9) before the reconciler created the member's Umami user or team membership |
 | 409 | `too_many_keys` | an MCP access key create over 20 active keys of the user (12.8) |
+| 409 | `no_proposal` | a cohort confirm or dismiss without an open proposal (19.1) |
+| 409 | `rule_limit` | a threshold rule create beyond 200 rules (19.4) |
+| 409 | `not_reportable` | a usage report of a project the operator views do not list (20.1) |
 | 410 | `tracker_version_revoked` | snippet for a revoked tracker version |
 | 413 | `body_too_large` | body over 64 KiB |
 | 415 | `unsupported_media_type` | see section 1 |
 | 422 | `validation_failed` | field rules, details in `fields` |
+| 422 | `period_not_final` | a usage report period that ends on a day the daily aggregation still reads again (20.1) |
 | 429 | `rate_limited` | per-client, per-session or per-route limit; `Retry-After` header set |
 | 500 | `internal` | anything unexpected; details only in the log |
 | 503 | `unavailable` | database, NATS, Umami or GitHub unreachable, or a tenant request that waited longer than its 5 second lock timeout for the tenant row (a reconcile or an operator action holds it; 1.3); `Retry-After` set |
-| 409 | `provisioning_pending` | a web dashboard read from Umami (18.9) before the reconciler created the member's Umami user or team membership |
 | 503 | `provisioning_pending` | an erasure (10.2) before the reconciler created the site's Umami websites; `Retry-After` set |
 | 503 | `alert_source_unreachable` | no Alertmanager member answered the operator alerts route (11.2) |
 | 503 | `alert_source_not_configured` | the operator alerts route on a control plane without `ALERTMANAGER_URLS` (11.2) |
@@ -362,7 +368,7 @@ The identity fields follow User.
 An invite names either a GitHub account or a Stellar account. `github_id` is
 the GitHub account the invite is bound to; `github_login` is that account's
 login when the invite was made, for display (4.2.5). `stellar_address` is the
-G-address of an invite by address; the other two fields are then `null`.
+G-address or C-address of an invite by address; the other two fields are then `null`.
 
 **Site** (`cp.sites`):
 
@@ -424,7 +430,8 @@ Every mutation writes one `cp.audit_log` row in the same transaction as the chan
 - `detail`: JSON with the changed fields (old and new values for updates). Never a
   token, cookie, password or secret.
 
-Sign-in, tenants and sites (section 4): `user.sign_in`, `user.sign_out`, `account.delete`, `tenant.create`, `tenant.update`,
+Sign-in, tenants and sites (section 4): `user.sign_in`, `user.sign_out`,
+`user.identity_link`, `user.identity_unlink`, `account.delete`, `tenant.create`, `tenant.update`,
 `tenant.terms_accept`, `member.add`, `member.role_change`, `member.remove`,
 `invite.create`, `invite.revoke`, `invite.resolve`, `site.create`, `site.update`,
 `site.delete`, `provision.team_create`, `provision.website_create`,
@@ -541,6 +548,8 @@ beyond that new clients get 429 until buckets refill.
 
 #### 4.1.2 `GET /api/auth/github/callback`
 
+Completes the GitHub sign-in: checks the state, exchanges the code and signs the person in.
+
 Public. Browser navigation from GitHub.
 
 Query from GitHub: `code` and `state`, or `error`, `error_description`, `error_uri`
@@ -579,10 +588,14 @@ Failure: **303** to `/sign-in?error=<code>` with `code` one of `state_mismatch`,
 
 #### 4.1.3 `POST /api/auth/logout`
 
+Signs the caller out.
+
 Session, CSRF rules apply. Body: none. Destroys the session row and expires the
 cookie. Audit `user.sign_out`. **204**. Without a session: also 204 (idempotent).
 
 #### 4.1.4 `GET /api/me`
+
+Returns the signed-in account, its projects and the current terms.
 
 Session.
 
@@ -604,6 +617,8 @@ Session.
 
 #### 4.1.5 `GET /api/terms`
 
+Returns the current terms of service.
+
 Public.
 
 ```json
@@ -615,6 +630,8 @@ version is the value of the file's front matter `version`.
 
 #### 4.1.6 `DELETE /api/me`
 
+Deletes the caller's own account.
+
 Session, CSRF rules apply. Body: none. Deletes the caller's own console
 account. **204**, with the session cookie expired.
 
@@ -622,7 +639,9 @@ Refused with **409 `sole_owner`** while the caller is the only owner of a tenant
 whose status is not `removed`; the error envelope lists those tenants in
 `tenants` (2.2), ordered by name. Nothing changes then. The caller makes another
 member an owner (4.2.5), or asks the operators to remove the tenant (5.5), and
-repeats the request. The last active operator admin of the roster gets **409
+repeats the request. An operator account needs a fresh passkey step-up (5.15)
+first, as for its identity changes (4.1.8): without one the answer is **401
+`step_up_required`** and nothing changes. The last active operator admin of the roster gets **409
 `last_operator_admin`** and changes nothing; another operator becomes an admin
 first (5.16).
 
@@ -957,14 +976,20 @@ Session. Enrollment.
 
 #### 4.2.2 `GET /api/tenants`
 
+Lists the caller's projects.
+
 Session. List envelope of Tenant for the caller's memberships, excluding
 `removed`, ordered by `(created_at, id)`.
 
 #### 4.2.3 `GET /api/tenants/{tenant_id}`
 
+Returns one project.
+
 Session, member. **200** Tenant.
 
 #### 4.2.4 `PATCH /api/tenants/{tenant_id}`
+
+Renames a project or changes its description.
 
 Session, owner. Body: any of `name`, `description`. These are the only tenant
 columns `cp_tenant` may update (`00003_cp_security.sql`). Editing
@@ -1046,13 +1071,27 @@ Audit `invite.revoke`.
 
 #### 4.2.6 `POST /api/tenants/{tenant_id}/terms`
 
+Accepts the current terms version for a project.
+
 Session, owner. Body `{"version": "..."}`. Must equal the current version, else 409
 `terms_version_mismatch`. Sets `cp.tenants.accepted_terms_version`. **200** Tenant.
 Audit `tenant.terms_accept`.
 
 While a tenant's accepted version is not current, every mutating tenant route
-except this one and member removal answers 403 `terms_not_accepted`. Reads keep
-working. A tenant accepts a new terms version through this route.
+answers 403 `terms_not_accepted`, the domain check (5.8) included. Reads keep
+working. These mutating routes are the exceptions, each for the reason given:
+
+| Route | Why it works without the current terms |
+|---|---|
+| `POST /api/tenants/{tenant_id}/terms` (this route) | it is how the project accepts the current terms |
+| `DELETE /api/tenants/{tenant_id}/members/{user_id}` (4.2.5) | leaving or removing a member only reduces access |
+| `DELETE /api/tenants/{tenant_id}/otlp-tokens/{token_id}` (6.4) | a revocation only reduces exposure |
+| `POST /api/tenants/{tenant_id}/reports/{report_id}/revoke` (20.1) | a revocation only reduces exposure |
+| `DELETE /api/tenants/{tenant_id}/mcp-credentials/{credential_id}` (12.8) | a revocation only reduces exposure |
+| `POST /api/tenants/{tenant_id}/erasure` (10.2) | an erasure answers a data subject's request |
+| `POST /api/tenants/{tenant_id}/mcp-credentials` (12.8) | an MCP access key reads only, and reads need no current terms |
+
+A tenant accepts a new terms version through this route.
 
 ### 4.3 Sites
 
@@ -1077,14 +1116,20 @@ Session, member.
 
 #### 4.3.2 `GET /api/tenants/{tenant_id}/sites`
 
+Lists a project's sites.
+
 Session, member. List envelope of Site, ordered by `(created_at, id)`. Query
 `include_removed=true` adds sites with `status = 'removed'`.
 
 #### 4.3.3 `GET /api/tenants/{tenant_id}/sites/{site_id}`
 
+Returns one site.
+
 Session, member. **200** Site.
 
 #### 4.3.4 `PATCH /api/tenants/{tenant_id}/sites/{site_id}`
+
+Changes a site's name, origins or UTM collection.
 
 Session, member. Body: any of `name`, `origins` (whole list replaced),
 `collect_utm` (boolean; any other JSON type answers 400). `domain` is
@@ -1099,12 +1144,16 @@ republishes the registry entry, so the gateway applies new origins and the
 
 #### 4.3.5 `DELETE /api/tenants/{tenant_id}/sites/{site_id}`
 
+Deletes a site and its web analytics data.
+
 Session, owner. Sets `status = 'removed'` (the row stays: `cp.erasure_requests`
 references it, and the review rule of 5.6 reads the domains of removed tenants' sites). **202** Site with
 `status: "removed"`. Reconcile deletes both Umami websites (and their data) and the
 `registry_sites` key. Audit `site.delete`. Repeating the call: 202, no change.
 
 #### 4.3.6 `GET /api/sites/{site_id}/snippet`
+
+Returns the script tag that installs the tracker on a site.
 
 Session, member of the site's tenant.
 
@@ -1128,14 +1177,22 @@ Query: `version` (optional; default the newest non-revoked version of
   `origin = INGEST_ORIGIN` (attribute order and quoting are part of that contract).
 - `integrity` equals the manifest's `integrity` for the version.
 - `versions`: every non-revoked manifest entry, newest first.
-- `npm`: `null`. The console offers the script tag and hides the npm tab while
-  `npm` is `null`. The control plane refuses to start when `TRACKER_NPM_PACKAGE`
-  is set (4.5), so it never answers with an install line for a package name it
-  has not been built for.
+- `npm`: `null` while `TRACKER_NPM_PACKAGE` is unset (4.5); the console then
+  offers the script tag only. With `TRACKER_NPM_PACKAGE` set to the scoped name
+  you publish every tracker release under (built with
+  `packages/tracker/scripts/pack.mjs`, see
+  [the npm package](../onboarding/web/npm.md)), `npm` is
+  `{"package", "version", "install", "import"}`: `version` is the answer's
+  `version`, `install` is `npm install --save-exact <package>@<version>`, and
+  `import` is `import { init } from "<package>";`. The console shows these on
+  its npm tab. The control plane refuses to start when the value is not a
+  scoped npm name (`@scope/name`, lowercase letters, digits, `.`, `_` and `-`).
 - Errors: 404 `not_found` (site), 422 `unknown_tracker_version` on `version`, 410
   `tracker_version_revoked`, 409 `site_removed`.
 
 #### 4.3.7 `GET /api/sites/{site_id}/ingest`
+
+Returns what the gateway did with a site's events, per hour or day.
 
 Session, member. Hourly outcome counts from `cp.web_ingest_hourly`.
 
@@ -1201,7 +1258,7 @@ the key.
 | `UMAMI_URL`, `UMAMI_ADMIN_PASSWORD` | yes | Umami's address on the private network and its admin password |
 | `UMAMI_USER_PASSWORD_KEY` | yes | 32 bytes, base64; derives daily Umami passwords; shared with `jobs` |
 | `TRACKER_RELEASE_DIR` | yes | holds `manifest.json` and `revoked.json` |
-| `TRACKER_NPM_PACKAGE` | no | leave unset: the control plane refuses to start when it is set (4.3.6) |
+| `TRACKER_NPM_PACKAGE` | no | the scoped npm name you publish the tracker releases under; set, the snippet route answers the npm install too (4.3.6) |
 | `NATS_URL`, `NATS_REPLICAS` | yes | NATS address and stream replica count |
 | `NATS_USER`, `NATS_PASSWORD` | when the server requires auth | NATS credentials |
 | database keys | yes | as `internal/db` `PoolConfig` for `cp_system`, `cp_tenant` and `cp_operator` |
@@ -1317,6 +1374,8 @@ approval or resume note). Stored in `cp.tenants.status_reason` (or
 
 ### 5.3 `GET /api/operator/tenants`
 
+Lists every project for operators, with filters for review.
+
 Operator. List envelope (2.3) of OperatorTenantSummary.
 
 Query:
@@ -1340,6 +1399,8 @@ Query:
 - 400 `invalid_query` for an unknown status, sort or order, or `q` out of range.
 
 ### 5.4 `GET /api/operator/tenants/{tenant_id}`
+
+Returns everything operators need to review one project.
 
 Operator. **200**:
 
@@ -1385,6 +1446,8 @@ Operator. **200**:
 
 ### 5.5 Tenant lifecycle actions
 
+Operators approve, reject, suspend, resume and remove projects with these routes.
+
 All are `POST`, operator, body `{"reason": "..."}` (5.2), run under `cp_system`
 in one transaction with the tenant row locked (`for update`), write one audit
 row (actor `user:<operator id>`, target `tenant:<id>`, detail
@@ -1426,8 +1489,8 @@ user has no membership in any non-removed tenant), `web_ingest`
 warning rows unless `keep_aggregates`),
 `agg` (8.7; skipped when `keep_aggregates`), `chain` (`agg.purge_chain`:
 `agg.chain_reads`, `agg.chain_week_members` and open weeks of
-`agg.chain_weeks` always; `agg.chain_daily` and closed weeks unless
-`keep_aggregates`), `reports` (`cp.purge_usage_reports`: every signed usage
+`agg.chain_weeks` always; `agg.chain_daily`, `agg.chain_function_daily` and
+closed weeks unless `keep_aggregates`), `reports` (`cp.purge_usage_reports`: every signed usage
 report of the tenant, whatever `keep_aggregates` says). Each finished store writes
 `steps.<name>` and an audit row `purge.step` (actor `system:purge`); the last one
 sets `completed_at` and writes `purge.complete`. A failed store is retried on the
@@ -1522,14 +1585,17 @@ never gates ingestion.
 
 This is the only route that returns `verify_token`.
 
-`POST /api/sites/{site_id}/verify`: session, member. Body `{}` or
+`POST /api/sites/{site_id}/verify`: session, member, current terms accepted
+(403 `terms_not_accepted`, 4.2.6). Body `{}` or
 `{"method": "dns" | "file"}` (absent: DNS first, then the file; first success
 wins). Runs the check synchronously (at most about 15 seconds: 5 for DNS, 10 for
-the file), writes the result under `cp_tenant`, audit `site.verify` (detail:
+the file), writes the result under `cp_system` (1.3), audit `site.verify` (detail:
 method tried, result code). **200** the object above. 409 `site_removed`. 429
 `rate_limited` above 6 checks per site per hour (`Retry-After` set). The limit
 counts the site's `site.verify` audit rows of the last hour, so it holds across
-all control plane instances without shared memory.
+all control plane instances without shared memory, plus the checks of the site
+still running on the instance, so a burst of concurrent requests cannot pass
+it together.
 
 - DNS check: a TXT record at `dns.name` whose value (strings of one record
   joined) equals `dns.value` exactly.
@@ -1564,6 +1630,8 @@ to the same host over HTTPS (`redirect_refused`), and gives a request 10
 seconds.
 
 ### 5.9 `GET /api/operator/audit`
+
+Lists the audit log for operators.
 
 Operator. List envelope of AuditEntry, ordered by `(at desc, id desc)`, under
 `cp_system`.
@@ -1681,8 +1749,8 @@ and new). **200** `{"keep": ...}`.
   removed (5.5), so changing it later never changes a removal in progress.
 - `true` keeps `cp.web_ingest_hourly`, `cp.web_evidence_daily` and
   `cp.web_signals_daily` rows, `api.metrics_hourly`, `api.metrics_daily` and
-  `api.ingest_warnings` rows, the web `agg` rows, `agg.chain_daily` and the
-  closed weeks of `agg.chain_weeks` of the removed tenant. Umami websites and
+  `api.ingest_warnings` rows, the web `agg` rows, `agg.chain_daily`,
+  `agg.chain_function_daily` and the closed weeks of `agg.chain_weeks` of the removed tenant. Umami websites and
   their raw data, `api` minute rows, `cp.web_networks_daily`,
   `agg.chain_reads`, `agg.chain_week_members`, open chain weeks and the signed
   usage reports are always deleted.
@@ -1848,6 +1916,8 @@ entry has `status = "active"`.
 
 ### 6.2 `POST /api/tenants/{tenant_id}/otlp-tokens`
 
+Creates an OTLP token and returns it once.
+
 Session, member, current terms (4.2.6).
 
 ```json
@@ -1870,11 +1940,15 @@ Session, member, current terms (4.2.6).
 
 ### 6.3 `GET /api/tenants/{tenant_id}/otlp-tokens` and `GET .../otlp-tokens/{token_id}`
 
+These routes list a project's OTLP tokens or return one, never the token itself.
+
 Session, member, any non-removed status. The list is the envelope of 2.3 over
 Token objects, ordered by `(created_at, id)`. Query `include_revoked=true` adds
 revoked tokens. A token of another tenant is 404 `not_found` (1.3).
 
 ### 6.4 `DELETE /api/tenants/{tenant_id}/otlp-tokens/{token_id}`
+
+Revokes an OTLP token, so the collector refuses it.
 
 Session, member. Allowed in every non-removed status and without current terms,
 because taking a credential out of use must never be blocked.
@@ -2119,6 +2193,8 @@ CORS preflights never inflate the volume, the error rates or the latency percent
 
 ### 7.5 `GET .../api-metrics/overview`
 
+Returns the headline API numbers of a range and of the range before it.
+
 Parameters: range and filters. The summary of the range and of the preceding
 range of equal length: `previous.from = from − (to − from)`,
 `previous.to = from`, resolved with the retention step of 7.2 on its own
@@ -2137,6 +2213,8 @@ range of equal length: `previous.from = from − (to − from)`,
 counted then.
 
 ### 7.6 `GET .../api-metrics/timeseries`
+
+Returns the API numbers per time bucket, for charts.
 
 Parameters: range and filters. One point per bucket from `from` (inclusive) to
 `to` (exclusive), in time order, including buckets without data (zeros,
@@ -2158,6 +2236,8 @@ points (a 24-month range has 730 or 731).
 Each point's percentiles come from the bucket arrays of that time bucket only.
 
 ### 7.7 `GET .../api-metrics/routes`
+
+Lists the API numbers per service, method and route.
 
 Parameters: range, filters, `sort`, `order`, `limit`, `cursor`. One item per
 service, method and route with at least one selected row. A route that only infrastructure
@@ -2192,6 +2272,8 @@ requests reached, such as `GET /healthz`, is listed with `requests` 0 and its
 
 ### 7.8 `GET .../api-metrics/status`
 
+Returns requests per status class and status code.
+
 Parameters: range and filters.
 
 ```json
@@ -2217,6 +2299,8 @@ Parameters: range and filters.
 
 ### 7.9 `GET .../api-metrics/services`
 
+Lists the services that sent API data in the range.
+
 Parameters: range only (a filter is 400 `invalid_query`). Every service with any
 row in the range, ordered by `service`; the list behind the service filter. An
 empty `items` is the console's empty state, which links to the OTLP token page
@@ -2235,6 +2319,8 @@ empty `items` is the console's empty state, which links to the OTLP token page
 `requests` and `lossy` are over the selected source of that service.
 
 ### 7.10 `GET .../api-metrics/warnings`
+
+Returns the ingest warnings of the range, per kind and day.
 
 Parameters: range only. Ingest warnings from `api.ingest_warnings`, which are
 counted per UTC day: every day from the day of `from` to the day of the last
@@ -2371,6 +2457,8 @@ rules of 5.2) and `has_web_data`, `has_api_data`.
 
 ### 8.3 `GET /api/operator/web/projects`
 
+Lists every project with its web numbers, for ranking and filtering.
+
 Operator. Default sort `pageviews`. Item:
 
 ```json
@@ -2383,6 +2471,8 @@ Operator. Default sort `pageviews`. Item:
   "quarantine_pageviews": 40, "quarantine_visitors": 12, "quarantine_share": 0.03225806451612903,
   "ingest_requests": 1890, "ingest_rejected": 75, "rejected_share": 0.03968253968253968,
   "integrity": { "grade": "A", "graded_days": 24, "days_a": 22, "days_b": 2, "days_c": 0 },
+  "coverage": { "script_requests": 1900, "gpc_requests": 230, "unmeasured_share": 0.12105263157894737 },
+  "onchain": { "Summary of 15.7": "..." },
   "top": {
     "referrer": [ { "key": "github.com", "value": 81 } ],
     "country": [ { "key": "DE", "value": 120 } ],
@@ -2417,8 +2507,14 @@ Operator. Default sort `pageviews`. Item:
 - `integrity`: the range grade over the project's graded site days (17.1);
   `grade` is `null` without one. Sorting by `integrity` orders A, B, C and
   puts projects without a grade last.
+- `coverage`: the estimate of visits not measured because of privacy signals
+  (17.5). `sort=unmeasured_share` sorts by its `unmeasured_share`.
+- `onchain`: the project's on-chain column (15.7). The cohort, growth and
+  percentile fields of 19.2 complete the item.
 
 ### 8.4 `GET /api/operator/web/compare`
+
+Compares the web numbers of up to five projects day by day.
 
 Operator. Query `tenants` (1 to 5 distinct tenant ids, comma-separated),
 `from`, `to` (8.1), `breakdown_limit` (1 to 500, default 10). **200**:
@@ -2455,6 +2551,8 @@ Operator. Query `tenants` (1 to 5 distinct tenant ids, comma-separated),
 - `projects` come in the order of `tenants`. Every `series` has one point per
   entry of `days`, so the charts align.
 - `integrity`: the project's range grade with its reasons (17.1).
+- `coverage` (17.5), `onchain` (15.7) and `cohort` (19.1) complete each
+  project; the example leaves them out.
 - A point is `aggregated: false`, with every number `null`, when no site of
   the project has a row for that day yet (the day was never read, for
   example before a backfill). A day the task read without traffic is
@@ -2469,6 +2567,8 @@ Operator. Query `tenants` (1 to 5 distinct tenant ids, comma-separated),
   `breakdown_limit`. 404 `not_found` when an id is unknown or internal.
 
 ### 8.5 `GET /api/operator/api/projects`
+
+Lists every project with its API numbers, for ranking and filtering.
 
 Operator. Default sort `requests`. Source rows are chosen per tenant and
 service exactly as 7.3 (metric rows when the service has any in the range,
@@ -2513,8 +2613,12 @@ than through `apimetrics.Select`, which is tenant-scoped. Item:
   `requests_5xx`, `rate_4xx`, `rate_5xx`, `p50`, `p95`, `p99`, `services`,
   `routes`. Sorting by `requests` in each order finds the lowest and highest
   usage projects.
+- `onchain` (15.7) and the cohort, growth and percentile fields of 19.2
+  complete the item.
 
 ### 8.6 `GET /api/operator/api/compare`
+
+Compares the API numbers of up to five projects day by day.
 
 Operator. Query `tenants` (as 8.4), `from`, `to`, `service_order` (`desc`
 default, or `asc`). **200**:
@@ -2539,6 +2643,7 @@ default, or `asc`). **200**:
 ```
 
 - `totals` equal the project's row of 8.5 for the same range.
+- `onchain` (15.7) and `cohort` (19.1) complete each project.
 - `series`: one point per day, the same source choice for every day (made
   over the whole range); a day without requests has 0 requests and `null`
   rates and percentiles.
@@ -2573,7 +2678,8 @@ which `jobs` already requires.
 ## 9. Operator API keys and machine metrics API
 
 Operators create keys in the console (9.2); machines read
-aggregate metrics with them under `/api/metrics/v1/` (9.3 to 9.10). The
+aggregate metrics with them under `/api/metrics/v1/` (9.3 to 9.10 and 9.12,
+plus the on-chain routes of 15.7 and the integrity route of 17.4). The
 machine API's own contract, and the document its tests validate every answer
 against, is `docs/reference/openapi/metrics-v1.yaml` (OpenAPI 3.1, served at
 `GET /api/metrics/v1/openapi.yaml`). This section states the rules around it;
@@ -2593,6 +2699,8 @@ Usage for operators: [Operator API keys](../operators/api-keys.md).
 - Every machine route is `GET`; other methods are 405.
 
 ### 9.2 Key management (operator)
+
+Operators create, list and revoke the keys of the machine API.
 
 Every route is **session** and **operator** (5.1) and runs as `cp_system`.
 Create and revoke follow the CSRF rules of 1.2.
@@ -2703,6 +2811,8 @@ Tenants in scope, ordered by id: `id`, `slug`, `name`, `status`, `created_at`,
 
 ### 9.5 `GET /web/daily`
 
+Returns daily web totals per tenant and band.
+
 Parameters `tenant`, `band` (`primary` or `quarantine`, absent for both),
 `from`, `to`, `limit`, `cursor`. One item per tenant, day and band that
 `agg.web_daily` holds: the sums over the tenant's sites of `pageviews`,
@@ -2717,6 +2827,8 @@ site and day (17.4).
 
 ### 9.6 `GET /web/dimensions`
 
+Returns daily web breakdowns (referrer, country, device, browser, operating system) per tenant.
+
 Parameters as 9.5 plus `dimension` (`referrer`, `country`, `device`,
 `browser`, `os`; absent for all). One item per tenant, day, band, dimension and
 key: `value` summed over the tenant's sites (Umami's `y`, 8.3). Ordered by
@@ -2724,6 +2836,8 @@ tenant, day, band, dimension, key (bytewise). Summed over a range these equal
 the breakdowns of 8.4.
 
 ### 9.7 `GET /web/hourly`
+
+Returns one tenant's web totals per hour, read live from Umami.
 
 Parameters `tenant`, `from`, `to` (hours). A key for every tenant must give
 `tenant` (400 otherwise). The control plane reads Umami's `/stats` for every
@@ -2737,6 +2851,8 @@ most 4 Umami requests of one answer run at once. The external prober
 (`cmd/prober`) uses this route as its freshness check.
 
 ### 9.8 `GET /api/daily`
+
+Returns daily API numbers per tenant.
 
 Parameters `tenant`, `service`, `from`, `to`, `limit`, `cursor`. From
 `api.metrics_daily`, the source chosen per tenant and service over the whole
@@ -2756,6 +2872,8 @@ service's `source`. Ordered by tenant, day, service, method, route (bytewise).
 
 ### 9.10 `GET /api/hourly`
 
+Returns hourly API numbers per tenant.
+
 Parameters `tenant`, `service`, `from`, `to` (hours), `limit`, `cursor`. As
 9.8 over `api.operator_hourly` (item field `hour`): the rolled-up rows of
 `api.metrics_hourly`, and for hours the rollup (every 5 minutes) has not
@@ -2763,6 +2881,8 @@ reached yet, the sums of their minute rows, so the current hour holds every
 minute the metrics writer has stored.
 
 ### 9.11 `GET /api/operator/api-keys/{key_id}/usage`
+
+Returns how often a machine API key was used, per hour.
 
 Operator. Parameters `from`, `to` (UTC days, default the 7 days ending today,
 at most 31). Answer: `key_id`, `from`, `to`, `totals` `{requests, rejected}`
@@ -2835,6 +2955,8 @@ in [Right to erasure](../compliance/erasure.md); this section is the contract. C
 
 ### 10.2 `POST /api/tenants/{tenant_id}/erasure`
 
+Starts an erasure: one visitor of today, one session, or a whole site.
+
 Session, owner (403 `owner_required` for members). Allowed in every tenant
 status a member can reach (suspended included) and without current terms.
 
@@ -2865,10 +2987,14 @@ continues in the control plane; clients poll 10.4.
 
 ### 10.3 `GET /api/tenants/{tenant_id}/erasure`
 
+Lists a project's erasure requests.
+
 Session, member. List envelope (2.3), newest first by `(requested_at, id)`.
 Optional query `site_id` filters to one site.
 
 ### 10.4 `GET /api/tenants/{tenant_id}/erasure/{request_id}`
+
+Returns one erasure request and its result.
 
 Session, member. The request object; 404 for an unknown id or one of another
 tenant.
@@ -2882,7 +3008,10 @@ tenant.
 2. The control plane records the last sequence of `WEB_EVENTS`, inserts the row
    (`running`, `heartbeat_at`), writes `erasure.request` and answers 202.
 3. The run renews `heartbeat_at` every 10 seconds and waits until `WEB_EVENTS`
-   holds no message on `web.events.<site>` at or below the recorded sequence. If
+   holds no message of the site at or below the recorded sequence. The replayer
+   partitions a site's events by visitor, so the run checks every subject of
+   the site: `web.events.<site>.<partition>` (two digits) and the subject
+   without a partition, `web.events.<site>`, that an older gateway writes. If
    that takes longer than `ERASURE_QUEUE_WAIT`, it fails with nothing deleted.
 4. `visitor_today`: reads `visit.<site>.<vt>` in `visit_state`, purges it, and
    deletes each Umami session it names (both bands); deletes `WEB_DLQ` messages
@@ -2921,6 +3050,8 @@ cluster holds right now. It is the operators' alert channel, so the route never
 lets the page say "all clear" without having asked Alertmanager.
 
 ### 11.1 `GET /api/operator/alerts`
+
+Returns the alerts Alertmanager holds right now.
 
 Operator (5.1). No query parameters. The control plane asks every configured
 Alertmanager member at once (`GET /api/v2/alerts` without filters, 5 seconds
@@ -3082,7 +3213,7 @@ resource is `<CONSOLE_ORIGIN>/mcp`.
 | `POST /oauth/register` | RFC 7591 | public clients only (`token_endpoint_auth_method` absent or `none`); 1 to 10 `redirect_uris`, each `https`, `http` on a loopback host (RFC 8252 7.3) or a private-use scheme without a fragment (`javascript`, `data`, `file` and similar refused); `client_name` at most 100 characters. Unknown metadata is ignored. 201 with `client_id` (`mcpc_` and 32 characters). At most 10 registrations a minute per instance, burst 30; a client without any grant is deleted after a day |
 | `GET /oauth/authorize` | OAuth 2.1 | `response_type=code`, `client_id`, `redirect_uri` (exactly a registered one; optional when the client registered exactly one), `code_challenge` with `code_challenge_method=S256` (required), `state` (at most 1,024 characters), optional `resource` (must equal the resource URI, RFC 8707) and `scope` (`analytics:read`; `offline_access` is accepted and ignored, every grant gets a refresh token). An unknown client or redirect URI is shown on the console page with `error`; every later error goes to the redirect URI with `error`, `state` and `iss`. A valid request is sealed (AES-256-GCM, key derived from `OAUTH_STATE_KEY` with HKDF and its own label, 10 minutes) and the browser goes to the console page `/ai/consent?request=<sealed>` |
 | `POST /api/mcp/authorize/inspect`, `.../approve`, `.../deny` | console | session routes with the CSRF rules of 1.2 (12.8) |
-| `POST /oauth/token` | OAuth 2.1 | form body. `authorization_code`: `client_id`, `code` (single use, 60 seconds), `redirect_uri` (as in the request), `code_verifier` (43 to 128 unreserved characters, S256 checked), optional `resource`. `refresh_token`: `client_id`, `refresh_token`. 200 `{access_token, token_type: "Bearer", expires_in: 3600, refresh_token, scope}` with `Cache-Control: no-store` |
+| `POST /oauth/token` | OAuth 2.1 | form body. `authorization_code`: `client_id`, `code` (single use, 60 seconds), `redirect_uri` (when given, exactly the one of the request; a client that left it out of the request leaves it out here too, and OAuth 2.1 lets any client leave it out), `code_verifier` (43 to 128 unreserved characters, S256 checked), optional `resource`. `refresh_token`: `client_id`, `refresh_token`. 200 `{access_token, token_type: "Bearer", expires_in: 3600, refresh_token, scope}` with `Cache-Control: no-store` |
 | `POST /oauth/revoke` | RFC 7009 | `client_id`, `token` (refresh or access token); revokes the whole grant of the presenting client; 200 whatever the token was |
 
 Lifetimes: access token 1 hour, refresh token 30 days from its issue, rotated
@@ -3093,8 +3224,9 @@ tenant status and the operator flag again. Token errors follow RFC 6749 5.2:
 `invalid_request`, `invalid_client` (401), `invalid_grant`,
 `unsupported_grant_type`, `invalid_target`.
 
-Consent: the console page `/ai/consent` signs the person in with GitHub if
-needed (the sealed request waits in the tab's session storage), shows the
+Consent: the console page `/ai/consent` sends a person without a session to
+the sign-in page (GitHub, Stellar wallet or passkey, 4.1) and back, while the
+sealed request waits in the tab's session storage. It then shows the
 client name, where the browser returns and what is granted, and lists the
 person's projects with status `active` or `pending`; operators also see "the
 operator view". Approve writes the code and answers `{redirect_to}`, which the
@@ -3136,8 +3268,8 @@ security, exactly as for the console. Only `GET` reaches them.
 
 **12.4.2 Web analytics tools** read Umami's REST API on the private network as
 the credential user's own Umami user, through the same reader as the web
-dashboard (18.8: daily derived password, a 5 minute login cache per user and
-site shared with the console, a 401 logs in once more). A `site_id` from the client is first read through 4.3.3 as the
+dashboard (18.8: daily derived password, login reused for 5 minutes per user
+and site). A `site_id` from the client is first read through 4.3.3 as the
 principal, which answers only for a site of the credential's tenant; only
 then is the Umami website id derived from it (`view` `primary` is the site
 id, `quarantine` its `quarantine_website_id`). Saved funnel and goal ids are
@@ -3180,6 +3312,11 @@ and `get_threshold_rule_matches` (19.4).
 
 **12.4.5 Integrity** for a project: `get_web_integrity` (17.2).
 
+**12.4.6 On-chain activity and "What SCF sees"**: the project tools
+`get_onchain_activity` (15.3), `get_contract_functions` (15.9) and
+`get_scf_view` (16.3), and the operator tools `get_tenant_onchain` and
+`get_tenant_contract_functions` (15.7).
+
 No MCP resources or prompts are offered; the server's instructions tell a
 model the order to call tools in.
 
@@ -3219,6 +3356,8 @@ a JSON-RPC error.
   `MCPToolFailuresHigh` ([alert runbook](../runbooks/alerts.md)).
 
 ### 12.8 Console routes
+
+Members and operators manage MCP access keys, and approve OAuth requests, with these routes.
 
 Session routes with the CSRF rules of 1.2.
 
@@ -3279,8 +3418,10 @@ closes (15.8).
   unique on `(tenant_id, strkey)`. `kind` is `account` or `contract`,
   `added_by` is `enrollment` or `console`. A trigger on `cp.tenants` copies the
   G and C ids of `enrollment_answers.stellar_ids` into it at enrollment and
-  resubmission; an id the answers already held and the tenant removed in the
-  console is not copied again until the answers add it anew. M (muxed) ids
+  resubmission, up to 20 declared ids per project (migration 00048, the same
+  cap as `POST .../onchain/ids` in 15.3), so a resubmission never takes a
+  project past it. An id the answers already held and the tenant removed in
+  the console is not copied again until the answers add it anew. M (muxed) ids
   are not copied: their activity is the activity of their G account, which the
   tenant adds. `cp_tenant` inserts and deletes rows of its own tenant; only
   `cp_system` writes the challenge and proof columns.
@@ -3406,7 +3547,9 @@ stay and come back if the id is added again.
 ### 15.4 Proof of control
 
 **`POST /api/tenants/{tenant_id}/onchain/ids/{chain_id}/challenge`** (accounts
-only, 422 for a contract): any member. A new random nonce valid for 30
+only, 422 for a contract): any member, terms accepted (403
+`terms_not_accepted`), not while the tenant is `suspended` (409
+`tenant_suspended`). A new random nonce valid for 30
 minutes replaces any earlier one. The message names the console host and the
 project by its name, quoted as a Go or JSON string, and its id, so a wallet
 shows the signer which project asks.
@@ -3422,7 +3565,7 @@ shows the signer which project asks.
 
 **`POST /api/tenants/{tenant_id}/onchain/ids/{chain_id}/verify`**: any member,
 terms accepted, not `suspended`, at most 10 attempts per id and hour (429
-`rate_limited`). Body by method:
+`rate_limited`), proofs still running on the instance included. Body by method:
 
 | Method | Kind | Body | The proof holds when |
 |---|---|---|---|
@@ -3449,7 +3592,9 @@ requests.
 checked; it is not read again on its own. A contract proven through an id
 rests on that id: removing the id clears the proof of every id proven
 through it, directly or in a chain, with `last_error`
-`verified_through_removed_id` and a `onchain.verify` audit row each.
+`verified_through_removed_id` and a `onchain.verify` audit row each. A
+contract proof that reads the ledger while its id is removed does not hold:
+it answers `admin_not_verified` or `deployer_not_verified`.
 
 The proofs follow SEP-53 exactly, so any wallet that signs messages with it
 works; the console asks through the Stellar Wallets Kit. A wallet that cannot
@@ -3685,6 +3830,8 @@ rules of 15.3; 404 for an id of another tenant.
 
 ### 16.1 Operator exports
 
+Operators download the global views and a contract's calls as CSV files.
+
 All under `/api/operator` (403 `operator_required` otherwise), `text/csv;
 charset=utf-8` as an attachment, streamed, one header row:
 
@@ -3728,7 +3875,7 @@ charset=utf-8` as an attachment, streamed, one header row:
   formula (starting with `=`, `+`, `-`, `@`, tab or carriage return) gets a
   leading apostrophe.
 - The API exports end their numbers with an `infrastructure_requests` column
-  (7.4).
+  (7.4). The web exports carry the coverage columns of 17.5.
 - Every export writes one `export.csv` audit row (3.3) with the query it
   answered.
 
@@ -3741,13 +3888,14 @@ security keys every table on the caller's tenant:
 `day, web_pageviews, web_visitors, web_visits, web_bounces,
 web_totaltime_seconds, web_quarantine_pageviews, api_requests,
 api_errors_4xx, api_errors_5xx, api_infrastructure_requests, onchain_ids_read, onchain_operations,
-onchain_transactions, integrity_grade`
+onchain_transactions, integrity_grade, script_requests, gpc_requests, unmeasured_share`
 
 The web columns are the project's `agg.web_daily` rows, summed over its sites
 (empty on a day not aggregated yet); the API columns are the daily series of
 7.6 (0 on a day without requests, as on the API traffic page); the on-chain
-columns are as in 16.1, and `integrity_grade` is the day's grade of 17. It
-writes one `export.csv` audit row. A contract's calls per function export
+columns are as in 16.1, `integrity_grade` is the day's grade of 17, and the
+last three columns are the day's coverage (17.5). It writes one `export.csv`
+audit row. A contract's calls per function export
 under `GET /api/tenants/{tenant_id}/onchain/ids/{chain_id}/functions.csv`
 (15.9).
 
@@ -3880,6 +4028,8 @@ operators read every project's under `cp_operator`; both get the same report.
 
 ### 17.2 `GET /api/tenants/{tenant_id}/integrity`
 
+Returns a project's own integrity report.
+
 Member (1.3). Query `from`, `to`: UTC days, both included, `to` not after
 today, at most 366 days; without `to` the range ends today, without `from`
 it holds 30 days. **200** Report of the tenant. 400 `invalid_query` for a bad
@@ -3887,6 +4037,8 @@ or unknown parameter. A project without graded days gets a report with
 `grade` `null` and no sites.
 
 ### 17.3 `GET /api/operator/web/integrity`
+
+Returns one project's integrity report for operators.
 
 Operator. Query `tenant` (required, lowercase UUID), `from`, `to` (8.1).
 **200** Report of that project. 400 `invalid_query` without `tenant` or for
@@ -4043,6 +4195,8 @@ Today is a range like any other: the aggregates of today are those the hourly
 
 ### 18.3 `GET /api/tenants/{tenant_id}/web/summary`
 
+Returns a project's web totals and daily series, with the previous period.
+
 Member (1.3). Query `from`, `to`, `site`, `band`. **200**:
 
 ```json
@@ -4087,6 +4241,8 @@ Member (1.3). Query `from`, `to`, `site`, `band`. **200**:
 
 ### 18.4 `GET /api/tenants/{tenant_id}/web/breakdown`
 
+Returns the top values of one dimension, such as pages or referrers.
+
 Member. Query `dimension` (required), `from`, `to`, `site`, `band`, `limit`
 (1 to 100, default 10). `dimension` is one of `referrer`, `country`,
 `browser`, `os`, `device`, `page`, `entry_page`, `exit_page`, `event`,
@@ -4118,6 +4274,8 @@ Member. Query `dimension` (required), `from`, `to`, `site`, `band`, `limit`
 
 ### 18.5 `GET /api/tenants/{tenant_id}/web/hourly`
 
+Returns page views and visitors per hour of one day.
+
 Member. Query `day` (a UTC day, default today, not after today), `site`,
 `band`. **200** `{ "day", "band", "source": "engine", "sites": [...],
 "points": [{ "at", "pageviews", "visitors" }] }` with 24 points, one per UTC
@@ -4126,6 +4284,8 @@ to the day's page views in Umami, which the aggregates hold after the next
 hourly read.
 
 ### 18.6 `GET /api/tenants/{tenant_id}/web/realtime`
+
+Returns the visitors right now and the page views of the last 30 minutes.
 
 Member. Query `site`. Primary band only. **200**:
 
@@ -4142,6 +4302,8 @@ over the sites. `minutes` holds the last 30 minutes; the last one is the
 current minute and still filling. The console asks every 30 seconds.
 
 ### 18.7 `GET /api/tenants/{tenant_id}/web/sessions`
+
+Lists one site's sessions of a day.
 
 Member. Query `site` (required), `day` (a UTC day, default today, not after
 today), `band`, `page` (1 to 1000, default 1). Lists the sessions of one site
@@ -4190,7 +4352,10 @@ project's data:
 4. Umami: the engine reads log in as the member's own Umami user (a
    `view-only` user in the project's team with a daily derived password),
    never as the admin, and only for one of the site's two websites. Umami's
-   own team check then refuses any website outside the project's team.
+   own team check then refuses any website outside the project's team. Each
+   control plane instance keeps a login in memory for 5 minutes per user and
+   site, for the console and the MCP tools alike; a 401 from Umami drops it
+   and logs in again.
 
 The tenant isolation gate (`make isolation`) sends every route of this
 section with real, guessed, malformed and mixed ids as a member of another
@@ -4268,7 +4433,7 @@ characters without control characters; `award_date` is a UTC day from
 | Route | Who | Does |
 |---|---|---|
 | `GET /api/tenants/{tenant_id}/cohort` | member | the project's CohortRecord |
-| `PUT /api/tenants/{tenant_id}/cohort/proposal` | owner | body: a cohort object with at least one field; replaces the proposal, audit `cohort.propose`; **200** CohortRecord |
+| `PUT /api/tenants/{tenant_id}/cohort/proposal` | owner, current terms (4.2.6) | body: a cohort object with at least one field; replaces the proposal, audit `cohort.propose`; **200** CohortRecord |
 | `GET /api/operator/cohorts` | operator | the confirmed values in use with their project counts (`programs`, `rounds`, `categories`: `[{"value", "projects"}]`) and every pending proposal (`proposals`: `[{"tenant", "confirmed", "proposal", "proposed_at"}]`), removed and internal projects left out |
 | `GET /api/operator/tenants/{tenant_id}/cohort` | operator | the CohortRecord |
 | `PUT /api/operator/tenants/{tenant_id}/cohort` | operator | body: a cohort object; sets the confirmed values, an object of nulls clears them; audit `cohort.set`; **200** CohortRecord |
@@ -4409,7 +4574,7 @@ format, the canonical form and offline verification are in
 | `POST /api/tenants/{tenant_id}/reports` | member, current terms | body `{"from", "to"}`; builds, signs and stores a report; audit `report.create`; **201** Detail |
 | `GET /api/tenants/{tenant_id}/reports` | member | `{"items": [Summary]}`, newest first, at most 200 |
 | `GET /api/tenants/{tenant_id}/reports/{report_id}` | member | Detail, revoked reports included |
-| `POST /api/tenants/{tenant_id}/reports/{report_id}/revoke` | member | revokes the shared link; audit `report.revoke`; a second revoke answers the same Summary and writes nothing; **200** Summary |
+| `POST /api/tenants/{tenant_id}/reports/{report_id}/revoke` | member, also without current terms | revokes the shared link; audit `report.revoke`; a second revoke answers the same Summary and writes nothing; **200** Summary |
 
 **Summary**: `id`, `url` (`https://app.<BASE_DOMAIN>/r/<id>`), `from`, `to`,
 `signer`, `created_at`, `created_by`, `revoked_at`, `view_count`,

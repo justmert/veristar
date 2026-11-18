@@ -17,8 +17,8 @@ Create `tracker.js` next to `docs.json` in your docs repository:
 {/* include examples/mintlify/site/tracker.js region=tracker */}
 ```js
 const tracker = document.createElement("script");
-tracker.src = "https://in.analytics.example/v/1.3.0/sdk.js";
-tracker.integrity = "sha384-3E+vbTmGHWaU8kaLAWT6ttw70odRH565/3vRal5558SgSitqFlIbsFHlfzWnSUtT";
+tracker.src = "https://in.analytics.example/v/1.3.2/sdk.js";
+tracker.integrity = "sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v";
 tracker.crossOrigin = "anonymous";
 tracker.dataset.websiteId = "3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c";
 document.head.appendChild(tracker);
@@ -29,9 +29,9 @@ Each line sets one attribute of the console's tag on a new `<script>` element:
 and `tracker.dataset.websiteId` is `data-website-id`. Replace the three example values with the
 ones from your tag:
 
-{/* snippet version=1.3.0 */}
+{/* snippet version=1.3.2 */}
 ```html
-<script defer src="https://in.analytics.example/v/1.3.0/sdk.js" integrity="sha384-3E+vbTmGHWaU8kaLAWT6ttw70odRH565/3vRal5558SgSitqFlIbsFHlfzWnSUtT" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
+<script defer src="https://in.analytics.example/v/1.3.2/sdk.js" integrity="sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
 
 The browser checks a script element created from JavaScript against its `integrity` value exactly
@@ -85,4 +85,4 @@ every client-routed example, in Chromium, Firefox and WebKit: one pageview per p
 and forward, the previous page as referrer, an external referrer on the first pageview, both kinds
 of custom event, no request with Global Privacy Control and a tampered tracker refused
 (`tests/e2e/specs`). The example's build test checks that `tracker.js` carries the values of the
-console's tag for version 1.3.0 (`examples/mintlify/test`).
+console's tag for version 1.3.2 (`examples/mintlify/test`).

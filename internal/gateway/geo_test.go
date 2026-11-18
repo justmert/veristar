@@ -1,18 +1,12 @@
 package gateway
 
 import (
-	"bytes"
-	"log/slog"
 	"math/big"
 	"math/rand/v2"
 	"net/netip"
 	"os"
 	"path/filepath"
-	"strings"
-	"sync"
-	"syscall"
 	"testing"
-	"time"
 
 	"github.com/oschwald/maxminddb-golang/v2"
 	"github.com/stretchr/testify/require"
@@ -269,37 +263,4 @@ func TestGeoReload(t *testing.T) {
 	_, err = OpenGeo(path)
 	require.Error(t, err)
 
-	// SIGHUP reloads: a good file is reported as reloaded, a broken one as
-	// failed with the old file kept
-	logs := &geoLogBuffer{}
-	log := slog.New(slog.NewJSONHandler(logs, nil))
-	g.ReloadOnSIGHUP(t.Context(), log)
-	require.NoError(t, syscall.Kill(os.Getpid(), syscall.SIGHUP))
-	require.Eventually(t, func() bool { return strings.Contains(logs.String(), "geo database reload failed") },
-		5*time.Second, 20*time.Millisecond)
-	require.NoError(t, os.WriteFile(tmp, b, 0o600))
-	require.NoError(t, os.Rename(tmp, path))
-	require.NoError(t, syscall.Kill(os.Getpid(), syscall.SIGHUP))
-	require.Eventually(t, func() bool { return strings.Contains(logs.String(), "geo database reloaded") },
-		5*time.Second, 20*time.Millisecond)
-	still, err = g.Country(ip)
-	require.NoError(t, err)
-	require.Equal(t, before, still)
-}
-
-type geoLogBuffer struct {
-	mu sync.Mutex
-	b  bytes.Buffer
-}
-
-func (l *geoLogBuffer) Write(p []byte) (int, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.b.Write(p)
-}
-
-func (l *geoLogBuffer) String() string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.b.String()
 }

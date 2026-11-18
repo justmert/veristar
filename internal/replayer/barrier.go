@@ -54,8 +54,9 @@ type seqBarrier struct {
 	// below: every message with a lower sequence is clear
 	below atomic.Uint64
 	// covered is the highest sequence the waiting kind has fetched. a read
-	// that finds no message of the other kind clears everything up to it,
-	// because a message published later gets a higher sequence.
+	// that finds no message of the other kind clears everything up to it
+	// and up to the stream's last sequence read just before, because a
+	// message published later gets a higher sequence.
 	covered atomic.Uint64
 	retired atomic.Bool
 
@@ -135,10 +136,20 @@ func (b *seqBarrier) refresh(ctx context.Context, seq uint64) {
 		}
 		b.stream = s
 	}
+	// the stream's last sequence, read before the search: a message of the
+	// other kind published after this read gets a higher one. without it a
+	// read clears only what the holds fetched so far, one message per read
+	// for a hold that clears its batch message by message, which capped a
+	// kind at 1 / barrierPace messages a second while the other was empty
+	info, err := b.stream.Info(ctx)
+	if err != nil {
+		return
+	}
+	last := max(covered, info.State.LastSeq)
 	m, err := b.stream.GetMsg(ctx, 1, jetstream.WithGetMsgSubject(b.filter))
 	switch {
 	case errors.Is(err, jetstream.ErrMsgNotFound):
-		b.raise(covered + 1)
+		b.raise(last + 1)
 	case err == nil:
 		b.raise(m.Sequence)
 	}

@@ -212,7 +212,7 @@ func Start(t testing.TB, o Options) *Env {
 		ClientID: clientID, ClientSecret: secret, Endpoints: endpoints,
 	})
 	require.NoError(t, err)
-	_, guard := stepuptest.Guard(t, o.DB, sessions, e.Srv.URL, operators)
+	stepUps, guard := stepuptest.Guard(t, o.DB, sessions, e.Srv.URL, operators)
 	mode, err := operator.NewEnrollmentMode(o.DB)
 	require.NoError(t, err)
 	actions, err := lifecycle.NewActions(o.DB, e.Scope.Reconcile)
@@ -225,7 +225,7 @@ func Start(t testing.TB, o Options) *Env {
 		um = e.Umami
 	}
 	accountRoutes, err := account.NewRoutes(account.Config{
-		DB: o.DB, Sessions: sessions, Umami: um, Reconcile: e.Scope.Reconcile,
+		DB: o.DB, Sessions: sessions, Umami: um, Reconcile: e.Scope.Reconcile, StepUp: stepUps,
 	})
 	require.NoError(t, err)
 	h := controlplane.NewHandler(controlplane.Options{

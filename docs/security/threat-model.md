@@ -132,7 +132,8 @@ Built:
 - The tenant id of API metrics comes from the OTLP credential. `tenantguard` replaces resource
   attributes with an allowlisted set, so a forged `scf.tenant.id` is dropped
   (`collector/tenantguardprocessor/guard.go`, function `stamp`).
-- Operators see aggregates only and get no Umami access.
+- Operators see aggregates, plus each project's enrollment answers, members and audit log for
+  review, and get no Umami access.
 
 Proved by:
 
@@ -308,6 +309,15 @@ Built:
   sets and each rate limit table (`internal/gateway/node.go`, `ratelimit.go`).
 - Ingestion does not depend on PostgreSQL or Umami: events are queued in JetStream (R3, 72 hours
   for `WEB_EVENTS`), so a database outage does not drop events.
+- Replay is partitioned by visitor: each event's subject carries one of 32 partitions, a hash of
+  the site id and the visitor token, and every replayer instance consumes only the partitions it
+  holds a lock for. A stopped instance's partitions move to the others, so one replayer node going
+  down slows delivery and loses nothing, and one visitor's events never reach Umami from two
+  nodes at once. A partition without an owner for 5 minutes raises the `ReplayerPartitionsUnowned`
+  page alert.
+- The web dashboard's Umami reads (an engine breakdown, `hourly`, `realtime`, `sessions`) are
+  limited to 120 per member per minute on each control plane instance (contract 18.9), so one
+  member cannot turn the dashboard into a load on Umami. Aggregate reads come from PostgreSQL.
 - Three nodes, one in each availability zone of the region, behind health-checked DNS
   ([../reference/availability.md](../reference/availability.md)).
 
@@ -316,7 +326,9 @@ Proved by: `TestRateLimitBoundedKeys`, `TestRateLimitConcurrent`
 (`tests/gateway/checks_test.go`); `TestCollector` subtests `oversize and decompression bombs`
 and `nats stopped gives 503 and recovers without a gap`; `TestQueueOutage`
 (`tests/gateway/cluster_test.go`); `TestWebPath` subtests `outage umami stopped` and
-`outage postgres stopped`; `TestThroughputK6` (`tests/gateway/throughput_test.go`,
+`outage postgres stopped`; `TestPartitionedReplayersOnCluster` (`internal/replayer/partitioned_test.go`,
+three replayer processes with one killed and one restarted while events arrive);
+`TestLimiter` (`internal/controlplane/webdash/unit_test.go`); `TestThroughputK6` (`tests/gateway/throughput_test.go`,
 `make gateway-load`). The measured throughput per node and per cluster is in
 [../reference/gateway-limits.md](../reference/gateway-limits.md).
 
@@ -338,8 +350,9 @@ sign-in for everyone.
 An attacker takes over an operator's GitHub account or console session.
 
 What an operator can do: approve, reject, suspend, resume and remove tenants; change enrollment
-mode and the removal setting; create and revoke operator API keys; read aggregates. An operator
-admin also changes the operator roster. An operator cannot read raw events or Umami data and has
+mode and the removal setting; create and revoke operator API keys; read aggregates, and each
+tenant's enrollment answers, members and the audit log. An operator admin also changes the
+operator roster. An operator cannot read raw events or Umami data and has
 no Umami admin.
 
 Built:
@@ -350,7 +363,8 @@ Built:
   next request, ends their console sessions and revokes their operator MCP credentials.
 - The operator area needs a passkey assertion recorded on the session within
   `OPERATOR_STEP_UP_MAX_AGE` (12 hours by default); otherwise 401 `step_up_required`. A stolen
-  session cookie or a taken-over GitHub account or wallet alone does not open the area. The step-up uses
+  session cookie or a taken-over GitHub account or wallet alone does not open the area. The
+  step-up uses
   the passkey verification of passkey sign-in (`internal/controlplane/passkey`): the assertion must
   name the console's relying party and origin, so a look-alike site cannot relay it, must sign a
   challenge the console issued for this session and purpose, and must carry user verification. A
@@ -394,8 +408,7 @@ Chromium virtual authenticator.
 Residual risk: a synced passkey is as safe as the platform account that syncs it; an operator
 who wants a key that never leaves one device registers a security key with a PIN. A new
 passkey's key is trusted because it signs the console's challenge; no attestation ties it to an
-authenticator model. Inside an open enrollment
-window, a person who takes over the operator's GitHub account and signs in first registers the
+authenticator model. Inside an open enrollment window, a person who takes over the operator's GitHub account and signs in first registers the
 first passkey; the window is short, the registration is audited, and the Operators page shows the
 passkey count of every row. One operator alone can remove a tenant, and removal purges the
 tenant's Umami websites and data; there is no second approval and no undo inside the application.

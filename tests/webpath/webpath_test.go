@@ -177,7 +177,7 @@ func (su *suite) customEventRerun(t *testing.T) {
 			}
 		}
 		s.WaitStored(t, x.ID, accepted)
-		evs := s.Events(t, x.ID, today())
+		evs := s.Events(t, x.ID, runRange())
 		n := countBy(evs, func(e UmamiEvent) string {
 			if e.EventType == umamiPageview {
 				return "pageview"
@@ -205,6 +205,12 @@ func (su *suite) customEventRerun(t *testing.T) {
 
 func (su *suite) firstVisit(t *testing.T) {
 	s, b := su.s, su.b
+	// both first visits land on one utc day: the visitor salt changes at
+	// midnight, and the expected two visitors assume one salt
+	if d := pastMidnight(time.Now(), 15*time.Minute); d > 0 {
+		t.Logf("waiting %s for utc midnight to pass before the first visits", d.Round(time.Second))
+		time.Sleep(d)
+	}
 	b.MustRun(t, []string{"chromium"}, "@s1-visit1")
 	b.MustRun(t, []string{"firefox"}, "@s1-single")
 	logged := b.NewEvents(t)
@@ -212,7 +218,7 @@ func (su *suite) firstVisit(t *testing.T) {
 	su.s1End = time.Now().UTC()
 	s.Drained(t, 2*time.Minute)
 	s.WaitStored(t, siteStatic.ID, 4)
-	st := s.stats(t, siteStatic.ID, today())
+	st := s.stats(t, siteStatic.ID, runRange())
 	t.Logf("static after the first visits: %+v", st)
 	want := umami.StatsValues{Pageviews: 4, Visitors: 2, Visits: 2, Bounces: 1}
 	st.Totaltime = 0
@@ -239,7 +245,7 @@ func (su *suite) sessionDuration(t *testing.T) {
 	expected := float64(ts[2]-ts[0]) / 1000
 	s.Drained(t, 2*time.Minute)
 	s.WaitStored(t, siteSPA.ID, 3)
-	st := s.stats(t, siteSPA.ID, today())
+	st := s.stats(t, siteSPA.ID, runRange())
 	t.Logf("spa: %+v; expected visit duration %.3f s (browser clock, first to last pageview)", st, expected)
 	if st.Visits != 1 || st.Pageviews != 3 || st.Bounces != 0 {
 		t.Errorf("stats %+v, want one visit of three pageviews and no bounce", st)
@@ -260,7 +266,7 @@ func (su *suite) referrers(t *testing.T) {
 	}
 	s.Drained(t, 2*time.Minute)
 	s.WaitStored(t, siteRR.ID, 3)
-	m := s.metrics(t, siteRR.ID, "referrer", today())
+	m := s.metrics(t, siteRR.ID, "referrer", runRange())
 	t.Logf("rr /metrics?type=referrer: %v", m)
 	if m["news.sa-referrer.example"] != 3 {
 		t.Errorf("referrer news.sa-referrer.example = %d, want 3 (one per engine)", m["news.sa-referrer.example"])
@@ -278,7 +284,7 @@ func (su *suite) country(t *testing.T) {
 	all202(t, b.NewEvents(t))
 	s.Drained(t, 2*time.Minute)
 	s.WaitStored(t, siteRR.ID, 2)
-	m := s.metrics(t, siteRR.ID, "country", today())
+	m := s.metrics(t, siteRR.ID, "country", runRange())
 	t.Logf("rr /metrics?type=country: %v", m)
 	if len(m) != 2 || m["DE"] != 1 || m["JP"] != 1 {
 		t.Errorf("countries %v, want DE 1 and JP 1", m)
@@ -298,17 +304,19 @@ func (su *suite) devices(t *testing.T) {
 	s.Drained(t, 2*time.Minute)
 	s.WaitStored(t, siteAstro.ID, 5)
 	// umami's own classification of the playwright device profiles
-	// (src/lib/detect.ts: detect-browser names, getDevice with screen width).
+	// (src/lib/detect.ts: detect-browser names, getDevice). the tracker sends
+	// no screen since 1.3.0, so getDevice decides from the user agent alone:
+	// a desktop browser is "desktop" (with a screen width it was "laptop").
 	// playwright's firefox reaches the gateway with its real linux user agent
 	// rather than the windows one of the "Desktop Firefox" descriptor
 	// (observed in the umami session row), so firefox counts as Linux.
 	want := map[string]map[string]int64{
-		"device":  {"laptop": 3, "mobile": 2},
+		"device":  {"desktop": 3, "mobile": 2},
 		"browser": {"chrome": 2, "firefox": 1, "safari": 1, "ios": 1},
 		"os":      {"Windows 10": 1, "Linux": 1, "Mac OS": 1, "Android OS": 1, "iOS": 1},
 	}
 	for _, typ := range []string{"device", "browser", "os"} {
-		m := s.metrics(t, siteAstro.ID, typ, today())
+		m := s.metrics(t, siteAstro.ID, typ, runRange())
 		t.Logf("astro /metrics?type=%s: %v", typ, m)
 		if fmt.Sprint(m) != fmt.Sprint(want[typ]) {
 			t.Errorf("%s: %v, want %v", typ, m, want[typ])
@@ -331,8 +339,8 @@ func (su *suite) bots(t *testing.T) {
 	time.Sleep(11 * time.Second)
 	stats := s.edgeStats(t)
 	after := s.replayerSum(t, `replayer_outcomes_total{outcome="bot"}`)
-	evs := s.Events(t, siteAstro.ID, today())
-	st := s.stats(t, siteAstro.ID, today())
+	evs := s.Events(t, siteAstro.ID, runRange())
+	st := s.stats(t, siteAstro.ID, runRange())
 	t.Logf("crawler: %d events answered 202; replayer bot outcomes +%.0f; EDGE_STATS bot=%d accepted=%d; umami events %d, stats %+v",
 		len(logged), after-before, stats[[2]string{siteAstro.ID, "bot"}], stats[[2]string{siteAstro.ID, "accepted"}], len(evs), st)
 	if len(logged) != 2 || after-before != 2 || stats[[2]string{siteAstro.ID, "bot"}] != 2 {
@@ -449,7 +457,7 @@ func (su *suite) visitRule(t *testing.T) {
 	}
 }
 
-// dumpEvents logs every umami event of a website today, for diagnosis.
+// dumpEvents logs every umami event of a website in this run, for diagnosis.
 func dumpEvents(t *testing.T, s *Stack, website string) {
 	t.Helper()
 	str := func(p *string) string {
@@ -458,7 +466,7 @@ func dumpEvents(t *testing.T, s *Stack, website string) {
 		}
 		return *p
 	}
-	for _, e := range s.Events(t, website, today()) {
+	for _, e := range s.Events(t, website, runRange()) {
 		t.Logf("  event %s type %d %s %q session %s visit %s referrer %s browser %s os %s device %s country %s",
 			e.CreatedAt.Format(time.RFC3339), e.EventType, e.URLPath, e.Name(), e.SessionID[:8], e.VisitID[:8],
 			str(e.ReferrerDomain), str(e.Browser), str(e.OS), str(e.Device), str(e.Country))
@@ -554,7 +562,7 @@ func (su *suite) outage(t *testing.T, container, tag string) {
 	}
 
 	s.WaitStored(t, siteAstro.ID, len(queued))
-	evs := s.Events(t, siteAstro.ID, today())
+	evs := s.Events(t, siteAstro.ID, runRange())
 	want := map[string]int64{} // custom event name to acceptance second
 	var pvWant, pvGot []int64
 	for _, q := range queued {
@@ -671,7 +679,7 @@ func (su *suite) replayerKill(t *testing.T) {
 		bm["replayer_leader"] == 1, drain.Round(time.Second), bm[`replayer_outcomes_total{outcome="delivered"}`], bm[`replayer_outcomes_total{outcome="duplicate_skipped"}`])
 
 	s.WaitStored(t, siteAstro.ID, len(logged))
-	evs := s.Events(t, siteAstro.ID, today())
+	evs := s.Events(t, siteAstro.ID, runRange())
 	names := map[string]int{}
 	pv := 0
 	for _, e := range evs {
@@ -719,7 +727,7 @@ func (su *suite) quarantineBand(t *testing.T) {
 	s.WaitStored(t, siteSPA.ID, 38)
 	s.WaitStored(t, su.quarantine[siteSPA.ID], 6)
 	names := func(id string) map[string]int {
-		return countBy(s.Events(t, id, today()), func(e UmamiEvent) string {
+		return countBy(s.Events(t, id, runRange()), func(e UmamiEvent) string {
 			if e.EventType == umamiPageview {
 				return "pageview"
 			}
@@ -748,21 +756,29 @@ func (su *suite) secondVisit(t *testing.T) {
 	// the gap must exceed 30 minutes (the replayer drops the cache token)
 	// and end in another utc hour (without it umami joins events of the hour
 	// the visit started in)
-	target := su.s1End.Add(31 * time.Minute)
-	if h := su.s1End.Truncate(time.Hour).Add(time.Hour + 5*time.Second); h.After(target) {
-		target = h
-	}
+	target := secondVisitAt(su.s1End)
 	if d := time.Until(target); d > 0 {
 		t.Logf("waiting %s until %s for the second visit", d.Round(time.Second), target.Format(time.TimeOnly))
 		time.Sleep(d)
 	}
+	// the second visit itself stays on one utc day
+	if d := pastMidnight(time.Now(), 10*time.Minute); d > 0 {
+		t.Logf("waiting %s for utc midnight to pass before the second visit", d.Round(time.Second))
+		time.Sleep(d)
+	}
+	visit2 := time.Now()
 	b.MustRun(t, []string{"chromium"}, "@s1-visit2")
 	all202(t, b.NewEvents(t))
 	s.Drained(t, 2*time.Minute)
 	s.WaitStored(t, siteStatic.ID, 6)
-	st := s.stats(t, siteStatic.ID, today())
+	st := s.stats(t, siteStatic.ID, runRange())
 	t.Logf("static after the second visit (%s after the first): %+v", time.Since(su.s1End).Round(time.Second), st)
 	want := umami.StatsValues{Pageviews: 6, Visitors: 2, Visits: 3, Bounces: 1}
+	if !sameUTCDay(su.s1End, visit2) {
+		// the returning browser's visitor id carries the new day's salt
+		want.Visitors = 3
+		t.Logf("the second visit is on the utc day after the first: the returning browser counts as a third visitor")
+	}
 	st.Totaltime = 0
 	if st != want {
 		t.Errorf("stats %+v, want %+v", st, want)

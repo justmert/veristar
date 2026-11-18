@@ -20,7 +20,7 @@ test("server rendered html carries the tracker tag", async () => {
     cwd: root,
     env: { ...process.env, ...env },
   });
-  const port = 47193;
+  const port = 27193;
   const server = spawn(
     process.execPath,
     [bin("@react-router/serve", "bin.cjs"), "./build/server/index.js"],

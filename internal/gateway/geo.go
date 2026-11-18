@@ -1,14 +1,9 @@
 package gateway
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"log/slog"
-	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/oschwald/maxminddb-golang/v2"
@@ -112,29 +107,6 @@ func (g *Geo) Reload() error {
 	g.r = r
 	g.mu.Unlock()
 	return old.Close()
-}
-
-// ReloadOnSIGHUP reloads the file on every SIGHUP until ctx ends. failures
-// are logged at error level, because the gateway then still serves last
-// month's file.
-func (g *Geo) ReloadOnSIGHUP(ctx context.Context, log *slog.Logger) {
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGHUP)
-	go func() {
-		defer signal.Stop(ch)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ch:
-				if err := g.Reload(); err != nil {
-					log.Error("geo database reload failed, previous file still in use", "error", err.Error())
-					continue
-				}
-				log.Info("geo database reloaded", "build_time", g.BuildTime().Format(time.RFC3339))
-			}
-		}
-	}()
 }
 
 // Close releases the loaded file.

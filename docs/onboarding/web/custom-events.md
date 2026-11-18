@@ -26,7 +26,10 @@ that name. Every `data-umami-event-<key>` attribute on the same element becomes 
 ```
 
 This sends `signup-click` with the data `{ "plan": "free" }`. Attribute values are always strings.
-A same-tab link with the attribute waits for the event before it navigates, so the click is not lost.
+A same-tab link with the attribute is not lost: the event goes out as the page is left. From
+tracker 1.3.2, a link that a client-side router handles stays a client-side navigation, a plain link
+waits for its event at most one second, and download links and links into another window are left
+to the browser.
 
 **From JavaScript**, with `umami.track(name, data)`:
 

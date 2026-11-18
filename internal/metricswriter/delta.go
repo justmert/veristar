@@ -236,14 +236,22 @@ type Contribution struct {
 // exactly, so the writer reports it instead of guessing.
 var ErrInvalidPoint = errors.New("metricswriter: invalid point")
 
-// MaxPointRequests bounds what one point may add to the stored counts: a
-// billion requests, 16 million a second for a minute from one stream of one
-// process. no real export comes near it, and with it the sums the platform
-// keeps in 64-bit integers (an hour, a day, a tenant's month) stay far
-// from overflowing even when a tenant sends absurd counts at its full rate
-// limit. a point above it is refused; a cumulative one still becomes the
-// base of its stream's next difference.
-const MaxPointRequests = 1_000_000_000
+// MaxPointRequests bounds what one point may add to the stored counts: ten
+// million requests, 166,000 a second for a minute from one stream of one
+// process. no real export comes near it. the sums the platform keeps in
+// 64-bit integers grow by at most this much per point, so a tenant that
+// sends absurd counts at the full item rate of three collector nodes
+// (MaxTenantPointsPerSecond) needs more than 70 days to bring any sum of
+// its requests (a daily row, a month's total) to the 64-bit limit. a point
+// above it is refused; a cumulative one still becomes the base of its
+// stream's next difference.
+const MaxPointRequests = 10_000_000
+
+// MaxTenantPointsPerSecond is the most data points one tenant gets past
+// tenantguard each second with the default rate limit on three collector
+// nodes (COLLECTOR_RATE_ITEMS_PER_SECOND 50,000 per node). it only sizes
+// MaxPointRequests.
+const MaxTenantPointsPerSecond = 3 * 50_000
 
 // DefaultFirstPointThreshold is the default for the first-point rule.
 const DefaultFirstPointThreshold = 120 * time.Second

@@ -97,6 +97,10 @@ func start(t *testing.T) *env {
 			w.WriteHeader(http.StatusNoContent)
 			return nil
 		}))
+		r.Method(http.MethodGet, "/value", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Value", e.m.Value(r.Context(), r.URL.Query().Get("key")))
+			w.WriteHeader(http.StatusNoContent)
+		}))
 		r.Method(http.MethodGet, "/age-sign-in", httpx.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
 			old := time.Now().Add(-session.Lifetime - time.Minute).Unix()
 			e.m.SetValue(r.Context(), "signed_in_at", strconv.FormatInt(old, 10))
@@ -331,4 +335,26 @@ func TestCookieShape(t *testing.T) {
 	b, err := base64.RawURLEncoding.DecodeString(ck.Value)
 	require.NoError(t, err)
 	require.Len(t, b, 32)
+}
+
+// a sign-in starts a new session: nothing the browser's previous session
+// held (another account's step-up, a ceremony in progress) carries over
+func TestSignInStartsEmpty(t *testing.T) {
+	e := start(t)
+	a, b := e.user(t), e.user(t)
+	c := e.signIn(t, a)
+	require.Equal(t, http.StatusNoContent, c.get(t, "/renew"))
+	value := func() string {
+		res, err := c.hc.Get(c.e.srv.URL + "/api/value?key=renewed")
+		require.NoError(t, err)
+		_ = res.Body.Close()
+		require.Equal(t, http.StatusNoContent, res.StatusCode)
+		return res.Header.Get("X-Value")
+	}
+	require.Equal(t, "yes", value())
+	require.Equal(t, http.StatusNoContent, c.get(t, "/test-sign-in?user="+b.String()))
+	require.Empty(t, value(), "another account's sign-in does not inherit the values")
+	require.Equal(t, http.StatusNoContent, c.get(t, "/test-sign-in?user="+a.String()))
+	require.Empty(t, value(), "nor does a later sign-in of the first account")
+	require.Zero(t, e.sessions(t, a)+e.sessions(t, b)-1, "one session row remains")
 }

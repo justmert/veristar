@@ -241,7 +241,7 @@ func start(t *testing.T) *env {
 	require.NoError(t, err)
 	erasureCfg, err := config.LoadErasure(settings)
 	require.NoError(t, err)
-	_, guard := stepuptest.Guard(t, e.conn, sessions, e.srv.URL, identity.Operators{GitHub: operators})
+	stepUps, guard := stepuptest.Guard(t, e.conn, sessions, e.srv.URL, identity.Operators{GitHub: operators})
 	roster, err := operator.NewRoster(operator.RosterConfig{
 		DB: e.conn, Guard: guard, Lookup: users, Bootstrap: identity.Operators{GitHub: operators}, EnrollWindow: time.Hour,
 	})
@@ -346,7 +346,7 @@ func start(t *testing.T) *env {
 	})
 	require.NoError(t, err)
 	accountRoutes, err := account.NewRoutes(account.Config{
-		DB: e.conn, Sessions: sessions, Umami: e.umami.Admin, Reconcile: scope.Reconcile,
+		DB: e.conn, Sessions: sessions, Umami: e.umami.Admin, Reconcile: scope.Reconcile, StepUp: stepUps,
 	})
 	require.NoError(t, err)
 	api = controlplane.NewHandler(controlplane.Options{

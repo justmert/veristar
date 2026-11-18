@@ -511,7 +511,7 @@ func (s *Server) exchangeCode(ctx context.Context, c client, f url.Values) (toke
 			return invalidGrant("the code expired")
 		case code.Client != c.ID:
 			return invalidGrant("the code was issued to another client")
-		case f.Get("redirect_uri") != code.Redirect:
+		case !redirectMatches(f, code.Redirect):
 			return invalidGrant("redirect_uri does not match the authorization request")
 		case code.Resource != s.resource:
 			return invalidGrant("the code was issued for another resource")
@@ -551,6 +551,17 @@ func (s *Server) exchangeCode(ctx context.Context, c client, f url.Values) (toke
 		return tokenResponse{}, refusal
 	}
 	return out, err
+}
+
+// redirectMatches checks the token request's redirect_uri against the one
+// the code was issued for. a client that registered one uri may leave it
+// out of the authorization request (contract 12.3), and then also out of
+// the token request; oauth 2.1 does not ask for it there at all, because
+// pkce binds the code to the client that asked for it. a value that is
+// given must be exactly the code's.
+func redirectMatches(f url.Values, issued string) bool {
+	v, given := f["redirect_uri"]
+	return !given || (len(v) == 1 && v[0] == issued)
 }
 
 // stillAllowed checks at token time what authenticate checks per request,

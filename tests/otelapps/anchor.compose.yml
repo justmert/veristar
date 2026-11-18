@@ -13,7 +13,7 @@ networks:
 services:
   sep-server:
     image: sa-otelapps/anchor-platform-otel:dev
-    ports: !override ["127.0.0.1:47206:8080"]
+    ports: !override ["127.0.0.1:27206:8080"]
   platform-server:
     image: sa-otelapps/anchor-platform-otel:dev
-    ports: !override ["127.0.0.1:47207:8085"]
+    ports: !override ["127.0.0.1:27207:8085"]

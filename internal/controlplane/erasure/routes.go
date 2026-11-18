@@ -197,7 +197,10 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 	if site.Status == "removed" {
 		return httpx.Conflict(httpx.CodeSiteRemoved, "the site is removed; its web data was deleted with it")
 	}
-	if !site.QuarantineWebsiteID.Valid {
+	// a pending site (of a pending or rejected tenant, or in review) never
+	// got its umami websites, and neither did a site without a quarantine
+	// website id: there is nothing to erase there yet
+	if !site.QuarantineWebsiteID.Valid || site.Status == "pending" {
 		return &httpx.Error{Status: http.StatusServiceUnavailable, Code: httpx.CodeProvisioningPending,
 			Message: "the site's umami websites are not created yet, so it holds no web data", RetryAfter: 10 * time.Second}
 	}

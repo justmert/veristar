@@ -71,7 +71,7 @@ do not come back.
    | `web_ingest` | `cp.web_ingest_hourly`, `cp.web_evidence_daily`, `cp.web_signals_daily`, `cp.web_networks_daily` | the network keys always; the other three tables' rows unless `keep_aggregates` |
    | `api` | `api` schema | minute rows, series and resource state, route caps and rollup marks always; hourly, daily and warning rows unless `keep_aggregates`. `ingest_dedup` ids stay until they expire (8 days), so a message still queued is not applied twice |
    | `agg` | `agg` schema | web aggregate rows, unless `keep_aggregates` |
-   | `chain` | `agg.chain_*` | read state (`chain_reads`), week members and open weeks always; daily counts and closed weeks unless `keep_aggregates` |
+   | `chain` | `agg.chain_*` | read state (`chain_reads`), week members and open weeks always; daily counts (`agg.chain_daily`), daily calls per contract function (`agg.chain_function_daily`) and closed weeks unless `keep_aggregates` |
    | `reports` | `cp.usage_reports` | every signed usage report of the project, always |
 
    Each finished step is stored in `cp.tenant_removals.steps` and audited as

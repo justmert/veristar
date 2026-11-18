@@ -11,6 +11,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -110,7 +111,8 @@ func (e *routeEnv) tenant(t *testing.T, owner uuid.UUID, status string) uuid.UUI
 	var id uuid.UUID
 	e.sys(t, func(tx pgx.Tx) error {
 		if err := tx.QueryRow(t.Context(),
-			`insert into cp.tenants (slug, name, status, created_by) values ($1, 'Project', $2, $3) returning id`,
+			`insert into cp.tenants (slug, name, status, created_by, accepted_terms_version)
+			 values ($1, 'Project', $2, $3, 'test-terms') returning id`,
 			"p-"+uuid.NewString()[:8], status, owner).Scan(&id); err != nil {
 			return err
 		}
@@ -355,4 +357,63 @@ func TestAfterSiteCreate(t *testing.T) {
 	rows = e.auditRows(t, "site:"+site.String(), domaincheck.ActionStellarToml)
 	require.Len(t, rows, 2)
 	require.Equal(t, map[string]any{"old": nil, "new": "public"}, rows[1]["network"])
+}
+
+// TestVerifyLimitConcurrent: a burst of checks of one site keeps the limit
+// of six per hour; checks still running count against it.
+func TestVerifyLimitConcurrent(t *testing.T) {
+	e := startRoutes(t)
+	owner := e.user(t)
+	tenant := e.tenant(t, owner, "active")
+	domain := "burst." + zone
+	site := e.site(t, tenant, domain, token)
+	e.files.set(domain, token)
+	c := e.client(t, owner)
+	path := "/api/sites/" + site.String() + "/verify"
+
+	const n = 20
+	codes := make(chan int, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() { codes <- c.call(t, http.MethodPost, path, map[string]any{"method": "file"}).status })
+	}
+	wg.Wait()
+	close(codes)
+	ok := 0
+	for code := range codes {
+		if code == http.StatusOK {
+			ok++
+		} else {
+			require.Equal(t, http.StatusTooManyRequests, code)
+		}
+	}
+	require.LessOrEqual(t, ok, 6)
+	require.LessOrEqual(t, len(e.auditRows(t, "site:"+site.String(), domaincheck.ActionVerify)), 6)
+}
+
+// a check writes the verification state, so it needs the current terms
+// (contract 4.2.6); reading the state does not
+func TestVerifyNeedsCurrentTerms(t *testing.T) {
+	e := startRoutes(t)
+	owner := e.user(t)
+	tenant := e.tenant(t, owner, "active")
+	domain := "terms." + zone
+	site := e.site(t, tenant, domain, token)
+	e.files.set(domain, token)
+	e.sys(t, func(tx pgx.Tx) error {
+		_, err := tx.Exec(t.Context(), `update cp.tenants set accepted_terms_version = 'older-terms' where id = $1`, tenant)
+		return err
+	})
+	c := e.client(t, owner)
+	r := c.call(t, http.MethodPost, "/api/sites/"+site.String()+"/verify", map[string]any{"method": "file"})
+	require.Equal(t, http.StatusForbidden, r.status)
+	require.Equal(t, "terms_not_accepted", errCode(r))
+	require.Empty(t, e.auditRows(t, "site:"+site.String(), domaincheck.ActionVerify), "nothing was checked")
+	require.Equal(t, http.StatusOK, c.call(t, http.MethodGet, "/api/sites/"+site.String()+"/verification", nil).status)
+
+	e.sys(t, func(tx pgx.Tx) error {
+		_, err := tx.Exec(t.Context(), `update cp.tenants set accepted_terms_version = 'test-terms' where id = $1`, tenant)
+		return err
+	})
+	require.Equal(t, http.StatusOK, c.call(t, http.MethodPost, "/api/sites/"+site.String()+"/verify", map[string]any{"method": "file"}).status)
 }

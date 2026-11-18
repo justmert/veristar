@@ -3,7 +3,7 @@ title: "Architecture"
 description: "The services, hosts, data flows, queues and stores that make up Veristar, with diagrams of each path."
 ---
 
-Veristar is a multi-tenant web and API analytics service. Web analytics are built on
+Veristar is a multi-tenant web, API and on-chain analytics service. Web analytics are built on
 an unmodified Umami 3.5.0. Everything beyond Umami (buffered ingestion, bot and inflation
 checks, neutral endpoint names, OpenTelemetry ingest, tenancy, operator views) runs in separate
 services beside it ([ADR 0001](adr/0001-base-platform.md),
@@ -52,6 +52,7 @@ flowchart LR
     gatus["Gatus status page"]
   end
   github["GitHub OAuth"]
+  ledger["Public ledger APIs<br/>Horizon, Stellar RPC"]
 
   page -- "GET /v/version/sdk.js, GET /v1/c, POST /v1/e" --> ecaddy
   app -- "OTLP gRPC or HTTP, Bearer sa_otlp_" --> ecaddy
@@ -80,6 +81,8 @@ flowchart LR
   cp -- "REST: provisioning, and reads as the member's own Umami user" --> umami
   cp <-- "registry KV, visitor-token request" --> nats
   cp --> github
+  cp -- "proofs of control" --> ledger
+  jobs -- "daily on-chain reads" --> ledger
   prober -- "synthetic events, metrics and API calls" --> ecaddy
   prober --> ccaddy
   prober --> gatus
@@ -105,11 +108,12 @@ node's loopback over SSH ([ADR 0005](adr/0005-umami-as-engine-only.md),
 | collector | authenticates OTLP tokens, drops traces, spans and logs after deriving request histograms, normalizes routes, rate limits per tenant | `collector/` (three custom components) |
 | replayer | delivers queued web events to the Umami processes of its own node, in order per visitor, at least once; every core node's replayer owns a share of the 32 web event partitions | `cmd/replayer`, `internal/replayer` |
 | metricswriter | turns OTLP metric batches into one-minute PostgreSQL rows | `cmd/metricswriter`, `internal/metricswriter` |
-| jobs | rollups, partitions, retention, web aggregates, gateway outcome counts, reconcile, daily Umami password rotation, domain checks, erasure follow-up | `cmd/jobs`, `internal/jobs/*` |
-| controlplane | sign-in, tenants, sites, members, tokens, operator governance, operator views, metrics API, erasure | `cmd/controlplane`, `internal/controlplane` |
+| jobs | rollups, partitions, retention, web aggregates, integrity grades, on-chain daily reads, gateway outcome counts, reconcile, daily Umami password rotation, domain checks, session pruning, erasure follow-up | `cmd/jobs`, `internal/jobs/*` |
+| controlplane | sign-in (GitHub, Stellar wallet, passkey), tenants, sites, members, tokens, on-chain ids and proofs, signed reports, operator roster and governance, operator views, metrics API, MCP server, erasure | `cmd/controlplane`, `internal/controlplane` |
 | console | the React single-page app for members and operators | `apps/console` |
 | platformctl | database migrations and roles, NATS topology, Umami bootstrap | `cmd/platformctl` |
 | prober, sloreport | end-to-end availability probes; monthly SLO report | `cmd/prober`, `cmd/sloreport` |
+| adoptionreport, issueage | adoption evidence per project, read from the metrics API; labels support issues that approach the response and resolution targets | `cmd/adoptionreport`, `cmd/issueage` |
 
 The edge accepts traffic with no dependency on PostgreSQL or Umami, so ingestion stays up
 while the core tier is down ([reference/availability.md](reference/availability.md)).
@@ -244,7 +248,7 @@ flowchart TB
   jobs --> aggschema
 ```
 
-- **Tenants** sign in with GitHub. Each tenant maps to one Umami team; each console user to one
+- **Tenants** sign in with GitHub, a Stellar wallet or a passkey. Each tenant maps to one Umami team; each console user to one
   Umami user with view-only rights whose password is derived per UTC day and never stored. The
   tenant's web dashboard is a console page: totals, days and the referrer, country and
   environment breakdowns come from the daily aggregates operators read too; pages, events, UTM
@@ -255,9 +259,10 @@ flowchart TB
   under a role with row-level security forced on every tenant table. No application role can
   bypass it. The isolation gate `tests/isolation` checks every route and the role matrix in CI
   ([security/threat-model.md](security/threat-model.md)).
-- **Operators** see aggregates only: the role `cp_operator` reads `agg`, hourly and daily `api`
-  data and non-secret project facts, cannot read raw events or sessions, and cannot connect to
-  the `umami` database. Operators get no Umami access
+- **Operators** see aggregate numbers, plus each project's enrollment answers, members and
+  audit log for review: the role `cp_operator` reads `agg`, hourly and daily `api` data and
+  non-secret project facts, cannot read raw events or sessions, and cannot connect to the
+  `umami` database. Operators get no Umami access
   ([operators/overview.md](operators/overview.md)).
 - **Machine consumers** read the same aggregates with operator API keys under
   `/api/metrics/v1/`, which has no session handling at all

@@ -13,6 +13,7 @@ require (
 	github.com/moby/moby/api v1.56.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/nats-io/nats.go v1.55.0
+	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/expohisto v0.165.1
 	github.com/oschwald/maxminddb-golang/v2 v2.9.1
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pressly/goose/v3 v3.29.0

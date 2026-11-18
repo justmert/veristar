@@ -94,10 +94,13 @@ jobs:
           node-version: 26.13.1
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # the e2e matrix in tests/e2e runs real chromium, firefox and webkit
+      # the browser matrix in tests/e2e runs real chromium, firefox and webkit
       - run: pnpm --filter ./tests/e2e exec playwright install --with-deps chromium firefox webkit
       - run: pnpm check
       - run: pnpm test
+      # the browser matrix against the fixture gateway, with the runner's
+      # browsers (make e2e-matrix runs them in a container instead)
+      - run: pnpm --filter ./tests/e2e run matrix
 
   integration:
     runs-on: ubuntu-24.04

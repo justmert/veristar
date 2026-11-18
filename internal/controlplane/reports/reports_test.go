@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -590,5 +591,72 @@ func TestUsageReports(t *testing.T) {
 		// another project keeps its own budget
 		code, raw := cb.call(t, http.MethodPost, "/api/tenants/"+b.String()+"/reports", map[string]string{"from": to, "to": to})
 		require.Equal(t, http.StatusCreated, code, string(raw))
+	})
+
+	t.Run("the creation limit holds under concurrent requests", func(t *testing.T) {
+		owner := e.user(t)
+		p := e.tenant(t, owner, "burst")
+		cp := e.client(t, &owner)
+		n := reports.CreateLimit + 10
+		codes := make(chan int, n)
+		var wg sync.WaitGroup
+		for range n {
+			wg.Go(func() {
+				code, _ := cp.call(t, http.MethodPost, "/api/tenants/"+p.String()+"/reports", map[string]string{"from": to, "to": to})
+				codes <- code
+			})
+		}
+		wg.Wait()
+		close(codes)
+		created := 0
+		for c := range codes {
+			if c == http.StatusCreated {
+				created++
+			} else {
+				require.Equal(t, http.StatusTooManyRequests, c)
+			}
+		}
+		var stored int
+		require.NoError(t, e.d.WithSystem(t.Context(), func(tx pgx.Tx) error {
+			return tx.QueryRow(t.Context(), `select count(*) from cp.usage_reports where tenant_id = $1`, p).Scan(&stored)
+		}))
+		require.Equal(t, reports.CreateLimit, created)
+		require.Equal(t, reports.CreateLimit, stored)
+	})
+
+	t.Run("the revocation limit holds under concurrent requests", func(t *testing.T) {
+		owner := e.user(t)
+		p := e.tenant(t, owner, "revokes")
+		cp := e.client(t, &owner)
+		n := reports.RevokeLimit + 10
+		ids := make([]string, n)
+		for i := range ids {
+			id, err := reports.NewID()
+			require.NoError(t, err)
+			ids[i] = id
+			require.NoError(t, e.d.WithTenant(t.Context(), p, func(tx pgx.Tx) error {
+				_, err := tx.Exec(t.Context(), `insert into cp.usage_reports (id, tenant_id, period_from, period_to, body, signature, signer)
+					values ($1, $2, current_date - 10, current_date - 10, '{}', repeat('A', 86) || '==', $3)`, id, p, e.key.Address())
+				return err
+			}))
+		}
+		codes := make(chan int, n)
+		var wg sync.WaitGroup
+		for _, id := range ids {
+			wg.Go(func() {
+				code, _ := cp.call(t, http.MethodPost, "/api/tenants/"+p.String()+"/reports/"+id+"/revoke", nil)
+				codes <- code
+			})
+		}
+		wg.Wait()
+		close(codes)
+		for c := range codes {
+			require.Contains(t, []int{http.StatusOK, http.StatusTooManyRequests}, c)
+		}
+		var revoked int
+		require.NoError(t, e.d.WithSystem(t.Context(), func(tx pgx.Tx) error {
+			return tx.QueryRow(t.Context(), `select count(*) from cp.usage_reports where tenant_id = $1 and revoked_at is not null`, p).Scan(&revoked)
+		}))
+		require.Equal(t, reports.RevokeLimit, revoked)
 	})
 }

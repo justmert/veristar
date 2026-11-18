@@ -7,7 +7,7 @@ How the service keeps personal data to a minimum: what it holds in memory,
 queues and stores, for how long, and which controls tenants have. Legal
 statements cite the legal sources register (`sources.md`); technical statements
 point to the code or test that shows them. This page is not legal advice. Last
-updated 2026-11-17.
+updated 2026-11-18.
 
 ## 1. Roles
 
@@ -24,7 +24,11 @@ updated 2026-11-17.
   sources as the operator's global views and machine API: `agg.*`,
   `api.metrics_hourly`, `api.metrics_daily` and counters, never raw events,
   sessions or Umami (role `cp_operator`, tested in
-  `internal/db/boundaries_test.go`).
+  `internal/db/boundaries_test.go`). To review projects, operators also
+  read each project's enrollment answers, its members and the audit log,
+  through the control plane's `cp_system` role; that is console account
+  data, for which the hosting operator is the controller
+  (`records-of-processing.md` part B).
 - CNIL's self-assessment tool excludes reuse of the data "for the provider's
   own account" unless the data was effectively anonymised first (S2). The
   aggregates, including those SCF receives, are exact counts per site and day,
@@ -49,7 +53,7 @@ file-backed stream. "Stored" means PostgreSQL.
 | Gateway | daily visitor secret, daily IP-cluster secret | `edge_secrets`, memory bucket | until the next UTC midnight (per-key TTL), then gone; gateways zero their copies at midnight (`internal/gateway/visitor.go`) |
 | Gateway | daily proof key, which signs challenges and derives no visitor token | `edge_secrets`, memory bucket | until the end of the following UTC day (per-key TTL), so a challenge issued just before midnight still verifies during its 6 hour validity; gateways keep yesterday's key in memory and zero older ones (`internal/gateway/challenge.go`) |
 | Gateway | IP-cluster sets: keyed HMAC of the truncated network, visitor tokens | memory | a sliding hour |
-| `WEB_EVENTS` | accepted event: site, band, visitor token, user agent (cut to 500 UTF-16 code units), country code, hostname, path with allowlisted query, referrer scheme and host, title, screen, language, event name and data. Tracker 1.3.0 sends no screen and no language, and a title only when the site sets `data-send-title="true"`, so those fields stay empty for its events | queued | until the replayer delivers it, at most 72 hours |
+| `WEB_EVENTS` | accepted event: site, band, visitor token, user agent (cut to 500 UTF-16 code units), country code, hostname, path with allowlisted query, referrer scheme and host, title, screen, language, event name and data. Tracker 1.3.0 and later read no screen and no language, and the title only when the site sets `data-send-title="true"`, so those fields stay empty unless the site's own before-send hook or `track()` call supplies them. The message subject holds the site id and a partition number from 0 to 31, a hash of the site id and the visitor token, so that every event of one visitor goes to the same replayer (`internal/events/webevent.go`); the partition number names no visitor, since every partition holds the events of many | queued | until the replayer delivers it, at most 72 hours |
 | `WEB_DLQ` | events Umami refused permanently, same fields | queued | at most 7 days; erasure deletes matching messages |
 | `visit_state` | per site and visitor token: Umami session id, cache token, last event time; duplicate-guard keys | memory bucket | 24 hours after the last write |
 | Umami (`umami` database) | `session` (browser, OS, device, screen, language, country), `website_event` (time, path, query, referrer domain, title, event name, hostname; the referrer path is always `/` and its query empty, section 7), `event_data` | stored | `WEB_RAW_RETENTION_MONTHS`, default 25 (section 4) |
@@ -183,7 +187,9 @@ platform reads from Umami is in `docs/reference/umami-contract.md`.
   `navigator.globalPrivacyControl` is true, and the gateway drops any event
   that arrives with `Sec-GPC: 1` (`internal/gateway/server.go`).
 - **Opt-out flag.** The tracker sends nothing when the browser's
-  `localStorage` holds `umami.disabled`. A tenant offers its visitors an
+  `localStorage` holds `umami.disabled`, or when the page runs in a frame
+  whose window name is `umami.disabled`, which lets a parent page opt a
+  framed page out. A tenant offers its visitors an
   opt-out link that sets this key. The tracker never writes browser storage.
 - **What the tracker reads from browser storage, and when.** Exactly this,
   from `packages/tracker/src/index.ts` and `wallets-kit.ts`:
@@ -214,7 +220,11 @@ platform reads from Umami is in `docs/reference/umami-contract.md`.
     (`packages/tracker/test/wallets-kit.test.ts`).
   - With the npm adapter (`attachWalletsKit`) the tracker reads no kit
     storage: it subscribes to the events of the kit the dapp set up itself.
-  - Nothing else. The challenge and proof stay in page memory.
+  - Nothing else from storage. Outside storage, the tracker reads
+    `navigator.globalPrivacyControl`, the window name of a framed page (the
+    opt-out flag above) and, only with `data-do-not-track="true"`, the
+    browser's Do Not Track setting. The challenge and proof stay in page
+    memory.
 
   Reading the kit's keys is access to information stored on the visitor's
   device (EDPB Guidelines 2/2023, `sources.md` S1), which is why Wallets Kit
@@ -339,7 +349,7 @@ period.
 The primary text of CNIL's July 2025 self-assessment tool, quoted in S2,
 says that the technical measures it names are recommendations: a provider may
 use an alternative if it shows the alternative meets the criterion. The
-conditions of the exemption are those of délibération 2020-091 art. 5 (S2).
+conditions of the exemption are those of délibération 2020-091 Art. 5 (S2).
 
 | Criterion (tool, section 4) | CNIL's recommended measure | What the service does | Met? |
 |---|---|---|---|
@@ -405,7 +415,8 @@ data, including Umami reports the console does not show.
   and latency buckets. No IP address or user agent exists in any store, so
   none can be returned.
 - **What an operator connection can receive.** The operator views' daily
-  aggregates and project metadata (section 1): never sessions or raw events.
+  aggregates and project metadata, including a project's enrollment answers
+  and members (`get_tenant`; section 1): never sessions or raw events.
 - **Read-only.** No tool changes, exports in bulk or deletes data. Results are
   capped at 512 KiB per call and paged.
 - **Revocation.** A connection ends when its member leaves the project, the

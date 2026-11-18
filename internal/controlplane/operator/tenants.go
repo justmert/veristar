@@ -82,7 +82,18 @@ func oneValue(q map[string][]string, key string) (string, bool, error) {
 	if len(v) != 1 {
 		return "", false, httpx.BadQuery(key + " may be given once")
 	}
+	if !sqlText(v[0]) {
+		return "", false, httpx.BadQuery(key + " must be utf-8 text without nul characters")
+	}
 	return v[0], true, nil
+}
+
+// sqlText reports whether s can reach postgresql as a text value:
+// postgresql refuses a nul character and invalid utf-8 in text, so such a
+// value, reached through a query parameter (%00, %ff) or a cursor a client
+// edited, would otherwise fail the request with 500 instead of 400.
+func sqlText(s string) bool {
+	return utf8.ValidString(s) && !strings.ContainsRune(s, 0)
 }
 
 func parseTenantQuery(r *http.Request) (operatorq.OperatorTenantPageParams, string, string, int, error) {
@@ -146,7 +157,7 @@ func parseTenantQuery(r *http.Request) (operatorq.OperatorTenantPageParams, stri
 		}
 		var c tenantCursor
 		if err := json.Unmarshal(raw, &c); err != nil || c.R != tenantsRoute || c.S != p.Sort || c.O != order ||
-			c.I == uuid.Nil {
+			c.I == uuid.Nil || !sqlText(c.K) {
 			return p, "", "", 0, httpx.BadCursor()
 		}
 		p.AfterK = &c.K

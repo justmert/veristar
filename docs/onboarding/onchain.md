@@ -82,8 +82,8 @@ Use either method:
 **Sign with a wallet.** Choose **Sign with a wallet**, pick a wallet that holds the account, and
 approve the message. The wallet signs it with SEP-53 (Sign and Verify Messages), the standard that
 prefixes the message so that a signature can never be a transaction: signing moves no funds and
-sends nothing to the ledger. Veristar lists the wallets that sign SEP-53 messages, such as Freighter
-5.34 or later, Lobstr and Hana. A signature counts only while the account's own key can still
+sends nothing to the ledger. Veristar lists the wallets that sign SEP-53 messages, such as Varial
+(formerly Freighter), xBull, LOBSTR and Hana. A signature counts only while the account's own key can still
 send a payment on its own: Veristar reads the account after checking the signature, and its master
 key weight must be above 0 and at least the account's medium threshold. An account whose master key
 was set to weight 0, such as an issuer locked behind several signers, proves control with a data
@@ -144,8 +144,8 @@ The **stellar.toml link** checklist shows each leg per site and account as one l
 done. A line that is not done has one action: verify the domain, open the site setup, or copy the
 lines or the domain to set. When every leg holds for a
 verified account on a verified domain, the project shows **stellar.toml linked both ways**; an
-account you have not proven never links, since anyone can declare an account that lists a domain. Veristar reads
-the stellar.toml once a day and the home domain with each daily ledger read, so a change shows
+account you have not proven never links, since anyone can declare an account that lists a
+domain. Veristar reads the stellar.toml once a day and the home domain with each daily ledger read, so a change shows
 within a day. A contract you list as a `[[CURRENCIES]]` `contract` shows as named by the file.
 
 ## SCF review
@@ -154,8 +154,9 @@ within a day. A contract you list as a `[[CURRENCIES]]` `contract` shows as name
 range, from the same queries: your standing (the integrity grade with what it means, your cohort,
 and the change and percentile of each key metric), the full integrity report with the
 **Appeal this grade** link, the rules you meet, your project's rows in the web and API views, its
-on-chain column with the weekly active accounts and the calls per contract function, and their
-daily series. The same page creates [signed reports](signed-reports.md) of these figures. **Export CSV** downloads your overview's daily numbers
+on-chain column with the weekly active accounts and the calls per function of each verified
+contract, and their daily series. The same page creates [signed reports](signed-reports.md) of
+these figures. **Export CSV** downloads your overview's daily numbers
 (web, API and on-chain) for the range. The [overview guide](overview.md) explains each web and API
 number.
 
@@ -163,8 +164,8 @@ number.
 
 Ledger data is public. Veristar stores the ids you declare, the proof of each (method and time, and
 the transaction hash or storage key a contract proof used), each account's home domain, three
-counts per id and day, and one count of weekly active accounts per week. It stores no counterparty
-address, no transaction and no signature. While a week is open, the accounts behind its count are
+counts per id and day, one count of weekly active accounts per week, and for each verified contract
+the successful calls, failed calls and distinct calling accounts per function, kind of caller and
+day. It stores no counterparty address, no transaction and no signature. While a week is open, the accounts behind its count are
 held only as keyed hashes under a key that exists for that week; both are deleted when the week
-closes. The
-requests to the ledger APIs carry the public ids only.
+closes. The requests to the ledger APIs carry the public ids only.

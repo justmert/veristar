@@ -9,10 +9,9 @@ every script of your site on your own origin. Tested by the page
 which runs in the browser test matrix.
 
 Only the file moves. **Events still go from the visitor's browser directly to the gateway**,
-`https://in.analytics.example` in these examples. There is no supported way to send them through
-your own server.
+`https://in.analytics.example` in these examples.
 
-## Why there is no first-party event proxy
+## Why events go straight to the gateway
 
 A proxy on your domain that forwards events to the gateway would turn every visitor's event into a
 request from your server's single address. The gateway counts unique visitors from the address and
@@ -25,17 +24,17 @@ from browsers, and only the file can be self-hosted.
 ## Steps
 
 1. **Copy the file of the version you use.** Download it from the gateway, for example
-   `https://in.analytics.example/v/1.3.0/sdk.js`, or take `packages/tracker/releases/1.3.0/sdk.js`
+   `https://in.analytics.example/v/1.3.2/sdk.js`, or take `packages/tracker/releases/1.3.2/sdk.js`
    from the repository. The files are immutable: a version's bytes never change.
-2. **Serve it unchanged** from a path of your choice, for example `/js/sdk/1.3.0/sdk.js`. Do not
+2. **Serve it unchanged** from a path of your choice, for example `/js/sdk/1.3.2/sdk.js`. Do not
    minify, bundle or otherwise rewrite it; the integrity check would refuse it.
 3. **Change the tag:** point `src` at your copy, keep the `integrity` value, and add
    `data-host-url` with the gateway origin, because `sdk.js` can no longer find the gateway from its
    own address:
 
-{/* snippet version=1.3.0 self-hosted=/js/sdk/1.3.0/sdk.js */}
+{/* snippet version=1.3.2 self-hosted=/js/sdk/1.3.2/sdk.js */}
 ```html
-<script defer src="/js/sdk/1.3.0/sdk.js" integrity="sha384-3E+vbTmGHWaU8kaLAWT6ttw70odRH565/3vRal5558SgSitqFlIbsFHlfzWnSUtT" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c" data-host-url="https://in.analytics.example"></script>
+<script defer src="/js/sdk/1.3.2/sdk.js" integrity="sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c" data-host-url="https://in.analytics.example"></script>
 ```
 
 4. **Check the file** before you publish it: its SHA-384 must be the integrity value in the

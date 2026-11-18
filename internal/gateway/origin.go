@@ -66,6 +66,16 @@ func parseOrigin(s string, allowWildcard bool) (origin, error) {
 	if net.ParseIP(o.host) == nil && !validDNSName(o.host) {
 		return origin{}, errors.New("host is not a dns name or ip address")
 	}
+	if net.ParseIP(o.host) == nil {
+		// a name whose last label is a number is an ipv4 address to the
+		// whatwg url parser, and not a valid one here. a browser never sends
+		// it, and umami, which resolves the page url against the hostname,
+		// fails on it
+		labels := strings.Split(o.host, ".")
+		if sanNumericLabel(labels[len(labels)-1]) {
+			return origin{}, errors.New("host ends in a number but is not an ipv4 address")
+		}
+	}
 	if o.wildcard && net.ParseIP(o.host) != nil {
 		return origin{}, errors.New("wildcard over an ip address")
 	}

@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        A maintainer answers within 5 business days and aims to resolve it within 10 (docs/support.md). The onboarding guides in docs/onboarding answer most setup questions.
+        A maintainer responds within 5 business days and resolves the issue within 10 (docs/support.md). The onboarding guides in docs/onboarding answer most setup questions.
 
         This tracker is public. Do not paste OTLP tokens, operator API keys, session cookies, visitor IP addresses or user agents. Name your project by its slug; the maintainers can look it up.
   - type: input
@@ -27,6 +27,9 @@ body:
         - Sending API metrics (OpenTelemetry)
         - API dashboard numbers
         - OTLP tokens
+        - On-chain accounts, contracts and proofs
+        - Signed reports
+        - Sign-in (GitHub, Stellar wallet or passkey)
         - Members and invites
         - Domain verification
         - Something else

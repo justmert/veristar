@@ -1,4 +1,4 @@
-import { JSDOM } from "jsdom";
+import { JSDOM, VirtualConsole } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createTracker,
@@ -652,7 +652,7 @@ describe("counting only pages a person could see (1.3.0)", () => {
     await pause(QUIET_MS);
     expect(pageviews().map((e) => e.u)).toEqual(["/", "/a", "/c"]);
     // the page the person saw last is the referrer of the one they see
-    expect(pageviews()[2]?.r).toBe("/b");
+    expect(pageviews()[2]?.r).toBe("/a");
   });
 
   it("sends a never-visible notice for a background page closed unseen", async () => {
@@ -778,5 +778,169 @@ describe("smaller footprint (1.3.0)", () => {
     expect(seen).toMatchObject({ website: SITE, screen: "", language: "", title: "" });
     // a value the site's own hook sets is the site's choice and is sent
     expect(parse(gw.events()[0] as Recorded).l).toBe("de-DE");
+  });
+});
+
+describe("current page in consent and manual mode (1.3.2)", () => {
+  it("start() counts the page the visitor is on, not the one the tracker loaded on", async () => {
+    const w = openPage({ url: "https://site.example/home", referrer: "https://search.example/" });
+    const t = track(w, { autoTrack: false });
+    // the spa moves on while the consent banner is open
+    w.history.pushState({}, "", "/pricing");
+    t.start();
+    await waitFor(() => gw.events().length === 1);
+    const e = parse(gw.events()[0] as Recorded);
+    expect(e.u).toBe("/pricing");
+    // the visit's own referrer stays, the uncounted landing page is no referrer
+    expect(e.r).toBe("https://search.example/");
+  });
+
+  it("track() after start({ automatic: false }) names the current page", async () => {
+    const w = openPage({ url: "https://site.example/" });
+    const t = track(w, { autoTrack: false });
+    t.start({ automatic: false });
+    w.history.pushState({}, "", "/checkout");
+    await t.track("paid");
+    await waitFor(() => gw.events().length === 1);
+    expect(parse(gw.events()[0] as Recorded).u).toBe("/checkout");
+  });
+});
+
+describe("redirects inside the navigation delay (1.3.2)", () => {
+  it("counts a route that redirects at once as one pageview of where it lands", async () => {
+    const w = openPage({ url: "https://site.example/" });
+    track(w);
+    await waitFor(() => gw.events().length === 1);
+    w.history.pushState({}, "", "/account");
+    w.history.replaceState({}, "", "/login");
+    await waitFor(() => gw.events().length === 2);
+    await pause(QUIET_MS);
+    expect(gw.events()).toHaveLength(2);
+    const e = parse(gw.events()[1] as Recorded);
+    expect(e.u).toBe("/login");
+    expect(e.r).toBe("/");
+  });
+
+  it("counts nothing for a navigation that returns to the counted page within the delay", async () => {
+    const w = openPage({ url: "https://site.example/" });
+    track(w);
+    await waitFor(() => gw.events().length === 1);
+    w.history.pushState({}, "", "/away");
+    w.history.replaceState({}, "", "/");
+    await pause(QUIET_MS);
+    expect(gw.events()).toHaveLength(1);
+    // the next real navigation is counted with the right referrer
+    w.history.pushState({}, "", "/next");
+    await waitFor(() => gw.events().length === 2);
+    expect(parse(gw.events()[1] as Recorded)).toMatchObject({ u: "/next", r: "/" });
+  });
+});
+
+describe("tracked links (1.3.2)", () => {
+  // a jsdom page whose full navigations are recorded instead of performed
+  function linkPage(html: string): { w: TestWindow; navigations: string[] } {
+    const navigations: string[] = [];
+    const virtualConsole = new VirtualConsole();
+    virtualConsole.on("jsdomError", (err: Error & { type?: string }) => {
+      if (err.message.includes("navigation")) navigations.push(err.message);
+    });
+    const dom = new JSDOM(`<!doctype html><title>t</title><body>${html}</body>`, {
+      url: "https://site.example/start",
+      virtualConsole,
+      beforeParse: (window) => browserize(window, {}),
+    });
+    windows.push(dom.window);
+    return { w: dom.window, navigations };
+  }
+
+  // what a client-side router does: it handles a click no one prevented
+  function routerLink(w: TestWindow, a: HTMLAnchorElement) {
+    a.addEventListener("click", (e) => {
+      if (e.defaultPrevented) return;
+      e.preventDefault();
+      w.history.pushState({}, "", a.getAttribute("href"));
+    });
+  }
+
+  it("leaves a client-side router's link to the router", async () => {
+    const { w, navigations } = linkPage('<a href="/pricing" data-umami-event="nav">p</a>');
+    track(w);
+    await waitFor(() => gw.events().length === 1);
+    const a = w.document.querySelector("a") as HTMLAnchorElement;
+    routerLink(w, a);
+    a.click();
+    await waitFor(() => gw.events().some((r) => parse(r).n === "nav"));
+    await pause(QUIET_MS);
+    expect(w.location.pathname).toBe("/pricing");
+    expect(navigations).toEqual([]);
+    // the router's navigation is counted as a pageview too
+    expect(gw.events().map((r) => parse(r).u)).toContain("/pricing");
+  });
+
+  it("still holds a plain link until the event is out when no proof is ready", async () => {
+    gw.holdChallenges = true;
+    const { w, navigations } = linkPage('<a href="/docs" data-umami-event="docs">d</a>');
+    const t = track(w, { autoTrack: false });
+    t.start();
+    const a = w.document.querySelector("a") as HTMLAnchorElement;
+    let prevented: boolean | undefined;
+    w.addEventListener("click", (e) => {
+      prevented = e.defaultPrevented;
+    });
+    a.click();
+    // held: the click waits for the proof
+    expect(prevented).toBe(true);
+    gw.holdChallenges = false;
+    gw.releaseChallenges();
+    await waitFor(() => gw.events().some((r) => parse(r).n === "docs"));
+    await waitFor(() => navigations.length === 1);
+  });
+
+  it("navigates after at most a second when the gateway does not answer", async () => {
+    gw.holdChallenges = true;
+    const { w, navigations } = linkPage('<a href="/docs" data-umami-event="docs">d</a>');
+    const t = track(w, { autoTrack: false });
+    t.start();
+    (w.document.querySelector("a") as HTMLAnchorElement).click();
+    await pause(300);
+    expect(navigations).toHaveLength(0);
+    await waitFor(() => navigations.length === 1, 2000);
+  });
+
+  it("leaves download links and links into other windows to the browser", async () => {
+    gw.holdChallenges = true;
+    const { w } = linkPage(
+      '<a id="dl" href="/report.pdf" download data-umami-event="dl">r</a>' +
+        '<a id="named" href="/help" target="help" data-umami-event="help">h</a>',
+    );
+    const t = track(w, { autoTrack: false });
+    t.start();
+    const prevented: boolean[] = [];
+    w.addEventListener("click", (e) => {
+      prevented.push(e.defaultPrevented);
+      // keep jsdom from following the link
+      e.preventDefault();
+    });
+    (w.document.getElementById("dl") as HTMLAnchorElement).click();
+    (w.document.getElementById("named") as HTMLAnchorElement).click();
+    expect(prevented).toEqual([false, false]);
+    gw.holdChallenges = false;
+    gw.releaseChallenges();
+    await waitFor(() => gw.events().length === 3);
+  });
+});
+
+describe("free text the gateway refuses (1.3.2)", () => {
+  it("drops nul characters from the title and referrer", async () => {
+    const w = openPage({ url: "https://site.example/" });
+    w.document.title = "Inbox\u0000(3)";
+    track(w, {
+      sendTitle: true,
+      beforeSend: (_type, p) => ({ ...p, referrer: "https://ref.example/\u0000x" }),
+    });
+    await waitFor(() => gw.events().length === 1);
+    const e = parse(gw.events()[0] as Recorded);
+    expect(e.ti).toBe("Inbox(3)");
+    expect(e.r).toBe("https://ref.example/x");
   });
 });

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -130,4 +131,32 @@ func TestLoadTrackerRefusesBadInput(t *testing.T) {
 	}
 	_, err := LoadTracker(writeReleases(t, twoReleases, `{"revoked":[{"version":"7.0.0"}]}`), "https://in.example.org")
 	require.Error(t, err, "revoking an unreleased version")
+}
+
+// TRACKER_NPM_PACKAGE (contract 4.3.6): a scoped name, as pack.mjs builds
+// it, gives every snippet the npm install of its version in the shape the
+// console reads (package, version, install, import); anything else stops
+// the process at start, since the install line is pasted into a shell
+func TestSnippetNPMPackage(t *testing.T) {
+	for _, bad := range []string{"tracker", "@Scope/tracker", "@scope/tracker; rm -rf ~", "@scope/", "@/x",
+		"@scope/tracker@1.0.0", "@scope/" + strings.Repeat("a", 214)} {
+		require.Error(t, CheckNPMPackage(bad), bad)
+	}
+	require.NoError(t, CheckNPMPackage("@acme/veristar-tracker"))
+
+	b, err := json.Marshal(SnippetResponse{NPM: npmInstall("@acme/veristar-tracker", "1.3.1")})
+	require.NoError(t, err)
+	var m map[string]any
+	require.NoError(t, json.Unmarshal(b, &m))
+	require.Equal(t, map[string]any{
+		"package": "@acme/veristar-tracker",
+		"version": "1.3.1",
+		"install": "npm install --save-exact @acme/veristar-tracker@1.3.1",
+		"import":  `import { init } from "@acme/veristar-tracker";`,
+	}, m["npm"])
+
+	// unset, the answer keeps npm null, as before
+	b, err = json.Marshal(SnippetResponse{})
+	require.NoError(t, err)
+	require.Contains(t, string(b), `"npm":null`)
 }

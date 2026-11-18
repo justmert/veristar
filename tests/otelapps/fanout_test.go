@@ -55,8 +55,8 @@ func TestCollectorFanout(t *testing.T) {
 {"key":"http.route","value":{"stringValue":"/accounts/{id}"}},{"key":"http.response.status_code","value":{"intValue":"200"}}]}]}]}]}`,
 		service, now-int64(20*time.Millisecond), now)
 
-	postWhenUp(t, "http://127.0.0.1:47211/v1/metrics", metrics)
-	postWhenUp(t, "http://127.0.0.1:47211/v1/traces", traces)
+	postWhenUp(t, "http://127.0.0.1:27211/v1/metrics", metrics)
+	postWhenUp(t, "http://127.0.0.1:27211/v1/traces", traces)
 
 	for _, backend := range []string{"tenant", "platform"} {
 		for _, file := range []string{"metrics.jsonl", "traces.jsonl"} {

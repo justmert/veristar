@@ -162,6 +162,8 @@ var badPoints = map[string]func(pmetric.HistogramDataPoint){
 	"count huge":            func(dp pmetric.HistogramDataPoint) { dp.SetCount(MaxPointCount + 1) },
 	"bucket huge":           func(dp pmetric.HistogramDataPoint) { dp.BucketCounts().FromRaw([]uint64{1, MaxPointCount + 1, 0}) },
 	"sum nan":               func(dp pmetric.HistogramDataPoint) { dp.SetSum(math.NaN()) },
+	"sum huge":              func(dp pmetric.HistogramDataPoint) { dp.SetSum(1e308) },
+	"sum huge negative":     func(dp pmetric.HistogramDataPoint) { dp.SetSum(-1e19) },
 }
 
 func TestDecodeLeavesOutBadPointsAlone(t *testing.T) {

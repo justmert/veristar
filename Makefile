@@ -216,6 +216,16 @@ isolation:
 	$(GO) test -race -count=1 -v ./internal/db/
 	$(GO) test -race -count=1 -run 'TestCaddyfilesNameNoUmami|TestAssembledConfigsReachNoUmami' ./deploy/caddy/
 
+# the browser matrix of tests/e2e (build tag e2ematrix): chromium, firefox,
+# webkit and firefox with gpc on every example site against the fixture
+# gateway. the browsers run in the official playwright image
+# (tests/fixtures/browserbox); SA_E2E_BROWSERS=host runs them on the host,
+# and SA_E2E_ARGS passes playwright options (SA_E2E_ARGS=--project=webkit).
+# needs docker and node 26 with pnpm, and the fixture ports free.
+.PHONY: e2e-matrix
+e2e-matrix:
+	$(GO) test -tags e2ematrix -count=1 -timeout 60m -v ./tests/e2e/
+
 # end-to-end web path (tests/webpath, build tag webpath): real
 # browsers on the example sites through the edge caddy, gateway, nats,
 # replayer and umami, all in containers the test owns (images from the
@@ -546,7 +556,9 @@ verify-migration: build
 # separate environment b by the pgbackrest and the pg_dump paths, checked
 # with verify-migration, signed in to through the oauth fixture, and the old
 # snippet delivering into b after the names move (transfer path) in three
-# engines. needs docker, node 26 with pnpm and the playwright browsers.
+# engines. needs docker and node 26 with pnpm; the browsers run in the
+# official playwright image (tests/fixtures/browserbox; SA_E2E_BROWSERS=host
+# runs them on the host).
 .PHONY: handover-it
 handover-it:
 	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags handover -count=1 -timeout 90m -v ./tests/handover/

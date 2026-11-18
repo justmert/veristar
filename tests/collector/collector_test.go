@@ -596,7 +596,9 @@ func TestCollector(t *testing.T) {
 		dp.SetTimestamp(pcommon.NewTimestampFromTime(time.Now()))
 		dp.SetCount(1)
 		dp.ExplicitBounds().FromRaw(canonical)
-		dp.BucketCounts().FromRaw(make([]uint64, 15))
+		one15 := make([]uint64, 15)
+		one15[3] = 1
+		dp.BucketCounts().FromRaw(one15)
 		body, _ := (&pmetric.ProtoMarshaler{}).MarshalMetrics(raw)
 		if code, msg := s.postMetrics(t, tn.Token, body, ""); code != http.StatusServiceUnavailable {
 			t.Fatalf("nats stopped: %d %s", code, msg)

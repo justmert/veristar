@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -45,6 +46,16 @@ type Config struct {
 	// (tenants.Scope.Reconcile), so each former tenant's umami team is
 	// brought in line with its members.
 	Reconcile func(ctx context.Context, tenantID uuid.UUID)
+	// StepUp tells whether the session holds a fresh operator step-up
+	// (*stepup.Service). an operator account is deleted only with one: the
+	// deletion removes its roster rows, so a stolen session alone must not
+	// be able to strip an operator, as for identity changes (4.1.8)
+	StepUp StepUpChecker
+}
+
+// StepUpChecker is the part of the step-up service the deletion needs.
+type StepUpChecker interface {
+	Fresh(ctx context.Context, userID uuid.UUID) (bool, time.Time)
 }
 
 // Routes serves the account route.
@@ -52,8 +63,8 @@ type Routes struct{ c Config }
 
 // NewRoutes checks c.
 func NewRoutes(c Config) (*Routes, error) {
-	if c.DB == nil || c.Sessions == nil || c.Umami == nil || c.Reconcile == nil {
-		return nil, errors.New("account: db, sessions, umami and reconcile are required")
+	if c.DB == nil || c.Sessions == nil || c.Umami == nil || c.Reconcile == nil || c.StepUp == nil {
+		return nil, errors.New("account: db, sessions, umami, reconcile and step-up are required")
 	}
 	return &Routes{c: c}, nil
 }
@@ -85,7 +96,18 @@ func (h *Routes) delete(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	res, err := Delete(ctx, h.c.DB, h.c.Umami, u.ID)
+	// the operator flag is read again from the locked row, so an account
+	// that became an operator while the request waited is held to it too
+	res, err := deleteAccount(ctx, h.c.DB, h.c.Umami, u.ID, func(isOperator bool) error {
+		if !isOperator {
+			return nil
+		}
+		if ok, _ := h.c.StepUp.Fresh(ctx, u.ID); ok {
+			return nil
+		}
+		return httpx.E(http.StatusUnauthorized, httpx.CodeStepUpRequired,
+			"confirm with your passkey before you delete an operator account")
+	})
 	if err != nil {
 		return err
 	}
@@ -113,6 +135,12 @@ func (h *Routes) delete(w http.ResponseWriter, r *http.Request) error {
 // waiting on a tenant row lock reads the memberships only after the commit,
 // so it cannot create the user again.
 func Delete(ctx context.Context, d *db.DB, um UmamiUsers, userID uuid.UUID) (Result, error) {
+	return deleteAccount(ctx, d, um, userID, nil)
+}
+
+// deleteAccount is Delete with a check of the locked row's operator flag,
+// which runs before anything changes; nil checks nothing.
+func deleteAccount(ctx context.Context, d *db.DB, um UmamiUsers, userID uuid.UUID, operatorCheck func(isOperator bool) error) (Result, error) {
 	var res Result
 	err := d.WithSystem(ctx, func(tx pgx.Tx) error {
 		res = Result{}
@@ -126,6 +154,11 @@ func Delete(ctx context.Context, d *db.DB, um UmamiUsers, userID uuid.UUID) (Res
 		}
 		if u.DeletedAt != nil {
 			return nil
+		}
+		if operatorCheck != nil {
+			if err := operatorCheck(u.IsOperator); err != nil {
+				return err
+			}
 		}
 		if _, err := q.AccountLockTenants(ctx, userID); err != nil {
 			return fmt.Errorf("account: lock tenants: %w", err)

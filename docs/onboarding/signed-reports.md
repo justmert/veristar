@@ -5,7 +5,7 @@ description: "Create a signed usage report of your project for a period, share i
 ---
 
 A signed usage report states your project's usage for a period: web traffic, API requests,
-on-chain activity, your integrity grade with its reasons, your SCF cohort and your percentiles in
+on-chain activity including the calls per function of your verified contracts, your integrity grade with its reasons, your SCF cohort and your percentiles in
 it. Veristar signs it with its published Stellar key, so a reviewer can check that the numbers
 come from Veristar unchanged without an account and without trusting your copy. Attach the link
 or the file to an SCF submission instead of assembling screenshots.
@@ -19,11 +19,15 @@ or the file to an SCF submission instead of assembling screenshots.
    events and grade them, so only older days are final, and a signed number never changes.
 3. Choose **Generate and sign**.
 
-Any member of the project who accepted the current terms creates reports. A project can create 20 reports per 24 hours.
+Any member of the project creates reports, once an owner has accepted the current terms of service
+for the project. A project creates at most 20 reports per 24 hours.
+
 The report holds the numbers **SCF review** shows for the same period, including the estimate of
 visits not measured because of privacy signals, the API flags (no data, lossy, infrastructure
-requests left out) and the weekly active accounts, and the versions of every definition behind them,
-including every integrity rule version that graded the period.
+requests left out), the weekly active accounts and the calls per function of each verified
+contract, and the versions of every definition behind them, including every integrity rule version
+that graded the period. Reports use format version 3; reports created in an earlier format keep
+their layout and still verify.
 
 ## Share it
 
@@ -35,8 +39,8 @@ and offers the signed file as JSON.
 The **Signed reports** section lists your reports with how often each link was opened. **Copy link**
 copies a report's link; its menu opens the report, downloads the JSON or revokes the link. A
 report never changes after it is created. To stop sharing one, choose **Revoke link**: the link
-then answers "not available" for everyone, and revoking cannot be undone. Your members still see
-the revoked report in the **Signed reports** section. Creating a report, revoking its link and every view
+then answers "not available" for everyone, and revoking cannot be undone. Members of your project
+still see the revoked report in the **Signed reports** section. Creating a report, revoking its link and every view
 of the link are in the audit log; a view records no trait of the person who opened it.
 
 ## Your cohort
@@ -66,4 +70,5 @@ Node and Python are in [signed usage reports](../reference/usage-reports.md).
 ## What a report contains
 
 Aggregates only: daily and total counts, rates, the grade and its reasons, your cohort and
-percentiles. No visitor, address, user agent or member of your project is in a report.
+percentiles, and the public ids of your verified contracts with their call counts. No visitor,
+visitor address, user agent or member of your project is in a report.

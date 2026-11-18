@@ -15,6 +15,12 @@ with these steps on 2026-11-13 ([../reference/drills/2026-11-13-azure.md](../ref
    `infra/secrets/staging/secrets.enc.yaml` and `infra/secrets/staging/tofu.enc.env`.
    Check: `sops decrypt infra/secrets/staging/secrets.enc.yaml | grep -c ':'` prints a number
    and no error.
+   An environment that takes over the data of an earlier one (a handover,
+   [../handover/rebuild.md](../handover/rebuild.md)) gets its own report signing key too: put
+   the earlier environment's report signing account id in `sa_report_signing_retired_keys` in
+   `infra/ansible/inventories/staging/group_vars/all.yml`, so the signed usage reports that move
+   with the data still verify
+   ([../runbooks/secret-rotation.md](../runbooks/secret-rotation.md#the-usage-report-signing-key)).
 
 2. **Infrastructure.** Follow the [OpenTofu procedure](opentofu.md#procedure): `terraform.tfvars`,
    `make state-bootstrap ENV=staging`, `make staging-plan`, `make staging-apply`.

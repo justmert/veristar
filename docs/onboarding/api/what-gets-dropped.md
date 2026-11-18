@@ -14,7 +14,7 @@ message for names and marker strings that must not be there.
 | Signal | What is kept |
 |---|---|
 | Metrics | `http.server.request.duration` in seconds, and the legacy `http.server.duration` in milliseconds or seconds (converted to the former), as explicit or exponential histograms |
-| Their attributes | `http.request.method`, `http.route`, `http.response.status_code`, `error.type`; the legacy names `http.method`, `http.target` and `http.status_code` are mapped to these |
+| Their attributes | `http.request.method`, `http.route`, `http.response.status_code`, `error.type`; the legacy names `http.method` and `http.status_code` are mapped to these. Without `http.route`, the request path (`url.path`, or the legacy `http.target`) is normalized and stored as the route |
 | Resource | `service.name`, redacted and cut to 128 bytes |
 | Traces | only SERVER spans with an HTTP method, and only long enough to turn their duration, method, route and status into the same request metric; then the span is discarded |
 
@@ -23,8 +23,9 @@ message for names and marker strings that must not be there.
 - **Every other metric**: counters, gauges, runtime and database metrics, client-side HTTP
   metrics, and your own custom metrics.
 - **Every other attribute** on the kept metrics, for example `server.address`, `url.scheme`,
-  `user_agent.original` or anything you added. The user agent and `user_agent.synthetic.type`
-  are read once to decide the traffic class (below) and then dropped.
+  `user_agent.original` or anything you added. The user agent (`user_agent.original`, or the
+  legacy `http.user_agent`) and `user_agent.synthetic.type` are read once to decide the traffic
+  class (below) and then dropped.
 - **Every other resource attribute**: host, container, cloud, process, SDK and deployment
   attributes. Attributes that claim a tenant (`scf.*`, `tenant.id`) are replaced from the token.
 - **Spans** after the request metric was derived from them: names, events, links, status messages
@@ -36,7 +37,9 @@ message for names and marker strings that must not be there.
   time of zero or past the year 2262, a start time after the time, a temporality other than
   delta or cumulative (the whole metric), bucket bounds that are not finite and strictly
   increasing, bucket counts that do not match the bounds (including a histogram without
-  buckets), a count above 10^12 and a sum that is not a finite number.
+  buckets), an exponential histogram with a scale outside -10 to 20 or a zero threshold that is
+  not a finite non-negative number, a count above 10^12 or different from the total of the buckets, and a sum that is
+  not a finite number or exceeds 10^18 seconds in magnitude.
 - **Spans that have no duration**: a span without a start time, one that ends before it starts,
   in the first minute of 1970 or past 2262.
 
@@ -66,13 +69,12 @@ message for names and marker strings that must not be there.
 ## Stored and for how long
 
 One row per minute, service, method, route, status code, source (metric or span) and traffic
-class with the
-bucket counts, sum and count. Minute rows are rolled up into hours and days. With the default
+class, with the bucket counts, sum and count. Minute rows are rolled up into hours and days. With the default
 settings, minute rows are kept for 30 days, hourly rows for 36 months and daily rows without a
 time limit. No request, trace, log line, address or user identifier is stored.
 
 ## Why
 
 The API dashboards show request volume, status codes and latency per route, and nothing beyond
-that. Keeping less means there is less to protect, less to erase and nothing in the platform that could identify
-one of your users. If you need traces, logs or other metrics, your own backend already has them.
+that. Keeping less means there is less to protect, less to erase and nothing in the platform that
+could identify one of your users. If you need traces, logs or other metrics, your own backend already has them.
