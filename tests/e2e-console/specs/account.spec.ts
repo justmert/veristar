@@ -117,7 +117,7 @@ test("with a second owner the account is deleted and signed out everywhere", asy
 
   await page.waitForURL(`${APP}/sign-in?deleted=1`);
   await expect(
-    page.getByRole("status").filter({ hasText: "Your account was deleted" }),
+    page.getByRole("status").filter({ hasText: "Your account is deleted" }),
   ).toBeVisible();
   expect((await person.cookies(APP)).find((c) => c.name === "__Host-sa_session")).toBeUndefined();
   expect((await api(person, "GET", "/api/me")).status).toBe(401);

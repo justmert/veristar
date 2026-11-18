@@ -1,13 +1,17 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { cn } from "@veristar/brand/cn";
 import { CircleAlert, Plug, ShieldCheck } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router";
+import { ApiError } from "@/api/client";
 import { type ConsentRequest, mcpApi, mcpKeys } from "@/api/mcp";
 import { meQuery } from "@/api/queries";
-import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
+import { ChoiceCard } from "@/components/choice-card";
+import { FormMessage } from "@/components/error-panel";
+import { Notice } from "@/components/notice";
 import { PublicFrame } from "@/components/public-frame";
+import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { Button } from "@/components/ui/button";
+import { errorMessage } from "@/lib/errors";
+import { ProjectsButton, StopPage } from "./not-found";
 
 // the oauth consent screen of the mcp authorization flow (contract 12.3).
 // /oauth/authorize checks the client and sends the browser here with a
@@ -61,71 +65,48 @@ export function AiConsentPage() {
     <PublicFrame center={false} className="items-center">
       <div className="w-full max-w-dialog-sm">
         {error ? (
-          <Stop
-            tone="critical"
-            title="The connection was not set up"
-            text={AUTHORIZE_ERRORS[error] ?? params.get("error_description") ?? error}
-            alert
-          />
+          <Stop tone="critical" title="The connection was not set up">
+            <p role="alert">
+              {AUTHORIZE_ERRORS[error] ??
+                params.get("error_description") ??
+                "The AI client sent a request this server cannot accept. Start again from the AI client."}
+            </p>
+          </Stop>
         ) : req ? (
           <Signed request={req} />
         ) : (
-          <Stop
-            tone="info"
-            title="No connection request"
-            text="Start from your AI client: add the Veristar server URL as a connector and it opens this page."
-          />
+          <Stop tone="info" title="No connection request">
+            <p>
+              Start from your AI client. Add the Veristar server URL as a connector, and the client
+              opens this page.
+            </p>
+          </Stop>
         )}
       </div>
     </PublicFrame>
   );
 }
 
-// a card that explains why there is nothing to approve, with the way back
+// a page that explains why there is nothing to approve, with the way back
 function Stop({
   tone,
   title,
-  text,
   children,
-  alert = false,
 }: {
   tone: "info" | "critical";
   title: string;
-  text?: string;
   children?: React.ReactNode;
-  alert?: boolean;
 }) {
   return (
-    <section className="flex flex-col gap-4 rounded-xl border border-line bg-raised p-6">
-      <span
-        className={cn(
-          "flex size-10 items-center justify-center rounded-lg border border-line-strong [&_svg]:size-5",
-          tone === "critical" ? "text-critical" : "text-fg-2",
-        )}
-      >
-        {tone === "critical" ? <CircleAlert aria-hidden /> : <Plug aria-hidden />}
-      </span>
-      <div className="flex flex-col gap-2">
-        <h1 className="text-section text-fg">{title}</h1>
-        {text ? (
-          <p role={alert ? "alert" : undefined} className="text-body text-fg-2">
-            {text}
-          </p>
-        ) : null}
-        {children}
-      </div>
-      <BackLink />
-    </section>
-  );
-}
-
-function BackLink() {
-  return (
-    <div>
-      <Button asChild variant="outline" className="max-sm:h-(--vs-control-touch)">
-        <Link to="/">Go to the console</Link>
-      </Button>
-    </div>
+    <StopPage
+      icon={tone === "critical" ? <CircleAlert aria-hidden /> : <Plug aria-hidden />}
+      tone={tone === "critical" ? "critical" : "neutral"}
+      title={title}
+      actions={<ProjectsButton />}
+      className="w-full"
+    >
+      {children}
+    </StopPage>
   );
 }
 
@@ -142,22 +123,31 @@ function Signed({ request }: { request: string }) {
   });
   if (me.isPending || (me.isSuccess && inspect.isPending))
     return (
-      <div className="rounded-xl border border-line bg-raised p-6">
-        <Loading label="Loading the request" rows={3} />
-      </div>
+      <LoadingState label="Loading the request">
+        <Skeleton.Table rows={3} columns={1} />
+      </LoadingState>
     );
-  if (me.error) return <ErrorPanel error={me.error} onRetry={() => me.refetch()} />;
+  if (me.error)
+    return (
+      <ErrorState title="Your account did not load" error={me.error} onRetry={() => me.refetch()} />
+    );
   if (inspect.error)
     return (
       <Stop tone="critical" title="This request cannot be approved">
-        <FormMessage error={inspect.error} />
-        <p className="text-small text-fg-2">
-          Requests expire after 10 minutes. Start again from the AI client.
-        </p>
+        <p role="alert">{inspectErrorText(inspect.error)}</p>
+        <p>A request expires after 10 minutes. Start again from the AI client.</p>
       </Stop>
     );
   if (!inspect.data) return null;
   return <Consent request={request} info={inspect.data} login={me.data?.user.display_name ?? ""} />;
+}
+
+// an expired or changed sealed request is a validation error of the whole
+// request, not of a field: say what it means on this page
+function inspectErrorText(err: unknown): string {
+  if (err instanceof ApiError && err.code === "validation_failed")
+    return "The request expired or is not complete.";
+  return errorMessage(err);
 }
 
 function Consent({
@@ -188,24 +178,30 @@ function Consent({
   });
   const busy = approve.isPending || deny.isPending || approve.isSuccess || deny.isSuccess;
   const nothing = info.tenants.length === 0 && !info.operator;
+  const operator = choice === "operator";
 
   return (
     <form
       aria-label="Approve the connection"
-      className="flex flex-col rounded-xl border border-line bg-raised"
+      className="flex flex-col rounded-lg border border-line bg-raised"
       onSubmit={(e) => {
         e.preventDefault();
         if (choice) approve.mutate();
       }}
     >
       <div className="flex flex-col gap-2 border-b border-line px-5 pt-6 pb-5 sm:px-6">
-        <h1 className="text-section text-fg">Connect {info.client_name} to Veristar</h1>
+        <h1 className="text-heading text-fg">Connect {info.client_name} to Veristar</h1>
         <p className="text-body text-fg-2">
           Signed in as <span className="font-medium text-fg">{login}</span>.{" "}
           <span className="font-medium text-fg">{info.client_name}</span> asks to read analytics as
-          you. After approval your browser returns to{" "}
-          <code className="font-mono text-small break-all text-fg">{info.redirect_origin}</code>.
+          you.
         </p>
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="text-caption text-fg-2">After approval, your browser goes back to</span>
+          <code className="w-fit max-w-full rounded-sm border border-line bg-sunken px-2 py-1 font-mono text-small break-all text-fg">
+            {info.redirect_origin}
+          </code>
+        </div>
       </div>
       <ul className="flex flex-col gap-2 border-b border-line px-5 py-4 text-small sm:px-6">
         <li className="flex gap-2">
@@ -213,55 +209,64 @@ function Consent({
           <span>
             <span className="font-medium text-fg">Read-only.</span>{" "}
             <span className="text-fg-2">
-              Web traffic, events and sessions as Umami holds them, and API request counts, errors
-              and latency. Nothing can be changed.
+              Web page views, events and visits, and API request counts, errors and latency. The
+              client cannot change anything.
             </span>
           </span>
         </li>
-        <li className="flex gap-2">
+        <li className="flex gap-2" data-scope={operator ? "operator" : "tenant"}>
           <ShieldCheck aria-hidden className="mt-1 size-4 shrink-0 text-success" />
-          <span>
-            <span className="font-medium text-fg">One project only, the one you choose.</span>{" "}
-            <span className="text-fg-2">
-              It ends when you leave the project, the project is suspended or removed, or you revoke
-              it on the project's AI page.
+          {operator ? (
+            <span>
+              <span className="font-medium text-fg">Every project, as daily totals.</span>{" "}
+              <span className="text-fg-2">
+                The operator view. It ends when you stop being an operator or you revoke the key.
+              </span>
             </span>
-          </span>
+          ) : (
+            <span>
+              <span className="font-medium text-fg">One project only, the one you choose.</span>{" "}
+              <span className="text-fg-2">
+                It ends when you leave the project, the project is suspended or removed, or you
+                revoke it on the AI assistants page of the project.
+              </span>
+            </span>
+          )}
         </li>
       </ul>
-      <div className="px-5 py-4 sm:px-6">
+      <div className="flex flex-col gap-3 px-5 py-4 sm:px-6">
         {nothing ? (
-          <p
-            role="alert"
-            className="flex items-start gap-2 rounded-md border border-warning-line bg-warning-soft px-3 py-2 text-small text-fg"
-          >
-            <CircleAlert aria-hidden className="mt-1 size-3.5 shrink-0 text-warning" />
-            You are not a member of a project that can be connected.
-          </p>
+          <Notice tone="warning" role="alert" title="Nothing to connect">
+            You are not a member of a project that can be connected. Join or enroll a project first.
+          </Notice>
         ) : (
-          <fieldset className="flex flex-col gap-1">
+          <fieldset className="flex flex-col gap-2">
             <legend className="mb-2 text-small font-medium text-fg">Give access to</legend>
             {info.tenants.map((t) => (
-              <Choice
+              <ChoiceCard
                 key={t.id}
+                name="scope"
+                value={t.id}
                 checked={choice === t.id}
                 onChange={() => setChoice(t.id)}
-                name={t.name}
-                detail={`${t.slug}, ${t.role}${t.status === "pending" ? ", in review" : ""}`}
+                title={t.name}
+                description={`${t.slug}, ${t.role}${t.status === "pending" ? ", in review" : ""}`}
               />
             ))}
             {info.operator ? (
-              <Choice
+              <ChoiceCard
+                name="scope"
+                value="operator"
                 checked={choice === "operator"}
                 onChange={() => setChoice("operator")}
-                name="The operator view of every project"
-                detail="daily aggregates, search and compare"
+                title="The operator view of every project"
+                description="Daily totals, search and compare"
               />
             ) : null}
           </fieldset>
         )}
-        {approve.error ? <FormMessage error={approve.error} className="mt-3" /> : null}
-        {deny.error ? <FormMessage error={deny.error} className="mt-3" /> : null}
+        <FormMessage error={approve.error} />
+        <FormMessage error={deny.error} />
       </div>
       <div className="flex flex-wrap gap-2 border-t border-line px-5 py-4 sm:px-6">
         <Button
@@ -284,40 +289,5 @@ function Consent({
         </Button>
       </div>
     </form>
-  );
-}
-
-// one scope as a selectable card; the native radio keeps keyboard and
-// screen reader behaviour, the card only draws the choice
-function Choice({
-  checked,
-  onChange,
-  name,
-  detail,
-}: {
-  checked: boolean;
-  onChange: () => void;
-  name: string;
-  detail: string;
-}) {
-  return (
-    <label
-      className={cn(
-        "grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 rounded-lg border px-3 py-2 transition-colors duration-(--vs-duration-press)",
-        checked ? "border-accent-text bg-selected" : "border-line hover:bg-hover",
-      )}
-    >
-      <input
-        type="radio"
-        name="scope"
-        className="mt-1 size-4 accent-accent focus-ring"
-        checked={checked}
-        onChange={onChange}
-      />
-      <span className="flex min-w-0 flex-col gap-1">
-        <span className="text-body font-medium text-fg">{name}</span>
-        <span className="text-caption font-normal text-fg-2">{detail}</span>
-      </span>
-    </label>
   );
 }
