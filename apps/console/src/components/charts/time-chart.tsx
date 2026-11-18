@@ -168,6 +168,10 @@ export type TimeChartProps = {
   // starts in the range), so the line does not rise from 0. "keep" draws
   // them, for a rate whose zero is a real reading from the first bucket
   leadingZeros?: "gap" | "keep";
+  // one bucket with data and nothing to compare: the readout of its value,
+  // or the bars as they are, for a chart whose buckets span a fixed whole
+  // (the hours of one day) that reads fine with one bar among zeros
+  firstData?: "readout" | "bars";
   className?: string;
 };
 
@@ -221,6 +225,7 @@ export function TimeChart({
   actions,
   legend = true,
   leadingZeros = "gap",
+  firstData = "readout",
   className,
 }: TimeChartProps) {
   const [showPrev, setShowPrev] = useState(true);
@@ -237,7 +242,10 @@ export function TimeChart({
   // one bucket with data and nothing to compare it with: the first data
   const filled = state === "data" ? dataBuckets(kind, series, n) : [];
   const prevHasData = (previous ?? []).some((v) => v !== null && v !== undefined && v > 0);
-  const first = n > 1 && filled.length === 1 && !prevHasData ? (filled[0] ?? null) : null;
+  const first =
+    firstData === "readout" && n > 1 && filled.length === 1 && !prevHasData
+      ? (filled[0] ?? null)
+      : null;
   const view: ChartState | "no-complete" | "first" = noComplete
     ? "no-complete"
     : first !== null

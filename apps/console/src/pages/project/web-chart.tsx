@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { type WebQuery, type WebSummary, webHourlyQuery } from "@/api/web";
+import { type WebBucket, type WebQuery, type WebSummary, webHourlyQuery } from "@/api/web";
 import { type TimeBucket, TimeChart } from "@/components/charts";
 import { formatCompact, formatDate, formatDateTimeUtc, formatTick, utcDay } from "@/lib/format";
 import {
@@ -111,18 +111,13 @@ function HourChart({
   day?: string | null;
 }) {
   const h = useQuery(webHourlyQuery(tenantId, q.from, q.site, q.band));
-  const points = h.data?.points ?? [];
-  const buckets: TimeBucket[] = useMemo(() => {
-    const now = Date.now();
-    return points.map((p) => ({
-      at: p.at,
-      tick: formatTick(p.at, "hour"),
-      label: formatDateTimeUtc(p.at),
-      // the running hour; later hours of today have not begun
-      partial: Date.parse(p.at) <= now && Date.parse(p.at) + 3_600_000 > now,
-    }));
-  }, [points]);
-  const total = points.reduce((a, p) => a + p.pageviews, 0);
+  // every hour of the day, so one hour with page views is one bar among
+  // the zeros of the others, not a lone readout
+  const { buckets, points } = useMemo(
+    () => dayHours(h.data?.day ?? q.from, h.data?.points ?? []),
+    [h.data, q.from],
+  );
+  const total = points.reduce((a, p) => a + (p?.pageviews ?? 0), 0);
   const state = h.isPending ? "loading" : h.error ? "error" : total === 0 ? "empty" : "data";
   const label = METRIC_LABEL[metric];
   return (
@@ -130,7 +125,10 @@ function HourChart({
       key={state}
       title={`${label === "Unique visitors" ? "Visitors" : label} per hour${day ? `, ${formatDate(day)}` : ""}`}
       buckets={buckets}
-      series={[{ key: metric, label, tone: "series-1", values: points.map((p) => p[metric]) }]}
+      series={[
+        { key: metric, label, tone: "series-1", values: points.map((p) => (p ? p[metric] : null)) },
+      ]}
+      firstData="bars"
       state={state}
       error={h.error}
       onRetry={() => h.refetch()}
@@ -138,4 +136,34 @@ function HourChart({
       emptyText="Page views show here a few minutes after they happen."
     />
   );
+}
+
+const HOUR_MS = 3_600_000;
+
+// the 24 utc hours of a day with the hourly points on them: an hour without
+// a point is 0, an hour of today that has not begun is no value, and the
+// running hour is partial (hatched)
+export function dayHours(
+  day: string,
+  points: WebBucket[],
+  now = Date.now(),
+): { buckets: TimeBucket[]; points: (WebBucket | null)[] } {
+  const start = Date.parse(`${day}T00:00:00Z`);
+  if (Number.isNaN(start)) return { buckets: [], points: [] };
+  const byHour = new Map<number, WebBucket>();
+  for (const p of points) byHour.set(Math.floor((Date.parse(p.at) - start) / HOUR_MS), p);
+  const buckets: TimeBucket[] = [];
+  const out: (WebBucket | null)[] = [];
+  for (let i = 0; i < 24; i++) {
+    const t = start + i * HOUR_MS;
+    const at = new Date(t).toISOString().replace(/\.\d{3}Z$/, "Z");
+    buckets.push({
+      at,
+      tick: formatTick(at, "hour"),
+      label: formatDateTimeUtc(at),
+      partial: t <= now && t + HOUR_MS > now,
+    });
+    out.push(byHour.get(i) ?? (t > now ? null : { at, pageviews: 0, visitors: 0 }));
+  }
+  return { buckets, points: out };
 }
