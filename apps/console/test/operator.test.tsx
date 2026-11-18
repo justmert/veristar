@@ -1,5 +1,5 @@
 import { act } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { auditPath, type TenantListQuery, tenantListPath } from "@/api/endpoints";
 import { tenantAction } from "@/api/schemas";
 import {
@@ -17,13 +17,13 @@ import { statusQuery } from "@/lib/operator-projects";
 import { AuditPage } from "@/pages/operator/audit";
 import { OperatorLayout } from "@/pages/operator/layout";
 import { AddOperator, validateAddOperator } from "@/pages/operator/operators";
-import { OperatorProjectPage } from "@/pages/operator/project";
+import { Clamped, OperatorProjectPage } from "@/pages/operator/project";
 import { OperatorProjectsPage } from "@/pages/operator/projects";
 import { ReviewQueuePage } from "@/pages/operator/review";
 import { SettingsPage } from "@/pages/operator/settings";
 import * as f from "./fixtures/contract";
 import { apiCompareBody, integrityReportBody, webCompareBody } from "./fixtures/global";
-import { byLabel, byRole, click, renderRoutes, stubFetch, type, waitFor } from "./helpers";
+import { byLabel, byRole, click, render, renderRoutes, stubFetch, type, waitFor } from "./helpers";
 import { type Route, routeFetch } from "./route-fetch";
 
 const detailRoute = [{ path: "/operator/projects/:tenantId", element: <OperatorProjectPage /> }];
@@ -701,5 +701,40 @@ describe("adding an operator (contract 5.16)", () => {
     await type(byLabel(host, "Reason"), "joins the on-call rotation");
     await click(byRole(host, "button", "Add operator"));
     await waitFor(() => expect(host.textContent).toContain("No GitHub user has this username."));
+  });
+});
+
+describe("a long enrollment answer", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // jsdom has no layout: a text taller than its three lines is one whose
+  // scroll height is more than its height
+  function lines(scroll: number, client: number) {
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(scroll);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(client);
+  }
+
+  it("shows three lines and a toggle for the rest", async () => {
+    lines(200, 60);
+    const host = await render(<Clamped text={"We run a DEX.\nIt settles on Stellar.\nMore."} />);
+    const text = host.querySelector("[id]") as HTMLElement;
+    expect(text.className).toContain("line-clamp-3");
+    const toggle = byRole(host, "button", "Show more");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.getAttribute("aria-controls")).toBe(text.id);
+    await click(toggle);
+    expect(text.className).not.toContain("line-clamp-3");
+    expect(byRole(host, "button", "Show less").getAttribute("aria-expanded")).toBe("true");
+    await click(byRole(host, "button", "Show less"));
+    expect(text.className).toContain("line-clamp-3");
+  });
+
+  it("has no toggle when the answer fits", async () => {
+    lines(40, 60);
+    const host = await render(<Clamped text="Soroban contracts on testnet" />);
+    expect(host.querySelector("button")).toBeNull();
+    expect(host.textContent).toBe("Soroban contracts on testnet");
   });
 });
