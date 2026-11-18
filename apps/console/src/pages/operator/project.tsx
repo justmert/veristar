@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { cn } from "@veristar/brand/cn";
 import { ArrowRight, Check, ChevronDown, LoaderCircle, MoreHorizontal } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { api } from "@/api/endpoints";
 import { operatorTenantQuery } from "@/api/queries";
@@ -284,22 +285,12 @@ function Answers({ detail }: { detail: OperatorTenantDetail }) {
   const a = t.enrollment_answers;
   const rows: [string, ReactNode][] = [
     ["Website", <span className="break-all">{a.website}</span>],
-    [
-      "How it uses Stellar",
-      <span className="whitespace-pre-wrap break-words">{a.stellar_usage}</span>,
-    ],
+    ["How it uses Stellar", <Clamped text={a.stellar_usage} />],
     [
       "SCF round",
       a.scf_round_url ? <span className="break-all">{a.scf_round_url}</span> : "Not given",
     ],
-    [
-      "Description",
-      t.description ? (
-        <span className="whitespace-pre-wrap break-words">{t.description}</span>
-      ) : (
-        "Not given"
-      ),
-    ],
+    ["Description", t.description ? <Clamped text={t.description} /> : "Not given"],
     ["Terms version", t.accepted_terms_version ?? "Not accepted"],
     ["Dashboards", t.provisioning === "ready" ? "Set up" : "Not set up yet"],
   ];
@@ -335,6 +326,50 @@ function Answers({ detail }: { detail: OperatorTenantDetail }) {
         </div>
       </dl>
     </Box>
+  );
+}
+
+// a long answer shows its first three lines and a toggle for the rest, so
+// one long answer does not push the other answers out of view. the toggle
+// shows only when the text has more lines than that.
+export function Clamped({ text }: { text: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  const [long, setLong] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || open) return;
+    const measure = () => setLong(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [open, text]);
+  return (
+    <span className="flex flex-col items-start gap-1">
+      <span
+        ref={ref}
+        id={id}
+        data-clamped={open ? undefined : ""}
+        className={cn("whitespace-pre-wrap break-words", !open && "line-clamp-3")}
+      >
+        {text}
+      </span>
+      {long ? (
+        <Button
+          variant="link"
+          size="xs"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={() => setOpen((o) => !o)}
+          className="max-lg:min-h-(--vs-control-touch)"
+        >
+          {open ? "Show less" : "Show more"}
+        </Button>
+      ) : null}
+    </span>
   );
 }
 
