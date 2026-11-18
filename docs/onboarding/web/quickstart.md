@@ -47,12 +47,12 @@ On the setup page, pick how the site is built under **Install the tracker**; the
 tag for the newest tracker version, marked recommended, and where it goes. Two options change the
 tag: **Wait for consent before measuring** adds `data-auto-track="false"` ([consent.md](consent.md)),
 and **Send the page title** adds `data-send-title="true"`. To come back to it later, open the site from the **Sites** panel and choose
-**Snippet** on its **Setup** tab. The site id is on the same page. The guides use version 1.3.2,
+**Snippet** on its **Setup** tab. The site id is on the same page. The guides use version 1.4.0,
 the newest release, which looks like this:
 
-{/* snippet version=1.3.2 */}
+{/* snippet version=1.4.0 */}
 ```html
-<script defer src="https://in.analytics.example/v/1.3.2/sdk.js" integrity="sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
+<script defer src="https://in.analytics.example/v/1.4.0/sdk.js" integrity="sha384-8bYExYW1FMGfNg5LETdGYFjtJPLfyY+gJQwWA0rL5xNM7Xl+3wK99GxSV3+siv/A" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
 
 The tag pins one tracker version. The `integrity` value makes the browser refuse the file if a
@@ -90,7 +90,7 @@ tab shows three requests to the gateway:
 
 | Request | Answer | What it is |
 |---|---|---|
-| `GET /v/1.3.2/sdk.js` | 200 | the tracker file |
+| `GET /v/1.4.0/sdk.js` | 200 | the tracker file |
 | `GET /v1/c?w=<site id>` | 200 | a challenge, once per page load |
 | `POST /v1/e` | 202 | the pageview, accepted and queued |
 

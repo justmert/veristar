@@ -22,6 +22,7 @@ released file is never rebuilt or replaced. Released so far:
 | 1.3.0 | counts only pages a person can see: a prerendered page counts when it is activated, a page opened in a background tab when it is first shown, a page restored from the back/forward cache counts again, and single-page navigation keeps counting; events of a page inside a frame say so, and a page left without ever being shown sends a never-visible notice instead of a page view (both feed the [integrity grade](../../security/bot-and-inflation.md)); screen size, language and page title are no longer read or sent, and `data-send-title="true"` sends the title for a site that wants it |
 | 1.3.1 | with `data-auto-track="false"`, `umami.track()` before `umami.start()` sends nothing, fetches no challenge and reads no browser storage, so code that runs before the consent banner is answered cannot measure anyone; a site that sends only chosen events calls `umami.start({ automatic: false })` once, which starts `umami.track()` without automatic pageviews or click capture ([consent.md](consent.md)) |
 | 1.3.2 | a route that redirects at once counts as one pageview of where the visitor lands, instead of two; `umami.start()` counts the page the visitor is on when consent is given after single-page navigation, and in manual mode every `umami.track()` names the current page; a tracked link that a client-side router handles stays a client-side navigation, and a plain same-tab link is held for its event for at most one second; download links and links into another window are left to the browser; nul characters in the title or referrer are dropped instead of the event being refused |
+| 1.4.0 | the tracker is also installed as `window.veristar`, the same object as `window.umami`, so `veristar.start()` and `veristar.track()` work next to `umami.start()` and `umami.track()` ([consent.md](consent.md), [custom-events.md](custom-events.md)); `init()` of the npm package installs both names too; what the tracker reads and sends is unchanged |
 
 ## Steps
 
@@ -34,16 +35,16 @@ released file is never rebuilt or replaced. Released so far:
 3. Deploy, then check one page as in the [quickstart](quickstart.md#5-check-that-it-works):
    `sdk.js` with the new version answers 200 and the pageview answers 202.
 
-Moving from 1.3.1 to 1.3.2 changes only these two attributes:
-
-{/* snippet version=1.3.1 */}
-```html
-<script defer src="https://in.analytics.example/v/1.3.1/sdk.js" integrity="sha384-54fz21LNRgy6RLEdhwecMK8yavckH44JnSX9iSA3p2uiEtCEs6fyFt6LhuOL5kKw" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
-```
+Moving from 1.3.2 to 1.4.0 changes only these two attributes:
 
 {/* snippet version=1.3.2 */}
 ```html
 <script defer src="https://in.analytics.example/v/1.3.2/sdk.js" integrity="sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
+```
+
+{/* snippet version=1.4.0 */}
+```html
+<script defer src="https://in.analytics.example/v/1.4.0/sdk.js" integrity="sha384-8bYExYW1FMGfNg5LETdGYFjtJPLfyY+gJQwWA0rL5xNM7Xl+3wK99GxSV3+siv/A" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
 
 Versions can be mixed: pages still carrying the old tag keep working while you roll out the new
