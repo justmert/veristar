@@ -95,7 +95,7 @@ func (lr *leadRun) deliver(ctx context.Context, q *visitorQueue, h *held) bool {
 			}
 			continue
 		}
-		err := lr.attempt(ctx, h)
+		err := lr.attempt(ctx, q, h)
 		if err == nil {
 			return true
 		}
@@ -166,7 +166,7 @@ func (lr *leadRun) deliver(ctx context.Context, q *visitorQueue, h *held) bool {
 }
 
 // attempt runs the duplicate guard, the send and the bookkeeping once.
-func (lr *leadRun) attempt(ctx context.Context, h *held) error {
+func (lr *leadRun) attempt(ctx context.Context, q *visitorQueue, h *held) error {
 	release, err := lr.acquire(ctx, h.target)
 	if err != nil {
 		return err
@@ -186,7 +186,7 @@ func (lr *leadRun) attempt(ctx context.Context, h *held) error {
 			lr.ack(ctx, h)
 			return nil
 		}
-		rec, err := r.store.load(ctx, ev.SiteID, ev.VT)
+		rec, _, err := r.store.load(ctx, ev.SiteID, ev.VT, q.visitRev)
 		if errors.Is(err, errBadVisitRecord) {
 			r.log.Warn("visit state unreadable, sending without continuity", "stream_seq", h.seq, "error", err.Error())
 			rec, err = nil, nil
@@ -237,14 +237,14 @@ func (lr *leadRun) attempt(ctx context.Context, h *held) error {
 		h.delivered, h.bot = true, res.Bot
 		h.sessionID, h.cache = res.SessionID, res.Cache
 	}
-	return lr.bookkeep(ctx, h)
+	return lr.bookkeep(ctx, q, h)
 }
 
 // bookkeep records a send umami answered with 200: the visit state, then
 // the duplicate guard, then the ack. it runs on a context detached from the
 // hold, so a lock loss right after the 200 still records the send; a failed
 // write is retried by deliver without sending again.
-func (lr *leadRun) bookkeep(ctx context.Context, h *held) error {
+func (lr *leadRun) bookkeep(ctx context.Context, q *visitorQueue, h *held) error {
 	r := lr.r
 	ev := h.ev
 	bctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), bookkeepingTimeout)
@@ -252,7 +252,7 @@ func (lr *leadRun) bookkeep(ctx context.Context, h *held) error {
 	if !h.bot && !h.visitSaved {
 		// one goroutine owns this visitor, so reading again here sees the record
 		// the send was based on
-		rec, err := r.store.load(bctx, ev.SiteID, ev.VT)
+		rec, _, err := r.store.load(bctx, ev.SiteID, ev.VT, q.visitRev)
 		if errors.Is(err, errBadVisitRecord) {
 			rec, err = nil, nil
 		}
@@ -269,7 +269,11 @@ func (lr *leadRun) bookkeep(ctx context.Context, h *held) error {
 		ts := ev.AcceptedAt / 1000
 		prev := rec.Websites[ev.WebsiteID]
 		rec.Websites[ev.WebsiteID] = VisitEntry{SessionID: h.sessionID, Cache: h.cache, LastEventTS: max(prev.LastEventTS, ts)}
-		if err := r.store.save(bctx, ev.SiteID, ev.VT, rec); err != nil {
+		rev, err := r.store.save(bctx, ev.SiteID, ev.VT, rec)
+		if err == nil {
+			q.visitRev = rev
+		}
+		if err != nil {
 			if !bucketFull(err) {
 				r.m.bookkeeping.Inc()
 				return err
