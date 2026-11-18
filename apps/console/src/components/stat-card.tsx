@@ -5,7 +5,7 @@ import { AnimatedNumber } from "@/components/motion";
 import { Missing } from "@/components/states";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
-import { formatCount } from "@/lib/format";
+import { formatChange, formatCount } from "@/lib/format";
 
 export type StatChange = {
   // the change as text, from lib/format ("+12%", "-1.2 pp", "no change")
@@ -162,7 +162,27 @@ export function StatCard({
   );
 }
 
-function ChangeLine({ change }: { change: StatChange }) {
+// the change of a count against the same count over the previous period;
+// nothing to compare with (no previous count) is no change at all
+export function countChange(
+  current: number,
+  previous: number | null | undefined,
+  period = "previous period",
+): StatChange | null {
+  if (previous === null || previous === undefined || previous <= 0) return null;
+  const r = (current - previous) / previous;
+  const direction = r > 0.0005 ? "up" : r < -0.0005 ? "down" : "flat";
+  return {
+    text: formatChange(r),
+    direction,
+    good: direction === "flat" ? null : direction === "up",
+    period,
+  };
+}
+
+// the arrow and the change in its colour, after a value; a table cell or a
+// figure line passes a smaller text step
+export function ChangeLine({ change, className }: { change: StatChange; className?: string }) {
   const flat = change.direction === "flat";
   const Icon =
     change.direction === "up" ? ArrowUp : change.direction === "down" ? ArrowDown : ArrowRight;
@@ -171,7 +191,7 @@ function ChangeLine({ change }: { change: StatChange }) {
   return (
     <span
       data-change={change.direction}
-      className={cn("flex items-center gap-1 text-body font-semibold tabular", tone)}
+      className={cn("flex items-center gap-1 text-body font-semibold tabular", tone, className)}
     >
       <Icon aria-hidden className="size-4" strokeWidth={2.4} />
       {flat ? <span className="sr-only">{change.text}</span> : change.text}

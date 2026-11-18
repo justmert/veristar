@@ -104,6 +104,16 @@ export function OperatorProjectsPage() {
     enabled: view === "api" && !badDays,
   });
   const list = view === "web" ? webList : view === "api" ? apiList : statusList;
+  // the web and api lists say when their numbers were read; the status list
+  // reads live, so its time is the time of the answer
+  const readAt =
+    view === "web"
+      ? (webList.data?.pages[0]?.read_at ?? null)
+      : view === "api"
+        ? (apiList.data?.pages[0]?.read_at ?? null)
+        : statusList.dataUpdatedAt > 0
+          ? new Date(statusList.dataUpdatedAt)
+          : null;
 
   const writeList = (next: ListState<string>) => {
     const out = writeListState(next, view === "web" ? DEFAULT_WEB_SORT : DEFAULT_API_SORT);
@@ -311,9 +321,9 @@ export function OperatorProjectsPage() {
       <PageHeader
         title="All projects"
         freshness={
-          list.dataUpdatedAt > 0
+          readAt
             ? {
-                at: new Date(list.dataUpdatedAt),
+                at: readAt,
                 cadence:
                   view === "status"
                     ? "A status change shows at once."

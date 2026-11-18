@@ -19,6 +19,7 @@ import { DbIpAttribution } from "@/components/dbip-attribution";
 import { Disclosure } from "@/components/disclosure";
 import { CompareIntegrity } from "@/components/integrity";
 import { PageHeader } from "@/components/page-header";
+import { ChangeLine, countChange } from "@/components/stat-card";
 import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -89,6 +90,8 @@ export function ComparePage() {
       ? { from: apiq.data.from, to: apiq.data.to }
       : null;
   const refs = web.data?.projects ?? apiq.data?.projects ?? null;
+  // when the web numbers were last read; the api compare reads live
+  const readAt = web.data?.read_at ?? apiq.data?.read_at ?? null;
   const remove = (id: string) =>
     setParams(
       compareSearch(
@@ -112,9 +115,9 @@ export function ComparePage() {
       <PageHeader
         title="Compare"
         freshness={
-          web.dataUpdatedAt > 0
+          readAt
             ? {
-                at: new Date(web.dataUpdatedAt),
+                at: readAt,
                 cadence: "Web numbers are read every hour. API numbers refresh every 5 minutes.",
               }
             : null
@@ -513,9 +516,21 @@ function WebSection({ data }: { data: WebCompare }) {
         label="Web totals"
         projects={withData}
         columns={[
-          { key: "pageviews", header: "Page views", value: (p) => formatCount(p.totals.pageviews) },
-          { key: "visitors", header: "Visitors", value: (p) => formatCount(p.totals.visitors) },
-          { key: "visits", header: "Visits", value: (p) => formatCount(p.totals.visits) },
+          {
+            key: "pageviews",
+            header: "Page views",
+            value: (p) => withChange(p.totals.pageviews, p.previous_totals.pageviews),
+          },
+          {
+            key: "visitors",
+            header: "Visitors",
+            value: (p) => withChange(p.totals.visitors, p.previous_totals.visitors),
+          },
+          {
+            key: "visits",
+            header: "Visits",
+            value: (p) => withChange(p.totals.visits, p.previous_totals.visits),
+          },
           {
             key: "bounce_rate",
             header: "Bounce rate",
@@ -686,7 +701,11 @@ function ApiSection({ data }: { data: ApiCompare }) {
         label="API totals"
         projects={withData}
         columns={[
-          { key: "requests", header: "Requests", value: (p) => formatCount(p.totals.requests) },
+          {
+            key: "requests",
+            header: "Requests",
+            value: (p) => withChange(p.totals.requests, p.previous_totals.requests),
+          },
           {
             key: "infra",
             header: "Infrastructure",
@@ -769,6 +788,19 @@ function latencyText(n: ApiNumbers): string {
 }
 
 // ---- shared
+
+// a count with its change against the previous period after it, as on the
+// stat cards; without a previous count only the count shows
+function withChange(current: number, previous: number): ReactNode {
+  const change = countChange(current, previous);
+  if (!change) return formatCount(current);
+  return (
+    <span className="inline-flex items-baseline justify-end gap-2">
+      {formatCount(current)}
+      <ChangeLine change={change} className="self-center text-small" />
+    </span>
+  );
+}
 
 type TotalsRow = { tenant: TenantRef; slot: number };
 

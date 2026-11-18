@@ -159,6 +159,10 @@ describe("operator project page", () => {
       expect(host.querySelector("[data-stat=requests]")?.textContent).toContain("300"),
     );
     expect(host.querySelector("[data-stat=grade]")?.textContent).toContain("C");
+    // a count with a previous period carries its change: 300 from 200
+    expect(host.querySelector("[data-stat=requests] [data-change=up]")?.textContent).toContain(
+      "+50%",
+    );
     // the decision is the one panel; remove sits in the actions menu
     expect(host.querySelector("form[aria-label='Decision on Stellar DEX']")).not.toBeNull();
     expect(byRole(host, "button", "Actions")).toBeTruthy();
