@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/justmert/veristar/tests/fixtures/browserbox"
 )
 
 // the example sites of tests/e2e/sites.ts with their fixed ids and ports
@@ -32,13 +34,19 @@ var (
 )
 
 // fixture ports of tests/e2e/sites.ts
-var fixturePorts = []int{47080, 47443, 47090}
+var fixturePorts = []int{proxyPort, 47443, 47090}
+
+// the fixture's forward proxy, the one address the browsers connect to
+const proxyPort = 47080
 
 // Browsers runs the e2e fixture (real-gateway mode, upstream = the country
 // forwarder) and the four example servers once for the whole suite, and runs
 // playwright against them with tests/e2e/specs/webpath/playwright.config.ts.
+// the browsers themselves run in a container of their own
+// (tests/fixtures/browserbox), out of reach of the host's network changes.
 type Browsers struct {
 	t        testing.TB
+	box      *browserbox.Box
 	EventLog string
 	OutDir   string
 	procs    []*exec.Cmd
@@ -85,6 +93,7 @@ func startBrowsersWith(t testing.TB, upstream string, runs []siteRun) *Browsers 
 		t.Fatal(err)
 	}
 	t.Cleanup(b.stop)
+	b.box = browserbox.Start(t, proxyPort)
 	b.spawn(t, "fixture", filepath.Join(repoRoot(), "tests", "e2e"), []string{"node", "fixture/main.ts"},
 		"SA_E2E_GATEWAY_UPSTREAM="+upstream, "SA_E2E_EVENT_LOG="+b.EventLog)
 	waitHTTP(t, "http://127.0.0.1:47090/health", 30*time.Second)
@@ -149,7 +158,7 @@ func (b *Browsers) Run(t testing.TB, projects []string, grep string, extra []str
 	args = append(args, extra...)
 	cmd := exec.Command("pnpm", args...)
 	cmd.Dir = repoRoot()
-	cmd.Env = append(os.Environ(), append(env, "WEBPATH_OUT="+b.OutDir)...)
+	cmd.Env = append(append(os.Environ(), b.box.Env()...), append(env, "WEBPATH_OUT="+b.OutDir)...)
 	out, err := cmd.CombinedOutput()
 	// the full output is kept per run: playwright clears its own results
 	// directory on the next run, which would lose the error of a failure

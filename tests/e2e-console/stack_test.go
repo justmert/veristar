@@ -52,6 +52,7 @@ import (
 	"github.com/justmert/veristar/internal/integrity"
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/umami"
+	"github.com/justmert/veristar/tests/fixtures/browserbox"
 	"github.com/justmert/veristar/tests/fixtures/gatewayimage"
 	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
@@ -1103,13 +1104,22 @@ func TestConsoleFlows(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// the browsers run in a container of their own, out of reach of the
+	// host's network changes; the proxy port is the one address they connect
+	// to, forwarded into it
+	proxyPort := freePort(t)
+	pp, err := strconv.Atoi(proxyPort)
+	if err != nil {
+		t.Fatal(err)
+	}
+	box := browserbox.Start(t, pp)
 	cmd := exec.Command("pnpm", args...)
 	cmd.Dir = repoRoot()
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(append(os.Environ(), box.Env()...),
 		"CE2E_BASE_DOMAIN="+baseDomain,
 		"CE2E_OAUTH_URL=http://"+oauthHost+":"+oauthPort,
 		"CE2E_OAUTH_CTL="+s.OAuthCtl,
-		"CE2E_PROXY_PORT="+freePort(t),
+		"CE2E_PROXY_PORT="+proxyPort,
 		"CE2E_SITE_CTL_PORT="+freePort(t),
 		"CE2E_ROUTES="+string(routes),
 		"CE2E_OUT="+outDir(),
