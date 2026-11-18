@@ -59,9 +59,9 @@ document.getElementById("manual").addEventListener("click", () => {
 
 ## What the browser tests check
 
-In Chromium, Firefox and WebKit, with tracker 1.0.0: one pageview per full load, no pageview for
-an anchor jump, the page title (1.0.0 always sends it; from 1.3.0 only with
-`data-send-title="true"`) and a same-site referrer as a path, both kinds of custom event, no request at all with
+In Chromium, Firefox and WebKit, with the current tracker release: one pageview per full load, no
+pageview for an anchor jump, no page title (this site does not set `data-send-title="true"`), a
+same-site referrer as a path, both kinds of custom event, no request at all with
 Global Privacy Control, the tracker refused when its file was tampered with, and every page
 served with the content security policy from [content-security-policy.md](content-security-policy.md)
 (`tests/e2e/specs`).

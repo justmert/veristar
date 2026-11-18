@@ -70,7 +70,7 @@ Each guide is backed by an example that runs in the test suites:
 - The static HTML, Vite and React, Vue, Astro, SvelteKit, React Router, Next.js, Docusaurus,
   VitePress and Mintlify guides, and the consent, self-hosting, content security policy and custom
   event guides, are backed by example sites that run in the browser test matrix (`tests/e2e`:
-  Chromium, Firefox and WebKit) against a test gateway, with tracker release 1.0.0. The Mintlify
+  Chromium, Firefox and WebKit) against a test gateway, with the current tracker release. The Mintlify
   example runs in Mintlify's local preview, `mint dev`.
 - The tracker's own tests (`packages/tracker/test`) cover the behaviour each newer release adds,
   such as consent mode, visibility and long single-page sessions, and check that every released
