@@ -1,5 +1,5 @@
 import { cn } from "@veristar/brand/cn";
-import { CircleAlert, CircleCheck, CircleX, Info, TriangleAlert } from "lucide-react";
+import { CircleAlert, CircleCheck, CircleX, Info } from "lucide-react";
 import type { ReactNode } from "react";
 
 export type NoticeTone = "info" | "warning" | "critical" | "success";
@@ -69,5 +69,3 @@ export function Notice({
     </div>
   );
 }
-
-export { TriangleAlert as NoticeAlertIcon };

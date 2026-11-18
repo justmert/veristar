@@ -19,23 +19,27 @@ function Tooltip({
   side?: "top" | "right" | "bottom" | "left";
   className?: string;
 }) {
+  // each tooltip carries its own provider, so a component with a tooltip
+  // works on any page and in a test without a provider around it
   return (
-    <TooltipPrimitive.Root>
-      <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
-      <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Content
-          side={side}
-          sideOffset={6}
-          collisionPadding={8}
-          className={cn(
-            "z-(--vs-layer-overlay) max-w-72 rounded-md border border-line-strong bg-overlay px-2 py-1 text-caption font-normal text-fg shadow-overlay data-[state=closed]:animate-reveal-out data-[state=delayed-open]:animate-reveal-in data-[state=instant-open]:animate-fade-in",
-            className,
-          )}
-        >
-          {content}
-        </TooltipPrimitive.Content>
-      </TooltipPrimitive.Portal>
-    </TooltipPrimitive.Root>
+    <TooltipProvider>
+      <TooltipPrimitive.Root>
+        <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
+        <TooltipPrimitive.Portal>
+          <TooltipPrimitive.Content
+            side={side}
+            sideOffset={6}
+            collisionPadding={8}
+            className={cn(
+              "z-(--vs-layer-overlay) max-w-72 rounded-md border border-line-strong bg-overlay px-2 py-1 text-caption font-normal text-fg shadow-overlay data-[state=closed]:animate-reveal-out data-[state=delayed-open]:animate-reveal-in data-[state=instant-open]:animate-fade-in",
+              className,
+            )}
+          >
+            {content}
+          </TooltipPrimitive.Content>
+        </TooltipPrimitive.Portal>
+      </TooltipPrimitive.Root>
+    </TooltipProvider>
   );
 }
 

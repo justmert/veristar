@@ -1,5 +1,5 @@
 import { cn } from "@veristar/brand/cn";
-import type { SiteStatus, TenantStatus } from "@/api/schemas";
+import type { IntegrityGrade, SiteStatus, TenantStatus } from "@/api/schemas";
 
 export type Tone = "success" | "warning" | "critical" | "info" | "accent";
 
@@ -70,21 +70,82 @@ export function Pill({
   );
 }
 
-const STATUS: Record<string, { tone: Tone; text: string }> = {
-  active: { tone: "success", text: "Active" },
-  pending: { tone: "warning", text: "Pending" },
-  suspended: { tone: "info", text: "Suspended" },
-  rejected: { tone: "critical", text: "Rejected" },
-  removed: { tone: "info", text: "Deleted" },
+// the status vocabulary of the console: one word and tone per status, used
+// by StatusBadge (status-badge.tsx) and wherever a status is said in text.
+// amber (warning) means "needs action" only; a normal waiting state is
+// neutral. operators see a project in review as needing action, its members
+// see it as waiting.
+
+export type StatusEntry = { tone: Tone; word: string };
+
+const PROJECT: Record<TenantStatus, StatusEntry> = {
+  active: { tone: "success", word: "Active" },
+  pending: { tone: "info", word: "In review" },
+  rejected: { tone: "critical", word: "Not approved" },
+  suspended: { tone: "info", word: "Suspended" },
+  removed: { tone: "info", word: "Removed" },
 };
 
-// the status in words, for places that show it without a pill
-export function statusText(status: string): string {
-  return STATUS[status]?.text ?? status;
+const SITE: Record<SiteStatus, StatusEntry> = {
+  active: { tone: "success", word: "Active" },
+  pending: { tone: "info", word: "In review" },
+  suspended: { tone: "info", word: "Suspended" },
+  removed: { tone: "info", word: "Removed" },
+};
+
+const KEY: Record<"active" | "expired" | "revoked", StatusEntry> = {
+  active: { tone: "success", word: "Active" },
+  expired: { tone: "info", word: "Expired" },
+  revoked: { tone: "info", word: "Revoked" },
+};
+
+const ALERT: Record<"page" | "ticket" | "suppressed", StatusEntry> = {
+  page: { tone: "critical", word: "Act now" },
+  ticket: { tone: "warning", word: "Act today" },
+  suppressed: { tone: "info", word: "Silenced" },
+};
+
+const GRADE: Record<IntegrityGrade, StatusEntry> = {
+  A: { tone: "success", word: "Grade A" },
+  B: { tone: "warning", word: "Grade B" },
+  C: { tone: "critical", word: "Grade C" },
+};
+
+export type BadgeSubject =
+  | { kind: "project"; status: TenantStatus; operator?: boolean }
+  | { kind: "site"; status: SiteStatus; operator?: boolean }
+  | { kind: "key"; status: "active" | "expired" | "revoked" }
+  | { kind: "alert"; status: "page" | "ticket" | "suppressed" }
+  | { kind: "grade"; grade: IntegrityGrade | null };
+
+// the operator acts on what waits for review; its members only wait
+function waiting(e: StatusEntry, status: string, operator?: boolean): StatusEntry {
+  return operator && status === "pending" ? { tone: "warning", word: e.word } : e;
 }
 
-export function statusTone(status: string): Tone {
-  return STATUS[status]?.tone ?? "info";
+// the word and tone of a status, for places that show it without a badge
+export function statusEntry(s: BadgeSubject): StatusEntry {
+  switch (s.kind) {
+    case "project":
+      return waiting(PROJECT[s.status], s.status, s.operator);
+    case "site":
+      return waiting(SITE[s.status], s.status, s.operator);
+    case "key":
+      return KEY[s.status];
+    case "alert":
+      return ALERT[s.status];
+    case "grade":
+      return s.grade === null ? { tone: "info", word: "Not graded" } : GRADE[s.grade];
+  }
+}
+
+// the older names, said with the same words
+export function statusText(status: TenantStatus | SiteStatus | string): string {
+  return statusEntry({ kind: "project", status: status as TenantStatus }).word ?? status;
+}
+
+export function statusTone(status: TenantStatus | SiteStatus | string): Tone {
+  return statusEntry({ kind: "project", status: status as TenantStatus })?.tone ?? "info";
 }
 
 export function StatusPill({
@@ -94,10 +155,10 @@ export function StatusPill({
   status: TenantStatus | SiteStatus;
   className?: string;
 }) {
-  const s = STATUS[status] ?? { tone: "info" as Tone, text: status };
+  const e = statusEntry({ kind: "project", status });
   return (
-    <Pill tone={s.tone} className={className}>
-      {s.text}
+    <Pill tone={e.tone} className={className}>
+      {e.word}
     </Pill>
   );
 }

@@ -1,12 +1,13 @@
 import { cn } from "@veristar/brand/cn";
-import { CircleAlert, RotateCcw } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import { ErrorState, StateFrame } from "@/components/states";
 import { Skeleton } from "@/components/ui/skeleton";
 import { errorText } from "@/lib/errors";
 
-// the one state component (system v2, R10): empty, no match, loading and
-// error look the same everywhere and always say what to do next
+// the older state blocks, drawn by the shared states (states.tsx) so every
+// page looks the same while it moves to EmptyState, ErrorState and
+// LoadingState
 export function StateBlock({
   kind,
   icon,
@@ -23,37 +24,23 @@ export function StateBlock({
   className?: string;
 }) {
   return (
-    <div
+    <StateFrame
+      tone={kind === "error" ? "critical" : "neutral"}
       role={kind === "error" ? "alert" : "status"}
-      className={cn(
-        "flex animate-fade-in flex-col items-center justify-center gap-3 rounded-lg border px-6 py-10 text-center",
-        kind === "empty" ? "border-dashed border-line-strong" : "border-line bg-raised",
-        className,
-      )}
+      icon={kind === "error" && !icon ? <CircleAlert aria-hidden strokeWidth={1.75} /> : icon}
+      title={title}
+      actions={action}
+      className={className}
     >
-      {icon ? (
-        <span
-          className={cn(
-            "flex size-10 items-center justify-center rounded-lg border border-line-strong [&_svg]:size-5",
-            kind === "error" ? "text-critical" : "text-fg-2",
-          )}
-        >
-          {icon}
-        </span>
-      ) : null}
-      <span className="flex max-w-sm flex-col gap-1">
-        <span className="text-title text-fg">{title}</span>
-        {children ? <span className="text-small text-fg-2">{children}</span> : null}
-      </span>
-      {action}
-    </div>
+      {children}
+    </StateFrame>
   );
 }
 
 export function ErrorPanel({
   error,
   onRetry,
-  title = "This could not be loaded",
+  title,
   className,
 }: {
   error: unknown;
@@ -61,24 +48,7 @@ export function ErrorPanel({
   title?: string;
   className?: string;
 }) {
-  return (
-    <StateBlock
-      kind="error"
-      icon={<CircleAlert aria-hidden strokeWidth={1.75} />}
-      title={title}
-      className={className}
-      action={
-        onRetry ? (
-          <Button variant="outline" onClick={onRetry}>
-            <RotateCcw aria-hidden />
-            Try again
-          </Button>
-        ) : null
-      }
-    >
-      {errorText(error)}
-    </StateBlock>
-  );
+  return <ErrorState error={error} onRetry={onRetry} title={title} className={className} />;
 }
 
 // inline message under a form, announced when it appears
