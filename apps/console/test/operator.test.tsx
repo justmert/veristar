@@ -162,6 +162,24 @@ describe("operator project page", () => {
     expect(host.querySelector("a[href*='/operator/audit?tenant_id=']")).not.toBeNull();
   });
 
+  it("leaves the figures out when the project has no data, and keeps the events fact", async () => {
+    const emptyWeb = { ...webCompareBody, projects: [webCompareBody.projects[1]] };
+    const emptyApi = { ...apiCompareBody, projects: [apiCompareBody.projects[1]] };
+    const calls = routeFetch([
+      { path: "/api/operator/web/compare", answer: { status: 200, body: emptyWeb } },
+      { path: "/api/operator/api/compare", answer: { status: 200, body: emptyApi } },
+      ...detailRoutes(f.operatorDetailBody),
+    ]);
+    const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
+    await waitFor(() => expect(host.querySelector("h1")?.textContent).toBe("Stellar DEX"));
+    await waitFor(() =>
+      expect(calls.filter((c) => c.url.includes("/compare")).length).toBeGreaterThanOrEqual(2),
+    );
+    await act(async () => {});
+    expect(host.querySelector("[data-numbers]")).toBeNull();
+    expect(host.querySelector("[data-evidence=events]")).not.toBeNull();
+  });
+
   it("lists many sites in a paged table with their checks in words", async () => {
     const site = f.operatorDetailBody.sites[0];
     const sites = Array.from({ length: 30 }, (_, i) => ({
@@ -184,7 +202,18 @@ describe("operator project page", () => {
     expect(evidence.dataset.signal).toBe("partial");
     expect(evidence.textContent).toContain("1 of 30 sites verified");
     expect(host.textContent).toContain("1 to 10 of 30");
-    await click(host.querySelector('button[aria-label="Checks of s1.example.org"]') as HTMLElement);
+    const trigger = host.querySelector(
+      'button[aria-label="Actions for s1.example.org"]',
+    ) as HTMLElement;
+    await act(async () => {
+      trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+    });
+    const show = () =>
+      [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].find(
+        (m) => m.textContent === "Show checks",
+      );
+    await waitFor(() => expect(show()).toBeTruthy());
+    await click(show() as HTMLElement);
     await waitFor(() => expect(host.textContent).toContain("Checks of s1.example.org"));
   });
 
@@ -623,8 +652,9 @@ describe("review workspace", () => {
     expect(host.querySelector("ul[aria-label=Evidence]")?.textContent).toContain(
       "1 of 2 not a valid ID",
     );
+    // the figures follow the evidence, and only the ones with data show
     await waitFor(() =>
-      expect(host.querySelector("[data-stat=pageviews]")?.textContent).not.toContain("Loading"),
+      expect(host.querySelector("[data-stat=pageviews]")?.textContent).toContain("45"),
     );
 
     const radios = [...host.querySelectorAll<HTMLElement>("[role=radio]")];

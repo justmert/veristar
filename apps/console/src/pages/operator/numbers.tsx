@@ -1,115 +1,123 @@
 // the numbers of one project next to a decision: web, api and on-chain
 // figures and the integrity grade, read from the comparison endpoint for one
 // project over its default range. the review page and the project page show
-// the same cards.
+// the same line. a figure shows only when it holds data, and the whole line
+// is left out when none does: for a new project the evidence carries the
+// decision, and a row of zeros says nothing.
 
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { ArrowRight } from "lucide-react";
 import { Link } from "react-router";
 import { apiCompareQuery, webCompareQuery } from "@/api/queries";
-import { StatCard } from "@/components/stat-card";
+import type { EvidenceItem } from "@/components/evidence-list";
 import { ErrorState } from "@/components/states";
 import { formatCount, formatDateRange, formatPercent } from "@/lib/format";
 import { compareSearch } from "@/lib/global";
 
 const DEFAULT_RANGE = { from: "", to: "" };
 
-export function ProjectNumbers({ tenantId, className }: { tenantId: string; className?: string }) {
-  const web = useQuery(webCompareQuery([tenantId], DEFAULT_RANGE));
-  const api = useQuery(apiCompareQuery([tenantId], DEFAULT_RANGE));
+type Figure = { key: string; label: string; value: string };
+
+// the figures of one project, the ones that hold data only
+export function useProjectNumbers(tenantId: string, enabled = true) {
+  const web = useQuery({ ...webCompareQuery([tenantId], DEFAULT_RANGE), enabled });
+  const api = useQuery({ ...apiCompareQuery([tenantId], DEFAULT_RANGE), enabled });
   const w = web.data?.projects[0];
   const a = api.data?.projects[0];
   const onchain = w?.onchain ?? a?.onchain;
   const range = web.data ?? api.data;
-  const webState = web.isPending ? "loading" : web.error ? "error" : "data";
-  const apiState = api.isPending ? "loading" : api.error ? "error" : "data";
-  const grade = w?.integrity.grade ?? null;
+  const figures: Figure[] = [];
+  if (w && w.totals.pageviews > 0) {
+    figures.push({ key: "pageviews", label: "Page views", value: formatCount(w.totals.pageviews) });
+    figures.push({ key: "visitors", label: "Visitors", value: formatCount(w.totals.visitors) });
+  }
+  if (w?.integrity.grade)
+    figures.push({ key: "grade", label: "Integrity grade", value: w.integrity.grade });
+  if (a && a.totals.requests > 0) {
+    figures.push({ key: "requests", label: "API requests", value: formatCount(a.totals.requests) });
+    if (a.totals.rate_5xx !== null)
+      figures.push({ key: "rate_5xx", label: "5xx rate", value: formatPercent(a.totals.rate_5xx) });
+  }
+  // nothing is measured without a verified id
+  if (onchain && onchain.totals.ids_verified > 0 && onchain.totals.operations > 0)
+    figures.push({
+      key: "onchain",
+      label: "On-chain operations",
+      value: formatCount(onchain.totals.operations),
+    });
+  return {
+    figures,
+    range: range ? { from: range.from, to: range.to } : null,
+    // only when both failed: one source still gives figures
+    error: web.error && api.error ? web.error : null,
+    retry: () => {
+      web.refetch();
+      api.refetch();
+    },
+    hasData: figures.length > 0,
+  };
+}
 
+export type ProjectNumbersData = ReturnType<typeof useProjectNumbers>;
+
+// the evidence next to the numbers, in one window. the events fact counts
+// the last 30 full days and the numbers count the range up to today, so the
+// two never stand side by side: with figures in view they carry the
+// traffic; without them the events fact does.
+export function withNumbers(items: EvidenceItem[], numbers: ProjectNumbersData): EvidenceItem[] {
+  return numbers.hasData ? items.filter((e) => e.key !== "events") : items;
+}
+
+// the figures as one line, with their window as the heading. nothing
+// renders while they load or when none holds data.
+export function ProjectNumbers({
+  tenantId,
+  numbers,
+  className,
+}: {
+  tenantId: string;
+  numbers: ProjectNumbersData;
+  className?: string;
+}) {
+  if (numbers.error)
+    return (
+      <ErrorState
+        compact
+        title="The numbers did not load"
+        error={numbers.error}
+        onRetry={numbers.retry}
+      />
+    );
+  if (!numbers.hasData) return null;
   return (
     <section
       aria-labelledby={`numbers-${tenantId}`}
-      className={cn("flex flex-col gap-3", className)}
+      data-numbers=""
+      className={cn("flex min-w-0 flex-col gap-3", className)}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 id={`numbers-${tenantId}`} className="text-title text-fg">
-          Numbers
+          {numbers.range
+            ? `${formatDateRange(numbers.range.from, numbers.range.to)}, UTC`
+            : "Numbers"}
         </h2>
-        <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-small text-fg-2">
-          {range ? <span>{formatDateRange(range.from, range.to)}, UTC</span> : null}
-          <Link
-            to={`/operator/compare?${compareSearch([tenantId], DEFAULT_RANGE)}`}
-            className="inline-flex items-center gap-1 rounded-sm text-fg underline-offset-4 hover:underline focus-ring"
-          >
-            Open in Compare
-            <ArrowRight aria-hidden className="size-3.5" />
-          </Link>
-        </span>
+        <Link
+          to={`/operator/compare?${compareSearch([tenantId], DEFAULT_RANGE)}`}
+          className="inline-flex items-center gap-1 rounded-sm text-small text-fg underline-offset-4 hover:underline focus-ring"
+        >
+          Open in Compare
+          <ArrowRight aria-hidden className="size-3.5" />
+        </Link>
       </div>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-        <StatCard
-          label="Page views"
-          definition="Page views of the counted traffic in the range."
-          value={w ? w.totals.pageviews : null}
-          state={webState}
-          data-stat="pageviews"
-        />
-        <StatCard
-          label="Visitors"
-          definition="Visitors are unique per UTC day and site. The range total is the sum of the days."
-          value={w ? w.totals.visitors : null}
-          state={webState}
-          data-stat="visitors"
-        />
-        <StatCard
-          label="Integrity grade"
-          definition="The grade of the web traffic in the range. C when a quarter of the graded site days are C."
-          value={grade}
-          missingReason="No day had enough traffic for a grade"
-          state={webState}
-          data-stat="grade"
-        />
-        <StatCard
-          label="API requests"
-          definition="Requests of every service, without health checks and probes."
-          value={a ? a.totals.requests : null}
-          state={apiState}
-          data-stat="requests"
-        />
-        <StatCard
-          label="5xx rate"
-          definition="Requests answered with a 5xx status, as a share."
-          value={a && a.totals.rate_5xx !== null ? formatPercent(a.totals.rate_5xx) : null}
-          missingReason="No requests in this range"
-          state={apiState}
-          data-stat="rate_5xx"
-        />
-        <StatCard
-          label="On-chain operations"
-          definition="Operations of the declared accounts and contracts in the range."
-          // nothing is measured without a verified id, so no 0 shows
-          value={onchain && onchain.totals.ids_verified > 0 ? onchain.totals.operations : null}
-          format={formatCount}
-          missingReason={
-            onchain && onchain.totals.ids > 0
-              ? "No verified account or contract"
-              : "No accounts or contracts declared"
-          }
-          state={webState === "data" || apiState === "data" ? "data" : webState}
-          data-stat="onchain"
-        />
-      </div>
-      {web.error && api.error ? (
-        <ErrorState
-          compact
-          title="The numbers did not load"
-          error={web.error}
-          onRetry={() => {
-            web.refetch();
-            api.refetch();
-          }}
-        />
-      ) : null}
+      <dl className="flex flex-wrap gap-x-8 gap-y-3">
+        {numbers.figures.map((f) => (
+          <div key={f.key} data-stat={f.key} className="flex min-w-0 flex-col-reverse gap-1">
+            <dt className="text-caption text-fg-2">{f.label}</dt>
+            <dd className="text-heading text-fg tabular">{f.value}</dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }
