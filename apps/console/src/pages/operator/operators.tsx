@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CirclePause, KeyRound, MoreHorizontal, Plus, UserMinus } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 import { ApiError } from "@/api/client";
 import {
   operatorKeys,
@@ -182,8 +182,8 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
         <span className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="min-w-0 truncate text-fg">{identity(e)}</span>
           <span className="text-caption text-fg-2">{kindText(e)}</span>
-          {e.bootstrap ? <Pill tone="info">Deploy settings</Pill> : null}
-          {mine(e, me) ? <Pill tone="info">You</Pill> : null}
+          {e.bootstrap ? <RoleTag>Deploy settings</RoleTag> : null}
+          {mine(e, me) ? <RoleTag>You</RoleTag> : null}
         </span>
       ),
     },
@@ -460,5 +460,15 @@ export function AddOperator({ onClose }: { onClose?: () => void }) {
         <FormMessage error={m.error} />
       </form>
     </section>
+  );
+}
+
+// a plain tag for a fact about a person (from the deploy settings, you),
+// apart from the status pills: no dot, no tint
+function RoleTag({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex h-5 items-center rounded-sm border border-line px-1 text-caption text-fg-2">
+      {children}
+    </span>
   );
 }
