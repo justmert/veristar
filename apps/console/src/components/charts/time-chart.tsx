@@ -288,9 +288,12 @@ export function TimeChart({
             <ul aria-label="Legend" className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {series.length > 1
                 ? series.map((s) => (
-                    <li key={s.key} className="flex items-center gap-1 text-caption text-fg-2">
-                      <span aria-hidden className={cn("size-2 rounded-bar", SWATCH[s.tone])} />
-                      {s.label}
+                    // the swatch sits on the first line of a long name
+                    <li key={s.key} className="flex items-start gap-1 text-caption text-fg-2">
+                      <span aria-hidden className="flex h-4 shrink-0 items-center">
+                        <span className={cn("size-2 rounded-bar", SWATCH[s.tone])} />
+                      </span>
+                      <span className="min-w-0">{s.label}</span>
                     </li>
                   ))
                 : null}
@@ -745,9 +748,11 @@ function Readout({
         {bucket.partial ? ", so far" : ""}
       </span>
       {rows.map((r) => (
-        <span key={r.key} className="flex items-center gap-2">
-          <span aria-hidden className={cn("size-2 rounded-bar", SWATCH[r.tone])} />
-          <span className="flex-1 text-fg-2">{r.label}</span>
+        <span key={r.key} className="flex items-start gap-2">
+          <span aria-hidden className="flex h-5 shrink-0 items-center">
+            <span className={cn("size-2 rounded-bar", SWATCH[r.tone])} />
+          </span>
+          <span className="min-w-0 flex-1 text-fg-2">{r.label}</span>
           <span className="text-fg tabular">{r.value}</span>
         </span>
       ))}
