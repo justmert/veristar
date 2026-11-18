@@ -35,7 +35,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import { isNotFound } from "@/lib/errors";
-import { formatCount, formatDate, formatDateTimeUtc } from "@/lib/format";
+import { formatCount, formatDate, formatDateTimeUtc, truncateMiddle } from "@/lib/format";
 import { outcomeLabel } from "@/lib/outcomes";
 import { termsVersionLabel } from "@/lib/terms";
 import { NotFoundPage } from "@/pages/public/not-found";
@@ -160,7 +160,14 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
         title={t.name}
         meta={<StatusBadge kind="project" status={t.status} operator />}
         details={[
-          { label: "Slug", value: <span className="font-mono">{t.slug}</span> },
+          {
+            label: "Slug",
+            value: (
+              <span className="font-mono" title={t.slug}>
+                {truncateMiddle(t.slug, 40)}
+              </span>
+            ),
+          },
           {
             label: "Enrolled",
             value: `${formatDate(t.created_at)}${t.created_by ? ` by ${t.created_by.display_name}` : ""}`,
