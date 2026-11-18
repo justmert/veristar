@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, KeyRound } from "lucide-react";
+import { Ban, ExternalLink, KeyRound } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { ApiError } from "@/api/client";
 import {
@@ -473,7 +473,7 @@ function CredentialRow({
       </div>
       {c.status === "active" && canRevoke ? (
         <Button
-          variant="ghost"
+          variant="destructive-outline"
           size="sm"
           className="max-lg:h-(--vs-control-touch)"
           onClick={() => {
@@ -481,6 +481,7 @@ function CredentialRow({
             setConfirm(true);
           }}
         >
+          <Ban aria-hidden />
           Revoke
         </Button>
       ) : null}

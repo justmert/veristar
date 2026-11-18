@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { UserPlus } from "lucide-react";
+import { Ban, LogOut, UserMinus, UserPlus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useNavigate } from "react-router";
 import { ApiError } from "@/api/client";
@@ -294,7 +294,7 @@ function MembersBody({
         if (!(canManage || self) || lastOwner(m)) return null;
         return (
           <Button
-            variant="ghost"
+            variant="destructive-outline"
             size="sm"
             className="max-lg:h-(--vs-control-touch)"
             onClick={() => {
@@ -302,6 +302,7 @@ function MembersBody({
               setPending({ kind: "remove", member: m, self });
             }}
           >
+            {self ? <LogOut aria-hidden /> : <UserMinus aria-hidden />}
             {self ? "Leave" : "Remove"}
           </Button>
         );
@@ -547,7 +548,7 @@ function InviteRow({
       </div>
       {canManage ? (
         <Button
-          variant="ghost"
+          variant="destructive-outline"
           size="sm"
           className="max-lg:h-(--vs-control-touch)"
           onClick={() => {
@@ -555,6 +556,7 @@ function InviteRow({
             setOpen(true);
           }}
         >
+          <Ban aria-hidden />
           Revoke
         </Button>
       ) : null}

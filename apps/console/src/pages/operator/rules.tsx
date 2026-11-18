@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Download, ListChecks, MoreHorizontal, Plus } from "lucide-react";
+import { Download, ListChecks, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
@@ -344,6 +344,7 @@ function RowMenu({
         <MenuContent align="end">
           <MenuItem onSelect={onEdit}>Edit rule</MenuItem>
           <MenuItem tone="critical" onSelect={onDelete}>
+            <Trash2 aria-hidden />
             Delete rule
           </MenuItem>
         </MenuContent>

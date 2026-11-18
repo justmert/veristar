@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { fade } from "@veristar/brand/motion";
-import { ArrowRight, Check, ChevronRight, ExternalLink, KeyRound } from "lucide-react";
+import { ArrowRight, Ban, Check, ChevronRight, ExternalLink, KeyRound } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { Link } from "react-router";
@@ -462,7 +462,7 @@ function TokensSection({
       cell: (t) =>
         t.status === "active" ? (
           <Button
-            variant="ghost"
+            variant="destructive-outline"
             size="sm"
             className="relative z-(--vs-layer-raised) max-lg:h-(--vs-control-touch)"
             onClick={() => {
@@ -470,6 +470,7 @@ function TokensSection({
               setRevoking(t);
             }}
           >
+            <Ban aria-hidden />
             Revoke
           </Button>
         ) : null,

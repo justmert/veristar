@@ -5,7 +5,7 @@
 // the rules met, the figures, and the reports.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, FileSignature, MoreHorizontal } from "lucide-react";
+import { Ban, Download, ExternalLink, FileSignature, MoreHorizontal } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import type { Kpi, KpiKey } from "@/api/cohorts";
 import { exportPaths, type SCFView, scfViewQuery } from "@/api/onchain";
@@ -878,6 +878,7 @@ function ReportRow({
                 </MenuItem>
                 <MenuSeparator />
                 <MenuItem tone="critical" onSelect={onRevoke}>
+                  <Ban aria-hidden />
                   Revoke link
                 </MenuItem>
               </MenuContent>

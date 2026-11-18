@@ -279,7 +279,7 @@ function DangerZone({ site }: { site: Site }) {
           </span>
         </div>
         <Button
-          variant="destructive"
+          variant="destructive-outline"
           className="max-lg:h-(--vs-control-touch)"
           onClick={() => {
             remove.reset();

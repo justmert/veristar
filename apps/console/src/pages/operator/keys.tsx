@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, MoreHorizontal } from "lucide-react";
+import { Ban, KeyRound, MoreHorizontal } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { globalApi } from "@/api/endpoints";
 import {
@@ -224,6 +224,7 @@ export function AccessKeysPage() {
                     setRevoking(r);
                   }}
                 >
+                  <Ban aria-hidden />
                   Revoke
                 </MenuItem>
               ) : null}

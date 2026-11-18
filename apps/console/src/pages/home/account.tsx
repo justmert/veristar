@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ThemeChoice, useTheme } from "@veristar/brand/theme";
-import { KeyRound, Wallet } from "lucide-react";
+import { KeyRound, Trash2, Wallet } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
@@ -519,13 +519,14 @@ function DeleteAccount({ me }: { me: Me }) {
             </ul>
           </div>
           <Button
-            variant="destructive"
+            variant="destructive-outline"
             className="max-lg:h-(--vs-control-touch)"
             onClick={() => {
               del.reset();
               setOpen(true);
             }}
           >
+            <Trash2 aria-hidden />
             Delete account
           </Button>
         </div>
