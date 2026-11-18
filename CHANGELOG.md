@@ -43,6 +43,34 @@ here, before they take effect, as the processing terms require
   (VitePress 1.6.4 on Vite 6.4.6 through an npm override) and
   `examples/mintlify` (Mintlify's local preview, CLI 4.3.49) run in the
   browser test matrix and in the real-gateway browser test.
+- Calls per contract function: for every verified Soroban contract, the
+  daily successful and failed calls into each function, split by caller
+  (operations that invoke the contract, and other contracts calling it),
+  with the distinct accounts behind them. The `chain-activity` task reads
+  them from the `getTransaction` answers it already fetches: the envelope
+  for the calls of accounts, the diagnostic `fn_call` and `fn_return`
+  events for the calls of contracts and their failures. Distinct accounts
+  are counted in memory; no address is stored. At most 64 functions per
+  contract and day keep their own row, the rest add up under `{other}`.
+  Contract days stored before this release are read again while the RPC
+  window holds them. Shown on the project's On-chain page with daily calls
+  and a CSV export, in the operator's project detail with the same export,
+  in What SCF sees, at `GET /api/metrics/v1/onchain/functions`, through the
+  MCP tools `get_contract_functions` and `get_tenant_contract_functions`,
+  and in signed usage reports, format version 3 (versions 1 and 2 still
+  verify). Migration 00047 (`agg.chain_function_daily`,
+  `agg.chain_daily.functions`, row-level security, `agg.purge_chain`)
+  ([docs/reference/onchain-sources.md](docs/reference/onchain-sources.md#calls-per-contract-function),
+  [control-plane-api.md](docs/reference/control-plane-api.md#159-calls-per-contract-function)).
+
+### Changed
+
+- Terms of use `2026-11-18-draft.6`: SCF also receives, per verified
+  contract, UTC day, function and kind of caller, the counts of successful
+  and failed calls and of the distinct accounts that made them; the accounts
+  behind a function's daily count are held in memory while the day is read
+  and never stored. The data processing terms and the records of processing
+  list the same. Every project accepts it at its next sign-in.
 
 ## [0.4.0] - 2026-11-18
 
@@ -258,25 +286,6 @@ here, before they take effect, as the processing terms require
   `release-images.json`; `release-images.yml` and `release-workstation.sh`
   run the licence gate on the tag and stop the release when it fails
   ([docs/security/supply-chain.md](docs/security/supply-chain.md), section 7).
-- Calls per contract function: for every verified Soroban contract, the
-  daily successful and failed calls into each function, split by caller
-  (operations that invoke the contract, and other contracts calling it),
-  with the distinct accounts behind them. The `chain-activity` task reads
-  them from the `getTransaction` answers it already fetches: the envelope
-  for the calls of accounts, the diagnostic `fn_call` and `fn_return`
-  events for the calls of contracts and their failures. Distinct accounts
-  are counted in memory; no address is stored. At most 64 functions per
-  contract and day keep their own row, the rest add up under `{other}`.
-  Contract days stored before this release are read again while the RPC
-  window holds them. Shown on the project's On-chain page with daily calls
-  and a CSV export, in the operator's project detail with the same export,
-  in What SCF sees, at `GET /api/metrics/v1/onchain/functions`, through the
-  MCP tools `get_contract_functions` and `get_tenant_contract_functions`,
-  and in signed usage reports, format version 3 (versions 1 and 2 still
-  verify). Migration 00047 (`agg.chain_function_daily`,
-  `agg.chain_daily.functions`, row-level security, `agg.purge_chain`)
-  ([docs/reference/onchain-sources.md](docs/reference/onchain-sources.md#calls-per-contract-function),
-  [control-plane-api.md](docs/reference/control-plane-api.md#159-calls-per-contract-function)).
 
 ### Changed
 
@@ -309,8 +318,7 @@ here, before they take effect, as the processing terms require
   reads, the per-site counts of tracker file requests behind the estimate of
   visits not measured, the separate count of preflight, health check and
   probe API requests, the operator roster and step-up passkey data, the
-  weekly active accounts, the daily calls per contract function, and the
-  full list of project statistics SCF
+  weekly active accounts, and the full list of project statistics SCF
   receives. It names the hosting operator and the privacy contact, and
   announces sub-processor changes in the changelog and a new terms version.
   Every project accepts it at its next sign-in.
