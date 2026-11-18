@@ -57,6 +57,7 @@ import {
   MAX_REPORT_DAYS,
   validatePeriod,
 } from "@/lib/reports";
+import { SPARK_MIN_DAYS } from "@/lib/web-dashboard";
 import { useProject } from "@/pages/project-layout";
 import { PAGE_HEADERS, ScfSkeleton } from "./page-frame";
 
@@ -192,8 +193,10 @@ function changeOf(r: number | null): StatChange | null {
 }
 
 // a spark only when it has a shape
+// a sparkline only where it shows a shape: the same rule as the web cards,
+// so a flat range with one spike at its end draws no line
 function shaped(values: number[]): number[] | null {
-  if (values.length < 2) return null;
+  if (values.filter((x) => x > 0).length < SPARK_MIN_DAYS) return null;
   return Math.max(...values) === Math.min(...values) ? null : values;
 }
 
