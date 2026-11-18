@@ -66,7 +66,7 @@ for tool in "$@"; do
 		install -m 0755 "$work/actionlint" "$dest/actionlint"
 		;;
 	shellcheck)
-		# shellcheck publishes no checksum file; this is the sha256 digest
+		# the shellcheck project publishes no checksum file; this is the sha256 digest
 		# github records for the release asset (read 2026-11-13), so a
 		# replaced asset still fails the check
 		v=0.11.0
