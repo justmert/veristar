@@ -283,10 +283,11 @@ describe("web dashboard page (contract 18)", () => {
     expect(totals).toContain("20%");
     expect(totals).toContain("40%");
     expect(totals).toContain("10 pp");
+    // each breakdown loads on its own, so each is awaited
     await waitFor(() => expect(host.textContent).toContain("Germany"));
-    expect(host.textContent).toContain("/pricing");
-    expect(host.textContent).toContain("github.com");
-    expect(host.textContent).toContain("signup");
+    await waitFor(() => expect(host.textContent).toContain("/pricing"));
+    await waitFor(() => expect(host.textContent).toContain("github.com"));
+    await waitFor(() => expect(host.textContent).toContain("signup"));
     // shares are of the range's visitors
     expect(host.textContent).toContain("75%");
     await waitFor(() =>
