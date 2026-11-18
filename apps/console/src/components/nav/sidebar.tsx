@@ -17,6 +17,7 @@ import {
   Plus,
   ScrollText,
   Search,
+  Shield,
   Sun,
   UserRound,
 } from "lucide-react";
@@ -28,14 +29,13 @@ import { stepUpQuery } from "@/api/operators";
 import { operatorAlertsQuery, operatorTenantsQuery, tenantQuery } from "@/api/queries";
 import type { FiringAlert, Me } from "@/api/schemas";
 import { Avatar } from "@/components/avatar";
+import { Segmented } from "@/components/segmented";
 import { CountBadge, StatusDot, statusEntry } from "@/components/status";
 import {
   Menu,
   MenuContent,
   MenuItem,
   MenuLabel,
-  MenuRadioGroup,
-  MenuRadioItem,
   MenuSeparator,
   MenuTrigger,
 } from "@/components/ui/menu";
@@ -51,6 +51,7 @@ import {
   OPERATOR_NAV,
   projectNav,
 } from "./nav-items";
+import { useOperatorAdmin } from "./operator-role";
 
 // the review queue as the review page reads it, so the badge and the page
 // share one cached answer
@@ -116,14 +117,20 @@ export function Sidebar({
             <span className="text-title">Veristar</span>
           </Link>
 
-          {/* operators do not work inside one project, so the operator area
-              has no switcher; the command palette opens any project */}
-          {area.kind === "operator" ? null : (
-            <ProjectSwitcher me={me} id={navProject} onNavigate={onNavigate} />
-          )}
+          {/* the switcher is the one way between contexts: a project, or the
+              operator area for an operator. the list below shows the pages of
+              that one context only; the command palette reaches every page */}
+          <ContextSwitcher
+            me={me}
+            id={area.kind === "operator" ? null : navProject}
+            operatorArea={area.kind === "operator"}
+            onNavigate={onNavigate}
+          />
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3">
-          {navProject ? (
+          {area.kind === "operator" && me.user.is_operator ? (
+            <OperatorGroups rest={area.rest} onNavigate={onNavigate} />
+          ) : navProject ? (
             <Groups
               label="Project"
               groups={projectNav(navProject)}
@@ -142,13 +149,6 @@ export function Sidebar({
               ))}
             </nav>
           )}
-
-          {me.user.is_operator ? (
-            <OperatorGroups
-              rest={area.kind === "operator" ? area.rest : null}
-              onNavigate={onNavigate}
-            />
-          ) : null}
         </div>
         <div className="mx-3 flex shrink-0 flex-col gap-px border-t border-line pt-3">
           {docs ? (
@@ -166,6 +166,7 @@ export function Sidebar({
           </FooterLink>
           {/* one way to Account: the account menu, which also holds the
               theme and sign out. it is marked current on the account page */}
+          <ThemeToggle />
           <AccountMenu
             me={me}
             onSignOut={onSignOut}
@@ -175,6 +176,25 @@ export function Sidebar({
         </div>
       </div>
     </LayoutGroup>
+  );
+}
+
+// the theme: system, light or dark, as three icons
+function ThemeToggle() {
+  const theme = useTheme();
+  return (
+    <Segmented
+      label="Theme"
+      iconOnly
+      value={theme.choice}
+      onChange={(v) => theme.setChoice(v as ThemeChoice)}
+      className="mt-1 px-2"
+      options={[
+        { value: "system", label: "System", icon: <Monitor aria-hidden /> },
+        { value: "light", label: "Light", icon: <Sun aria-hidden /> },
+        { value: "dark", label: "Dark", icon: <Moon aria-hidden /> },
+      ]}
+    />
   );
 }
 
@@ -190,7 +210,6 @@ function AccountMenu({
   current?: boolean;
 }) {
   const navigate = useNavigate();
-  const theme = useTheme();
   return (
     <Menu>
       <MenuTrigger asChild>
@@ -206,7 +225,6 @@ function AccountMenu({
         </button>
       </MenuTrigger>
       <MenuContent side="top" align="start" className="w-(--radix-dropdown-menu-trigger-width)">
-        <MenuLabel>Signed in as {me.user.display_name}</MenuLabel>
         <MenuItem
           onSelect={() => {
             onNavigate?.();
@@ -217,25 +235,6 @@ function AccountMenu({
           Account
         </MenuItem>
         <MenuSeparator />
-        <MenuLabel>Theme</MenuLabel>
-        <MenuRadioGroup
-          value={theme.choice}
-          onValueChange={(v) => theme.setChoice(v as ThemeChoice)}
-        >
-          <MenuRadioItem value="system">
-            <Monitor aria-hidden />
-            System
-          </MenuRadioItem>
-          <MenuRadioItem value="light">
-            <Sun aria-hidden />
-            Light
-          </MenuRadioItem>
-          <MenuRadioItem value="dark">
-            <Moon aria-hidden />
-            Dark
-          </MenuRadioItem>
-        </MenuRadioGroup>
-        <MenuSeparator />
         <MenuItem onSelect={onSignOut}>
           <LogOut aria-hidden />
           Sign out
@@ -245,22 +244,28 @@ function AccountMenu({
   );
 }
 
-// the project in view and the way to the others. with many projects the
-// menu has a search field.
-function ProjectSwitcher({
+// the context in view (a project, or the operator area) and the way to the
+// others. with many projects the menu has a search field.
+function ContextSwitcher({
   me,
   id,
+  operatorArea,
   onNavigate,
 }: {
   me: Me;
   id: string | null;
+  operatorArea: boolean;
   onNavigate?: () => void;
 }) {
   const tenant = useQuery({ ...tenantQuery(id ?? ""), enabled: id !== null });
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const listed = id ? me.tenants.find((t) => t.id === id) : undefined;
-  const name = id ? (tenant.data?.name ?? listed?.name ?? "Project") : "Choose a project";
+  const name = operatorArea
+    ? "Operator area"
+    : id
+      ? (tenant.data?.name ?? listed?.name ?? "Project")
+      : "Choose a project";
   const st = id ? (tenant.data?.status ?? listed?.status) : undefined;
   const word = st ? statusEntry({ kind: "project", status: st }) : null;
   const shown = me.tenants.filter((t) => t.name.toLowerCase().includes(q.trim().toLowerCase()));
@@ -280,7 +285,13 @@ function ProjectSwitcher({
           className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-line bg-raised p-2 text-left text-fg transition-colors duration-(--vs-duration-press) hover:border-line-strong hover:bg-hover focus-ring aria-expanded:border-line-strong max-lg:min-h-(--vs-control-touch)"
         >
           <span className="flex size-7 items-center justify-center rounded-md bg-selected text-caption font-semibold">
-            {id ? name.slice(0, 1) : <FolderOpen aria-hidden className="size-4" />}
+            {operatorArea ? (
+              <Shield aria-hidden className="size-4" />
+            ) : id ? (
+              name.slice(0, 1)
+            ) : (
+              <FolderOpen aria-hidden className="size-4" />
+            )}
           </span>
           <span className="flex min-w-0 flex-col">
             <span className="truncate text-body font-semibold" title={name}>
@@ -294,7 +305,7 @@ function ProjectSwitcher({
             ) : null}
           </span>
           <ChevronsUpDown aria-hidden className="size-4 text-fg-3" />
-          <span className="sr-only">, switch project</span>
+          <span className="sr-only">, switch</span>
         </button>
       </MenuTrigger>
       {/* as wide as the switcher, so it never covers the sidebar's edge */}
@@ -328,6 +339,16 @@ function ProjectSwitcher({
             {me.tenants.length === 0 ? "No project yet." : "No project matches."}
           </p>
         ) : null}
+        {me.user.is_operator ? (
+          <>
+            <MenuSeparator />
+            <MenuItem onSelect={() => go("/operator")}>
+              <Shield aria-hidden />
+              <span className="min-w-0 flex-1 truncate">Operator area</span>
+              {operatorArea ? <Check aria-hidden /> : null}
+            </MenuItem>
+          </>
+        ) : null}
         <MenuSeparator />
         <MenuItem onSelect={() => go("/")}>
           <FolderOpen aria-hidden />
@@ -360,39 +381,45 @@ function Groups({
       {groups.map((g) => (
         <div key={g.key} className="flex flex-col gap-px">
           <span className="px-2 pb-1 text-caption text-fg-2">{g.label}</span>
-          {g.items.map((n) => (
-            <Item
-              key={n.key}
-              item={n}
-              current={rest !== null && n.match(rest)}
-              onNavigate={onNavigate}
-              badge={badges?.[n.key]}
-            />
-          ))}
+          {g.items
+            .filter((n) => !n.paletteOnly)
+            .map((n) => (
+              <Item
+                key={n.key}
+                item={n}
+                current={rest !== null && n.match(rest)}
+                onNavigate={onNavigate}
+                badge={badges?.[n.key]}
+              />
+            ))}
         </div>
       ))}
     </nav>
   );
 }
 
-// the operator groups. the review and alert badges are read only inside
-// the operator area and once the session holds a step-up (contract 5.13,
-// 5.15): before it every operator route answers step_up_required
-function OperatorGroups({ rest, onNavigate }: { rest: string | null; onNavigate?: () => void }) {
-  const inOperator = rest !== null;
-  const stepUp = useQuery({ ...stepUpQuery, enabled: inOperator });
-  const live = inOperator && stepUp.data?.stepped_up === true;
-  const alerts = useQuery({ ...operatorAlertsQuery, enabled: live });
+// the operator groups. the review and alert badges are read only once the
+// session holds a step-up (contract 5.13, 5.15): before it every operator
+// route answers step_up_required. alerts are platform operations: the item
+// and its badge are for operator admins only
+function OperatorGroups({ rest, onNavigate }: { rest: string; onNavigate?: () => void }) {
+  const stepUp = useQuery(stepUpQuery);
+  const live = stepUp.data?.stepped_up === true;
+  const admin = useOperatorAdmin() === true;
+  const alerts = useQuery({ ...operatorAlertsQuery, enabled: live && admin });
   const queue = useInfiniteQuery({ ...operatorTenantsQuery(REVIEW_QUEUE), enabled: live });
-  const current = live && !alerts.error ? alerts.data : undefined;
-  const failed = live && alerts.error !== null;
+  const current = live && admin && !alerts.error ? alerts.data : undefined;
+  const failed = live && admin && alerts.error !== null;
   const first = queue.data?.pages[0];
   const waiting = first ? first.items.length : 0;
   const more = first ? first.next_cursor !== null : false;
+  const groups = admin
+    ? OPERATOR_NAV
+    : OPERATOR_NAV.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== "alerts") }));
   return (
     <Groups
       label="Operator"
-      groups={OPERATOR_NAV}
+      groups={groups}
       rest={rest}
       onNavigate={onNavigate}
       badges={{
@@ -418,24 +445,14 @@ function OperatorGroups({ rest, onNavigate }: { rest: string | null; onNavigate?
   );
 }
 
-// the alerts count: the critical (paging) alerts while any fires, the same
-// number the alert line says; else every firing alert, in warning
+// the alerts count: every firing alert, the number the Alerts page lists.
+// critical while any of them pages, else warning
 export function AlertsBadge({ alerts, className }: { alerts: FiringAlert[]; className?: string }) {
-  const critical = criticalCount(alerts);
-  if (critical > 0)
-    return (
-      <CountBadge
-        tone="critical"
-        className={className}
-        label={critical === 1 ? "1 critical alert firing" : `${critical} critical alerts firing`}
-      >
-        {formatCount(critical)}
-      </CountBadge>
-    );
   if (alerts.length === 0) return null;
+  const critical = criticalCount(alerts) > 0;
   return (
     <CountBadge
-      tone="warning"
+      tone={critical ? "critical" : "warning"}
       className={className}
       label={alerts.length === 1 ? "1 alert firing" : `${alerts.length} alerts firing`}
     >
