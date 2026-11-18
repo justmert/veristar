@@ -113,11 +113,17 @@ describe("access keys", () => {
       calls.some((x) => x.url.includes("status=active%2Cpending%2Csuspended%2Crejected")),
     ).toBe(true);
 
+    // the header button opens the form, as on the other operator pages
+    expect(host.querySelector("form[aria-label='Create a key']")).toBeNull();
+    await click(byRole(host, "button", "Create key"));
     await type(byLabel(host, "Name") as HTMLInputElement, "warehouse");
     await click(byRole(host, "button", "Create key"));
-    // the one-time secret is masked until it is revealed
+    // the one-time secret is masked until it is revealed, and the curl
+    // example shows it masked too; only its copy holds the key
     await waitFor(() => byRole(host, "button", "Copy key"));
     expect(host.querySelector('[aria-label="Secret hidden"]')).toBeTruthy();
+    expect(host.textContent).not.toContain(f.KEY_PLAIN);
+    expect(host.textContent).toContain("Bearer sa_op_••••");
     await click(host.querySelector('[aria-label="Show the secret"]') as HTMLElement);
     await waitFor(() => expect(host.textContent).toContain(f.KEY_PLAIN));
     const post = calls.find((x) => x.method === "POST");
