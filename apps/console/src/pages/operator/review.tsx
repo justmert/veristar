@@ -24,7 +24,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { countOf, formatCount } from "@/lib/format";
 import { useNow } from "./alerts";
-import { ageText, enrolledLine, Waiting } from "./decision";
+import { ageText, DecisionSection, enrolledLine, Waiting } from "./decision";
 import { ProjectNumbers } from "./numbers";
 
 // contract 5.3 review=true: pending projects and active projects with a site
@@ -362,15 +362,7 @@ function SelectedProject({
             ) : null}
 
             {detail.data.allowed_actions.some((a) => a === "approve" || a === "reject") ? (
-              // on a phone the decision stays at the bottom of the screen
-              // while the evidence scrolls above it
-              <section
-                aria-labelledby="decide-h"
-                className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-4 max-lg:sticky max-lg:bottom-0 max-lg:z-(--vs-layer-raised) max-lg:-mx-4 max-lg:max-h-[70dvh] max-lg:overflow-y-auto max-lg:rounded-b-none max-lg:bg-overlay max-lg:shadow-overlay sm:p-5"
-              >
-                <h2 id="decide-h" className="text-title text-fg">
-                  Decision
-                </h2>
+              <DecisionSection>
                 <DecisionPanel
                   subject={{
                     kind: "project",
@@ -380,7 +372,7 @@ function SelectedProject({
                   }}
                   onDecided={onDecided}
                 />
-              </section>
+              </DecisionSection>
             ) : (
               <p className="text-small text-fg-2">
                 The project is active. Only its sites in review wait for a decision.
