@@ -49,7 +49,7 @@ import {
   formatTick,
   OPEN_BUCKET,
 } from "@/lib/format";
-import { chainGap, DAYS_WITHOUT_DATA, shortKey, weeklyActiveText } from "@/lib/onchain";
+import { DAYS_WITHOUT_DATA, shortKey, weeklyActiveText } from "@/lib/onchain";
 import {
   closedDays,
   downloadFile,
@@ -150,12 +150,13 @@ const KEY_ORDER: { key: KpiKey; label: string }[] = [
 // the first three counts the project has data for, in the order a funder
 // reads them; a count of zero or one not measured is left out, not dashed
 export function keyNumbers(v: SCFView): KeyNumber[] {
-  const chainOk = v.onchain !== null && chainGap(v.onchain.ids_verified, v.onchain_series) === null;
+  // the view answers null counts, with a reason, where nothing was measured
+  const chainOk = (v.onchain?.operations ?? null) !== null;
   const own: Record<string, number | null> = {
     visitors: v.web?.visitors ?? null,
     pageviews: v.web?.pageviews ?? null,
     requests: v.api?.requests ?? null,
-    onchain_operations: chainOk ? (v.onchain?.operations ?? null) : null,
+    onchain_operations: v.onchain?.operations ?? null,
   };
   const spark: Record<string, number[]> = {
     visitors: v.web_series.map((p) => p.visitors ?? 0),
@@ -375,7 +376,7 @@ function CohortPlace({ v }: { v: SCFView }) {
       : "Every listed project";
   const hidden = percentileHiddenReason(c.cohort_size);
   const chain = v.onchain;
-  const chainOk = chain !== null && chainGap(chain.ids_verified, v.onchain_series) === null;
+  const chainOk = (chain?.operations ?? null) !== null;
   const rows = KPI_ROWS.map((r) => ({ ...r, k: c.kpis[r.key] })).filter(
     (r) =>
       (r.key !== "onchain_operations" || chainOk) &&
@@ -597,7 +598,7 @@ function Figures({ v }: { v: SCFView }) {
   const award = v.comparison?.cohort.award_date ?? null;
   const marker = award ? { day: award, label: `Award date ${formatDate(award)}` } : null;
   const awardInRange = marker !== null && v.days.includes(marker.day);
-  const chainOk = chain !== null && chain.ids_verified > 0;
+  const chainOk = (chain?.operations ?? null) !== null;
   const webDays = v.web_series.some((p) => p.aggregated && (p.pageviews ?? 0) > 0);
   const chainDays = v.onchain_series.some((p) => (p.operations ?? 0) > 0);
   return (
@@ -688,20 +689,16 @@ function Figures({ v }: { v: SCFView }) {
         >
           <FigureList
             items={[
-              chainOk && !shown.has("onchain_operations")
-                ? fig("Operations", cnt(chain.operations))
-                : null,
-              chainOk ? fig("Transactions", cnt(chain.transactions)) : null,
+              shown.has("onchain_operations") ? null : fig("Operations", cnt(chain.operations)),
+              fig("Transactions", cnt(chain.transactions)),
               fig(
                 "Verified IDs",
                 `${formatCount(chain.ids_verified)} of ${formatCount(chain.ids)}`,
               ),
-              chainOk
-                ? fig("Days without data", cnt(chain.days_missing), {
-                    definition: DAYS_WITHOUT_DATA,
-                    name: "days-missing",
-                  })
-                : null,
+              fig("Days without data", cnt(chain.days_missing), {
+                definition: DAYS_WITHOUT_DATA,
+                name: "days-missing",
+              }),
               chain.weekly_active_accounts.average === null
                 ? null
                 : fig("Weekly active accounts", weeklyActiveText(chain.weekly_active_accounts)),
