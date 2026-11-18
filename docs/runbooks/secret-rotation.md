@@ -236,6 +236,13 @@ published in the console host's `stellar.toml`, on the status page and in
 [signed usage reports](../reference/usage-reports.md). Replace the pair when the seed may have been
 exposed. A replaced key stays published as retired, so every report it signed still verifies.
 
+A new environment that takes over the data of an earlier one (a handover,
+[../handover/rebuild.md](../handover/rebuild.md)) makes its own pair with
+`infra/secrets/new-secrets.py` and retires the earlier environment's key the same way: put that
+account id in its `sa_report_signing_retired_keys` before the first `site.yml`, as in step 2.
+Reports signed by the earlier environment then verify against the new environment's
+`stellar.toml`.
+
 1. **Make the new pair** on the controller, in a directory that does not exist yet, on a
    memory-backed file system:
 
