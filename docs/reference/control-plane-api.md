@@ -1166,10 +1166,16 @@ Query: `version` (optional; default the newest non-revoked version of
   `origin = INGEST_ORIGIN` (attribute order and quoting are part of that contract).
 - `integrity` equals the manifest's `integrity` for the version.
 - `versions`: every non-revoked manifest entry, newest first.
-- `npm`: `null`. The console offers the script tag and hides the npm tab while
-  `npm` is `null`. The control plane refuses to start when `TRACKER_NPM_PACKAGE`
-  is set (4.5), so it never answers with an install line for a package name it
-  has not been built for.
+- `npm`: `null` while `TRACKER_NPM_PACKAGE` is unset (4.5); the console then
+  offers the script tag only. With `TRACKER_NPM_PACKAGE` set to the scoped name
+  you publish every tracker release under (built with
+  `packages/tracker/scripts/pack.mjs`, see
+  [the npm package](../onboarding/web/npm.md)), `npm` is
+  `{"package", "version", "install", "import"}`: `version` is the answer's
+  `version`, `install` is `npm install --save-exact <package>@<version>`, and
+  `import` is `import { init } from "<package>";`. The console shows these on
+  its npm tab. The control plane refuses to start when the value is not a
+  scoped npm name (`@scope/name`, lowercase letters, digits, `.`, `_` and `-`).
 - Errors: 404 `not_found` (site), 422 `unknown_tracker_version` on `version`, 410
   `tracker_version_revoked`, 409 `site_removed`.
 
@@ -1241,7 +1247,7 @@ the key.
 | `UMAMI_URL`, `UMAMI_ADMIN_PASSWORD` | yes | Umami's address on the private network and its admin password |
 | `UMAMI_USER_PASSWORD_KEY` | yes | 32 bytes, base64; derives daily Umami passwords; shared with `jobs` |
 | `TRACKER_RELEASE_DIR` | yes | holds `manifest.json` and `revoked.json` |
-| `TRACKER_NPM_PACKAGE` | no | leave unset: the control plane refuses to start when it is set (4.3.6) |
+| `TRACKER_NPM_PACKAGE` | no | the scoped npm name you publish the tracker releases under; set, the snippet route answers the npm install too (4.3.6) |
 | `NATS_URL`, `NATS_REPLICAS` | yes | NATS address and stream replica count |
 | `NATS_USER`, `NATS_PASSWORD` | when the server requires auth | NATS credentials |
 | database keys | yes | as `internal/db` `PoolConfig` for `cp_system`, `cp_tenant` and `cp_operator` |

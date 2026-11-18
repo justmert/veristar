@@ -18,6 +18,11 @@ here, before they take effect, as the processing terms require
 
 ### Added
 
+- The snippet route answers the npm install of the tracker when
+  `TRACKER_NPM_PACKAGE` names the scoped package you publish the releases
+  under: package, version, a pinned `npm install` line and the `init` import,
+  which the console shows on its npm tab. Unset, `npm` stays `null`. Before,
+  the control plane refused to start with the key set.
 - API onboarding for Java: the guide
   [docs/onboarding/api/java.md](docs/onboarding/api/java.md) and the example
   `examples/otel-java-spring`, Spring Boot 4.1.2 on Java 25 with the

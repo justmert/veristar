@@ -211,28 +211,67 @@ type SnippetResponse struct {
 	Src       string           `json:"src"`
 	Integrity string           `json:"integrity"`
 	Tag       string           `json:"tag"`
-	NPM       *json.RawMessage `json:"npm"`
+	NPM       *NPMInstall      `json:"npm"`
 	Versions  []TrackerRelease `json:"versions"`
+}
+
+// NPMInstall is the npm form of a snippet: the package the operator
+// publishes the tracker under (TRACKER_NPM_PACKAGE, built with
+// packages/tracker/scripts/pack.mjs), the version, which is the snippet's
+// tracker version, the install command with the version pinned, and the
+// import of init (docs/onboarding/web/npm.md).
+type NPMInstall struct {
+	Package string `json:"package"`
+	Version string `json:"version"`
+	Install string `json:"install"`
+	Import  string `json:"import"`
+}
+
+// npmNameRe is the scoped npm name pack.mjs accepts (NAME there): the
+// install line is copied into a shell, so nothing outside these
+// characters can reach it.
+var npmNameRe = regexp.MustCompile(`^@[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$`)
+
+// CheckNPMPackage refuses a TRACKER_NPM_PACKAGE that is not a scoped npm
+// name of at most 214 characters, npm's limit.
+func CheckNPMPackage(name string) error {
+	if len(name) > 214 || !npmNameRe.MatchString(name) {
+		return fmt.Errorf("controlplane: TRACKER_NPM_PACKAGE %q must be a scoped npm name such as @scope/tracker, as pack.mjs builds it", name)
+	}
+	return nil
+}
+
+// npmInstall is the npm answer for a package and a tracker version.
+func npmInstall(pkg, version string) *NPMInstall {
+	return &NPMInstall{
+		Package: pkg,
+		Version: version,
+		Install: "npm install --save-exact " + pkg + "@" + version,
+		Import:  `import { init } from "` + pkg + `";`,
+	}
 }
 
 // SnippetRoutes serves GET /api/sites/{site_id}/snippet (contract 4.3.6).
 type SnippetRoutes struct {
 	scope   *tenants.Scope
 	tracker *Tracker
+	// npmPackage is TRACKER_NPM_PACKAGE; empty answers npm null
+	npmPackage string
 }
 
-// NewSnippetRoutes returns the route. npmPackage is TRACKER_NPM_PACKAGE.
-// the shape of the npm answer (in particular its import line) is defined
-// only once the package is published on npm, so a configured package
-// name is refused here instead of answering with a guessed import.
+// NewSnippetRoutes returns the route. npmPackage is TRACKER_NPM_PACKAGE:
+// empty, or the scoped name the operator publishes every tracker release
+// under; with a name each answer carries the npm install of its version.
 func NewSnippetRoutes(scope *tenants.Scope, tracker *Tracker, npmPackage string) (*SnippetRoutes, error) {
 	if scope == nil || tracker == nil {
 		return nil, errors.New("controlplane: snippet route needs a scope and a tracker")
 	}
 	if npmPackage != "" {
-		return nil, errors.New("controlplane: TRACKER_NPM_PACKAGE is set, but the npm snippet is defined only once the tracker is published on npm")
+		if err := CheckNPMPackage(npmPackage); err != nil {
+			return nil, err
+		}
 	}
-	return &SnippetRoutes{scope: scope, tracker: tracker}, nil
+	return &SnippetRoutes{scope: scope, tracker: tracker, npmPackage: npmPackage}, nil
 }
 
 // Routes registers the path under a router mounted at /api.
@@ -282,9 +321,13 @@ func (h *SnippetRoutes) get(w http.ResponseWriter, r *http.Request) error {
 	case err != nil:
 		return err
 	}
+	var npm *NPMInstall
+	if h.npmPackage != "" {
+		npm = npmInstall(h.npmPackage, rel.Version)
+	}
 	httpx.WriteJSON(w, http.StatusOK, SnippetResponse{
 		SiteID: site.ID, Version: rel.Version, Src: h.tracker.ScriptURL(rel.Version),
-		Integrity: rel.Integrity, Tag: tag, NPM: nil, Versions: avail,
+		Integrity: rel.Integrity, Tag: tag, NPM: npm, Versions: avail,
 	})
 	return nil
 }
