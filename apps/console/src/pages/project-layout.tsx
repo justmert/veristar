@@ -121,7 +121,7 @@ export function StatusNotice({ tenant, isOwner }: { tenant: Tenant; isOwner: boo
           title="Waiting for review"
           actions={
             <Button asChild variant="outline" size="sm" className="max-sm:h-(--vs-control-touch)">
-              <Link to={`/projects/${tenant.id}/sites`}>Add a site</Link>
+              <Link to={`/projects/${tenant.id}/sites`}>Add site</Link>
             </Button>
           }
         >

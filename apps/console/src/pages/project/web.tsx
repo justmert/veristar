@@ -132,7 +132,7 @@ export function WebPage() {
           title="No sites yet"
           action={
             <Button asChild variant="outline">
-              <Link to={`/projects/${tenant.id}/sites`}>Add a site</Link>
+              <Link to={`/projects/${tenant.id}/sites`}>Add site</Link>
             </Button>
           }
         >
