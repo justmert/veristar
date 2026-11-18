@@ -80,7 +80,7 @@ Suites that start real services, run when the change touches their area:
 | `make handover-it` | the data migration and transfer rehearsal |
 | `make promtool` | the alert and recording rule tests |
 
-`make webpath`, `make console-e2e` and the browser matrix of `make gateway-it` run their
+`make webpath`, `make console-e2e`, `make handover-it` and the browser matrix of `make gateway-it` run their
 browsers in the official Playwright image, pinned in `tests/fixtures/browserbox` to the
 workspace's `@playwright/test` version, while the test runner stays on the host. Chromium aborts
 navigations in flight whenever the host's network interfaces change, and in a container of its

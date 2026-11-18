@@ -1,7 +1,7 @@
 // Package browserbox runs the playwright browsers of the browser suites
-// (tests/webpath, tests/gateway TestBrowserMatrix, tests/e2e-console) in a
-// container with its own network namespace, while the playwright test runner
-// stays on the host.
+// (tests/webpath, tests/gateway TestBrowserMatrix, tests/e2e-console,
+// tests/handover) in a container with its own network namespace, while the
+// playwright test runner stays on the host.
 //
 // why: chromium watches the interfaces of its network namespace and aborts
 // every navigation in flight with net::ERR_NETWORK_CHANGED when one appears
