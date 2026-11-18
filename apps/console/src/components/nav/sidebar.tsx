@@ -27,6 +27,7 @@ import type { TenantListQuery } from "@/api/endpoints";
 import { stepUpQuery } from "@/api/operators";
 import { operatorAlertsQuery, operatorTenantsQuery, tenantQuery } from "@/api/queries";
 import type { FiringAlert, Me } from "@/api/schemas";
+import { Avatar } from "@/components/avatar";
 import { CountBadge, StatusDot, statusEntry } from "@/components/status";
 import {
   Menu,
@@ -82,47 +83,51 @@ export function Sidebar({
   const projectId = area.kind === "project" ? area.id : null;
   return (
     <LayoutGroup id={group}>
-      <div className="flex h-full flex-col gap-4 overflow-y-auto px-3 py-4">
-        <Link
-          to="/"
-          onClick={onNavigate}
-          aria-label="Veristar, your projects"
-          className="flex items-center gap-2 self-start rounded-md px-2 py-1 text-fg focus-ring"
-        >
-          <Mark className="size-5" />
-          <span className="text-title">Veristar</span>
-        </Link>
+      {/* the brand and the switcher stay at the top and the account at the
+          bottom; only the page list between them scrolls */}
+      <div className="flex h-full flex-col gap-4 py-4">
+        <div className="flex shrink-0 flex-col gap-4 px-3">
+          <Link
+            to="/"
+            onClick={onNavigate}
+            aria-label="Veristar, your projects"
+            className="flex items-center gap-2 self-start rounded-md px-2 py-1 text-fg focus-ring"
+          >
+            <Mark className="size-5" />
+            <span className="text-title">Veristar</span>
+          </Link>
 
-        <ProjectSwitcher me={me} id={projectId} onNavigate={onNavigate} />
+          <ProjectSwitcher me={me} id={projectId} onNavigate={onNavigate} />
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3">
+          {projectId ? (
+            <Groups
+              label="Project"
+              groups={projectNav(projectId)}
+              rest={area.rest}
+              onNavigate={onNavigate}
+            />
+          ) : (
+            <nav aria-label="Console" className="flex flex-col gap-px">
+              {HOME_NAV.filter((i) => i.key === "projects").map((i) => (
+                <Item
+                  key={i.key}
+                  item={i}
+                  current={area.kind === "home" && i.match(area.rest)}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </nav>
+          )}
 
-        {projectId ? (
-          <Groups
-            label="Project"
-            groups={projectNav(projectId)}
-            rest={area.rest}
-            onNavigate={onNavigate}
-          />
-        ) : (
-          <nav aria-label="Console" className="flex flex-col gap-px">
-            {HOME_NAV.filter((i) => i.key === "projects").map((i) => (
-              <Item
-                key={i.key}
-                item={i}
-                current={area.kind === "home" && i.match(area.rest)}
-                onNavigate={onNavigate}
-              />
-            ))}
-          </nav>
-        )}
-
-        {me.user.is_operator ? (
-          <OperatorGroups
-            rest={area.kind === "operator" ? area.rest : null}
-            onNavigate={onNavigate}
-          />
-        ) : null}
-
-        <div className="mt-auto flex flex-col gap-px border-t border-line pt-3">
+          {me.user.is_operator ? (
+            <OperatorGroups
+              rest={area.kind === "operator" ? area.rest : null}
+              onNavigate={onNavigate}
+            />
+          ) : null}
+        </div>
+        <div className="mx-3 flex shrink-0 flex-col gap-px border-t border-line pt-3">
           {docs ? (
             <FooterLink href={docs} icon={<BookOpen aria-hidden />}>
               Docs
@@ -171,9 +176,7 @@ function AccountMenu({
           aria-current={current ? "page" : undefined}
           className="mt-1 flex items-center gap-2 rounded-md px-2 py-2 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-selected aria-[current=page]:bg-selected max-lg:min-h-(--vs-control-touch)"
         >
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-line-strong text-caption font-semibold text-fg">
-            {me.user.display_name.slice(0, 2)}
-          </span>
+          <Avatar name={me.user.display_name} />
           <span className="min-w-0 flex-1 truncate text-small">{me.user.display_name}</span>
           <Ellipsis aria-hidden className="size-4 text-fg-3" />
           <span className="sr-only">, Account menu</span>
@@ -257,7 +260,9 @@ function ProjectSwitcher({
             {id ? name.slice(0, 1) : <FolderOpen aria-hidden className="size-4" />}
           </span>
           <span className="flex min-w-0 flex-col">
-            <span className="truncate text-body font-semibold">{name}</span>
+            <span className="truncate text-body font-semibold" title={name}>
+              {name}
+            </span>
             {word ? (
               <span className="flex items-center gap-1 text-caption font-normal text-fg-2">
                 <StatusDot tone={word.tone} />
@@ -269,7 +274,8 @@ function ProjectSwitcher({
           <span className="sr-only">, switch project</span>
         </button>
       </MenuTrigger>
-      <MenuContent className="w-(--radix-dropdown-menu-trigger-width) min-w-60">
+      {/* as wide as the switcher, so it never covers the sidebar's edge */}
+      <MenuContent className="w-(--radix-dropdown-menu-trigger-width)">
         {me.tenants.length >= SWITCHER_SEARCH_FROM ? (
           <div className="flex items-center gap-2 border-b border-line px-2 pb-1">
             <Search aria-hidden className="size-4 shrink-0 text-fg-3" />
@@ -284,11 +290,13 @@ function ProjectSwitcher({
             />
           </div>
         ) : null}
-        <MenuLabel>Your projects</MenuLabel>
+        <MenuLabel>My projects</MenuLabel>
         {shown.map((t) => (
           <MenuItem key={t.id} onSelect={() => go(`/projects/${t.id}`)}>
             <StatusDot tone={statusEntry({ kind: "project", status: t.status }).tone} />
-            <span className="min-w-0 flex-1 truncate">{t.name}</span>
+            <span className="min-w-0 flex-1 truncate" title={t.name}>
+              {t.name}
+            </span>
             {t.id === id ? <Check aria-hidden /> : null}
           </MenuItem>
         ))}

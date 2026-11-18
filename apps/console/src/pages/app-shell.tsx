@@ -14,6 +14,7 @@ import { AlertsBadge, Sidebar } from "@/components/nav/sidebar";
 import { Kbd } from "@/components/panel";
 import { Toaster, toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
+import { MenuContainer } from "@/components/ui/menu";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { criticalCount } from "@/lib/alerts";
 import { queryClient } from "@/query-client";
@@ -218,6 +219,7 @@ function Drawer({
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const [box, setBox] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -235,17 +237,18 @@ function Drawer({
       }}
       className="drawer-motion m-0 h-dvh max-h-dvh w-(--vs-sidebar) max-w-[85vw] border-r border-line bg-ground p-0 text-fg lg:hidden"
     >
-      <div className="relative h-full">
+      <div ref={setBox} className="relative h-full">
         <Button
           variant="ghost"
           size="icon-lg"
           aria-label="Close navigation"
-          className="absolute top-2 right-2"
+          className="absolute top-2 right-2 z-(--vs-layer-raised)"
           onClick={onClose}
         >
           <X aria-hidden />
         </Button>
-        {children}
+        {/* the switcher and the account menu open inside the drawer */}
+        <MenuContainer.Provider value={box}>{children}</MenuContainer.Provider>
       </div>
     </dialog>
   );
