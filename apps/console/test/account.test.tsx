@@ -93,7 +93,10 @@ describe("account deletion (contract 4.1.6)", () => {
 });
 
 describe("sign-in methods of an operator account (contract 4.1.8)", () => {
-  const operatorMe = { ...f.meBody, user: { ...f.meBody.user, is_operator: true } };
+  const operatorMe = {
+    ...f.meBody,
+    user: { ...f.meBody.user, is_operator: true, operator_role: "operator" },
+  };
   const notSteppedUp = {
     ...f.steppedUpBody,
     stepped_up: false,
