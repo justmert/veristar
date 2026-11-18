@@ -447,7 +447,7 @@ test("an api key is created, read with from a client without a session, and revo
   const page = op.page;
   await page.goto(`${APP}/operator/keys`);
   await expect(page.getByRole("heading", { level: 1, name: "Access keys" })).toBeVisible();
-  // the header button opens the form, as on the other operator pages
+  // the header button opens the form in a dialog
   await page.getByRole("button", { name: "Create key" }).click();
   const form = page.getByRole("form", { name: "Create a key" });
   const name = `e2e ${run}`;
@@ -500,6 +500,11 @@ test("an api key is created, read with from a client without a session, and revo
     await expect(
       page.getByRole("region", { name: `Usage of ${name}` }).locator("[data-usage=requests]"),
     ).toHaveText("1");
+    // the usage opens in a dialog; closing it gives the list back
+    await page
+      .getByRole("dialog", { name: `Usage of ${name}` })
+      .getByRole("button", { name: "Close" })
+      .click();
     // the closed menu finishes its exit before the row menu opens again
     await expect(page.getByRole("menu")).toHaveCount(0);
 
