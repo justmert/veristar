@@ -581,12 +581,14 @@ describe("the public report page (contract 20.5)", () => {
     stubFetch([{ status: 404, body: c.errorBody("not_found") }]);
     const host = await renderRoutes(publicRoute, "/r/zzzzzzzzzzzzzzzzzzzzzzzzzz");
     await waitFor(() => expect(host.textContent).toContain("This report link is not available"));
+    expect(host.textContent).not.toContain("revoked");
   });
 
-  it("shows a revoked link (410 report_revoked) as not available", async () => {
+  it("shows a revoked link (410 report_revoked) as revoked, apart from an unknown one", async () => {
     stubFetch([{ status: 410, body: c.errorBody("report_revoked") }]);
     const host = await renderRoutes(publicRoute, "/r/zzzzzzzzzzzzzzzzzzzzzzzzzz");
-    await waitFor(() => expect(host.textContent).toContain("This report link is not available"));
+    await waitFor(() => expect(host.textContent).toContain("This report link was revoked"));
+    expect(host.textContent).not.toContain("This report link is not available");
     expect(host.textContent).not.toContain("did not load");
   });
 });

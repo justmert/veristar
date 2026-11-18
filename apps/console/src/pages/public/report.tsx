@@ -58,19 +58,26 @@ export function PublicReportPage() {
         <Skeleton.Table rows={4} columns={2} />
       </LoadingState>
     );
-  else if (isNotFound(q.error) || (q.error instanceof ApiError && q.error.status === 410))
-    // a removed project and an unknown id answer 404 and a revoked link
-    // 410 report_revoked; this page names all three in one message
+  else if (q.error instanceof ApiError && q.error.status === 410)
+    // a revoked link answers 410 report_revoked, apart from an unknown id
+    body = (
+      <MessagePage
+        icon={<FileX aria-hidden />}
+        title="This report link was revoked"
+        actions={<AboutLink />}
+      >
+        <p>Ask the project for a new link.</p>
+      </MessagePage>
+    );
+  else if (isNotFound(q.error))
+    // a removed project and an unknown id answer the same 404
     body = (
       <MessagePage
         icon={<FileX aria-hidden />}
         title="This report link is not available"
         actions={<AboutLink />}
       >
-        <p>
-          The project revoked the link, the project was removed, or the address is not complete. Ask
-          the project for a new link.
-        </p>
+        <p>The project was removed, or the address is not complete.</p>
       </MessagePage>
     );
   else if (q.error || !q.data)
