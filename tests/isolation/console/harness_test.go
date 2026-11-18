@@ -321,7 +321,7 @@ func start(t *testing.T) *env {
 	require.NoError(t, err)
 	ruleRoutes, err := operator.NewRules(e.conn, time.Now)
 	require.NoError(t, err)
-	// the scf award directory (contract 19.4) and its matching on
+	// the scf award directory (contract 19.5) and its matching on
 	// enrollment and site creation
 	scfAwards, err := operator.NewSCFAwards(e.conn, time.Now)
 	require.NoError(t, err)

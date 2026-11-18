@@ -87,7 +87,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	case len(args) >= 1 && args[0] == "scf":
-		if err := runSCF(ctx, args[1:], config.FromEnviron(), stdout); err != nil {
+		if err := runSCF(ctx, args[1:], config.FromEnviron(), os.Stdin, stdout); err != nil {
 			log.Error("scf command failed", "error", err.Error())
 			return 1
 		}
