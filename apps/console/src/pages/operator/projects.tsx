@@ -275,7 +275,7 @@ export function OperatorProjectsPage() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
-        title="Projects"
+        title="All projects"
         freshness={
           list.dataUpdatedAt > 0
             ? {
