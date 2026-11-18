@@ -72,8 +72,9 @@ Good:
 
 Costs:
 
-- Umami's report pages (funnels, journeys, retention, goals, session lists) are not in the
-  console. The MCP tools still read them as the member (control-plane-api.md section 12).
+- Umami's report pages (funnels, journeys, retention, goals) are not in the console. The MCP
+  tools read them as the member (control-plane-api.md section 12). The console lists a site's
+  sessions of one day only on the **Privacy** page, where an owner finds a session to erase.
 - Engine reads cost Umami a query per site, so they are limited per member (120 a minute).
 - Today's totals follow the hourly aggregation; the hours of today and the visitors right
   now are read live.

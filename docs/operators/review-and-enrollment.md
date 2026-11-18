@@ -16,8 +16,8 @@ The mode is on the operator **Admin**, **Settings** tab, under **Enrollment mode
 
 | Mode | A new project | Its sites |
 |---|---|---|
-| `open` (the seeded default) | becomes `active` at once | are set up in the web dashboard and accepted by the gateway as soon as the reconciler has run |
-| `approval` | is created `pending` and appears in the review queue | get nothing: no web dashboard, no gateway registry entry. The gateway refuses their events as `rejected_unknown_site`, and the dashboard link answers that set-up is pending |
+| `open` (the seeded default) | becomes `active` at once | are set up in Umami and accepted by the gateway as soon as the reconciler has run |
+| `approval` | is created `pending` and appears in the review queue | get nothing: no Umami websites, no gateway registry entry. The gateway refuses their events as `rejected_unknown_site`, and the web dashboard shows that set-up is pending |
 
 - The mode is read at each enrollment, so a switch applies to the next enrollment without a
   restart.
@@ -70,9 +70,9 @@ status. Each one asks for confirmation.
 
 | Action | From | To | Reason | Effect |
 |---|---|---|---|---|
-| Approve | `pending` | `active` | optional | every pending site becomes active; dashboards are set up and the sites start receiving traffic |
+| Approve | `pending` | `active` | optional | every pending site becomes active; its Umami websites are set up and the sites start receiving traffic |
 | Reject | `pending` | `rejected` | required | nothing is set up; the project's owners see the reason and can edit and resubmit, which puts the project back in the queue as `pending` |
-| Suspend | `active` | `suspended` | required | new events from the project's sites are refused and its OTLP tokens stop working; its dashboards stay readable; members can read but cannot add or change sites |
+| Suspend | `active` | `suspended` | required | new events from the project's sites are refused and its OTLP tokens stop working; its web and API numbers stay readable; members can read but cannot add or change sites |
 | Resume | `suspended` | `active` | optional | events and OTLP data are accepted again |
 | Remove | any status except `removed` | `removed` | required | see [removal.md](removal.md) |
 
