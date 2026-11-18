@@ -163,8 +163,12 @@ describe("operator alerts page", () => {
     expect(down.querySelector("a")?.getAttribute("href")).toBe(
       "https://github.com/justmert/veristar/blob/main/docs/runbooks/alerts.md#servicedown",
     );
-    expect(host.textContent).toContain("Last checked 12:00:05 UTC");
+    expect(host.textContent).toContain("12:00:05 UTC, every 30 s");
     expect(host.textContent).not.toContain("All clear");
+    // where the alerts come from, as facts in the header
+    expect(host.querySelector("[data-sources]")?.textContent).toBe("Alertmanager, 1 server");
+    // the count beside the title is the badge's: the alerts to act on now
+    expect(host.querySelector("h1 ~ [data-count]")?.textContent).toBe("1");
   });
 
   it("says all clear with the time of the check when nothing fires", async () => {
@@ -176,7 +180,7 @@ describe("operator alerts page", () => {
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
     await waitFor(() => expect(host.textContent).toContain("All clear"));
     expect(host.textContent).toContain("No alert fires.");
-    expect(host.textContent).toContain("Last checked 12:00:05 UTC");
+    expect(host.textContent).toContain("12:00:05 UTC, every 30 s");
     expect(host.textContent).not.toContain("critical alert");
     expect(host.querySelector("[data-alert]")).toBeNull();
   });
@@ -261,9 +265,9 @@ describe("operator alerts page", () => {
       vi.advanceTimersByTime(ALERTS_REFRESH_MS);
     });
     await waitFor(() => expect(host.textContent).toContain("BackupTooOld"));
-    expect(host.textContent).toContain("Last checked 12:00:35 UTC");
+    expect(host.textContent).toContain("12:00:35 UTC, every 30 s");
     await click(byRole(host, "button", "Check now"));
-    await waitFor(() => expect(host.textContent).toContain("Last checked 12:00:40 UTC"));
+    await waitFor(() => expect(host.textContent).toContain("12:00:40 UTC, every 30 s"));
     expect(calls.filter((c) => c.url === "/api/operator/alerts")).toHaveLength(3);
   });
 });
