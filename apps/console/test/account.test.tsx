@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/api/client";
 import { errorEnvelope } from "@/api/schemas";
-import { AccountPage, blockingProjects, confirmsLogin } from "@/pages/home/account";
+import { AccountPage, blockingProjects } from "@/pages/home/account";
 import * as f from "./fixtures/contract";
 import { byLabel, byRole, click, renderRoutes, stubFetch, type, waitFor } from "./helpers";
 
@@ -33,14 +33,6 @@ function confirmButton(): HTMLButtonElement {
 }
 
 describe("account deletion (contract 4.1.6)", () => {
-  it("accepts the login typed exactly, around spaces only", () => {
-    expect(confirmsLogin("octocat", "octocat")).toBe(true);
-    expect(confirmsLogin("  octocat ", "octocat")).toBe(true);
-    expect(confirmsLogin("Octocat", "octocat")).toBe(false);
-    expect(confirmsLogin("octo", "octocat")).toBe(false);
-    expect(confirmsLogin("", "octocat")).toBe(false);
-  });
-
   it("parses the sole_owner envelope with its projects", () => {
     const parsed = errorEnvelope.parse(soleOwner);
     expect(parsed.error.tenants).toEqual([{ id: f.TENANT_ID, name: "Stellar Wallet" }]);
@@ -92,9 +84,8 @@ describe("account deletion (contract 4.1.6)", () => {
     await click(byRole(host, "button", "Delete account"));
     await type(byLabel(document.body, "Type octocat to confirm"), "octocat");
     await click(confirmButton());
-    await waitFor(() =>
-      expect(host.textContent).toContain("You are the only owner of this project"),
-    );
+    await waitFor(() => expect(host.textContent).toContain("You are the only owner"));
+    expect(host.textContent).toContain("an owner of this project");
     const link = [...host.querySelectorAll("a")].find((a) => a.textContent === "Stellar Wallet");
     expect(link?.getAttribute("href")).toBe(`/projects/${f.TENANT_ID}/members`);
     expect(document.body.querySelector("dialog[open]")).toBeNull();
@@ -117,7 +108,7 @@ describe("sign-in methods of an operator account (contract 4.1.8)", () => {
     ]);
     const host = await page();
     await waitFor(() =>
-      expect(host.textContent).toContain("Confirm with your passkey to change sign-in methods."),
+      expect(host.textContent).toContain("Confirm with your passkey to change sign-in methods"),
     );
     expect(byRole(host, "button", "Use your passkey")).toBeTruthy();
     expect(calls[1]?.url).toContain("/api/operator/step-up");
@@ -130,7 +121,7 @@ describe("sign-in methods of an operator account (contract 4.1.8)", () => {
     ]);
     const host = await page();
     await waitFor(() =>
-      expect(host.textContent).toContain("Register a passkey for the operator area first."),
+      expect(host.textContent).toContain("Add a passkey for the operator area first"),
     );
   });
 

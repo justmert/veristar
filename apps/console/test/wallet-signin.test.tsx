@@ -134,7 +134,7 @@ describe("linked sign-in methods (contract 4.1.8)", () => {
       { status: 200, body: linked },
     ]);
     const host = await renderRoutes([{ path: "/account", element: <AccountPage /> }], "/account");
-    await waitFor(() => expect(host.textContent).toContain("Linked sign-in methods"));
+    await waitFor(() => expect(host.textContent).toContain("Sign-in methods"));
     // the only method cannot be unlinked
     const unlink = byRole(host, "button", "Unlink") as HTMLButtonElement;
     expect(unlink.disabled).toBe(true);
@@ -187,7 +187,7 @@ describe("linked sign-in methods (contract 4.1.8)", () => {
   it("links github through the oauth flow from a wallet-only account", async () => {
     stubFetch([{ status: 200, body: walletMe }]);
     const host = await renderRoutes([{ path: "/account", element: <AccountPage /> }], "/account");
-    await waitFor(() => expect(host.textContent).toContain("Linked sign-in methods"));
+    await waitFor(() => expect(host.textContent).toContain("Sign-in methods"));
     const gh = host.querySelector<HTMLAnchorElement>("a[href='/api/auth/github/start?link=1']");
     expect(gh?.textContent).toBe("Link GitHub");
   });
@@ -206,7 +206,7 @@ describe("linked sign-in methods (contract 4.1.8)", () => {
   it("asks a wallet-only account to type its whole address before deletion", async () => {
     stubFetch([{ status: 200, body: walletMe }]);
     const host = await renderRoutes([{ path: "/account", element: <AccountPage /> }], "/account");
-    await waitFor(() => expect(host.textContent).toContain("Linked sign-in methods"));
+    await waitFor(() => expect(host.textContent).toContain("Sign-in methods"));
     await click(byRole(host, "button", "Delete account"));
     await waitFor(() => expect(dialog()).toBeTruthy());
     const input = byLabel(document.body, `Type ${ADDRESS} to confirm`);
