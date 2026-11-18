@@ -84,15 +84,6 @@ export function actorName(e: AuditEntry): string {
   return "A person";
 }
 
-export function initials(login: string): string {
-  return (
-    login
-      .replace(/[^0-9A-Za-z]/g, "")
-      .slice(0, 2)
-      .toUpperCase() || "?"
-  );
-}
-
 // ----------------------------------------------------------------- verbs
 
 // the action as the verb of a sentence about its target

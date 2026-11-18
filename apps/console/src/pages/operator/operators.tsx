@@ -173,7 +173,7 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
       minWidth: "min-w-56",
       cell: (e) => (
         <span className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="min-w-0 truncate font-mono text-fg">{identity(e)}</span>
+          <span className="min-w-0 truncate text-fg">{identity(e)}</span>
           <span className="text-caption text-fg-2">{kindText(e)}</span>
           {e.bootstrap ? <Pill tone="info">Deploy settings</Pill> : null}
           {mine(e, me) ? <Pill tone="info">You</Pill> : null}

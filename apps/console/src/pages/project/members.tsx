@@ -1,5 +1,4 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { cn } from "@veristar/brand/cn";
 import { Ban, LogOut, UserMinus, UserPlus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useNavigate } from "react-router";
@@ -7,6 +6,7 @@ import { ApiError } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys, membersQuery } from "@/api/queries";
 import type { AddMemberResult, Invite, Member, Members, Role } from "@/api/schemas";
+import { Avatar } from "@/components/avatar";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { type Column, DataTable } from "@/components/data-table";
 import { FormMessage } from "@/components/error-panel";
@@ -119,17 +119,7 @@ function PersonName({
 }
 
 function Initial({ login, dashed }: { login: string; dashed?: boolean }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-full text-caption font-semibold",
-        dashed ? "border border-dashed border-line-strong text-fg-2" : "bg-selected text-fg",
-      )}
-    >
-      {login.slice(0, 1).toUpperCase()}
-    </span>
-  );
+  return <Avatar name={login} dashed={dashed} />;
 }
 
 export function MembersPage() {
