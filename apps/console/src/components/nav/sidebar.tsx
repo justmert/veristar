@@ -298,7 +298,7 @@ function ProjectSwitcher({
         <MenuSeparator />
         <MenuItem onSelect={() => go("/")}>
           <FolderOpen aria-hidden />
-          All projects
+          My projects
         </MenuItem>
         <MenuItem onSelect={() => go("/projects/new")}>
           <Plus aria-hidden />

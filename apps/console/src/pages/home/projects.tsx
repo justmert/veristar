@@ -60,7 +60,7 @@ export function ProjectsPage() {
   const tenants = me.data?.tenants ?? [];
   const header = (
     <PageHeader
-      title="Projects"
+      title="My projects"
       description="A project is one team, with its sites, keys and members."
       primary={me.data && tenants.length > 0 ? <EnrollButton /> : null}
     />

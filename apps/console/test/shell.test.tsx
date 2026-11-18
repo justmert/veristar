@@ -130,7 +130,7 @@ describe("console shell", () => {
     await waitFor(() => expect(host.textContent).toContain("1 critical alert is firing."));
     const open = [...host.querySelectorAll("a")].find((a) => a.textContent === "Open alerts");
     expect(open?.getAttribute("href")).toBe("/operator/alerts");
-    expect(current(host)).toEqual(["Projects"]);
+    expect(current(host)).toEqual(["All projects"]);
     // the badges on Review and Alerts
     const alerts = [...host.querySelectorAll("aside a")].find((a) =>
       a.textContent?.startsWith("Alerts"),
