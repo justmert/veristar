@@ -231,6 +231,13 @@ here, before they take effect, as the processing terms require
 
 ### Changed
 
+- `make webpath`, `make console-e2e` and the browser matrix of `make
+  gateway-it` run their browsers in a container of their own (test image
+  `mcr.microsoft.com/playwright` v1.64.1, the workspace's Playwright
+  release), so changes to the host's network interfaces no longer abort
+  Chromium navigations. The specs, scenarios and checks are unchanged;
+  `SA_E2E_BROWSERS=host` runs the browsers on the host
+  ([CONTRIBUTING.md](CONTRIBUTING.md)).
 - The capacity documents separate the ingest rate from the delivery rate:
   700 events a second per node is what a gateway accepts, measured without
   challenge requests, while one replayer delivers for the whole cluster. The

@@ -80,6 +80,14 @@ Suites that start real services, run when the change touches their area:
 | `make handover-it` | the data migration and transfer rehearsal |
 | `make promtool` | the alert and recording rule tests |
 
+`make webpath`, `make console-e2e` and the browser matrix of `make gateway-it` run their
+browsers in the official Playwright image, pinned in `tests/fixtures/browserbox` to the
+workspace's `@playwright/test` version, while the test runner stays on the host. Chromium aborts
+navigations in flight whenever the host's network interfaces change, and in a container of its
+own it sees none of those changes. The browsers reach the suites' proxies on the same loopback
+ports as before. `SA_E2E_BROWSERS=host` runs the browsers on the host instead, for local
+debugging; that mode needs the Playwright browsers installed (`pnpm exec playwright install`).
+
 `.github/workflows/ci.yml` runs `test`, `test-containers`, `isolation`, `supplychain-it`,
 `test-integration` and `promtool` on every change. `.github/workflows/e2e.yml` runs every other
 suite above, plus `db-it`, `local-converge` and `rotate-local`, each night and on demand, one
