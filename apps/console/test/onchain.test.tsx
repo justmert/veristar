@@ -487,6 +487,7 @@ const scfBody = {
     operations: 12,
     transactions: 5,
     days_missing: 4,
+    counts_reason: null,
     ids_failing: 1,
     weekly_active_accounts: { average: 42, latest: 40, weeks_counted: 2, weeks_missing: 1 },
   },
@@ -598,6 +599,34 @@ describe("scf review figures (contract 16.3)", () => {
     expect(card?.textContent).toContain("Grade B");
     expect(card?.textContent).toContain("A quarter or more of the graded site days");
     expect(card?.textContent).toContain("Graded on 8 site days: 5 A, 3 B, 0 C.");
+  });
+
+  it("shows on-chain counts that measured nothing as missing, with no zero", async () => {
+    answer({
+      ...scfBody,
+      onchain: {
+        ...scfBody.onchain,
+        operations: null,
+        transactions: null,
+        days_missing: null,
+        counts_reason: "nothing_read",
+      },
+      onchain_series: scfBody.onchain_series.map((p) => ({
+        ...p,
+        ids_read: 0,
+        operations: null,
+        transactions: null,
+      })),
+    });
+    const host = await renderRoutes(
+      routes(<ScfReviewPage />, "scf"),
+      `/projects/${f.TENANT_ID}/scf`,
+    );
+    await waitFor(() => expect(host.querySelector("[data-figure=days-missing]")).not.toBeNull());
+    expect(host.querySelector("[data-figure=days-missing]")?.textContent).toContain(
+      "No ledger read for a verified id in this range",
+    );
+    expect(host.textContent).not.toContain("did not load");
   });
 
   it("says when the project is not in the scf views", async () => {

@@ -3981,7 +3981,7 @@ membership only; it takes no tenant list and never names another project.
   "has_web_data": true, "has_api_data": false,
   "web": "the project's row of 8.3 without tenant, site counts and top lists",
   "api": "the project's row of 8.5 without tenant and site counts",
-  "onchain": "Summary of 15.7",
+  "onchain": "Summary of 15.7, with the null counts and counts_reason below",
   "integrity": "the row's grade of 17.3",
   "link_two_way": true,
   "cohort": "CohortRecord of 19.1",
@@ -4000,6 +4000,13 @@ membership only; it takes no tenant list and never names another project.
   project's own row of 19.2 computed in that population.
 - `rules_met` holds every saved rule the project meets when the request is
   answered (19.4), with its evidence.
+- `onchain` is the Summary of 15.7 with one difference: `operations`,
+  `transactions` and `days_missing` are `null` when they measure nothing,
+  and `counts_reason` says why: `no_verified_id` (the project has no
+  verified account or contract) or `nothing_read` (no day of a verified id
+  in the range has a stored row). `counts_reason` is `null` when the three
+  hold numbers, so a `0` always means a read found no activity. The
+  operator lists of 15.7 keep their numbers.
 
 `in_operator_views` is false for an internal project, which the operator
 views do not list; `tenant`, `sites`, `web`, `api`, `onchain` and
@@ -4705,8 +4712,11 @@ rule versions that graded the period, and it carries the figures "What SCF
 sees" shows next to the counts: the web coverage estimate, `has_data` of web
 and API, `lossy` and `infrastructure_requests` of the API, the weekly
 active accounts, and the calls per function of each verified contract
-(`onchain.contracts`, 15.9). A stored version 1 or 2 report keeps its layout
-and verifies as before.
+(`onchain.contracts`, 15.9). Its `onchain.operations`,
+`onchain.transactions` and `onchain.days_missing` are `null` with
+`onchain.counts_reason` (`no_verified_id` or `nothing_read`) when they
+measure nothing, as in 16.3. A stored version 1 or 2 report keeps its
+layout, with numbers in those members, and verifies as before.
 
 - The period is UTC days, both included, at most 366 days, `from` not after
   `to`: 422 `validation_failed` otherwise.
