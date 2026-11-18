@@ -4,9 +4,9 @@
 # another environment.
 
 # images come from the local registry that infra/local/build-images.sh fills
-sa_image_registry: 172.31.99.5:5000/sa
+sa_image_registry: 10.98.99.5:5000/sa
 sa_image_tag: lc
-base_docker_insecure_registries: ["172.31.99.5:5000"]
+base_docker_insecure_registries: ["10.98.99.5:5000"]
 
 # no domain and no cloudflare token: caddy issues from its
 # local ca, and the names under the reserved .test tld resolve only where a

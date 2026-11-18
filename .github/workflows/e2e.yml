@@ -156,8 +156,8 @@ jobs:
         run: |
           make local-converge-up
           make local-converge-images
-          go run ./tests/observability/receiver -listen 172.31.99.1:8099 > "$RUNNER_TEMP/receiver.log" 2>&1 &
-          make local-converge ANSIBLE_EXTRA='-e observability_test_webhook_base=http://172.31.99.1:8099'
+          go run ./tests/observability/receiver -listen 10.98.99.1:8099 > "$RUNNER_TEMP/receiver.log" 2>&1 &
+          make local-converge ANSIBLE_EXTRA='-e observability_test_webhook_base=http://10.98.99.1:8099'
           make local-converge-e2e
 
       # suite logs, saved container logs and playwright results of a failure

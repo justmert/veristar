@@ -75,9 +75,9 @@ cleanup() {
 trap cleanup EXIT
 
 # alertmanager needs a receiver (docs/deploy/local-converge.md section 2)
-go run "$root/tests/observability/receiver" -listen 172.31.99.1:8099 >"$out/receiver.log" 2>&1 &
+go run "$root/tests/observability/receiver" -listen 10.98.99.1:8099 >"$out/receiver.log" 2>&1 &
 receiver_pid=$!
-webhook='-e observability_test_webhook_base=http://172.31.99.1:8099'
+webhook='-e observability_test_webhook_base=http://10.98.99.1:8099'
 
 # nested docker: the node containers run their own engine
 on() {
@@ -241,8 +241,8 @@ probe_vars() {
 	cat >"$out/probe-vars.json" <<EOF
 {"observability_probe_tls": "internal",
  "observability_probe_ca_file": "$LC_STATE/probe-ca.crt",
- "observability_probe_extra_hosts": {"in.sa-local.test": "172.31.99.12", "otlp.sa-local.test": "172.31.99.12",
-   "app.sa-local.test": "172.31.99.22", "status.sa-local.test": "172.31.99.51"}}
+ "observability_probe_extra_hosts": {"in.sa-local.test": "10.98.99.12", "otlp.sa-local.test": "10.98.99.12",
+   "app.sa-local.test": "10.98.99.22", "status.sa-local.test": "10.98.99.51"}}
 EOF
 }
 
