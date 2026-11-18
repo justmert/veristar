@@ -517,7 +517,7 @@ describe("audit log", () => {
       target: "chain_id:c1",
       detail: {},
     });
-    expect(check.object).toBe("an on-chain id");
+    expect(check.object).toBe("an on-chain ID");
     const own = auditSentence({
       ...f.auditEntryBody,
       action: "user.sign_in",
@@ -783,7 +783,7 @@ describe("audit sentences", () => {
     expect(auditVerb("cohort.confirm")).toBe("confirmed the cohort of");
     expect(auditVerb("rule.delete")).toBe("deleted the rule");
     expect(auditVerb("report.revoke")).toBe("revoked a report link of");
-    expect(auditVerb("onchain.verify")).toBe("verified an on-chain id of");
+    expect(auditVerb("onchain.verify")).toBe("verified an on-chain ID of");
     expect(auditVerb("export.csv")).toBe("exported a CSV file of");
     expect(auditVerb("user.identity_link")).toBe("added a sign-in method to");
     expect(auditVerb("site.stellar_toml")).toBe("checked the stellar.toml of the site");
