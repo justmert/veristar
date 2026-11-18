@@ -11,43 +11,32 @@ import { PageHeader } from "@/components/page-header";
 import { LoadingState, Skeleton } from "@/components/states";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
 
-export const PAGE_HEADERS = {
-  overview: {
-    title: "Overview",
-    description: "The main numbers of your project: web visits, API traffic and on-chain activity.",
-  },
-  web: { title: "Web", description: "Visits to your sites: pages, sources, places and devices." },
-  api: {
-    title: "API",
-    description: "Requests to your API: volume, errors and latency by service and route.",
-  },
-  onchain: {
-    title: "On-chain",
-    description:
-      "The Stellar accounts and Soroban contracts of your project, and their ledger activity.",
-  },
-  scf: {
-    title: "SCF review",
-    description: "What SCF reviewers see about your project. They read the same figures.",
-  },
-  sites: { title: "Sites", description: "Each website of the project and how far its setup is." },
-  "connect-api": {
-    title: "Connect your API",
-    description:
-      "Add a second exporter to your app. It sends request counts, status codes and latency here.",
-  },
-  ai: {
-    title: "AI assistants",
-    description:
-      "Ask Claude, ChatGPT, Cursor or another MCP client about this project. A connection only reads data, and only of this project.",
-  },
-  members: { title: "Members", description: "The people who manage this project." },
-  privacy: {
-    title: "Privacy",
-    description:
-      "When a visitor asks you to erase their data, request it here. The audit log records each request.",
-  },
-} as const;
+// a page names itself; a line under the title only when it says what the
+// title does not
+export const PAGE_HEADERS: Record<
+  | "overview"
+  | "web"
+  | "api"
+  | "onchain"
+  | "scf"
+  | "sites"
+  | "connect-api"
+  | "ai"
+  | "members"
+  | "privacy",
+  { title: string; description?: string }
+> = {
+  overview: { title: "Overview" },
+  web: { title: "Web" },
+  api: { title: "API" },
+  onchain: { title: "On-chain" },
+  scf: { title: "SCF review" },
+  sites: { title: "Sites" },
+  "connect-api": { title: "Connect your API" },
+  ai: { title: "AI assistants", description: "Read-only, this project only." },
+  members: { title: "Members" },
+  privacy: { title: "Privacy" },
+};
 
 type PageKey = keyof typeof PAGE_HEADERS;
 
