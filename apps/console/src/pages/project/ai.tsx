@@ -489,7 +489,7 @@ function CredentialRow({
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}
-        title={`Revoke ${c.name}?`}
+        title={`Revoke the key “${c.name}”?`}
         description="The next request of this client is refused. You cannot restore it. Make a new one instead."
         confirmLabel="Revoke"
         pendingLabel="Revoking"

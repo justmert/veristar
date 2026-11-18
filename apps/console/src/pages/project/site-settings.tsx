@@ -297,7 +297,7 @@ function DangerZone({ site }: { site: Site }) {
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
-        title={`Delete ${site.name}?`}
+        title={`Delete the site “${site.name}”?`}
         description={`Events from ${site.domain} are refused, and all web data of this site is deleted. You cannot undo this.`}
         cancelLabel="Keep site"
         confirmLabel="Delete site"

@@ -517,7 +517,7 @@ function TokensSection({
         onOpenChange={(o) => {
           if (!o) setRevoking(null);
         }}
-        title={`Revoke ${revoking?.name ?? "the token"}?`}
+        title={revoking ? `Revoke the token “${revoking.name}”?` : "Revoke the token?"}
         description="The collector refuses this token within seconds. Apps that still send with it get 401. You cannot undo this."
         confirmLabel="Revoke token"
         pendingLabel="Revoking"

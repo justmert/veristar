@@ -303,7 +303,7 @@ export function AccessKeysPage() {
             revoke.reset();
           }
         }}
-        title={`Revoke ${revoking?.name ?? "the key"}?`}
+        title={revoking ? `Revoke the key “${revoking.name}”?` : "Revoke the key?"}
         description="The next request with it is refused. You cannot restore it. Create a new key instead."
         confirmLabel="Revoke"
         pendingLabel="Revoking"

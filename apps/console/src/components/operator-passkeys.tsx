@@ -199,7 +199,7 @@ export function OperatorPasskeys({ userName }: { userName: string }) {
             del.reset();
           }
         }}
-        title={`Delete ${deleting?.name ?? "the passkey"}?`}
+        title={deleting ? `Delete the passkey “${deleting.name}”?` : "Delete the passkey?"}
         description="This passkey no longer opens the operator area. Delete it from your device too."
         confirmLabel="Delete passkey"
         pendingLabel="Deleting"

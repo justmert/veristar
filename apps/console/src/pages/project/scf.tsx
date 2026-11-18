@@ -797,7 +797,11 @@ export function SignedReports() {
             revoke.reset();
           }
         }}
-        title="Revoke this link?"
+        title={
+          revoking
+            ? `Revoke the link to the report for ${formatDateRange(revoking.from, revoking.to)}?`
+            : "Revoke the report link?"
+        }
         description="People who open the link see that the report is not available. A downloaded JSON file keeps its valid signature. You cannot restore the link."
         confirmLabel="Revoke link"
         pendingLabel="Revoking"

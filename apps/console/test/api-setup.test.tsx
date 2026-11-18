@@ -130,7 +130,7 @@ describe("api analytics setup page (contract section 6)", () => {
     await click(byRole(host, "button", "Revoke"));
     const dialog = host.querySelector("dialog");
     expect(dialog?.hasAttribute("open")).toBe(true);
-    expect(dialog?.textContent).toContain("Revoke Production API?");
+    expect(dialog?.textContent).toContain("Revoke the token “Production API”?");
     expect(dialog?.textContent).toContain("refuses this token within seconds");
     expect(calls).toHaveLength(1);
     await click(byRole(host, "button", "Revoke token"));
