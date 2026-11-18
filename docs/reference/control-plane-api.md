@@ -1051,7 +1051,10 @@ Session, owner. Body `{"version": "..."}`. Must equal the current version, else 
 Audit `tenant.terms_accept`.
 
 While a tenant's accepted version is not current, every mutating tenant route
-except this one and member removal answers 403 `terms_not_accepted`. Reads keep
+answers 403 `terms_not_accepted`, except this one, member removal, and the
+routes that take something out of use, answer a data request or only check a
+claim: OTLP token revocation (6.4), MCP credential revocation (12.8), report
+link revocation (20.1), erasure (10.2) and the domain check (5.8). Reads keep
 working. A tenant accepts a new terms version through this route.
 
 ### 4.3 Sites
@@ -1525,7 +1528,7 @@ This is the only route that returns `verify_token`.
 `POST /api/sites/{site_id}/verify`: session, member. Body `{}` or
 `{"method": "dns" | "file"}` (absent: DNS first, then the file; first success
 wins). Runs the check synchronously (at most about 15 seconds: 5 for DNS, 10 for
-the file), writes the result under `cp_tenant`, audit `site.verify` (detail:
+the file), writes the result under `cp_system` (1.3), audit `site.verify` (detail:
 method tried, result code). **200** the object above. 409 `site_removed`. 429
 `rate_limited` above 6 checks per site per hour (`Retry-After` set). The limit
 counts the site's `site.verify` audit rows of the last hour, so it holds across
@@ -3406,7 +3409,9 @@ stay and come back if the id is added again.
 ### 15.4 Proof of control
 
 **`POST /api/tenants/{tenant_id}/onchain/ids/{chain_id}/challenge`** (accounts
-only, 422 for a contract): any member. A new random nonce valid for 30
+only, 422 for a contract): any member, terms accepted (403
+`terms_not_accepted`), not while the tenant is `suspended` (409
+`tenant_suspended`). A new random nonce valid for 30
 minutes replaces any earlier one. The message names the console host and the
 project by its name, quoted as a Go or JSON string, and its id, so a wallet
 shows the signer which project asks.
@@ -3449,7 +3454,9 @@ requests.
 checked; it is not read again on its own. A contract proven through an id
 rests on that id: removing the id clears the proof of every id proven
 through it, directly or in a chain, with `last_error`
-`verified_through_removed_id` and a `onchain.verify` audit row each.
+`verified_through_removed_id` and a `onchain.verify` audit row each. A
+contract proof that reads the ledger while its id is removed does not hold:
+it answers `admin_not_verified` or `deployer_not_verified`.
 
 The proofs follow SEP-53 exactly, so any wallet that signs messages with it
 works; the console asks through the Stellar Wallets Kit. A wallet that cannot
@@ -4409,7 +4416,7 @@ format, the canonical form and offline verification are in
 | `POST /api/tenants/{tenant_id}/reports` | member, current terms | body `{"from", "to"}`; builds, signs and stores a report; audit `report.create`; **201** Detail |
 | `GET /api/tenants/{tenant_id}/reports` | member | `{"items": [Summary]}`, newest first, at most 200 |
 | `GET /api/tenants/{tenant_id}/reports/{report_id}` | member | Detail, revoked reports included |
-| `POST /api/tenants/{tenant_id}/reports/{report_id}/revoke` | member | revokes the shared link; audit `report.revoke`; a second revoke answers the same Summary and writes nothing; **200** Summary |
+| `POST /api/tenants/{tenant_id}/reports/{report_id}/revoke` | member, also without current terms | revokes the shared link; audit `report.revoke`; a second revoke answers the same Summary and writes nothing; **200** Summary |
 
 **Summary**: `id`, `url` (`https://app.<BASE_DOMAIN>/r/<id>`), `from`, `to`,
 `signer`, `created_at`, `created_by`, `revoked_at`, `view_count`,
