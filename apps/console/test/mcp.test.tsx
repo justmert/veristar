@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { clientSnippets, mcpCredential, mcpCredentialCreated } from "@/api/mcp";
-import { McpKeyCreateForm, validateMcpKey } from "@/pages/project/ai";
+import { credentialLine, McpKeyCreateForm, validateMcpKey } from "@/pages/project/ai";
 import { byLabel, byRole, click, render, stubFetch, type, waitFor } from "./helpers";
 
 const credential = {
@@ -103,5 +103,23 @@ describe("mcp access keys", () => {
     expect(calls[1]?.method).toBe("POST");
     expect(calls[1]?.headers.get("X-Requested-With")).toBe("sa-console");
     expect(calls[1]?.body).toEqual({ name: "laptop", expires_in_days: 90 });
+  });
+});
+
+describe("mcp key list", () => {
+  it("says who a key acts as, its dates and its last use in one line", () => {
+    const c = mcpCredential.parse(credential);
+    expect(credentialLine(c)).toBe(
+      "Acts as octocat. Created Nov 14, 2026, 05:00 UTC. Expires Feb 12, 2027, 05:00 UTC. Not used yet.",
+    );
+    const revoked = mcpCredential.parse({
+      ...credential,
+      status: "revoked",
+      revoked_at: "2026-11-15T05:00:00Z",
+      revoked_reason: "member_removed",
+    });
+    expect(credentialLine(revoked)).toContain(
+      "Revoked Nov 15, 2026, 05:00 UTC: its user left the project.",
+    );
   });
 });
