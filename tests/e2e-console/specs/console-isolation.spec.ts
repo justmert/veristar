@@ -159,7 +159,7 @@ test("the web dashboard of another project answers not found, page and api alike
   const page = await b.ctx.newPage();
   await page.goto(`${APP}/projects/${a.tenant.id}/web`);
   await expect(page.getByText(a.site.name, { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Web analytics" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Web", exact: true })).toHaveCount(0);
   await page.close();
 });
 

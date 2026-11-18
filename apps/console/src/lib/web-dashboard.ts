@@ -3,8 +3,9 @@
 // from the components so tests can check them directly. the rules mirror
 // docs/reference/control-plane-api.md section 18.
 
+import type { Ingest } from "@/api/schemas";
 import type { WebBand, WebDimension, WebPoint, WebQuery, WebTotals } from "@/api/web";
-import type { Trend } from "@/components/stat-tile";
+import type { StatChange } from "@/components/stat-card";
 import {
   countryName,
   formatChange,
@@ -18,12 +19,12 @@ import { type DayRange, isDay, lastDays, validateDays } from "@/lib/global";
 
 export type WebPreset = "today" | "7" | "30" | "90" | "custom";
 
-export const WEB_PRESETS: readonly { value: WebPreset; label: string }[] = [
+// the presets of the range control; it adds "Custom" itself
+export const WEB_PRESETS: readonly { value: Exclude<WebPreset, "custom">; label: string }[] = [
   { value: "today", label: "Today" },
   { value: "7", label: "7 days" },
   { value: "30", label: "30 days" },
   { value: "90", label: "90 days" },
-  { value: "custom", label: "Custom" },
 ];
 
 export type WebMetric = "pageviews" | "visitors" | "visits" | "bounce_rate" | "avg_visit_duration";
@@ -52,7 +53,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // the server validates everything again.
 export function readWebState(params: URLSearchParams): WebState {
   const p = params.get("range");
-  const preset: WebPreset = WEB_PRESETS.some((x) => x.value === p) ? (p as WebPreset) : "30";
+  const preset: WebPreset =
+    p === "custom" || WEB_PRESETS.some((x) => x.value === p) ? (p as WebPreset) : "30";
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";
   const site = params.get("site");
@@ -149,7 +151,7 @@ export function webTrend(
   cur: number | null,
   prev: number | null,
   days: number,
-): Trend | null {
+): StatChange | null {
   if (cur === null || prev === null) return null;
   const period = periodLabel(days);
   if (m === "bounce_rate") {
@@ -253,4 +255,43 @@ export function shareOf(value: number, visitors: number): number | null {
 // the dashboard of a project, or of one of its sites
 export function webPath(tenantId: string, site?: string | null): string {
   return `/projects/${tenantId}/web${site ? `?site=${encodeURIComponent(site)}` : ""}`;
+}
+
+// the values of a metric per day, for a stat card's sparkline. a day not
+// read yet is a gap in the chart, but the sparkline only shows the shape, so
+// it reads as zero there; null when there is no shape to show (fewer than
+// two days, or every day the same)
+export function sparkOf(series: WebPoint[], m: WebMetric): number[] | null {
+  const v = series.map((p) => pointValue(p, m) ?? 0);
+  if (v.length < 2) return null;
+  return Math.max(...v) === Math.min(...v) ? null : v;
+}
+
+// the gateway's outcome counts cover whole utc hours up to the current one,
+// so a range of days reads from its first midnight to the end of its last
+// day or the current whole hour, whichever comes first. null when no whole
+// hour of the range has passed yet (just after midnight on "Today").
+export function ingestWindow(
+  r: DayRange,
+  now: Date,
+): { from: string; to: string; bucket: "day" } | null {
+  const hour = new Date(now);
+  hour.setUTCMinutes(0, 0, 0);
+  const from = Date.parse(`${r.from}T00:00:00Z`);
+  const to = Math.min(Date.parse(`${r.to}T00:00:00Z`) + 86_400_000, hour.getTime());
+  if (to <= from) return null;
+  const iso = (t: number) => new Date(t).toISOString().replace(/\.\d{3}Z$/, "Z");
+  return { from: iso(from), to: iso(to), bucket: "day" };
+}
+
+// the outcome totals of several sites added up
+export function sumOutcomes(
+  answers: (Pick<Ingest, "totals"> | undefined)[],
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const a of answers) {
+    if (!a) continue;
+    for (const [k, v] of Object.entries(a.totals)) out[k] = (out[k] ?? 0) + v;
+  }
+  return out;
 }

@@ -172,7 +172,7 @@ test("a passkey member joins a project by its address and opens its dashboard", 
   // project's web dashboard reads umami as it
   await waitWebReady(device, shared.id, site.id);
   await page.goto(`${APP}/projects/${shared.id}/web?site=${site.id}`);
-  await expect(page.getByRole("heading", { name: "Web analytics" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Web", exact: true })).toBeVisible();
   await expect(page.getByLabel("Right now")).toBeVisible();
   await page.close();
 });

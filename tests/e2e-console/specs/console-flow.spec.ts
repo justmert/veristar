@@ -390,11 +390,11 @@ test("the console's web dashboard shows the site's seven metrics for a selected 
   await page.getByLabel("From (UTC day)").fill(today);
   await page.getByRole("button", { name: "Apply range" }).click();
   await expect(page).toHaveURL(new RegExp(`from=${today}&to=${today}`));
-  // the quarantined traffic of the site is its own view
-  await page
-    .getByRole("radiogroup", { name: "Traffic" })
-    .getByRole("radio", { name: "Quarantined" })
-    .click();
+  // the quarantined traffic of the site is its own view, opened from what
+  // the totals leave out
+  const notCounted = page.getByRole("region", { name: "Not counted" });
+  await expect(notCounted.getByText("Every event, by outcome")).toBeVisible();
+  await notCounted.getByRole("button", { name: "Show quarantined traffic" }).click();
   await expect(page).toHaveURL(/band=quarantine/);
   await expect(page.getByLabel("Right now")).toHaveCount(0);
 

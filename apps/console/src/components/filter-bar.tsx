@@ -121,7 +121,7 @@ export function FilterBar({
                   key={f.key}
                   className="inline-flex h-7 animate-fade-in items-center gap-1 rounded-full border border-line-strong pr-1 pl-3 text-caption text-fg max-lg:h-(--vs-control-touch)"
                 >
-                  <span className="text-fg-2">{f.label}:</span>
+                  <span className="text-fg-2">{f.label}:</span>{" "}
                   <span className="font-medium">{f.active?.label}</span>
                   <button
                     type="button"
