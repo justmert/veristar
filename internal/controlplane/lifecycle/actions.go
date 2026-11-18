@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -104,6 +105,33 @@ func (a *Actions) tenantHandler(act Action) http.Handler {
 // then triggers a reconcile. reason must already be validated (nil when
 // absent). an unknown or internal tenant is 404.
 func (a *Actions) TenantAction(ctx context.Context, operatorID, tenantID uuid.UUID, act Action, reason *string) (TenantSummary, error) {
+	return a.tenantAction(ctx, actor{user: uuid.NullUUID{UUID: operatorID, Valid: true}, name: audit.User(operatorID)},
+		tenantID, act, reason, false)
+}
+
+// errDryRun rolls back the transaction of a dry run
+var errDryRun = errors.New("lifecycle: dry run")
+
+// TenantActionAs applies one lifecycle action as a command line actor such
+// as platformctl: the same transaction, rows and reconcile as TenantAction,
+// with name as the audit actor and no user in requested_by or approved_by.
+// dryRun runs every step and rolls back, so the summary shows the outcome
+// and nothing changes and no reconcile is triggered.
+func (a *Actions) TenantActionAs(ctx context.Context, name string, tenantID uuid.UUID, act Action, reason *string, dryRun bool) (TenantSummary, error) {
+	if name == "" || strings.HasPrefix(name, "user:") {
+		return TenantSummary{}, errors.New("lifecycle: a command line actor needs its own name")
+	}
+	return a.tenantAction(ctx, actor{name: name}, tenantID, act, reason, dryRun)
+}
+
+// actor is who applies an action: an operator's user, or a command line
+// tool without one
+type actor struct {
+	user uuid.NullUUID
+	name string
+}
+
+func (a *Actions) tenantAction(ctx context.Context, by actor, tenantID uuid.UUID, act Action, reason *string, dryRun bool) (TenantSummary, error) {
 	t, ok := tenantTransitions[act]
 	if !ok {
 		return TenantSummary{}, httpx.NotFound()
@@ -142,7 +170,7 @@ func (a *Actions) TenantAction(ctx context.Context, operatorID, tenantID uuid.UU
 			params.StatusReason = reason
 		}
 		if act == Approve {
-			params.ApprovedBy = uuid.NullUUID{UUID: operatorID, Valid: true}
+			params.ApprovedBy = by.user
 		}
 		if err := q.LifecycleSetTenantStatus(ctx, params); err != nil {
 			return fmt.Errorf("lifecycle: set status: %w", err)
@@ -156,13 +184,13 @@ func (a *Actions) TenantAction(ctx context.Context, operatorID, tenantID uuid.UU
 			}
 			detail["sites_activated"] = idStrings(ids)
 		case Remove:
-			if err := a.remove(ctx, q, operatorID, tenantID, *reason, detail); err != nil {
+			if err := a.remove(ctx, q, by.user, tenantID, *reason, detail); err != nil {
 				return err
 			}
 		}
 
 		if err := audit.InSystem(ctx, tx, audit.Entry{
-			Actor: audit.User(operatorID), Action: t.audit, Target: audit.TenantTarget(tenantID), Detail: detail,
+			Actor: by.name, Action: t.audit, Target: audit.TenantTarget(tenantID), Detail: detail,
 		}); err != nil {
 			return err
 		}
@@ -171,8 +199,14 @@ func (a *Actions) TenantAction(ctx context.Context, operatorID, tenantID uuid.UU
 			return fmt.Errorf("lifecycle: summary: %w", err)
 		}
 		sum = toSummary(row)
+		if dryRun {
+			return errDryRun
+		}
 		return nil
 	})
+	if dryRun && errors.Is(err, errDryRun) {
+		return sum, nil
+	}
 	if err != nil {
 		return TenantSummary{}, err
 	}
@@ -183,7 +217,7 @@ func (a *Actions) TenantAction(ctx context.Context, operatorID, tenantID uuid.UU
 // remove is the transactional part of a removal (contract 5.5 steps 1 to
 // 4): sites removed, open invites deleted, and the cp.tenant_removals row
 // that drives the purge, with removal_keep_aggregates copied as it is now.
-func (a *Actions) remove(ctx context.Context, q *systemq.Queries, operatorID, tenantID uuid.UUID, reason string, detail map[string]any) error {
+func (a *Actions) remove(ctx context.Context, q *systemq.Queries, requestedBy uuid.NullUUID, tenantID uuid.UUID, reason string, detail map[string]any) error {
 	sites, err := q.LifecycleRemoveSites(ctx, tenantID)
 	if err != nil {
 		return fmt.Errorf("lifecycle: remove sites: %w", err)
@@ -201,7 +235,7 @@ func (a *Actions) remove(ctx context.Context, q *systemq.Queries, operatorID, te
 		return err
 	}
 	if err := q.LifecycleInsertRemoval(ctx, systemq.LifecycleInsertRemovalParams{
-		TenantID: tenantID, RequestedBy: uuid.NullUUID{UUID: operatorID, Valid: true},
+		TenantID: tenantID, RequestedBy: requestedBy,
 		Reason: reason, KeepAggregates: keep,
 	}); err != nil {
 		return fmt.Errorf("lifecycle: insert removal: %w", err)

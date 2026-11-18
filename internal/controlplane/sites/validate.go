@@ -37,6 +37,29 @@ func ValidDomain(d string) bool {
 	return strings.Trim(labels[len(labels)-1], "0123456789") != ""
 }
 
+// CheckNewSite validates a new site the way POST
+// /api/tenants/{tenant_id}/sites does and returns the name and domain to
+// store. platformctl uses it too, so both accept the same sites.
+func CheckNewSite(f *tenants.Fields, name, domain *string, origins []string) (string, string) {
+	var n, d string
+	if name == nil {
+		f.Add("name", httpx.FieldRequired)
+	} else {
+		n = tenants.Text(f, "name", *name, 1, 100)
+	}
+	if domain == nil {
+		f.Add("domain", httpx.FieldRequired)
+	} else if d = *domain; !ValidDomain(d) {
+		f.Add("domain", httpx.FieldInvalidDomain)
+	}
+	if domain != nil && ValidDomain(d) {
+		CheckOrigins(f, origins, d)
+	} else if len(origins) == 0 {
+		f.Add("origins", httpx.FieldRequired)
+	}
+	return n, d
+}
+
 // localOrigin reports the loopback origins allowed for local testing:
 // http://localhost[:port] and http://127.0.0.1[:port].
 func localOrigin(u *url.URL) bool {

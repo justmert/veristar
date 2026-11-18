@@ -133,6 +133,12 @@ func checkReason(b ReasonBody, required bool) (*string, error) {
 	return &v, nil
 }
 
+// CheckReason validates a reason as the action routes do, for callers
+// outside them such as platformctl.
+func CheckReason(reason *string, required bool) (*string, error) {
+	return checkReason(ReasonBody{Reason: reason}, required)
+}
+
 // decodeReason reads the body of an action route.
 func decodeReason(r *http.Request, required bool) (*string, error) {
 	var b ReasonBody
