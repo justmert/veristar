@@ -19,7 +19,7 @@
 //	{/* snippet version=<x.y.z> [options] */}    the tracker tag the console
 //	                                             builds for the example site
 //
-// Region markers follow apps/console/src/lib/otel-guides.ts: a comment line
+// A region marker is a comment line
 // (//, #, <!--, /* or {/*) holding "docs:start <name>"; the marker lines are
 // dropped, trailing blank lines removed and the common indentation stripped.
 package docs
@@ -287,7 +287,7 @@ var (
 )
 
 // region returns the lines between the docs:start and docs:end markers of
-// name, as otel-guides.ts region() does
+// name
 func region(source, name string) (string, error) {
 	lines := strings.Split(strings.ReplaceAll(source, "\r\n", "\n"), "\n")
 	marker := func(kind string) int {
@@ -429,7 +429,7 @@ func guideBlocks(root, text string) ([]block, error) {
 			case inc[2] == "require" && strings.HasSuffix(path, "/go.mod"):
 				// go mod tidy moves comment lines, so a go.mod cannot hold
 				// markers; its first require block (the direct dependencies)
-				// is taken instead, as otel-guides.ts goRequires() does
+				// is taken instead
 				b.want, b.err = goRequires(string(src))
 			default:
 				b.want, b.err = region(string(src), inc[2])
@@ -553,7 +553,7 @@ func TestOnboardingStyle(t *testing.T) {
 	}
 }
 
-func TestRegionMatchesConsoleRule(t *testing.T) {
+func TestRegionRule(t *testing.T) {
 	src := "a\n  // docs:start x (note)\n    one\n\n      two\n\n  // docs:end x\nb"
 	got, err := region(src, "x")
 	if err != nil {

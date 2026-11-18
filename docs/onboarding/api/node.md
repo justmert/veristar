@@ -60,8 +60,8 @@ exporters: the one to your backend without a token, the one to the platform with
 
 // loaded with --require before the app, because the http and express
 // instrumentations patch those modules when they are first required.
-// the console's api connect page shows this whole file
-// (apps/console/src/lib/otel-guides.ts), so the instructions cannot drift.
+// the node.js guide in the docs shows this whole file, so the
+// instructions cannot drift.
 const { NodeSDK } = require("@opentelemetry/sdk-node");
 const { OTLPTraceExporter } = require("@opentelemetry/exporter-trace-otlp-proto");
 const { OTLPMetricExporter } = require("@opentelemetry/exporter-metrics-otlp-proto");

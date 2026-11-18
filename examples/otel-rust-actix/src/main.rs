@@ -94,9 +94,9 @@ fn load_config() -> Result<Config, String> {
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-// the console's api connect page shows the lines between each
-// docs:start and docs:end marker pair (apps/console/src/lib/otel-guides.ts),
-// so the instructions are this code and cannot drift from it.
+// the rust guide in the docs shows the lines between each docs:start and
+// docs:end marker pair, so the instructions are this code and cannot drift
+// from it.
 
 // docs:start telemetry
 // one tracer provider and one meter provider, each with two exporters, so

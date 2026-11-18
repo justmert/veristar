@@ -22,7 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDateTimeUtc } from "@/lib/format";
 import { siblingUrl } from "@/lib/hosts";
-import { otlpEndpoint } from "@/lib/otel-guides";
+import { otlpEndpoint } from "@/lib/otlp-endpoint";
 import * as v from "@/lib/validate";
 import { NOT_USED, nameTaken } from "@/pages/project/ai";
 import { useProject } from "@/pages/project-layout";
