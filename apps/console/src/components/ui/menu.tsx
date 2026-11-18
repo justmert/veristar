@@ -2,6 +2,13 @@ import { cn } from "@veristar/brand/cn";
 import { Check } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import type * as React from "react";
+import { createContext, useContext } from "react";
+
+// a menu opened inside a native modal <dialog> (the phone drawer) must
+// render inside that dialog: the dialog makes the rest of the page inert, so
+// a menu portalled to <body> would show behind it and take no input. the
+// dialog provides itself here as the portal's container
+export const MenuContainer = createContext<HTMLElement | null>(null);
 
 // a dropdown menu. modal={false} keeps radix from adding its scroll lock,
 // which needs an inline <style> element the csp refuses.
@@ -21,8 +28,9 @@ function MenuContent({
   sideOffset = 6,
   ...props
 }: React.ComponentProps<typeof M.Content>) {
+  const container = useContext(MenuContainer);
   return (
-    <M.Portal>
+    <M.Portal container={container ?? undefined}>
       <M.Content
         align={align}
         sideOffset={sideOffset}
@@ -45,7 +53,7 @@ function MenuItem({
   return (
     <M.Item
       className={cn(
-        "flex h-8 cursor-pointer select-none items-center gap-2 rounded-sm px-2 text-body outline-none transition-colors duration-(--vs-duration-press) data-[disabled]:pointer-events-none data-[highlighted]:bg-hover data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-3",
+        "flex h-8 cursor-pointer select-none items-center gap-2 rounded-sm px-2 text-body outline-none max-lg:h-(--vs-control-touch) transition-colors duration-(--vs-duration-press) data-[disabled]:pointer-events-none data-[highlighted]:bg-hover data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-3",
         tone === "critical" && "text-critical [&_svg]:text-critical",
         className,
       )}
@@ -73,7 +81,7 @@ function MenuRadioItem({
   return (
     <M.RadioItem
       className={cn(
-        "flex h-8 cursor-pointer select-none items-center gap-2 rounded-sm px-2 text-body outline-none transition-colors duration-(--vs-duration-press) data-[highlighted]:bg-hover [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-3",
+        "flex h-8 cursor-pointer select-none items-center gap-2 rounded-sm px-2 text-body outline-none max-lg:h-(--vs-control-touch) transition-colors duration-(--vs-duration-press) data-[highlighted]:bg-hover [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-3",
         className,
       )}
       {...props}
@@ -97,7 +105,7 @@ function MenuCheckboxItem({
     <M.CheckboxItem
       onSelect={(e) => e.preventDefault()}
       className={cn(
-        "flex h-8 cursor-pointer select-none items-center gap-2 rounded-sm px-2 text-body outline-none transition-colors duration-(--vs-duration-press) data-[disabled]:pointer-events-none data-[highlighted]:bg-hover data-[disabled]:text-disabled-fg [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-2",
+        "flex h-8 cursor-pointer select-none items-center gap-2 rounded-sm px-2 text-body outline-none max-lg:h-(--vs-control-touch) transition-colors duration-(--vs-duration-press) data-[disabled]:pointer-events-none data-[highlighted]:bg-hover data-[disabled]:text-disabled-fg [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-2",
         className,
       )}
       {...props}
