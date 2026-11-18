@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
+import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ApiError } from "@/api/client";
 import { api, type EnrollmentInput } from "@/api/endpoints";
@@ -12,11 +13,14 @@ import {
   isEmptyCohort,
   validateCohort,
 } from "@/components/cohort";
-import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
+import { FormMessage } from "@/components/error-panel";
 import { TextAreaField, TextField } from "@/components/form-field";
-import { PageHeader } from "@/components/panel";
+import { PageHeader } from "@/components/page-header";
+import { ErrorState } from "@/components/states";
+import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import * as v from "@/lib/validate";
 import { queryClient } from "@/query-client";
 
@@ -128,7 +132,7 @@ export function serverCohortErrors(err: unknown): Partial<Record<keyof CohortVal
 
 export function serverEnrollErrors(err: unknown, values: EnrollValues): EnrollErrors {
   if (!(err instanceof ApiError)) return {};
-  if (err.code === "slug_taken") return { slug: "This address is taken. Choose another one." };
+  if (err.code === "slug_taken") return { slug: "This short name is taken. Choose another one." };
   if (err.code === "terms_version_mismatch")
     return { termsAccepted: "The terms changed. Read the new version and accept it again." };
   if (err.code !== "validation_failed") return {};
@@ -147,11 +151,97 @@ export function serverEnrollErrors(err: unknown, values: EnrollValues): EnrollEr
   return out;
 }
 
+// the fields under "More about the project"; a refused submit opens the
+// section when one of them needs attention
+const MORE: readonly FieldKey[] = ["slug", "description", "scfRoundUrl"];
+
+function BackLink() {
+  return (
+    <Link
+      to="/"
+      className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring"
+    >
+      <ArrowLeft aria-hidden className="size-4" />
+      Projects
+    </Link>
+  );
+}
+
+const HEADER = {
+  title: "Enroll a project",
+  description: "Tell us about your project. Operators read the answers.",
+};
+
 export function EnrollPage() {
   const me = useQuery(meQuery);
-  if (me.isPending) return <Loading label="Loading" />;
-  if (me.error) return <ErrorPanel error={me.error} onRetry={() => me.refetch()} />;
+  if (me.isPending)
+    return (
+      <section className="flex flex-col gap-6">
+        <BackLink />
+        <PageHeader {...HEADER} />
+        <div role="status" aria-busy="true" className="flex max-w-content flex-col gap-4">
+          <span className="sr-only">Loading the form</span>
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+      </section>
+    );
+  if (me.error)
+    return (
+      <section className="flex flex-col gap-6">
+        <BackLink />
+        <PageHeader {...HEADER} />
+        <ErrorState error={me.error} onRetry={() => me.refetch()} />
+      </section>
+    );
   return <EnrollForm termsVersion={me.data.terms.current_version} />;
+}
+
+// a group of fields under a heading in the caption style
+function Group({ title, children }: { title: string; children: ReactNode }) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} className="flex min-w-0 flex-col gap-4">
+      <h2 id={id} className="text-title text-fg">
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+// an optional group that starts closed; `open` forces it open
+function Optional({
+  title,
+  hint,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  hint: string;
+  open: boolean;
+  onToggle: (open: boolean) => void;
+  children: ReactNode;
+}) {
+  return (
+    <details
+      open={open}
+      onToggle={(e) => onToggle(e.currentTarget.open)}
+      className="group rounded-lg border border-line"
+    >
+      <summary className="flex min-h-(--vs-control-touch) cursor-pointer list-none items-center gap-2 rounded-lg px-4 py-2 text-body text-fg transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring [&::-webkit-details-marker]:hidden">
+        <ChevronRight
+          aria-hidden
+          className="size-4 shrink-0 text-fg-2 transition-transform duration-(--vs-duration-press) ease-standard group-open:rotate-90"
+        />
+        <span className="font-medium">{title}</span>
+        <span className="text-small text-fg-2">{hint}</span>
+      </summary>
+      <div className="flex flex-col gap-4 border-t border-line p-4">{children}</div>
+    </details>
+  );
 }
 
 export function EnrollForm({ termsVersion }: { termsVersion: string }) {
@@ -160,27 +250,37 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
   const [errors, setErrors] = useState<EnrollErrors>({});
   const [cohort, setCohort] = useState<CohortValues>(EMPTY_COHORT);
   const [cohortErrors, setCohortErrors] = useState<Partial<Record<keyof CohortValues, string>>>({});
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [cohortOpen, setCohortOpen] = useState(false);
   const termsId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const [focusTick, setFocusTick] = useState(0);
 
   // after a refused submit, move focus to the first field that needs
-  // attention; it runs after the render that marked the fields invalid
+  // attention; it runs after the render that opened its section
   useEffect(() => {
     if (focusTick === 0) return;
     formRef.current?.querySelector<HTMLElement>("[aria-invalid=true]")?.focus();
   }, [focusTick]);
+
+  function show(found: EnrollErrors, cohortFound: Partial<Record<keyof CohortValues, string>>) {
+    setErrors(found);
+    setCohortErrors(cohortFound);
+    if (MORE.some((k) => found[k])) setMoreOpen(true);
+    if (Object.keys(cohortFound).length > 0) setCohortOpen(true);
+  }
 
   const enroll = useMutation({
     mutationFn: (body: EnrollmentInput) => api.createTenant(body),
     onSuccess: async (tenant) => {
       queryClient.setQueryData(keys.tenant(tenant.id), tenant);
       await queryClient.invalidateQueries({ queryKey: keys.me });
+      toast.success(`${tenant.name} is enrolled. Add its first site.`);
       navigate(`/projects/${tenant.id}/sites`, { state: { enrolled: true } });
     },
     onError: async (err) => {
-      setErrors(serverEnrollErrors(err, values));
-      setCohortErrors(serverCohortErrors(err));
+      show(serverEnrollErrors(err, values), serverCohortErrors(err));
+      setFocusTick((n) => n + 1);
       if (err instanceof ApiError && err.code === "terms_version_mismatch") {
         setValues((s) => ({ ...s, termsAccepted: false }));
         await queryClient.invalidateQueries({ queryKey: keys.me });
@@ -196,8 +296,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
     e.preventDefault();
     const found = validateEnrollment(values);
     const cohortFound = validateCohort(cohort, new Date().toISOString().slice(0, 10));
-    setErrors(found);
-    setCohortErrors(cohortFound);
+    show(found, cohortFound);
     if (Object.keys(found).length > 0 || Object.keys(cohortFound).length > 0) {
       setFocusTick((n) => n + 1);
       return;
@@ -212,64 +311,33 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
       ? enroll.error
       : null;
 
-  const errorCount = Object.keys(errors).length;
-  const legend = "px-1 text-caption tracking-wide text-fg-3 uppercase";
-  const fieldset =
-    "flex min-w-0 flex-col gap-4 rounded-lg border border-line bg-raised px-4 pt-2 pb-5 sm:px-5";
+  const errorCount = Object.keys(errors).length + Object.keys(cohortErrors).length;
 
   return (
     <section className="flex flex-col gap-6">
-      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-small text-fg-2">
-        <Link
-          to="/"
-          className="rounded-sm transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring"
-        >
-          Your projects
-        </Link>
-        <span aria-hidden>/</span>
-        <span className="text-fg">Enroll</span>
-      </nav>
-      <div className="grid items-start gap-10 xl:grid-cols-[minmax(0,42rem)_minmax(0,17rem)]">
-        <div className="flex min-w-0 flex-col gap-6">
-          <PageHeader
-            title="Enroll a project"
-            description="Tell us about the project. Operators of this service read these answers to keep it for the Stellar ecosystem."
-          />
+      <BackLink />
+      <div className="grid items-start gap-x-12 gap-y-8 xl:grid-cols-[minmax(0,40rem)_minmax(0,17rem)]">
+        <div className="flex min-w-0 flex-col gap-8">
+          <PageHeader {...HEADER} />
 
           <form
             ref={formRef}
             noValidate
             onSubmit={submit}
-            className="flex flex-col gap-6"
+            className="flex flex-col gap-8"
             aria-label="Enroll a project"
           >
-            <fieldset className={fieldset}>
-              <legend className={legend}>The project</legend>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <TextField
-                  label="Project name"
-                  name="name"
-                  autoComplete="organization"
-                  maxLength={100}
-                  value={values.name}
-                  onChange={set("name")}
-                  error={errors.name}
-                  required
-                />
-                <TextField
-                  label="Project address"
-                  name="slug"
-                  optional
-                  hint="Lowercase letters, digits and hyphens. Leave empty to derive it from the name."
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  className="font-mono"
-                  maxLength={63}
-                  value={values.slug}
-                  onChange={set("slug")}
-                  error={errors.slug}
-                />
-              </div>
+            <Group title="Project">
+              <TextField
+                label="Project name"
+                name="name"
+                autoComplete="organization"
+                maxLength={100}
+                value={values.name}
+                onChange={set("name")}
+                error={errors.name}
+                required
+              />
               <TextField
                 label="Website"
                 name="website"
@@ -283,20 +351,9 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 error={errors.website}
                 required
               />
-              <TextAreaField
-                label="Description"
-                name="description"
-                optional
-                rows={2}
-                maxLength={1000}
-                value={values.description}
-                onChange={set("description")}
-                error={errors.description}
-              />
-            </fieldset>
+            </Group>
 
-            <fieldset className={fieldset}>
-              <legend className={legend}>Evidence for reviewers</legend>
+            <Group title="Stellar">
               <TextAreaField
                 label="How does the project use Stellar?"
                 name="stellar_usage"
@@ -304,11 +361,8 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 maxLength={2000}
                 hint={
                   <span className="flex justify-between gap-4">
-                    <span>
-                      For example: a Soroban lending protocol on mainnet, or a wallet for Stellar
-                      accounts.
-                    </span>
-                    <span className="shrink-0 font-mono tabular text-fg-3">
+                    <span>For example: a lending protocol on Soroban, or a Stellar wallet.</span>
+                    <span className="shrink-0 font-mono tabular text-fg-2">
                       {values.stellarUsage.length} / 2000
                     </span>
                   </span>
@@ -323,7 +377,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 name="stellar_ids"
                 optional
                 rows={3}
-                hint="Up to 20 ids starting with G, M or C, one per line."
+                hint="Up to 20 ids that start with G, M or C. Put one id on each line."
                 className="font-mono text-small"
                 autoCapitalize="characters"
                 spellCheck={false}
@@ -331,36 +385,71 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 onChange={set("stellarIds")}
                 error={errors.stellarIds}
               />
-              <TextField
-                label="Stellar Community Fund round"
-                name="scf_round_url"
-                optional
-                type="url"
-                inputMode="url"
-                placeholder="https://"
-                hint="A link to the project's SCF submission, if it has one."
-                autoCapitalize="none"
-                spellCheck={false}
-                value={values.scfRoundUrl}
-                onChange={set("scfRoundUrl")}
-                error={errors.scfRoundUrl}
-              />
-            </fieldset>
+            </Group>
 
-            <fieldset className={fieldset}>
-              <legend className={legend}>SCF cohort (optional)</legend>
-              <p className="text-small text-fg-2">
-                If the Stellar Community Fund awarded your project, propose the program, round,
-                category and award date. An operator confirms them; until then your project is
-                compared with every enrolled project.
-              </p>
-              <CohortFields
-                values={cohort}
-                onChange={setCohort}
-                errors={cohortErrors}
-                idPrefix="enroll-cohort"
-              />
-            </fieldset>
+            <div className="flex flex-col gap-3">
+              <Optional
+                title="More about the project"
+                hint="Optional"
+                open={moreOpen}
+                onToggle={setMoreOpen}
+              >
+                <TextField
+                  label="Short name"
+                  name="slug"
+                  optional
+                  hint="Lowercase letters, digits and hyphens. If you leave it empty, the project name is used."
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  className="font-mono"
+                  maxLength={63}
+                  value={values.slug}
+                  onChange={set("slug")}
+                  error={errors.slug}
+                />
+                <TextAreaField
+                  label="Description"
+                  name="description"
+                  optional
+                  rows={2}
+                  maxLength={1000}
+                  value={values.description}
+                  onChange={set("description")}
+                  error={errors.description}
+                />
+                <TextField
+                  label="SCF submission link"
+                  name="scf_round_url"
+                  optional
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://"
+                  hint="The link to the project's Stellar Community Fund submission."
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  value={values.scfRoundUrl}
+                  onChange={set("scfRoundUrl")}
+                  error={errors.scfRoundUrl}
+                />
+              </Optional>
+              <Optional
+                title="SCF award"
+                hint="Optional"
+                open={cohortOpen}
+                onToggle={setCohortOpen}
+              >
+                <p className="max-w-prose text-small text-fg-2">
+                  If the Stellar Community Fund gave the project an award, enter it here. An
+                  operator confirms it. Until then, the project is compared with all projects.
+                </p>
+                <CohortFields
+                  values={cohort}
+                  onChange={setCohort}
+                  errors={cohortErrors}
+                  idPrefix="enroll-cohort"
+                />
+              </Optional>
+            </div>
 
             <div className="flex flex-col gap-2">
               <div className="flex items-start gap-3">
@@ -390,18 +479,17 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 <p
                   id={`${termsId}-e`}
                   role="alert"
-                  className="animate-fade-in pl-6 text-caption font-normal text-critical"
+                  className="animate-fade-in pl-6 text-caption text-critical"
                 >
                   {errors.termsAccepted}
                 </p>
               ) : null}
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Button
                 type="submit"
                 pending={enroll.isPending}
-                disabled={enroll.isPending}
                 className="max-sm:h-(--vs-control-touch) max-sm:flex-1"
               >
                 {enroll.isPending ? "Enrolling" : "Enroll project"}
@@ -410,7 +498,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 <Link to="/">Cancel</Link>
               </Button>
               {errorCount > 0 ? (
-                <span className="text-caption font-normal text-critical sm:ml-auto">
+                <span role="status" className="text-caption text-critical sm:ml-auto">
                   {errorCount === 1
                     ? "1 field needs attention"
                     : `${errorCount} fields need attention`}
@@ -421,11 +509,8 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
           </form>
         </div>
 
-        <aside aria-labelledby={`${termsId}-after`} className="flex flex-col xl:pt-16">
-          <h2
-            id={`${termsId}-after`}
-            className="pb-2 text-caption tracking-wide text-fg-3 uppercase"
-          >
+        <aside aria-labelledby={`${termsId}-after`} className="flex flex-col gap-2 xl:pt-16">
+          <h2 id={`${termsId}-after`} className="text-caption text-fg-2">
             After you enroll
           </h2>
           <ol className="flex flex-col">
@@ -434,7 +519,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 key={step.title}
                 className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2 border-t border-line py-3"
               >
-                <span className="pt-1 font-mono text-caption font-normal text-fg-3">{i + 1}</span>
+                <span className="font-mono text-small text-fg-2 tabular">{i + 1}</span>
                 <span className="flex flex-col gap-1">
                   <span className="text-body font-medium text-fg">{step.title}</span>
                   <span className="text-small text-fg-2">{step.text}</span>
@@ -448,17 +533,13 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
   );
 }
 
-// what happens next, as the console does it: a pending project waits for
-// review (when the service asks for approval), sites come next, the api is
-// optional
+// what happens next, as the console does it: sites come first, review
+// (where the service asks for it) runs at the same time, the api is optional
 const AFTER = [
+  { title: "Add your website", text: "You get a tracking tag for each site." },
   {
     title: "Operator review",
-    text: "When the service asks for approval, operators read the answers. You can add sites and members meanwhile.",
+    text: "If the service asks for approval, operators read the answers. You can add sites meanwhile.",
   },
-  { title: "Add your website", text: "Each site gets a tracking snippet to install." },
-  {
-    title: "Connect your API",
-    text: "Optional: send API metrics with an OpenTelemetry exporter and a token.",
-  },
+  { title: "Connect your API", text: "Optional. Send API metrics with a token." },
 ];
