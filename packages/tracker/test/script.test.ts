@@ -8,7 +8,8 @@ import type { WireEvent } from "../src/wire.ts";
 import { type Gateway, pause, type Recorded, startGateway, waitFor } from "./gateway-fixture.ts";
 
 const SITE = "8f6b1c3e-2a4d-4e5f-9a7b-0c1d2e3f4a5b";
-const SDK = readFileSync(join(import.meta.dirname, "..", "releases", "1.0.0", "sdk.js"));
+const sdk = (version: string) =>
+  readFileSync(join(import.meta.dirname, "..", "releases", version, "sdk.js"));
 
 let gw: Gateway;
 let other: Gateway;
@@ -17,7 +18,7 @@ let windows: (Window & typeof globalThis)[] = [];
 beforeEach(async () => {
   gw = await startGateway(8);
   other = await startGateway(8);
-  gw.files.set("/v/1.0.0/sdk.js", { type: "text/javascript", body: SDK });
+  gw.files.set("/v/1.0.0/sdk.js", { type: "text/javascript", body: sdk("1.0.0") });
 });
 
 afterEach(async () => {
@@ -27,12 +28,15 @@ afterEach(async () => {
   await other.close();
 });
 
-function load(attrs: string, extraHead = ""): Window & typeof globalThis {
-  const html = `<!doctype html><html><head><title>Page</title>${extraHead}<script defer src="${gw.origin}/v/1.0.0/sdk.js" data-website-id="${SITE}" ${attrs}></script></head><body><a id="l" href="#">x</a></body></html>`;
+function load(attrs: string, extraHead = "", version = "1.0.0"): Window & typeof globalThis {
+  const html = `<!doctype html><html><head><title>Page</title>${extraHead}<script defer src="${gw.origin}/v/${version}/sdk.js" data-website-id="${SITE}" ${attrs}></script></head><body><a id="l" href="#">x</a></body></html>`;
   const dom = new JSDOM(html, {
     url: "https://site.example/p?q=1#h",
     runScripts: "dangerously",
     resources: "usable",
+    // from 1.3.0 a page counts only once it is visible, which jsdom reports
+    // only when it pretends to render
+    pretendToBeVisual: version !== "1.0.0",
     beforeParse: (window) => {
       window.fetch = fetch;
       Object.defineProperty(window, "crypto", { value: globalThis.crypto, configurable: true });
@@ -97,5 +101,45 @@ describe("released sdk.js 1.0.0", () => {
     await pause(600);
     expect(gw.events()).toHaveLength(0);
     expect(gw.challenges()).toHaveLength(0);
+  });
+});
+
+describe("released sdk.js 1.4.0", () => {
+  beforeEach(() => {
+    gw.files.set("/v/1.4.0/sdk.js", { type: "text/javascript", body: sdk("1.4.0") });
+  });
+
+  it("installs one tracker as both window.veristar and window.umami", async () => {
+    const w = load('data-auto-track="false"', "", "1.4.0");
+    await waitFor(() => w.veristar !== undefined);
+    expect(w.veristar).toBe(w.umami);
+    expect(w.veristar?.version).toBe("1.4.0");
+    expect(typeof w.veristar?.track).toBe("function");
+    expect(typeof w.veristar?.start).toBe("function");
+    await pause(600);
+    expect(gw.events()).toHaveLength(0);
+    w.veristar?.start();
+    await waitFor(() => gw.events().length === 1);
+    expect(parse(gw.events()[0] as Recorded)).toMatchObject({ t: "pv", u: "/p?q=1" });
+    await w.veristar?.track("from-veristar", { k: "v" });
+    await w.umami?.track("from-umami");
+    await waitFor(() => gw.events().length === 3);
+    expect(gw.events().map((r) => parse(r).n)).toEqual([
+      undefined,
+      "from-veristar",
+      "from-umami",
+    ]);
+  });
+
+  it("leaves a tracker already installed under either name alone", async () => {
+    const w = load(
+      "",
+      "<script>window.veristar = { version: 'mine' };</script>",
+      "1.4.0",
+    );
+    await pause(600);
+    expect(w.veristar?.version).toBe("mine");
+    expect(w.umami).toBeUndefined();
+    expect(gw.events()).toHaveLength(0);
   });
 });
