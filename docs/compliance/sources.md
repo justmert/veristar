@@ -3,7 +3,7 @@ title: "Legal sources register"
 description: "The register of legal sources the compliance documents rely on."
 ---
 
-This register records what each primary source says, as read on the date stated in its entry (2026-11-12 or 2026-11-13). The other compliance pages cite the anchors below (S1, S2, ...). Statements marked "Inference" are a reading of the source, not the source's words. This page is not legal advice.
+This register records what each primary source says, as read on the date stated in its entry (2026-11-12 or 2026-11-13). The other compliance pages cite the anchors below (S1, S2, ...). An anchor never changes its meaning, so a retired number (S11) is not reused. Statements marked "Inference" are a reading of the source, not the source's words. This page is not legal advice.
 
 ---
 
@@ -33,11 +33,11 @@ Date checked: 2026-11-12. Confidence: high. Status: confirmed.
 ## S2. France (CNIL): audience measurement consent exemption
 
 **Supported claim.**
-- Legal basis of the exemption: CNIL délibération n° 2020-091 of 17 September 2020 (lignes directrices on Article 82 of the loi Informatique et Libertés), article 5, paras 50 to 52. Para 50: trackers whose purpose is limited to audience measurement are "strictement nécessaires au fonctionnement et aux opérations d'administration courante" and are not subject to prior consent.
+- Legal basis of the exemption: CNIL délibération n° 2020-091 of 17 September 2020 (lignes directrices on Art. 82 of the loi Informatique et Libertés), Art. 5, paras 50 to 52. Para 50: trackers whose purpose is limited to audience measurement are "strictement nécessaires au fonctionnement et aux opérations d'administration courante" and are not subject to prior consent.
 - Conditions (para 51): purpose "strictement limitée à la seule mesure de l'audience sur le site ou l'application pour le compte exclusif de l'éditeur"; must not allow "le suivi global de la navigation" across sites or apps; must "uniquement servir à produire des données statistiques anonymes"; personal data "ne peuvent être recoupées avec d'autres traitements ni transmises à des tiers". Para 52: audience measurement remains processing of personal data subject to the GDPR.
-- Scope beyond cookies: para 13 of the same guidelines says they cover HTTP cookies and also "local storage", "les identifications par calcul d'empreinte du terminal ou « fingerprinting »", OS identifiers and hardware identifiers; "traceur" means every device covered by Article 82. The July 2025 self-assessment tool expressly contemplates fingerprint-based identifiers (see below).
+- Scope beyond cookies: para 13 of the same guidelines says they cover HTTP cookies and also "local storage", "les identifications par calcul d'empreinte du terminal ou « fingerprinting »", OS identifiers and hardware identifiers; "traceur" means every device covered by Art. 82. The July 2025 self-assessment tool expressly contemplates fingerprint-based identifiers (see below).
 - Self-assessment tool: "Outil d'auto-évaluation relatif à la mise en œuvre d'une solution de mesure d'audience exemptée de consentement", dated "Juillet 2025", addressed to the provider of the solution. Criteria it lists include:
-  - provider offers the service "sous le régime de la sous-traitance" with a standard DPA containing the Article 28 GDPR clauses;
+  - provider offers the service "sous le régime de la sous-traitance" with a standard DPA containing the Art. 28 GDPR clauses;
   - "Aucune mise en commun par le prestataire de données brutes de mesure d'audience provenant de plusieurs de ses clients";
   - no reuse of data for the provider's own account, whatever the purpose;
   - no import of external data; referrer, if collected, limited to the host; any integration with third-party tools excluded;
@@ -60,7 +60,7 @@ Translation: to fall within the tool, the solution must be configurable to meet 
 - The CNIL page of 4 July 2025 says the tool sets out sufficient, not necessary, conditions: "Celui-ci détaille les conditions suffisantes pour que l’exemption s’applique. Pour autant, il n’est pas exclu que certaines solutions ne remplissant pas l’ensemble des critères définis puissent tout de même être mises en œuvre de sorte à respecter l’exemption prévue par l’article 82 de la loi Informatique et Libertés." It puts the burden on the provider: "Il serait alors de la responsabilité du fournisseur de documenter son analyse pour démontrer que, bien que sortant du champ de l’outil d’auto-évaluation fourni par la CNIL, sa solution, telle que configurée, peut être mise en œuvre sans recueillir le consentement." It also warns that a self-assessment "ne préjuge pas de l’analyse que la CNIL pourra en faire".
 
 **What is required, and of what kind (inference).**
-- Neither "referrer limited to the host" nor "rounded to the nearest ten" is a condition of the exemption in its own right. The conditions are those of délibération 2020-091 art. 5 (para 51 above). The tool's criteria are a sufficient route to them, and each named technical measure is a recommendation that an alternative may replace if the provider shows the alternative meets the objective.
+- Neither "referrer limited to the host" nor "rounded to the nearest ten" is a condition of the exemption in its own right. The conditions are those of délibération 2020-091 Art. 5 (para 51 above). The tool's criteria are a sufficient route to them, and each named technical measure is a recommendation that an alternative may replace if the provider shows the alternative meets the objective.
 - Referrer: the objective is that no outside data is imported. The recommended measure is to keep only the host. Following it is the only route that needs no further justification.
 - Rounding: the criterion (all reports and exports contain only anonymous statistics, for any combination of filters) is what the tool requires. Rounding to ten is the recommended measure; the alternative is a documented anonymity analysis under WP29 Opinion 05/2014 on anonymisation techniques. Rounding alone does not satisfy the next criterion (no combination of filters isolates a user).
 - The same row as the referrer measure recommends disabling the collection of UTM and campaign identifiers in URLs.
@@ -100,13 +100,13 @@ Date checked: 2026-11-12. Confidence: high. Status: confirmed.
 ---
 
 <a id="S4"></a>
-## S4. Germany: TDDDG section 25
+## S4. Germany: § 25 TDDDG
 
 **Supported claim.**
 - § 25(1) TDDDG: storing or accessing information in end-user terminal equipment is permitted only with consent based on clear and comprehensive information, given in accordance with the GDPR.
 - § 25(2) has two exemptions only: no. 1, where the sole purpose is "die Durchführung der Übertragung einer Nachricht über ein öffentliches Telekommunikationsnetz"; no. 2, where the storage or access is "unbedingt erforderlich ist, damit der Anbieter eines digitalen Dienstes einen vom Nutzer ausdrücklich gewünschten digitalen Dienst zur Verfügung stellen kann". There is no analytics or reach measurement exemption in the text.
 - DSK "Orientierungshilfe der Aufsichtsbehörden für Anbieter:innen von digitalen Diensten (OH Digitale Dienste)", Version 1.2, Stand November 2024, paras 87 to 90: the authorities deliberately make no general statement that "Reichweitenmessung" falls under § 25(2) no. 2. A finding is possible "allenfalls für eine genau definierte Konfiguration und Zweckbestimmung" (para 89). "Selbst die einfache Messung von Besucherzahlen ist daher nicht per se als Bestandteil des Basisdienstes einzustufen, sondern abhängig vom jeweils konkret verfolgten Zweck" (para 90). Para 88 notes that pure page impression counting can be done by a simple counter, by log files without personal data, or by a simple first-party counting pixel that collects no further user data.
-- Reform: no German reform was found adding an analytics exemption to § 25. At EU level, the Commission's Digital Omnibus proposal COM(2025) 837 (19 November 2025) would insert GDPR Article 88a, whose para 3(c) allows storage or access without consent where necessary for "creating aggregated information about the usage of an online service to measure the audience of such a service, where it is carried out by the controller of that online service solely for its own use". This is a proposal with no legal effect. On 2026-11-13 it was still at first reading: Parliament's committees had not voted, and the Council agreed its negotiating mandate on 21 October 2026, in which Article 88a appears to be deleted and the audience measurement exemption moved to ePrivacy Art. 5(3) (S14). It covers personal data in terminal equipment, not § 25 TDDDG as such.
+- Reform: no German reform was found adding an analytics exemption to § 25. At EU level, the Commission's Digital Omnibus proposal COM(2025) 837 (19 November 2025) would insert GDPR Art. 88a, whose para 3(c) allows storage or access without consent where necessary for "creating aggregated information about the usage of an online service to measure the audience of such a service, where it is carried out by the controller of that online service solely for its own use". This is a proposal with no legal effect. On 2026-11-13 it was still at first reading: Parliament's committees had not voted, and the Council agreed its negotiating mandate on 21 October 2026, in which Art. 88a appears to be deleted and the audience measurement exemption moved to ePrivacy Art. 5(3) (S14). It covers personal data in terminal equipment, not § 25 TDDDG as such.
 
 **Note.** Germany has only a strictly necessary exemption. The DSK gives no blanket answer for reach measurement: it decides case by case, by configuration and purpose.
 
@@ -120,13 +120,13 @@ Date checked: 2026-11-12; Omnibus status updated 2026-11-13. Confidence: high on
 ---
 
 <a id="S5"></a>
-## S5. Netherlands: Telecommunicatiewet article 11.7a
+## S5. Netherlands: Telecommunicatiewet Art. 11.7a
 
 **Supported claim.**
 - Art. 11.7a(1) (version in force from 15 August 2026) applies to "het via een elektronisch communicatienetwerk opslaan van of toegang verkrijgen tot informatie in de randapparatuur van een gebruiker", requiring information and consent. The rule is technology-neutral: it is not limited to cookies.
 - Art. 11.7a(3)(b) exempts storage or access that is strictly necessary for the requested information society service "of, mits dit geen of geringe gevolgen heeft voor de persoonlijke levenssfeer van de betrokken abonnee of gebruiker, om informatie te verkrijgen over de kwaliteit of effectiviteit van een geleverde dienst van de informatiemaatschappij".
 - Art. 11.7a(4): an operation aimed at collecting, combining or analysing data about the user's use of different information society services so the user can be treated differently is presumed to be processing of personal data.
-- Autoriteit Persoonsgegevens (English cookies page): "limited analytics cookies" (number of visitors, most visited pages) with no or little impact on privacy need no consent, citing Article 11.7a; if they process personal data, a legal basis is needed and the use must be stated in the privacy statement.
+- Autoriteit Persoonsgegevens (English cookies page): "limited analytics cookies" (number of visitors, most visited pages) with no or little impact on privacy need no consent, citing Art. 11.7a; if they process personal data, a legal basis is needed and the use must be stated in the privacy statement.
 
 **Not confirmed.** No AP guidance was found specifically on non-cookie techniques; the statement that the exemption covers cookieless access rests on the statutory wording only (Inference: the exemption follows the same "opslaan van of toegang verkrijgen tot" scope as para 1). The AP page's further conditions (for example on sharing with third parties) were not read in full; one AP URL returned 404.
 
@@ -159,8 +159,8 @@ Date checked: 2026-11-12. Confidence: medium. Status: confirmed (conditions), wo
 
 **Supported claim.**
 - Cookie guide: "Çerez Uygulamaları Hakkında Rehber", KVKK Yayınları No: 69, the edition served on 2026-11-12 is dated "Temmuz 2025, Ankara". Section 4 sets Kriter A (cookie used solely to carry out communication over an electronic communications network) and Kriter B (strictly necessary for an information society service explicitly requested). Section 5 is titled "Açık rıza dışındaki diğer işleme şartları dahilinde çerez kullanım senaryoları" (cookie scenarios under processing conditions other than explicit consent). Section 5.9, "Birinci Taraf Analitik Çerezler (Kriter B)", states that first-party analytics "Kriter B kapsamında değerlendirilebileceği düşünülmektedir", provided they are used only to produce anonymous statistics and not for cross-site tracking; IP masking and not passing data to third parties are recommended. Section 6 (explicit consent scenarios) lists social plug-in tracking cookies and online behavioural advertising cookies.
-- Law No. 7499 (accepted 2 March 2024, Resmî Gazete No. 32487, 12 March 2024) amends Article 9 of Law No. 6698. New Art. 9(5): "Standart sözleşme, imzalanmasından itibaren beş iş günü içinde veri sorumlusu veya veri işleyen tarafından Kuruma bildirilir." Article 40(1)(a) of Law 7499 puts the relevant articles into force on 1 June 2024.
-- "Kişisel Verilerin Yurt Dışına Aktarılmasına İlişkin Usul ve Esaslar Hakkında Yönetmelik", Resmî Gazete 10 July 2024, No. 32598. Article 14(5): the standard contract is notified to the Authority within five business days of completion of signatures, physically, by KEP, or by other methods the Board sets.
+- Law No. 7499 (accepted 2 March 2024, Resmî Gazete No. 32487, 12 March 2024) amends Art. 9 of Law No. 6698. New Art. 9(5): "Standart sözleşme, imzalanmasından itibaren beş iş günü içinde veri sorumlusu veya veri işleyen tarafından Kuruma bildirilir." Art. 40(1)(a) of Law 7499 puts the relevant articles into force on 1 June 2024.
+- "Kişisel Verilerin Yurt Dışına Aktarılmasına İlişkin Usul ve Esaslar Hakkında Yönetmelik", Resmî Gazete 10 July 2024, No. 32598. Art. 14(5): the standard contract is notified to the Authority within five business days of completion of signatures, physically, by KEP, or by other methods the Board sets.
 - EU adequacy: the European Commission's list of adequacy decisions (17 entries) does not include Turkey.
 
 **Note.** The current official edition (July 2025) places first-party analytics under Kriter B, outside explicit consent, under conditions (anonymous statistics, no cross-site tracking). The original 2022 edition was not obtained, so this entry does not say whether it differed. Third-party analytics are not addressed as such in section 5.9.
@@ -171,7 +171,7 @@ Date checked: 2026-11-12. Confidence: medium. Status: confirmed (conditions), wo
 - https://www.resmigazete.gov.tr/eskiler/2024/07/20240710-2.htm
 - https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/adequacy-decisions_en
 
-Date checked: 2026-11-12. Confidence: high (guide text, Law 7499, Regulation, adequacy list). Status: partly confirmed (transfer rules and no-adequacy confirmed; cookie guide claim contradicted).
+Date checked: 2026-11-12. Confidence: high (guide text, Law 7499, Regulation, adequacy list). Status: confirmed (July 2025 edition of the cookie guide, transfer rules, no adequacy decision); the 2022 edition of the guide was not obtained.
 
 ---
 
@@ -212,28 +212,17 @@ Date checked: 2026-11-12. Confidence: high. Status: confirmed (order content unc
 ---
 
 <a id="S10"></a>
-## S10. GDPR Article 11 and Article 28 (Regulation (EU) 2016/679)
+## S10. GDPR Art. 11 and Art. 28 (Regulation (EU) 2016/679)
 
 **Supported claim.**
 - Art. 11(1): "If the purposes for which a controller processes personal data do not or do no longer require the identification of a data subject by the controller, the controller shall not be obliged to maintain, acquire or process additional information in order to identify the data subject for the sole purpose of complying with this Regulation."
-- Art. 11(2): where the controller can demonstrate it cannot identify the data subject, it informs the data subject if possible, and Articles 15 to 20 do not apply unless the data subject provides additional information enabling identification.
-- Art. 28(3): the contract must set out subject-matter and duration, nature and purpose, type of personal data, categories of data subjects, and the controller's obligations and rights, and must stipulate that the processor: (a) processes only on documented instructions, including on third-country transfers; (b) ensures confidentiality of authorised persons; (c) takes all measures required by Article 32; (d) respects the conditions of paras 2 and 4 for sub-processors; (e) assists with data subject requests; (f) assists with Articles 32 to 36; (g) at the controller's choice deletes or returns all personal data at the end of services; (h) makes information available and allows for and contributes to audits. The processor must immediately inform the controller if an instruction infringes data protection law. Art. 28(2) and (4) govern sub-processor authorisation and flow-down.
+- Art. 11(2): where the controller can demonstrate it cannot identify the data subject, it informs the data subject if possible, and Arts. 15 to 20 do not apply unless the data subject provides additional information enabling identification.
+- Art. 28(3): the contract must set out subject-matter and duration, nature and purpose, type of personal data, categories of data subjects, and the controller's obligations and rights, and must stipulate that the processor: (a) processes only on documented instructions, including on third-country transfers; (b) ensures confidentiality of authorised persons; (c) takes all measures required by Art. 32; (d) respects the conditions of paras 2 and 4 for sub-processors; (e) assists with data subject requests; (f) assists with Arts. 32 to 36; (g) at the controller's choice deletes or returns all personal data at the end of services; (h) makes information available and allows for and contributes to audits. The processor must immediately inform the controller if an instruction infringes data protection law. Art. 28(2) and (4) govern sub-processor authorisation and flow-down.
 
 **Sources.**
 - https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32016R0679
 
 Date checked: 2026-11-12. Confidence: high. Status: confirmed.
-
----
-
-<a id="S11"></a>
-## S11. United States and Brazil (pointer)
-
-**US (CCPA/CPRA): no opt-in for first-party analytics.** Confirmed for this service, with conditions; see S12. On 2026-11-12 the leginfo page returned HTTP 403 to a plain client; on 2026-11-13 the same sections were read through a rendering scraper, and the CPPA regulations were read on cppa.ca.gov.
-
-**Brazil (LGPD): legitimate interest available.** Confirmed for aggregate audience measurement, with conditions; see S13. Planalto still redirected on 2026-11-13; the text was read on the Câmara dos Deputados and Senado sites, and the ANPD cookie guide was read.
-
-Date checked: 2026-11-12, retried 2026-11-13. Status: superseded by S12 and S13.
 
 ---
 
@@ -259,7 +248,7 @@ Date checked: 2026-11-12, retried 2026-11-13. Status: superseded by S12 and S13.
 
 **Inference.** No opt-in is needed for this service in California. The conditions are: the tenant is a "business" under § 1798.140(d) (if not, the Act does not apply to it); the tenant gives a notice at collection; the tenant and the operator sign a contract meeting § 1798.140(ag), § 1798.100(d) and § 7051(a); and the operator does not combine data across tenants or use it for its own purposes. Honouring GPC is not required where nothing is sold or shared, but it does no harm. Whether a daily, per-site visitor hash is a "unique identifier" ((aj) requires a "persistent identifier ... over time and across different services") is an inference; this register treats the raw events as personal information.
 
-**Not read.** § 1798.130 (privacy policy contents), regulations §§ 7004 and 7011. The regulations were read in the strike-and-underline amendment text, so the exact wording of § 7050(a) and § 7051 numbering should be checked against a clean copy.
+**Not read.** § 1798.130 (privacy policy contents), regulations §§ 7004 and 7011. The regulations were read in the strike-and-underline amendment text, so the exact wording of § 7050(a) and the numbering of § 7051 are not yet checked against a clean copy.
 
 **Sources.**
 - https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=1798.100 (and the same URL with sectionNum 1798.120, 1798.121, 1798.135, 1798.140, 1798.145). Read through a rendering scraper; a plain HTTP client still gets HTTP 403.
@@ -282,7 +271,7 @@ Date checked: 2026-11-13. Confidence: high (statute), medium (regulation wording
 - ANPD, "Guia Orientativo: Cookies e Proteção de Dados Pessoais", Versão 1.0, October 2022. Scope (p. 6) includes "tecnologias similares de rastreamento". Page 24: "A utilização de cookies para fins de medição de audiência (cookies analíticos ou de medição) pode ser amparada na hipótese legal do legítimo interesse em determinados contextos ... é razoável supor que a medição de audiência constituirá um interesse legítimo do controlador, bem como que os riscos à privacidade de titulares serão de menor monta quando o tratamento se limitar à finalidade específica de identificação de padrões e tendências, com base em dados agregados e sem a combinação com outros mecanismos de rastreamento ou sem a formação de perfis de usuários." Page 23: the controller must assess, before processing, whether the data subject's rights prevail. Page 15 and page 34: browser settings do not replace "um mecanismo direto e próprio" for exercising rights, including objection.
 - ANPD, "Guia Orientativo: Hipóteses legais de tratamento de dados pessoais: Legítimo Interesse", February 2024. Page 29: legitimate interest "deve ser precedido de um teste de balanceamento", applied "para cada finalidade específica". Page 30: the test "pode ser breve ou simplificado" where low impact is clearly identified.
 
-**Inference.** Consent is not required. The basis is the tenant's (controller's) legitimate interest. The tenant should document a short balancing test, state the processing in its privacy notice, and offer a direct opt-out link. Art. 12 helps for stored aggregates but does not replace a legal basis, because collection and the daily hash are processing of personal data before aggregation.
+**Inference.** Consent is not required. The basis is the tenant's (controller's) legitimate interest. The tenant documents a short balancing test, state the processing in its privacy notice, and offer a direct opt-out link. Art. 12 helps for stored aggregates but does not replace a legal basis, because collection and the daily hash are processing of personal data before aggregation.
 
 **Not read on planalto.gov.br.** Every Planalto URL (l13709.htm, L13709compilado.htm, http and https) redirected to the gov.br home page on 2026-11-13. The text was read on the Câmara dos Deputados compiled version and checked against the Senado amendment register, which shows no amendment to Arts. 10 and 12 and none to Art. 7 IX.
 
@@ -300,14 +289,14 @@ Date checked: 2026-11-13. Confidence: high (statute and guide text), medium-high
 ## S14. EU Digital Omnibus, COM(2025) 837 (procedure 2025/0360(COD))
 
 **Supported claim.**
-- Commission proposal of 19 November 2025, registered by the Council as ST 15698/25 on 20 November 2025. Its proposed GDPR Article 88a(3)(c) allows storage or access without consent where necessary for "creating aggregated information about the usage of an online service to measure the audience of such a service, where it is carried out by the controller of that online service solely for its own use". The proposal also adds to ePrivacy Art. 5(3): "This paragraph shall not apply if the subscriber or user is a natural person, and the information stored or accessed constitutes or leads to the processing of personal data."
+- Commission proposal of 19 November 2025, registered by the Council as ST 15698/25 on 20 November 2025. Its proposed GDPR Art. 88a(3)(c) allows storage or access without consent where necessary for "creating aggregated information about the usage of an online service to measure the audience of such a service, where it is carried out by the controller of that online service solely for its own use". The proposal also adds to ePrivacy Art. 5(3): "This paragraph shall not apply if the subscriber or user is a natural person, and the information stored or accessed constitutes or leads to the processing of personal data."
 - Parliament (OEIL file 2025/0360(COD), log to 12 November 2026): referral to ITRE and LIBE jointly announced 19 January 2026; draft report PE786.818 of 22 June 2026; amendments tabled 27 July 2026. "Stage reached in procedure": "Awaiting committee decision". No committee vote, plenary position, trilogue agreement or adoption is recorded.
-- Council: Coreper agreed the mandate for negotiations with Parliament on 21 October 2026 (ST 14756/26, "Outcome of proceedings", 22 October 2026). In that mandate the GDPR lead-in reads "the following ~~articles are~~ **article is** added", and the Article 88a block is struck through. The terminal-equipment rules return to ePrivacy Art. 5(3) with a closed list of exemptions. Point (c), as extracted: "Creating anonymous aggregated information about the usage of an online service to measure the audience of that service, provided that it is carried out by the provider of the service requested by the subscriber or user, or by a third party on behalf of that provider, and the data collected for the purpose of aggregating ... are not processed for another purpose, shared with third parties or combined with data from third parties". The mandate gives Member States 24 months to transpose.
-- The separate AI omnibus, COM(2025) 836 (2025/0359(COD)), was adopted as Regulation (EU) 2026/1744 (OJ L, 24 July 2026). It amends the AI Act only and does not contain Article 88a.
+- Council: Coreper agreed the mandate for negotiations with Parliament on 21 October 2026 (ST 14756/26, "Outcome of proceedings", 22 October 2026). In that mandate the GDPR lead-in reads "the following ~~articles are~~ **article is** added", and the Art. 88a block is struck through. The terminal-equipment rules return to ePrivacy Art. 5(3) with a closed list of exemptions. Point (c), as extracted: "Creating anonymous aggregated information about the usage of an online service to measure the audience of that service, provided that it is carried out by the provider of the service requested by the subscriber or user, or by a third party on behalf of that provider, and the data collected for the purpose of aggregating ... are not processed for another purpose, shared with third parties or combined with data from third parties". The mandate gives Member States 24 months to transpose.
+- The separate AI omnibus, COM(2025) 836 (2025/0359(COD)), was adopted as Regulation (EU) 2026/1744 (OJ L, 24 July 2026). It amends the AI Act only and does not contain Art. 88a.
 
 **Status in plain words.** As of 2026-11-13 COM(2025) 837 is a proposal at first reading. It has no legal effect. National Art. 5(3) laws apply unchanged. The Council's text is a negotiating position, not law.
 
-**Not confirmed.** That the Council deleted Article 88a is read from strike-through marks in the PDF, not from a clean consolidated text (medium-high confidence). The quoted point (c) merges struck and new words in extraction; check it against the PDF. The Council press release of 21 October 2026 returned HTTP 403 and was not read. The EUR-Lex copy of the proposal did not load on 2026-11-13; the Council register copy was used.
+**Not confirmed.** That the Council deleted Art. 88a is read from strike-through marks in the PDF, not from a clean consolidated text (medium-high confidence). The quoted point (c) merges struck and new words in extraction; check it against the PDF. The Council press release of 21 October 2026 returned HTTP 403 and was not read. The EUR-Lex copy of the proposal did not load on 2026-11-13; the Council register copy was used.
 
 **Sources.**
 - https://oeil.europarl.europa.eu/oeil/en/procedure-file/pdf?reference=2025%2F0360%28COD%29
@@ -319,6 +308,7 @@ Date checked: 2026-11-13. Confidence: high (statute and guide text), medium-high
 Date checked: 2026-11-13. Confidence: high (stages, non-adoption, proposal text), medium-high (content of the Council mandate). Status: confirmed (not adopted, latest stage Council mandate of 21 October 2026, Parliament committee vote pending).
 
 ---
+
 <a id="S15"></a>
 ## S15. Austria: TKG 2021 § 165(3) and DSB FAQ
 
@@ -336,11 +326,12 @@ Date checked: 2026-11-13. Confidence: high (stages, non-adoption, proposal text)
 Date checked: 2026-11-13. Confidence: medium-high. Status: confirmed (statute and DSB FAQ); telecom authority guidance not checked.
 
 ---
+
 <a id="S16"></a>
-## S16. Belgium: Law of 30 July 2018, art. 10/2, and APD/GBA guidance
+## S16. Belgium: Law of 30 July 2018, Art. 10/2, and APD/GBA guidance
 
 **Supported claim.**
-- The rule formerly in art. 129 of the Wet elektronische communicatie is now art. 10/2 of the Loi du 30 juillet 2018 (inserted by the law of 21 December 2021, art. 256, in force 10 January 2022). Storage or access "est autorisée uniquement à condition que" the user receives clear and precise information and "ait donné son consentement". Exemption: "L'alinéa 1er ne s'applique pas à l'enregistrement technique des informations ou de l'accès ... ayant pour seul but de réaliser l'envoi d'une communication via un réseau de communications électroniques ou de fournir un service demandé expressément par l'abonné ou l'utilisateur final lorsque cela est strictement nécessaire à cet effet."
+- The rule formerly in Art. 129 of the Wet elektronische communicatie is now Art. 10/2 of the Loi du 30 juillet 2018 (inserted by the law of 21 December 2021, Art. 256, in force 10 January 2022). Storage or access "est autorisée uniquement à condition que" the user receives clear and precise information and "ait donné son consentement". Exemption: "L'alinéa 1er ne s'applique pas à l'enregistrement technique des informations ou de l'accès ... ayant pour seul but de réaliser l'envoi d'une communication via un réseau de communications électroniques ou de fournir un service demandé expressément par l'abonné ou l'utilisateur final lorsque cela est strictement nécessaire à cet effet."
 - APD/GBA cookie checklist, footnote 12, on the strictly necessary exemption: "En principe, ceci n'inclut dès lors pas le comptage des visiteurs". It notes that "Quelques contrôleurs (dans d'autres États membres)" exempt such cookies under strict conditions; the APD does not adopt that position.
 - APD/GBA citizen page on cookies: "Un cookie pour des finalités analytiques ne répond en principe donc pas à ces deux conditions. Plus précisément, ce cookie n'est pas nécessaire pour fournir un service demandé par l'utilisateur, mais uniquement pour communiquer des données statistiques au fournisseur du site Internet." The page says the rules also cover "le stockage local ou local storage".
 
@@ -352,8 +343,9 @@ Date checked: 2026-11-13. Confidence: medium-high. Status: confirmed (statute an
 Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 
 ---
+
 <a id="S17"></a>
-## S17. Bulgaria: E-Commerce Act art. 4a and CPDP guidance
+## S17. Bulgaria: E-Commerce Act Art. 4a and CPDP guidance
 
 **Supported claim.**
 - The cookie rule is in the Закон за електронната търговия (ЗЕТ), чл. 4а, not in the Electronic Communications Act (whose чл. 4а concerns spectrum). ЗЕТ чл. 4а ал. 1: the provider "съхранява информация или получава достъп до информация, съхранена в крайното устройство на получателя на услугата, при условие че: 1. [...] е предоставена ясна и изчерпателна информация по чл. 13 от Регламент (ЕС) 2016/679 [...]; 2. на получателя на услуга на информационното общество е предоставена възможност да откаже съхраняването или достъпа до информацията." (Information plus a possibility to refuse: the text reads as opt-out.) Ал. 4 exempts storage or access "необходими за: 1. предаването на съобщения по електронна съобщителна мрежа; 2. предоставяне на услуга на информационното общество, изрично поискана от получателя".
@@ -368,15 +360,16 @@ Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 Date checked: 2026-11-13. Confidence: medium. Status: partly confirmed (statute and CPDP text read; the two are inconsistent, and the anonymity condition is undefined).
 
 ---
+
 <a id="S18"></a>
-## S18. Croatia: ZEK art. 43(4) and AZOP guidance
+## S18. Croatia: ZEK Art. 43(4) and AZOP guidance
 
 **Supported claim.**
-- Zakon o elektroničkim komunikacijama (NN 76/22) art. 43(4): storage or access "dopušteno je samo u slučaju kada je taj krajnji korisnik ili korisnik dao svoju privolu, nakon što je dobio jasnu i potpunu obavijest". Exemption: "Time se ne može spriječiti tehnička pohrana podataka ili pristup podacima isključivo u svrhu obavljanja prijenosa komunikacija putem elektroničke komunikacijske mreže, ili, ako je to nužno, radi pružanja usluga informacijskog društva na izričit zahtjev krajnjeg korisnika ili korisnika." The amending act NN 45/26 does not change art. 43.
+- Zakon o elektroničkim komunikacijama (NN 76/22) Art. 43(4): storage or access "dopušteno je samo u slučaju kada je taj krajnji korisnik ili korisnik dao svoju privolu, nakon što je dobio jasnu i potpunu obavijest". Exemption: "Time se ne može spriječiti tehnička pohrana podataka ili pristup podacima isključivo u svrhu obavljanja prijenosa komunikacija putem elektroničke komunikacijske mreže, ili, ako je to nužno, radi pružanja usluga informacijskog društva na izričit zahtjev krajnjeg korisnika ili korisnika." The amending act NN 45/26 does not change Art. 43.
 - AZOP answer published 14 August 2026: "Ako se, međutim, koriste analitički, marketinški ili drugi kolačići koji nisu tehnički nužni, isti se ne smiju postaviti niti aktivirati prije nego što korisnik za njih dade valjanu privolu."
 - AZOP page on cookies lists the cookies that can be exempt, following WP29; analytics is not among them.
 
-**Not read.** NN 14/24 itself (an unofficial consolidation shows art. 43(4) unchanged).
+**Not read.** NN 14/24 itself (an unofficial consolidation shows Art. 43(4) unchanged).
 
 **Sources.**
 - https://narodne-novine.nn.hr/clanci/sluzbeni/2022_07_76_1116.html
@@ -387,12 +380,13 @@ Date checked: 2026-11-13. Confidence: medium. Status: partly confirmed (statute 
 Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 
 ---
+
 <a id="S19"></a>
-## S19. Cyprus: Law 112(I)/2004 art. 99(5) and Commissioner guidance
+## S19. Cyprus: Law 112(I)/2004 Art. 99(5) and Commissioner guidance
 
 **Supported claim.**
 - Ν. 112(Ι)/2004 άρθρο 99(5): storage or access "επιτρέπεται μόνον εάν ο συγκεκριμένος συνδρομητής ή χρήστης έχει δώσει τη συγκατάθεσή του". Exemption for transmission or where "απολύτως αναγκαία" for a service the user explicitly requested.
-- Commissioner for Personal Data Protection, "Cookies", published 13 October 2025: "Τα cookies τα οποία παρέχουν στατιστικά δεδομένα σχετικά με την επισκεψιμότητα της σελίδας (analytics) ... δεν εξαιρούνται από την υποχρέωση λήψης συγκατάθεσης καθώς αυτά δεν «απολύτως απαραίτητα», αφού ο χρήστης μπορεί να λάβει όλες τις υπηρεσίες της ιστοσελίδας και χωρίς αυτά." (Analytics cookies are not exempt from consent.) The page confirms the rule is in art. 99(5).
+- Commissioner for Personal Data Protection, "Cookies", published 13 October 2025: "Τα cookies τα οποία παρέχουν στατιστικά δεδομένα σχετικά με την επισκεψιμότητα της σελίδας (analytics) ... δεν εξαιρούνται από την υποχρέωση λήψης συγκατάθεσης καθώς αυτά δεν «απολύτως απαραίτητα», αφού ο χρήστης μπορεί να λάβει όλες τις υπηρεσίες της ιστοσελίδας και χωρίς αυτά." (Analytics cookies are not exempt from consent.) The page confirms the rule is in Art. 99(5).
 
 **Caveat.** The statute was read on CyLaw, run by the Cyprus Bar Association, not a government portal. The Commissioner's page confirms the article number and the rule.
 
@@ -403,6 +397,7 @@ Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 Date checked: 2026-11-13. Confidence: high. Status: confirmed (rule via the Commissioner; statute text via CyLaw).
 
 ---
+
 <a id="S20"></a>
 ## S20. Czechia: Act 127/2005 § 89(3) and ÚOOÚ guidance
 
@@ -418,6 +413,7 @@ Date checked: 2026-11-13. Confidence: high. Status: confirmed (rule via the Comm
 Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 
 ---
+
 <a id="S21"></a>
 ## S21. Denmark: cookiebekendtgørelsen and joint DIGST/Datatilsynet guidance
 
@@ -433,6 +429,7 @@ Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 
 ---
+
 <a id="S22"></a>
 ## S22. Estonia: ESS § 102 and AKI guidance
 
@@ -450,6 +447,7 @@ Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 Date checked: 2026-11-13. Confidence: medium. Status: partly confirmed (AKI position confirmed; statutory mapping unclear).
 
 ---
+
 <a id="S23"></a>
 ## S23. Finland: Act on Electronic Communications Services 917/2014 § 205 and Traficom guidance
 
@@ -465,11 +463,12 @@ Date checked: 2026-11-13. Confidence: medium. Status: partly confirmed (AKI posi
 Date checked: 2026-11-13. Confidence: medium. Status: confirmed.
 
 ---
+
 <a id="S24"></a>
-## S24. Greece: Law 3471/2006 art. 4(5) and Hellenic DPA Recommendations 1/2020
+## S24. Greece: Law 3471/2006 Art. 4(5) and Hellenic DPA Recommendations 1/2020
 
 **Supported claim.**
-- Ν. 3471/2006 art. 4(5), as replaced by art. 170 of Ν. 4070/2012: storage or access "επιτρέπεται μόνο αν ο συγκεκριμένος συνδρομητής ή χρήστης έχει δώσει τη συγκατάθεσή του μετά από σαφή και εκτενή ενημέρωση". Exemption for transmission or storage or access "η οποία είναι αναγκαία για την παροχή υπηρεσίας της κοινωνίας της πληροφορίας, την οποία έχει ζητήσει ρητά ο χρήστης ή ο συνδρομητής".
+- Ν. 3471/2006 Art. 4(5), as replaced by Art. 170 of Ν. 4070/2012: storage or access "επιτρέπεται μόνο αν ο συγκεκριμένος συνδρομητής ή χρήστης έχει δώσει τη συγκατάθεσή του μετά από σαφή και εκτενή ενημέρωση". Exemption for transmission or storage or access "η οποία είναι αναγκαία για την παροχή υπηρεσίας της κοινωνίας της πληροφορίας, την οποία έχει ζητήσει ρητά ο χρήστης ή ο συνδρομητής".
 - Hellenic DPA Recommendations 1/2020 (25 February 2020): scope includes "τοπικό αποθηκευτικό χώρο (local storage)" and fingerprinting. A.1: "Για την τοποθέτηση ενός ιχνηλάτη σε τερματική συσκευή απαιτείται κατ' αρχήν η συγκατάθεση του χρήστη, ανεξάρτητα αν μέσω αυτού πραγματοποιείται τελικά επεξεργασία προσωπικών δεδομένων." A.2 lists technically necessary trackers; analytics is not among them. A.4: "Η χρήση ιχνηλατών τρίτων, όπως η υπηρεσία Google Analytics με σκοπό την στατιστική ανάλυση (web analytics), μπορεί να γίνει μόνο κατόπιν συγκατάθεσης του χρήστη".
 
 **Not confirmed.** The statute was read in the DPA's 2019 consolidation; later amendments in the Government Gazette were not checked. A.4 is worded for third-party trackers; the DPA does not address first-party or processor-run aggregate analytics expressly.
@@ -482,6 +481,7 @@ Date checked: 2026-11-13. Confidence: medium. Status: confirmed.
 Date checked: 2026-11-13. Confidence: medium. Status: partly confirmed (statute current to 2019 only).
 
 ---
+
 <a id="S25"></a>
 ## S25. Hungary: Eht. § 155(4) and NAIH guidance
 
@@ -498,8 +498,9 @@ Date checked: 2026-11-13. Confidence: medium. Status: partly confirmed (statute 
 Date checked: 2026-11-13. Confidence: medium. Status: partly confirmed.
 
 ---
+
 <a id="S26"></a>
-## S26. Iceland: Electronic Communications Act 70/2022 art. 88(2) and Fjarskiptastofa decision 14/2024
+## S26. Iceland: Electronic Communications Act 70/2022 Art. 88(2) and Fjarskiptastofa decision 14/2024
 
 **Supported claim.**
 - Lög um fjarskipti nr. 70/2022, 88. gr. 2. mgr., as enacted (Stjórnartíðindi A, 12 July 2022): use of systems that store or access information in the user's terminal "er óheimil nema samkvæmt upplýstu samþykki notanda eða samkvæmt heimild í lögum. Þrátt fyrir þetta er notkun slíks búnaðar heimil til að fá aðgang að upplýsingum og/eða til tæknilegrar geymslu í lögmætum tilgangi og með vitund hlutaðeigandi notanda."
@@ -516,6 +517,7 @@ Date checked: 2026-11-13. Confidence: medium. Status: partly confirmed.
 Date checked: 2026-11-13. Confidence: medium. Status: partly confirmed (enacted text and regulator reading confirmed; current consolidation not read).
 
 ---
+
 <a id="S27"></a>
 ## S27. Ireland: S.I. 336/2011 reg. 5 and DPC guidance
 
@@ -536,8 +538,9 @@ Date checked: 2026-11-13. Confidence: medium. Status: partly confirmed (enacted 
 Date checked: 2026-11-13. Confidence: high. Status: confirmed (amendment status unverified).
 
 ---
+
 <a id="S28"></a>
-## S28. Latvia: Information Society Services Law art. 7.1 and DVI guidance
+## S28. Latvia: Information Society Services Law Art. 7.1 and DVI guidance
 
 **Supported claim.**
 - Informācijas sabiedrības pakalpojumu likums, 7.¹ pants (version in force 21 June 2024 to 30 November 2026; unchanged in the version from 1 December 2026). (1): storage or access "ir atļauta, ja attiecīgais abonents vai lietotājs ir devis savu piekrišanu". (2): consent is not needed where storage or access "ir nepieciešama informācijas aprites nodrošināšanai elektronisko sakaru tīklā vai starpniecības pakalpojumu sniedzējam, lai sniegtu abonenta vai lietotāja pieprasīto pakalpojumu".
@@ -553,12 +556,13 @@ Date checked: 2026-11-13. Confidence: high. Status: confirmed (amendment status 
 Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 
 ---
+
 <a id="S29"></a>
-## S29. Liechtenstein: KomG art. 61(4) and Datenschutzstelle guidance
+## S29. Liechtenstein: KomG Art. 61(4) and Datenschutzstelle guidance
 
 **Supported claim.**
-- Kommunikationsgesetz (LGBl. 2023 Nr. 216, LR 784.10) art. 61(4), in force 1 February 2025: storage or access "sind nur zulässig, wenn der Nutzer auf der Grundlage von klaren und umfassenden Informationen eingewilligt hat". Consent is not needed for transmission or where storage or access "unbedingt erforderlich ist, damit der Diensteanbieter einen vom Nutzer ausdrücklich gewünschten audiovisuellen Mediendienst zur Verfügung stellen kann". (The official text says "audiovisuellen Mediendienst"; the Datenschutzstelle paraphrases it as a requested "Dienst".)
-- Datenschutzstelle: the DSS "schliesst sich der grosszügigeren Auslegung der Behörden etwa aus Frankreich und Italien an" and allows, under strict conditions, cookies "und vergleichbaren Technologien für den alleinigen Zweck der Erstellung von ... einfachen Webanalysen und Besucherstatistiken auch ohne die Einholung einer ausdrücklichen Einwilligung". Its cookie page: such use falls under the art. 61(4)(b) exemption "und es ist entsprechend nur eine Information, aber keine Einwilligung (Cookie-Banner) der Betroffenen erforderlich" where the conditions are met. Conditions: purpose solely the controller's visitor measurement, no "eigene Zwecke des Auftragsverarbeiters"; data only for anonymised statistics of one website; no matching, linking or passing on to third parties in non-anonymised form; no tracking across sites; information to users; limited storage periods; a GDPR Art. 21 objection right. A processor must keep each customer's data separate and "keine eindeutig zuordenbaren Identifikatoren pro Betroffenen verwenden".
+- Kommunikationsgesetz (LGBl. 2023 Nr. 216, LR 784.10) Art. 61(4), in force 1 February 2025: storage or access "sind nur zulässig, wenn der Nutzer auf der Grundlage von klaren und umfassenden Informationen eingewilligt hat". Consent is not needed for transmission or where storage or access "unbedingt erforderlich ist, damit der Diensteanbieter einen vom Nutzer ausdrücklich gewünschten audiovisuellen Mediendienst zur Verfügung stellen kann". (The official text says "audiovisuellen Mediendienst"; the Datenschutzstelle paraphrases it as a requested "Dienst".)
+- Datenschutzstelle: the DSS "schliesst sich der grosszügigeren Auslegung der Behörden etwa aus Frankreich und Italien an" and allows, under strict conditions, cookies "und vergleichbaren Technologien für den alleinigen Zweck der Erstellung von ... einfachen Webanalysen und Besucherstatistiken auch ohne die Einholung einer ausdrücklichen Einwilligung". Its cookie page: such use falls under the Art. 61(4)(b) exemption "und es ist entsprechend nur eine Information, aber keine Einwilligung (Cookie-Banner) der Betroffenen erforderlich" where the conditions are met. Conditions: purpose solely the controller's visitor measurement, no "eigene Zwecke des Auftragsverarbeiters"; data only for anonymised statistics of one website; no matching, linking or passing on to third parties in non-anonymised form; no tracking across sites; information to users; limited storage periods; a GDPR Art. 21 objection right. A processor must keep each customer's data separate and "keine eindeutig zuordenbaren Identifikatoren pro Betroffenen verwenden".
 
 **Note.** The last condition needs checking against the daily visitor hash, which identifies one visitor on one site for one day.
 
@@ -570,11 +574,12 @@ Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 Date checked: 2026-11-13. Confidence: high (regulator position), medium (statute wording). Status: confirmed.
 
 ---
+
 <a id="S30"></a>
-## S30. Lithuania: Electronic Communications Law art. 73(4) and VDAI summary
+## S30. Lithuania: Electronic Communications Law Art. 73(4) and VDAI summary
 
 **What the leads say (not primary).**
-- Elektroninių ryšių įstatymas Nr. IX-2135, art. 73(4) (formerly 61(3)), as shown on an unofficial mirror: storage or access "leidžiama tik su sąlyga, jeigu ... davė tam sutikimą", with exemptions for transmission and "būtinais atvejais" for an information society service ordered by the user.
+- Elektroninių ryšių įstatymas Nr. IX-2135, Art. 73(4) (formerly 61(3)), as shown on an unofficial mirror: storage or access "leidžiama tik su sąlyga, jeigu ... davė tam sutikimą", with exemptions for transmission and "būtinais atvejais" for an information society service ordered by the user.
 - VDAI "Slapukų naudojimo praktikos apibendrinimas" (2025), as read on a third-party copy: "prieš svetainėje įgalinant bet kokios rūšies (išskyrus būtinuosius) slapukų veikimą būtina gauti svetainės lankytojo sutikimą". It classes statistics cookies as non-necessary.
 
 **Unconfirmed.** Every official route (e-tar.lt, e-seimas.lrs.lt, vdai.lrv.lt) returned HTTP 403 or a bot challenge on 2026-11-13. The RRT page on cookies did not render. The wording above therefore comes from non-official copies and is not relied on.
@@ -588,11 +593,12 @@ Date checked: 2026-11-13. Confidence: high (regulator position), medium (statute
 Date checked: 2026-11-13. Confidence: low. Status: unconfirmed (official sources unreachable).
 
 ---
+
 <a id="S31"></a>
-## S31. Luxembourg: law of 30 May 2005 art. 4(3)(e) and CNPD guidelines
+## S31. Luxembourg: law of 30 May 2005 Art. 4(3)(e) and CNPD guidelines
 
 **Supported claim.**
-- Loi modifiée du 30 mai 2005, art. 4(3)(e) (consolidated version applicable at 25 December 2020; no later amending act found): storage or access only "à condition que l'abonné ou l'utilisateur ait donné son accord, après avoir reçu une information claire et complète". Exemption for transmission or storage or access "strictement nécessaires au fournisseur pour la fourniture d'un service de la société de l'information expressément demandé". Art. 4(4) makes breach a criminal offence.
+- Loi modifiée du 30 mai 2005, Art. 4(3)(e) (consolidated version applicable at 25 December 2020; no later amending act found): storage or access only "à condition que l'abonné ou l'utilisateur ait donné son accord, après avoir reçu une information claire et complète". Exemption for transmission or storage or access "strictement nécessaires au fournisseur pour la fourniture d'un service de la société de l'information expressément demandé". Art. 4(4) makes breach a criminal offence.
 - CNPD "Lignes directrices en matière de cookies et autres traceurs", version of 3 January 2022. Statistics: consent needed, "sauf exceptions": although first-party analytics "ne posent pas de risques importants", "il est néanmoins nécessaire que l'exploitant du site obtienne le consentement". Exception: "dans les cas où l'exploitant du site serait en mesure de démontrer que l'utilisation de certains cookies analytiques sont nécessaires à la fourniture du service (par exemple, parce qu'ils sont nécessaires à l'évaluation des capacités serveurs nécessaires ou à la détection de problèmes de navigation), ceux-ci pourraient être exemptés de consentement", if the data "ne sont pas transmises à des tiers ni recoupées avec d'autres traitements, ne permettent pas un suivi global de la navigation ..., sont collectées pour le compte exclusif de l'éditeur du site et servent à produire des statistiques anonymes uniquement". The same regime applies to other trackers.
 
 **Sources.**
@@ -602,6 +608,7 @@ Date checked: 2026-11-13. Confidence: low. Status: unconfirmed (official sources
 Date checked: 2026-11-13. Confidence: medium. Status: confirmed (statute current to the 2020 consolidation).
 
 ---
+
 <a id="S32"></a>
 ## S32. Malta: S.L. 586.01 reg. 5 and IDPC guidance
 
@@ -617,6 +624,7 @@ Date checked: 2026-11-13. Confidence: medium. Status: confirmed (statute current
 Date checked: 2026-11-13. Confidence: medium. Status: partly confirmed (statute confirmed; no IDPC statement on analytics).
 
 ---
+
 <a id="S33"></a>
 ## S33. Norway: ekomloven § 3-15 and Nkom guidance
 
@@ -633,11 +641,12 @@ Date checked: 2026-11-13. Confidence: medium. Status: partly confirmed (statute 
 Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 
 ---
+
 <a id="S34"></a>
-## S34. Poland: Electronic Communications Law of 12 July 2024 art. 399 and UODO
+## S34. Poland: Electronic Communications Law of 12 July 2024 Art. 399 and UODO
 
 **Supported claim.**
-- Prawo komunikacji elektronicznej (Dz.U. 2024 poz. 1221) art. 399 ust. 1: storage or access "jest dozwolone, pod warunkiem że: 1) abonent lub użytkownik końcowy zostanie uprzednio poinformowany [...]; 2) [...] wyrazi na to zgodę". Ust. 3: the conditions do not apply where storage or access "jest konieczne do: 1) wykonania transmisji komunikatu elektronicznego [...] lub 2) dostarczania usługi telekomunikacyjnej lub usługi świadczonej drogą elektroniczną, żądanej przez abonenta lub użytkownika końcowego." The Sejm ELI API lists the act as in force with five amending acts (2025/637, 2025/820, 2026/252, 2026/815, 2026/1296); none amends art. 399.
+- Prawo komunikacji elektronicznej (Dz.U. 2024 poz. 1221) Art. 399 ust. 1: storage or access "jest dozwolone, pod warunkiem że: 1) abonent lub użytkownik końcowy zostanie uprzednio poinformowany [...]; 2) [...] wyrazi na to zgodę". Ust. 3: the conditions do not apply where storage or access "jest konieczne do: 1) wykonania transmisji komunikatu elektronicznego [...] lub 2) dostarczania usługi telekomunikacyjnej lub usługi świadczonej drogą elektroniczną, żądanej przez abonenta lub użytkownika końcowego." The Sejm ELI API lists the act as in force with five amending acts (2025/637, 2025/820, 2026/252, 2026/815, 2026/1296); none amends Art. 399.
 - UODO Biuletyn, 31 March 2025: "użytkownik musi wyrazić świadomą i jednoznaczną zgodę na stosowanie plików cookies, w szczególności tych wykorzystywanych w celach marketingowych i analitycznych."
 
 **Not found.** UKE guidance on cookies. isap.sejm.gov.pl blocked automated access; the official journal PDF and the Sejm ELI API were used.
@@ -650,11 +659,12 @@ Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 
 ---
+
 <a id="S35"></a>
-## S35. Portugal: Lei 41/2004 art. 5 and CNPD note
+## S35. Portugal: Lei 41/2004 Art. 5 and CNPD note
 
 **Supported claim.**
-- Lei 41/2004 art. 5 (as republished by Lei 46/2012, DR 1.ª série n.º 167, 29 August 2012). (1): storage or access "apenas são permitidos se estes tiverem dado o seu consentimento prévio, com base em informações claras e completas". (2) exempts storage or access "a) Que tenha como única finalidade transmitir uma comunicação através de uma rede de comunicações eletrónicas; b) Estritamente necessário ao fornecedor para fornecer um serviço da sociedade de informação solicitado expressamente pelo assinante ou utilizador."
+- Lei 41/2004 Art. 5 (as republished by Lei 46/2012, DR 1.ª série n.º 167, 29 August 2012). (1): storage or access "apenas são permitidos se estes tiverem dado o seu consentimento prévio, com base em informações claras e completas". (2) exempts storage or access "a) Que tenha como única finalidade transmitir uma comunicação através de uma rede de comunicações eletrónicas; b) Estritamente necessário ao fornecedor para fornecer um serviço da sociedade de informação solicitado expressamente pelo assinante ou utilizador."
 - CNPD "Nota informativa" on cookies (25 June 2021): website owners must obtain consent "quando tal se impõe, como é o caso de cookies para fins de analítica, nos termos do artigo 5.º da Lei 41/2004".
 
 **Not confirmed.** The consolidated text on diariodarepublica.pt did not render, so amendments after 2012 are not ruled out.
@@ -666,14 +676,15 @@ Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 Date checked: 2026-11-13. Confidence: high. Status: partly confirmed (statute current to 2012 republication).
 
 ---
+
 <a id="S36"></a>
-## S36. Romania: Law 506/2004 art. 4(5) and (6), and ANSPDCP enforcement
+## S36. Romania: Law 506/2004 Art. 4(5) and (6), and ANSPDCP enforcement
 
 **Supported claim.**
-- Legea 506/2004 art. 4(5) (as amended by OUG 13/2012): storage or access "este permisă numai cu îndeplinirea în mod cumulativ a următoarelor condiţii: a) abonatul sau utilizatorul în cauză şi-a exprimat acordul; b) [...] i s-au furnizat, anterior exprimării acordului, [...] informaţii clare şi complete". Art. 4(6) exempts operations "realizate exclusiv în scopul efectuării transmisiei unei comunicări" and those "strict necesare în vederea furnizării unui serviciu al societăţii informaţionale, solicitat în mod expres de către abonat sau utilizator".
+- Legea 506/2004 Art. 4(5) (as amended by OUG 13/2012): storage or access "este permisă numai cu îndeplinirea în mod cumulativ a următoarelor condiţii: a) abonatul sau utilizatorul în cauză şi-a exprimat acordul; b) [...] i s-au furnizat, anterior exprimării acordului, [...] informaţii clare şi complete". Art. 4(6) exempts operations "realizate exclusiv în scopul efectuării transmisiei unei comunicări" and those "strict necesare în vederea furnizării unui serviciu al societăţii informaţionale, solicitat în mod expres de către abonat sau utilizator".
 - ANSPDCP press release of 14 October 2025 (CORAL TRAVEL): the operator stored "module cookies care nu erau necesare din punct de vedere tehnic [...] fără obținerea acordului utilizatorului"; it was ordered to configure the site so that "cookie-urile nenecesare să nu fie plasate înainte de obținerea consimțământului valabil".
 
-**Not confirmed.** legislatie.just.ro failed (protocol and TLS errors). The text was read in the consolidated copy hosted by ANSPDCP (amendments up to Legea 235/2015). The Chamber of Deputies register (not an official text) lists no later change to art. 4(5) and (6). No ANSPDCP guidance specific to analytics was found.
+**Not confirmed.** legislatie.just.ro failed (protocol and TLS errors). The text was read in the consolidated copy hosted by ANSPDCP (amendments up to Legea 235/2015). The Chamber of Deputies register (not an official text) lists no later change to Art. 4(5) and (6). No ANSPDCP guidance specific to analytics was found.
 
 **Sources.**
 - https://www.dataprotection.ro/servlet/ViewDocument?id=859
@@ -683,6 +694,7 @@ Date checked: 2026-11-13. Confidence: high. Status: partly confirmed (statute cu
 Date checked: 2026-11-13. Confidence: medium-high. Status: partly confirmed.
 
 ---
+
 <a id="S37"></a>
 ## S37. Slovakia: Act 452/2021 § 109(8) and ÚRSO/ÚOOÚ opinion
 
@@ -697,14 +709,15 @@ Date checked: 2026-11-13. Confidence: medium-high. Status: partly confirmed.
 Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 
 ---
+
 <a id="S38"></a>
-## S38. Slovenia: ZEKom-2 art. 225 and Information Commissioner
+## S38. Slovenia: ZEKom-2 Art. 225 and Information Commissioner
 
 **Supported claim.**
-- ZEKom-2 (Uradni list RS 130/22), art. 225(1): storage or access "je dovoljeno samo pod pogojem, da je naročnik ali uporabnik v to privolil potem, ko je bil predhodno jasno in izčrpno obveščen". (2) exempts transmission and storage or access "nujno potrebno za zagotovitev storitve informacijske družbe, ki jo naročnik ali uporabnik izrecno zahtevata". (5): the Informacijski pooblaščenec supervises the article. The PISRS consolidation (to 40/25) has the same wording.
-- Information Commissioner opinion 07121-1/2022/1301 (28 November 2022): "Za spletno analitiko niso določene izjeme, zato velja zahteva po privolitvi in se ni primerno zanašati na legitimen interes." Cookie FAQ: fingerprinting used "za namen izdelave analitike" needs "vnaprejšnja informirana privolitev ... enako kot pri uporabi piškotkov", unless one of the art. 225 exemptions applies.
+- ZEKom-2 (Uradni list RS 130/22), Art. 225(1): storage or access "je dovoljeno samo pod pogojem, da je naročnik ali uporabnik v to privolil potem, ko je bil predhodno jasno in izčrpno obveščen". (2) exempts transmission and storage or access "nujno potrebno za zagotovitev storitve informacijske družbe, ki jo naročnik ali uporabnik izrecno zahtevata". (5): the Informacijski pooblaščenec supervises the article. The PISRS consolidation (to 40/25) has the same wording.
+- Information Commissioner opinion 07121-1/2022/1301 (28 November 2022): "Za spletno analitiko niso določene izjeme, zato velja zahteva po privolitvi in se ni primerno zanašati na legitimen interes." Cookie FAQ: fingerprinting used "za namen izdelave analitike" needs "vnaprejšnja informirana privolitev ... enako kot pri uporabi piškotkov", unless one of the Art. 225 exemptions applies.
 
-**Caveat.** ip-rs.si returned HTTP 403; both IP-RS pages were read through Internet Archive captures of the official URLs (2 July 2025 and 17 October 2026). The 2022 opinion carries a banner that it may no longer be current, but it applies ZEKom-2 art. 225.
+**Caveat.** ip-rs.si returned HTTP 403; both IP-RS pages were read through Internet Archive captures of the official URLs (2 July 2025 and 17 October 2026). The 2022 opinion carries a banner that it may no longer be current, but it applies ZEKom-2 Art. 225.
 
 **Sources.**
 - https://www.uradni-list.si/glasilo-uradni-list-rs/vsebina/2022-01-3081
@@ -715,12 +728,13 @@ Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 Date checked: 2026-11-13. Confidence: high. Status: confirmed (regulator pages via archive copies).
 
 ---
+
 <a id="S39"></a>
-## S39. Spain: LSSI art. 22.2 and AEPD audience measurement guide
+## S39. Spain: LSSI Art. 22.2 and AEPD audience measurement guide
 
 **Supported claim.**
-- Ley 34/2002 (LSSI) art. 22.2 (BOE consolidated text, last update 23 January 2025): storage and retrieval devices may be used "a condición de que los mismos hayan dado su consentimiento después de que se les haya facilitado información clara y completa". Exemption: "Lo anterior no impedirá el posible almacenamiento o acceso de índole técnica al solo fin de efectuar la transmisión de una comunicación ... o, en la medida que resulte estrictamente necesario, para la prestación de un servicio de la sociedad de la información expresamente solicitado por el destinatario."
-- AEPD "Uso de cookies para herramientas de medición de audiencia" (January 2024): audience measurement cookies "o tecnologías similares" can be exempt under art. 22.2 if they "deben tener una finalidad estrictamente limitada a la medición exclusiva de la audiencia del sitio o de la aplicación. Este tratamiento ha de ser realizado en nombre exclusivo del editor y ser utilizadas para producir datos estadísticos anónimos únicamente." They must not lead to data being "cotejen con otras operaciones de tratamiento" or "se transmitan a terceros", and "se excluye cualquier solución que utilice el mismo identificador en varios sitios". Allowed measurements include page-by-page audience, referrer "por página y agregada diariamente", "tipo de dispositivo, navegador y tamaño de pantalla ... agregados diariamente" and geographic area aggregated daily; "cualquier otro tratamiento de los datos más allá de estos listados ... ha de contar con el consentimiento". Safeguards: inform users; tracker lifetime of about 13 months that "no se extenderá automáticamente en nuevas visitas"; keep data at most 25 months; review periodically. A multi-publisher provider must ensure "Los datos se recopilan, procesan y almacenan de forma independiente para cada editor", under an Art. 28 GDPR contract with no reuse.
+- Ley 34/2002 (LSSI) Art. 22.2 (BOE consolidated text, last update 23 January 2025): storage and retrieval devices may be used "a condición de que los mismos hayan dado su consentimiento después de que se les haya facilitado información clara y completa". Exemption: "Lo anterior no impedirá el posible almacenamiento o acceso de índole técnica al solo fin de efectuar la transmisión de una comunicación ... o, en la medida que resulte estrictamente necesario, para la prestación de un servicio de la sociedad de la información expresamente solicitado por el destinatario."
+- AEPD "Uso de cookies para herramientas de medición de audiencia" (January 2024): audience measurement cookies "o tecnologías similares" can be exempt under Art. 22.2 if they "deben tener una finalidad estrictamente limitada a la medición exclusiva de la audiencia del sitio o de la aplicación. Este tratamiento ha de ser realizado en nombre exclusivo del editor y ser utilizadas para producir datos estadísticos anónimos únicamente." They must not lead to data being "cotejen con otras operaciones de tratamiento" or "se transmitan a terceros", and "se excluye cualquier solución que utilice el mismo identificador en varios sitios". Allowed measurements include page-by-page audience, referrer "por página y agregada diariamente", "tipo de dispositivo, navegador y tamaño de pantalla ... agregados diariamente" and geographic area aggregated daily; "cualquier otro tratamiento de los datos más allá de estos listados ... ha de contar con el consentimiento". Safeguards: inform users; tracker lifetime of about 13 months that "no se extenderá automáticamente en nuevas visitas"; keep data at most 25 months; review periodically. A multi-publisher provider must ensure "Los datos se recopilan, procesan y almacenan de forma independiente para cada editor", under an Art. 28 GDPR contract with no reuse.
 - AEPD "Guía sobre el uso de las cookies" (May 2024), Annex II, refers to the audience measurement guide.
 
 **Note.** "Language" is not in the AEPD list of allowed measurements. The AEPD requires anonymous statistics only; the service's exact counts and its session lists raise the same point as for France (S2, `privacy-strategy.md` section 9).
@@ -733,6 +747,7 @@ Date checked: 2026-11-13. Confidence: high. Status: confirmed (regulator pages v
 Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 
 ---
+
 <a id="S40"></a>
 ## S40. Sweden: Electronic Communications Act (2022:482) ch. 9 § 28 and PTS guidance
 
@@ -757,40 +772,39 @@ Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 | S1 | EDPB Guidelines 2/2023 v2.0 scope, JavaScript instruction is access | Confirmed | High |
 | S2 | CNIL audience measurement exemption, tool, non-cookie scope | Confirmed | High (conditions) |
 | S3 | UK DUAA 2025 s.112 / Sch. 12, in force 5 Feb 2026, ICO guidance | Confirmed | High |
-| S4 | Germany § 25 TDDDG, DSK on reach measurement, reform | Confirmed (law, DSK); reform status partly confirmed | High (law, DSK), low (Omnibus status) |
-| S5 | Netherlands Tw art. 11.7a low-impact analytics | Partly confirmed (AP guidance on non-cookie not found) | High (statute), medium (AP) |
+| S4 | Germany § 25 TDDDG, DSK on reach measurement, reform | Confirmed (law, DSK); Omnibus confirmed as a proposal not adopted (S14) | High |
+| S5 | Netherlands Tw Art. 11.7a low-impact analytics | Partly confirmed (AP guidance on non-cookie not found) | High (statute), medium (AP) |
 | S6 | Italy Garante 10 June 2021 analytics conditions | Confirmed, wording to recheck | Medium |
-| S7 | Turkey cookie guide, Law 7499, 2024 Regulation, no EU adequacy | Partly confirmed; cookie claim contradicted | High |
+| S7 | Turkey cookie guide (July 2025: first-party analytics under Kriter B), Law 7499, 2024 Regulation, no EU adequacy | Confirmed (2022 edition of the guide not obtained) | High |
 | S8 | CJEU C-413/23 P EDPS v SRB | Confirmed (application is inference) | High |
 | S9 | Latombe T-553/23 and appeal C-703/25 P | Confirmed (pending; order of 4 June 2026 not read) | High |
 | S10 | GDPR Art. 11 and Art. 28 | Confirmed | High |
-| S11 | United States and Brazil (pointer) | Superseded by S12 and S13 | See S12, S13 |
 | S12 | California CCPA/CPRA: opt-out regime, analytics by a service provider is a business purpose | Confirmed (statute); partly confirmed (regulation wording) | High (statute), medium (regulations) |
 | S13 | Brazil LGPD Arts. 7, 10, 12 and ANPD cookie guide: legitimate interest for aggregate audience measurement | Confirmed (Planalto unreachable, Câmara and Senado used) | High (text), medium-high (application) |
 | S14 | EU Digital Omnibus COM(2025) 837: not adopted, Council mandate 21 Oct 2026, EP committee vote pending | Confirmed | High (stage), medium-high (mandate content) |
 | S15 | Austria TKG 2021 § 165(3), DSB: analytics needs consent | Confirmed (telecom authority guidance not checked) | Medium-high |
-| S16 | Belgium law of 30 July 2018 art. 10/2, APD: analytics needs consent | Confirmed | High |
-| S17 | Bulgaria ZET art. 4a (opt-out wording), CPDP: consent unless anonymised and not shared | Partly confirmed (statute and guidance inconsistent) | Medium |
-| S18 | Croatia ZEK art. 43(4), AZOP: analytics needs consent | Confirmed | High |
-| S19 | Cyprus Law 112(I)/2004 art. 99(5), Commissioner: analytics needs consent | Confirmed | High |
+| S16 | Belgium law of 30 July 2018 Art. 10/2, APD: analytics needs consent | Confirmed | High |
+| S17 | Bulgaria ZET Art. 4a (opt-out wording), CPDP: consent unless anonymised and not shared | Partly confirmed (statute and guidance inconsistent) | Medium |
+| S18 | Croatia ZEK Art. 43(4), AZOP: analytics needs consent | Confirmed | High |
+| S19 | Cyprus Law 112(I)/2004 Art. 99(5), Commissioner: analytics needs consent | Confirmed | High |
 | S20 | Czechia Act 127/2005 § 89(3), ÚOOÚ: analytics needs consent | Confirmed | High |
 | S21 | Denmark BEK 1148/2011, DIGST and Datatilsynet: statistics need consent | Confirmed | High |
 | S22 | Estonia ESS § 102, AKI: identifying analytics need consent | Partly confirmed (statutory mapping unclear) | Medium |
 | S23 | Finland Act 917/2014 § 205, Traficom: analytics only exceptionally necessary | Confirmed | Medium |
-| S24 | Greece Law 3471/2006 art. 4(5), DPA 1/2020: consent in principle | Partly confirmed (statute current to 2019) | Medium |
+| S24 | Greece Law 3471/2006 Art. 4(5), DPA 1/2020: consent in principle | Partly confirmed (statute current to 2019) | Medium |
 | S25 | Hungary Eht. § 155(4), NAIH 2017: consent, no analytics exemption | Partly confirmed | Medium |
-| S26 | Iceland Act 70/2022 art. 88(2), Fjarskiptastofa 14/2024: narrow reading | Partly confirmed (current consolidation not read) | Medium |
+| S26 | Iceland Act 70/2022 Art. 88(2), Fjarskiptastofa 14/2024: narrow reading | Partly confirmed (current consolidation not read) | Medium |
 | S27 | Ireland S.I. 336/2011 reg. 5, DPC: analytics needs consent | Confirmed (amendments unverified) | High |
-| S28 | Latvia ISPL art. 7.1, DVI: analytics needs consent | Confirmed | High |
-| S29 | Liechtenstein KomG art. 61(4), Datenschutzstelle: simple analytics without consent under conditions | Confirmed | High (regulator), medium (statute) |
-| S30 | Lithuania ERI art. 73(4), VDAI | Unconfirmed (official sources returned 403) | Low |
-| S31 | Luxembourg law of 30 May 2005 art. 4(3)(e), CNPD: consent unless necessity shown | Confirmed | Medium |
+| S28 | Latvia ISPL Art. 7.1, DVI: analytics needs consent | Confirmed | High |
+| S29 | Liechtenstein KomG Art. 61(4), Datenschutzstelle: simple analytics without consent under conditions | Confirmed | High (regulator), medium (statute) |
+| S30 | Lithuania ERI Art. 73(4), VDAI | Unconfirmed (official sources returned 403) | Low |
+| S31 | Luxembourg law of 30 May 2005 Art. 4(3)(e), CNPD: consent unless necessity shown | Confirmed | Medium |
 | S32 | Malta S.L. 586.01 reg. 5, IDPC | Partly confirmed (IDPC silent on analytics) | Medium |
 | S33 | Norway ekomloven § 3-15, Nkom: narrow exemptions | Confirmed | High |
-| S34 | Poland PKE art. 399, UODO: analytics needs consent | Confirmed | High |
-| S35 | Portugal Lei 41/2004 art. 5, CNPD: analytics needs consent | Partly confirmed (statute current to 2012) | High |
-| S36 | Romania Law 506/2004 art. 4(5)-(6), ANSPDCP enforcement | Partly confirmed (DPA-hosted text) | Medium-high |
+| S34 | Poland PKE Art. 399, UODO: analytics needs consent | Confirmed | High |
+| S35 | Portugal Lei 41/2004 Art. 5, CNPD: analytics needs consent | Partly confirmed (statute current to 2012) | High |
+| S36 | Romania Law 506/2004 Art. 4(5)-(6), ANSPDCP enforcement | Partly confirmed (DPA-hosted text) | Medium-high |
 | S37 | Slovakia Act 452/2021 § 109(8), ÚRSO and DPA: analytics needs consent | Confirmed | High |
-| S38 | Slovenia ZEKom-2 art. 225, IP-RS: analytics needs consent | Confirmed (IP-RS via archive copies) | High |
-| S39 | Spain LSSI art. 22.2, AEPD audience measurement guide: exempt under conditions | Confirmed | High |
+| S38 | Slovenia ZEKom-2 Art. 225, IP-RS: analytics needs consent | Confirmed (IP-RS via archive copies) | High |
+| S39 | Spain LSSI Art. 22.2, AEPD audience measurement guide: exempt under conditions | Confirmed | High |
 | S40 | Sweden LEK ch. 9 § 28, PTS: statistics are not necessary | Confirmed | High |
