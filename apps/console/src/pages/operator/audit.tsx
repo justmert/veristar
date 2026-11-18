@@ -20,14 +20,13 @@ import {
   auditDaysError,
   auditReason,
   auditSentence,
-  auditText,
   dayToUtc,
   foldRuns,
   utcToDay,
 } from "@/lib/audit";
-import { countOf, formatCount, formatDate, formatDateTimeUtc, formatTimeUtc } from "@/lib/format";
+import { countOf, formatDate, formatDateTimeUtc, formatTimeUtc } from "@/lib/format";
 
-const FIELDS = ["tenant_id", "action", "actor", "target", "from", "to"] as const;
+const FIELDS = ["q", "tenant_id", "action", "actor", "target", "from", "to"] as const;
 type Field = (typeof FIELDS)[number];
 
 export function auditFromParams(p: URLSearchParams): AuditQuery {
@@ -36,6 +35,7 @@ export function auditFromParams(p: URLSearchParams): AuditQuery {
     action: p.get("action") ?? "",
     actor: p.get("actor") ?? "",
     target: p.get("target") ?? "",
+    q: p.get("q") ?? "",
     from: p.get("from") ?? "",
     to: p.get("to") ?? "",
   };
@@ -52,12 +52,7 @@ export function AuditPage() {
   const to = utcToDay(q.to, true);
   const daysError = auditDaysError(from, to);
   const list = useInfiniteQuery({ ...auditQuery(q), enabled: daysError === null });
-  const loaded = list.data?.pages.flatMap((p) => p.items) ?? [];
-  // the search reads the loaded entries as sentences; older entries join it
-  // as they load
-  const [search, setSearch] = useState("");
-  const needle = search.trim().toLowerCase();
-  const entries = needle ? loaded.filter((e) => auditText(e).includes(needle)) : loaded;
+  const entries = list.data?.pages.flatMap((p) => p.items) ?? [];
 
   function setOne(f: Field, value: string) {
     const next = new URLSearchParams(params);
@@ -66,7 +61,19 @@ export function AuditPage() {
     setParams(next, { replace: true });
   }
   const clear = () => setParams(new URLSearchParams(), { replace: true });
-  const filtered = FIELDS.some((f) => q[f] !== "");
+  const filtered = FIELDS.some((f) => (q[f] ?? "") !== "");
+
+  // the server searches the whole log (5.9) as the person types, after a
+  // short pause, so each key press does not ask it
+  const currentQ = q.q ?? "";
+  const [search, setSearch] = useState(currentQ);
+  useEffect(() => setSearch(currentQ), [currentQ]);
+  useEffect(() => {
+    const t = search.trim();
+    if (t === currentQ) return;
+    const timer = setTimeout(() => setOne("q", t), TEXT_DELAY_MS);
+    return () => clearTimeout(timer);
+  });
 
   const family = ACTION_FAMILIES.find((a) => a.value === q.action);
   const filters: Filter[] = [
@@ -132,7 +139,7 @@ export function AuditPage() {
         placeholder="Search the log"
         filters={filters}
         onClearAll={
-          filtered || needle
+          filtered
             ? () => {
                 setSearch("");
                 clear();
@@ -160,7 +167,7 @@ export function AuditPage() {
           <AuditEntries
             entries={entries}
             onClear={
-              filtered || needle
+              filtered
                 ? () => {
                     setSearch("");
                     clear();
@@ -168,12 +175,10 @@ export function AuditPage() {
                 : undefined
             }
           />
-          {loaded.length > 0 ? (
+          {entries.length > 0 ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-small text-fg-2 tabular" aria-live="polite" data-count="">
-                {needle
-                  ? `${formatCount(entries.length)} of ${countOf(loaded.length, "entry", "entries")}`
-                  : `${countOf(loaded.length, "entry", "entries")} shown.`}
+                {`${countOf(entries.length, "entry", "entries")} shown.`}
               </p>
               {list.hasNextPage ? (
                 <Button
@@ -279,17 +284,14 @@ function dayLabel(day: string, today: string): string {
 
 // the log in utc days, newest first; a run of the same system event folds
 // into one line. `limit` shows only the newest entries (the project page).
-// `names` names the targets the page knows ("site:<id>" to its domain).
 export function AuditEntries({
   entries,
   onClear,
   limit,
-  names,
 }: {
   entries: AuditEntry[];
   onClear?: () => void;
   limit?: number;
-  names?: Readonly<Record<string, string>>;
 }) {
   if (entries.length === 0)
     return (
@@ -327,7 +329,7 @@ export function AuditEntries({
           <ol className="flex flex-col">
             {foldRuns(g.items).map((item) => (
               <li key={item.kind === "one" ? item.entry.id : `run-${item.key}`}>
-                <ItemRow item={item} names={names} />
+                <ItemRow item={item} />
               </li>
             ))}
           </ol>
@@ -337,13 +339,11 @@ export function AuditEntries({
   );
 }
 
-type Names = Readonly<Record<string, string>> | undefined;
-
-function ItemRow({ item, names }: { item: AuditItem; names: Names }) {
-  if (item.kind === "one") return <AuditRow e={item.entry} names={names} />;
+function ItemRow({ item }: { item: AuditItem }) {
+  if (item.kind === "one") return <AuditRow e={item.entry} />;
   const first = item.entries[0] as AuditEntry;
   const last = item.entries.at(-1) as AuditEntry;
-  const s = auditSentence(first, names);
+  const s = auditSentence(first);
   // a run inside one minute shows that minute once
   const from = formatTimeUtc(last.at);
   const to = formatTimeUtc(first.at);
@@ -365,7 +365,7 @@ function ItemRow({ item, names }: { item: AuditItem; names: Names }) {
       <ol className="border-t border-line-subtle bg-sunken">
         {item.entries.map((e) => (
           <li key={e.id}>
-            <AuditRow e={e} names={names} nested />
+            <AuditRow e={e} nested />
           </li>
         ))}
       </ol>
@@ -393,8 +393,8 @@ function ActorMark({ e }: { e: AuditEntry }) {
 // one entry as a sentence with its changes and reason. the row itself
 // opens to the codes and the raw detail, so no row carries a second line
 // for them
-function AuditRow({ e, names, nested }: { e: AuditEntry; names: Names; nested?: boolean }) {
-  const s = auditSentence(e, names);
+function AuditRow({ e, nested }: { e: AuditEntry; nested?: boolean }) {
+  const s = auditSentence(e);
   const changes = auditChanges(e);
   const reason = auditReason(e);
   const [open, setOpen] = useState(false);

@@ -120,6 +120,8 @@ export type AuditQuery = {
   target: string;
   action: string;
   actor: string;
+  // 5.9 text search on the server over the row and the names it refers to
+  q?: string;
   from: string;
   to: string;
 };
@@ -147,6 +149,7 @@ export function auditPath(q: AuditQuery, cursor: string | null): string {
     ["target", q.target.trim()],
     ["action", q.action.trim()],
     ["actor", q.actor.trim()],
+    ["q", (q.q ?? "").trim()],
     ["from", q.from],
     ["to", q.to],
     ["limit", "50"],

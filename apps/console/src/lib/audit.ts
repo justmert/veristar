@@ -67,16 +67,17 @@ export const ACTION_FAMILIES: { value: string; label: string }[] = [
 export type ActorKind = "person" | "system" | "assistant";
 
 export function actorKind(e: AuditEntry): ActorKind {
-  if (e.actor_login) return "person";
+  if (e.actor_login || e.actor_display_name) return "person";
   if (e.actor.startsWith("mcp_credential:")) return "assistant";
   if (e.actor.startsWith("system:") || e.actor === "system") return "system";
   return "person";
 }
 
-// a person by their login; an ai assistant by what it is; the system by its
-// job in words. a person without a login waits for a display name from the
-// server, so the line says "A person" and the id stays in the details.
+// a person by the name the server reads with the row (the login, the short
+// address, or "Deleted account"); an ai assistant by what it is; the system
+// by its job in words. "A person" is left only for a row without a name.
 export function actorName(e: AuditEntry): string {
+  if (e.actor_display_name) return e.actor_display_name;
   if (e.actor_login) return e.actor_login;
   const kind = actorKind(e);
   if (kind === "assistant") return "An AI assistant";
@@ -233,12 +234,10 @@ function nameOf(e: AuditEntry): string | null {
   );
 }
 
-// names maps a target ("site:<id>", "tenant:<id>") to the name a page
-// already knows, for entries whose detail does not carry it
-export function auditSentence(
-  e: AuditEntry,
-  names: Readonly<Record<string, string>> = {},
-): AuditSentence {
+// the target by the name the server reads with the row, so a renamed project
+// shows its current name; a report reads as its period, which the verb
+// already calls a report. the detail names the rest (an on-chain id, a rule)
+export function auditSentence(e: AuditEntry): AuditSentence {
   const tool = e.action === "mcp.tool_call" ? detailText(e, "tool") : null;
   const failed = e.action in CHECKS && detailText(e, "result") !== "ok";
   let verb = tool
@@ -246,7 +245,9 @@ export function auditSentence(
     : failed
       ? (CHECKS[e.action] as string)
       : auditVerb(e.action);
-  const named = nameOf(e) ?? names[e.target] ?? null;
+  const named = e.target.startsWith("report:")
+    ? (nameOf(e) ?? e.target_display_name)
+    : (e.target_display_name ?? nameOf(e));
   const prefix = e.target.split(":")[0] ?? "";
   let object: string | null = e.target ? (named ?? TARGET_KIND[prefix] ?? "an object") : null;
   // a verb that names its own object ("the project") reads "a project" twice
@@ -336,14 +337,6 @@ export function auditReason(e: AuditEntry): string | null {
     return REVOKED_REASON[reason] ?? null;
   }
   return reason;
-}
-
-// the words of an entry, for the search of the loaded log
-export function auditText(e: AuditEntry, names?: Readonly<Record<string, string>>): string {
-  const s = auditSentence(e, names);
-  return [s.actor, s.verb, s.object ?? "", auditReason(e) ?? "", e.action, e.target]
-    .join(" ")
-    .toLowerCase();
 }
 
 // ------------------------------------------------------------------ runs
