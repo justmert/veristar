@@ -133,7 +133,7 @@ test("sign in, enroll, add a site and copy the snippet", async ({ browserName })
   const api0 = await api<{ tag: string; integrity: string }>(
     context,
     "GET",
-    `/api/sites/${site.id}`,
+    `/api/sites/${site.id}/snippet`,
   );
   expect(api0.body.integrity).toBe(newest?.integrity);
   expect(api0.body.tag).toBe(

@@ -144,7 +144,7 @@ test.beforeAll(async ({ browser }) => {
   await waitProvisioned(owner.ctx, tenant.id);
   const origin = `https://${site.domain}`;
   await waitRegistered(owner.ctx, site.id, origin);
-  const snip = await api<{ tag: string }>(owner.ctx, "GET", `/api/sites/${site.id}`);
+  const snip = await api<{ tag: string }>(owner.ctx, "GET", `/api/sites/${site.id}/snippet`);
   expect(snip.status).toBe(200);
   await pasteSnippet(site.domain, snip.body.tag);
   for (let i = 0; i < VISITORS; i++) await visit(browser, origin, i, PAGES);
