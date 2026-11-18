@@ -26,18 +26,18 @@ type exampleSite struct {
 }
 
 var (
-	siteStatic = exampleSite{"static-html", "static.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e01", "@veristar/example-static-html", 47101}
-	siteSPA    = exampleSite{"vite-react-spa", "spa.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e02", "@veristar/example-vite-react-spa", 47102}
-	siteRR     = exampleSite{"react-router-ssr", "rr.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e03", "@veristar/example-react-router-ssr", 47103}
-	siteAstro  = exampleSite{"astro-ssr", "astro.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e04", "@veristar/example-astro-ssr", 47104}
+	siteStatic = exampleSite{"static-html", "static.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e01", "@veristar/example-static-html", 27101}
+	siteSPA    = exampleSite{"vite-react-spa", "spa.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e02", "@veristar/example-vite-react-spa", 27102}
+	siteRR     = exampleSite{"react-router-ssr", "rr.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e03", "@veristar/example-react-router-ssr", 27103}
+	siteAstro  = exampleSite{"astro-ssr", "astro.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e04", "@veristar/example-astro-ssr", 27104}
 	allSites   = []exampleSite{siteStatic, siteSPA, siteRR, siteAstro}
 )
 
 // fixture ports of tests/e2e/sites.ts
-var fixturePorts = []int{proxyPort, 47443, 47090}
+var fixturePorts = []int{proxyPort, 27443, 27090}
 
 // the fixture's forward proxy, the one address the browsers connect to
-const proxyPort = 47080
+const proxyPort = 27080
 
 // Browsers runs the e2e fixture (real-gateway mode, upstream = the country
 // forwarder) and the four example servers once for the whole suite, and runs
@@ -96,7 +96,7 @@ func startBrowsersWith(t testing.TB, upstream string, runs []siteRun) *Browsers 
 	b.box = browserbox.Start(t, proxyPort)
 	b.spawn(t, "fixture", filepath.Join(repoRoot(), "tests", "e2e"), []string{"node", "fixture/main.ts"},
 		"SA_E2E_GATEWAY_UPSTREAM="+upstream, "SA_E2E_EVENT_LOG="+b.EventLog)
-	waitHTTP(t, "http://127.0.0.1:47090/health", 30*time.Second)
+	waitHTTP(t, "http://127.0.0.1:27090/health", 30*time.Second)
 	for _, r := range runs {
 		s := r.Site
 		b.spawn(t, s.Key, repoRoot(), []string{"sh", "-c", "pnpm --filter " + s.Pkg + " " + r.Build + " && pnpm --filter " + s.Pkg + " start"},

@@ -28,7 +28,7 @@ import (
 )
 
 // the wallets kit example of tests/e2e/sites.ts (WALLET_SITE)
-var siteWallets = exampleSite{"wallets-kit-spa", "wk.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e05", "@veristar/example-wallets-kit-spa", 47105}
+var siteWallets = exampleSite{"wallets-kit-spa", "wk.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e05", "@veristar/example-wallets-kit-spa", 27105}
 
 // TEST_WALLET_ADDRESS of tests/fixtures/wallets-kit-module, the account the
 // test wallet hands the kit. it must reach no request body, no queued message

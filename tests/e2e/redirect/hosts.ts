@@ -1,14 +1,14 @@
 // shared table of the redirect research harness.
 // the ports are a range of their own so this harness can run next to the main
-// browser matrix of tests/e2e, which holds 47080, 47443 and 47090.
+// browser matrix of tests/e2e, which holds 27080, 27443 and 27090.
 
 export const REDIRECT_PORTS = {
   // forward proxy every browser is pointed at; it is how the fake names resolve
-  proxy: 47280,
+  proxy: 27280,
   // tls front behind the proxy for every name below
-  tls: 47643,
+  tls: 27643,
   // control api for the test runner only
-  control: 47290,
+  control: 27290,
 } as const;
 
 // the new gateway after a domain change: serves the released sdk.js with the

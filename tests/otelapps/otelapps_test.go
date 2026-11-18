@@ -42,11 +42,11 @@ type app struct {
 }
 
 var apps = []app{
-	{"otel-node-express", 47201, func(r string) string { return strings.ReplaceAll(r, "{id}", ":id") }, ""},
-	{"otel-go-nethttp", 47202, func(r string) string { return r }, ""},
-	{"otel-python-fastapi", 47203, func(r string) string { return strings.ReplaceAll(r, "{id}", "{account_id}") }, ""},
-	{"otel-rust-actix", 47204, func(r string) string { return r }, ""},
-	{"otel-java-spring", 47205, func(r string) string { return r }, "/healthz"},
+	{"otel-node-express", 27201, func(r string) string { return strings.ReplaceAll(r, "{id}", ":id") }, ""},
+	{"otel-go-nethttp", 27202, func(r string) string { return r }, ""},
+	{"otel-python-fastapi", 27203, func(r string) string { return strings.ReplaceAll(r, "{id}", "{account_id}") }, ""},
+	{"otel-rust-actix", 27204, func(r string) string { return r }, ""},
+	{"otel-java-spring", 27205, func(r string) string { return r }, "/healthz"},
 }
 
 type mode struct {

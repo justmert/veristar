@@ -22,7 +22,7 @@ test("server rendered html carries the snippet once", async () => {
       env: { ...process.env, ...env },
     },
   );
-  const port = 47194;
+  const port = 27194;
   const server = spawn(process.execPath, ["./dist/server/entry.mjs"], {
     cwd: root,
     env: { ...process.env, ...env, PORT: String(port), HOST: "127.0.0.1" },
