@@ -109,7 +109,6 @@ here, before they take effect, as the processing terms require
   host that the browser URL parser refuses (`a<b`, `1.2.3.256`, a zone),
   which Umami refused the same way, and refuses a site origin whose last
   label is a number but not an IPv4 address.
-
 - The disaster recovery runbook stops every Umami process before the import
   (`umami` and `umami-2` and up). Stopping process 1 alone left a connection
   to the `umami` database open, so `scripts/migrate.sh` could not drop it. The
