@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import {
   ArrowRight,
@@ -16,7 +16,7 @@ import {
 import { type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { api } from "@/api/endpoints";
-import { auditQuery, operatorTenantQuery } from "@/api/queries";
+import { operatorTenantQuery } from "@/api/queries";
 import type { OperatorSite, OperatorTenantDetail, TenantAction, TenantStatus } from "@/api/schemas";
 import { OperatorCohortPanel } from "@/components/cohort";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -188,7 +188,7 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
         </p>
       ) : null}
 
-      {detail.removal ? <Removal tenantId={t.id} removal={detail.removal} /> : null}
+      {detail.removal ? <Removal removal={detail.removal} /> : null}
 
       <div className="grid min-w-0 items-start gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="flex min-w-0 flex-col gap-8">
@@ -256,14 +256,7 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
                 <ArrowRight aria-hidden className="size-3.5" />
               </Link>
             </div>
-            <AuditEntries
-              entries={detail.recent_audit}
-              limit={5}
-              names={{
-                [`tenant:${t.id}`]: t.name,
-                ...Object.fromEntries(detail.sites.map((s) => [`site:${s.id}`, s.domain])),
-              }}
-            />
+            <AuditEntries entries={detail.recent_audit} limit={5} />
           </section>
         </div>
 
@@ -771,35 +764,8 @@ function Counts({ title, counts }: { title: string; counts: Record<string, numbe
   );
 }
 
-// the login of the person who asked for the removal. the record holds
-// their user id; their audit entries on the project carry the login.
-function useRequester(tenantId: string, by: string | { display_name: string } | null) {
-  const userId = typeof by === "string" ? by : null;
-  const audit = useInfiniteQuery({
-    ...auditQuery({
-      tenant_id: tenantId,
-      actor: `user:${userId ?? ""}`,
-      action: "",
-      target: "",
-      from: "",
-      to: "",
-    }),
-    enabled: userId !== null,
-    staleTime: Number.POSITIVE_INFINITY,
-  });
-  if (by === null) return null;
-  if (typeof by !== "string") return by.display_name;
-  return audit.data?.pages[0]?.items.find((e) => e.actor_login)?.actor_login ?? null;
-}
-
-function Removal({
-  tenantId,
-  removal,
-}: {
-  tenantId: string;
-  removal: NonNullable<OperatorTenantDetail["removal"]>;
-}) {
-  const by = useRequester(tenantId, removal.requested_by);
+function Removal({ removal }: { removal: NonNullable<OperatorTenantDetail["removal"]> }) {
+  const by = removal.requested_by_display_name;
   const steps = Object.entries(removal.steps).sort((x, y) =>
     x[1].done_at.localeCompare(y[1].done_at),
   );

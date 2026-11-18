@@ -277,20 +277,7 @@ describe("operator project page", () => {
         },
       },
     };
-    const calls = routeFetch(
-      detailRoutes(removal, [
-        {
-          path: "/api/operator/audit",
-          answer: {
-            status: 200,
-            body: {
-              items: [{ ...f.auditEntryBody, actor: `user:${f.OPERATOR_ID}` }],
-              next_cursor: null,
-            },
-          },
-        },
-      ]),
-    );
+    const calls = routeFetch(detailRoutes(removal));
     const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
     await waitFor(() => expect(host.textContent).toContain("The service is deleting the data."));
     const steps = [...host.querySelectorAll("[data-step]")].map(
@@ -302,16 +289,13 @@ describe("operator project page", () => {
       "On-chain data deleted",
       "Reports revoked",
     ]);
-    // the requester is named by login, never by the user id
-    await waitFor(() =>
-      expect(host.querySelector("[data-requested]")?.textContent).toContain(
-        `by ${f.auditEntryBody.actor_login}`,
-      ),
-    );
+    // the requester is named as the record names them, never by the user id,
+    // and no audit lookup is made for it
+    expect(host.querySelector("[data-requested]")?.textContent).toContain("by sa-operator");
     expect(host.querySelector("[aria-labelledby=removal-h]")?.textContent).not.toContain(
       f.OPERATOR_ID,
     );
-    expect(calls.some((c) => c.url.includes(`actor=user%3A${f.OPERATOR_ID}`))).toBe(true);
+    expect(calls.some((c) => c.url.includes(`actor=user%3A${f.OPERATOR_ID}`))).toBe(false);
     // the data is deleted, so no figures and no action are offered
     expect(host.querySelector("form[aria-label^='Decision on']")).toBeNull();
     expect(host.querySelector("[data-stat]")).toBeNull();
@@ -497,7 +481,7 @@ describe("audit log", () => {
     ]);
     // a check that did not pass is a check, not a verification
     const said = (x: AuditEntry) => {
-      const t = auditSentence(x, { [`site:${f.SITE_ID}`]: "example.org" });
+      const t = auditSentence({ ...x, target_display_name: "example.org" });
       return `${t.verb} ${t.object}`;
     };
     expect(said(site)).toBe("checked the domain of the site example.org");
@@ -506,16 +490,25 @@ describe("audit log", () => {
     );
   });
 
-  it("names the object from the detail or from the page", () => {
-    const site = { ...f.auditEntryBody, action: "site.create", target: `site:${f.SITE_ID}` };
+  it("names the object as the server names it, else from the detail", () => {
+    const site = {
+      ...f.auditEntryBody,
+      action: "site.create",
+      target: `site:${f.SITE_ID}`,
+      target_display_name: null,
+    };
     expect(auditSentence({ ...site, detail: {} }).object).toBe("a site");
     expect(
-      auditSentence({ ...site, detail: {} }, { [`site:${f.SITE_ID}`]: "example.org" }),
-    ).toMatchObject({ verb: "added the site", object: "example.org" });
+      auditSentence({ ...site, target_display_name: "Docs site", detail: { name: "Old name" } }),
+    ).toMatchObject({ verb: "added the site", object: "Docs site" });
+    expect(
+      auditSentence({ ...f.auditEntryBody, target_display_name: "Deleted project" }).object,
+    ).toBe("Deleted project");
     const id = auditSentence({
       ...f.auditEntryBody,
       action: "onchain.add",
       target: "chain_id:c1",
+      target_display_name: null,
       detail: { strkey: "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H" },
     });
     expect(id.object).toBe("GBRP…OX2H");
@@ -523,6 +516,7 @@ describe("audit log", () => {
       ...f.auditEntryBody,
       action: "report.create",
       target: "report:r1",
+      target_display_name: "Report 2026-10-20 to 2026-11-18",
       detail: { from: "2026-10-20", to: "2026-11-18" },
     });
     expect(`${report.verb} ${report.object}`).toBe("signed a report for Oct 20 to Nov 18, 2026");
@@ -533,8 +527,8 @@ describe("audit log", () => {
     expect(person).toMatchObject({
       actor: "sa-operator",
       kind: "person",
-      verb: "suspended",
-      object: "a project",
+      verb: "suspended the project",
+      object: "Stellar DEX",
       href: `/operator/projects/${f.TENANT_ID}`,
     });
     const system = f.auditPageBody.items[1] as typeof f.auditEntryBody;
@@ -543,11 +537,19 @@ describe("audit log", () => {
     expect(auditSentence(system).object).toBeNull();
     expect(actorName({ ...system, actor: "mcp_credential:x" })).toBe("An AI assistant");
     expect(actorName({ ...system, actor: `user:${f.TENANT_ID}` })).toBe("A person");
+    // a person without a login is named by the server: an address or a deleted account
+    expect(
+      actorName({ ...system, actor: `user:${f.TENANT_ID}`, actor_display_name: "GBRP…OX2H" }),
+    ).toBe("GBRP…OX2H");
+    expect(
+      actorKind({ ...system, actor: `user:${f.TENANT_ID}`, actor_display_name: "Deleted account" }),
+    ).toBe("person");
     // an unnamed report or on-chain id reads once, with its kind
     const view = auditSentence({
       ...f.auditEntryBody,
       action: "report.view",
       target: "report:r1",
+      target_display_name: null,
       detail: {},
     });
     expect(`${view.verb} ${view.object}`).toBe("opened a report");
@@ -555,6 +557,7 @@ describe("audit log", () => {
       ...f.auditEntryBody,
       action: "onchain.challenge",
       target: "chain_id:c1",
+      target_display_name: null,
       detail: {},
     });
     expect(check.object).toBe("an on-chain ID");
@@ -581,6 +584,7 @@ describe("audit log", () => {
       id: 100 - i,
       actor: "system:verify-domains",
       actor_login: null,
+      actor_display_name: null,
       action: "site.verify",
     }));
     const people = Array.from({ length: 3 }, (_, i) => ({ ...f.auditEntryBody, id: 10 - i }));
@@ -602,7 +606,9 @@ describe("audit log", () => {
       [{ path: "/operator/audit", element: <AuditPage /> }],
       "/operator/audit",
     );
-    await waitFor(() => expect(host.textContent).toContain("sa-operator suspended a project"));
+    await waitFor(() =>
+      expect(host.textContent).toContain("sa-operator suspended the project Stellar DEX"),
+    );
     expect(host.querySelector("[data-actor=system]")).not.toBeNull();
     expect(host.textContent).not.toContain("Apply");
     const action = byLabel(host, "Action") as unknown as HTMLSelectElement;
@@ -620,11 +626,13 @@ describe("audit log", () => {
     await waitFor(() =>
       expect(host.querySelector("[data-count]")?.textContent).toBe("2 entries shown."),
     );
-    // the search reads the loaded entries as sentences
-    await type(byLabel(host, "Search the log"), "suspended");
-    await waitFor(() =>
-      expect(host.querySelector("[data-count]")?.textContent).toBe("1 of 2 entries"),
+    // the search asks the server, which searches the whole log (5.9)
+    await type(byLabel(host, "Search the log"), "stellar dex");
+    await waitFor(() => expect(calls).toHaveLength(4));
+    expect(calls[3]?.url).toBe(
+      "/api/operator/audit?action=tenant.&q=stellar%20dex&from=2026-11-01T00%3A00%3A00Z&limit=50",
     );
+    await waitFor(() => expect(host.querySelector("article[data-action]")).not.toBeNull());
     // a row opens to its codes; no row carries a details line of its own
     expect(host.textContent).not.toContain("Details");
     const row = host.querySelector<HTMLElement>("article[data-action]") as HTMLElement;
@@ -640,8 +648,10 @@ it("reads the reason code of a revoked AI assistant key, and leaves out the cons
     at: "2026-11-12T09:00:00Z",
     actor: "user:x",
     actor_login: "lumen-dev",
+    actor_display_name: "lumen-dev",
     action: "mcp_credential.revoke",
     target: "mcp_credential:y",
+    target_display_name: null,
   };
   expect(auditReason({ ...base, detail: { reason: "user" } })).toBeNull();
   expect(auditReason({ ...base, detail: { reason: "tenant_suspended" } })).toBe(

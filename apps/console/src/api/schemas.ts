@@ -337,8 +337,13 @@ export const auditEntry = z.object({
   at: time,
   actor: z.string(),
   actor_login: z.string().nullable(),
+  // 5.9 the account's login or short address ("Deleted account" for a
+  // deleted one), null for an actor that is not an account
+  actor_display_name: z.string().nullable(),
   action: z.string().min(1),
   target: z.string(),
+  // the current name of the project, site, account or report the row names
+  target_display_name: z.string().nullable(),
   detail: z.record(z.string(), z.unknown()).nullable(),
 });
 export type AuditEntry = z.infer<typeof auditEntry>;
@@ -382,7 +387,11 @@ export const operatorTenantDetail = z.object({
   removal: z
     .object({
       requested_at: time,
-      requested_by: z.union([id, userRef]).nullable(),
+      requested_by: id.nullable(),
+      // the requester's login, and its display name (the login, the short
+      // address, or "Deleted account"); both null without a requester
+      requested_by_login: z.string().nullable(),
+      requested_by_display_name: z.string().nullable(),
       keep_aggregates: z.boolean(),
       completed_at: time.nullable(),
       steps: z.record(z.string(), z.object({ done_at: time })),
