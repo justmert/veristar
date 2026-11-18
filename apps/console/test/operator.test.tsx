@@ -13,15 +13,15 @@ import {
 } from "@/pages/operator/audit";
 import { OperatorLayout } from "@/pages/operator/layout";
 import { AddOperator, validateAddOperator } from "@/pages/operator/operators";
+import { OperatorProjectPage } from "@/pages/operator/project";
 import { ReviewQueuePage } from "@/pages/operator/review";
 import { SettingsPage } from "@/pages/operator/settings";
-import { TenantDetailPage } from "@/pages/operator/tenant-detail";
 import { queryFromParams, TenantsPage } from "@/pages/operator/tenants";
 import * as f from "./fixtures/contract";
 import { integrityReportBody } from "./fixtures/global";
 import { byLabel, byRole, click, renderRoutes, stubFetch, type, waitFor } from "./helpers";
 
-const detailRoute = [{ path: "/operator/tenants/:tenantId", element: <TenantDetailPage /> }];
+const detailRoute = [{ path: "/operator/projects/:tenantId", element: <OperatorProjectPage /> }];
 
 // the on-chain section of the detail reads its own route after the detail
 // 19.1 a project without a cohort row
@@ -109,13 +109,9 @@ describe("operator area guard", () => {
       "/operator",
     );
     await waitFor(() => expect(host.textContent).toContain("queue"));
-    // the place header and its tabs; the sidebar of the shell picks the place
-    expect(host.querySelector("h1")?.textContent).toBe("Attention");
-    const tabs = host.querySelector('nav[aria-label="Operator sections"]') as HTMLElement;
-    expect([...tabs.querySelectorAll("a")].map((a) => a.textContent)).toEqual([
-      "Review queue",
-      "Alerts",
-    ]);
+    // the page title is the sidebar's name of the page; no tab bar
+    expect(host.querySelector("h1")?.textContent).toBe("Review");
+    expect(host.querySelector("nav")).toBeNull();
   });
 });
 
@@ -127,7 +123,7 @@ describe("operator project detail", () => {
       noOnchain,
       noCohort,
     ]);
-    const host = await renderRoutes(detailRoute, `/operator/tenants/${f.TENANT_ID}`);
+    const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
     await waitFor(() => expect(host.textContent).toContain("Soroban AMM on mainnet"));
     await waitFor(() =>
       expect(host.textContent).toContain("The project declares no accounts or contracts."),
@@ -160,7 +156,7 @@ describe("operator project detail", () => {
         body: { ...f.operatorSummaryBody, status: "rejected", status_reason: "Not on Stellar" },
       },
     ]);
-    const host = await renderRoutes(detailRoute, `/operator/tenants/${f.TENANT_ID}`);
+    const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
     await waitFor(() => byRole(host, "button", "Reject"));
     await waitFor(() => expect(calls).toHaveLength(4));
     await click(byRole(host, "button", "Reject"));
@@ -192,7 +188,7 @@ describe("operator project detail", () => {
       noCohort,
       { status: 200, body: { ...f.operatorSummaryBody, status: "active" } },
     ]);
-    const host = await renderRoutes(detailRoute, `/operator/tenants/${f.TENANT_ID}`);
+    const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
     await waitFor(() => byRole(host, "button", "Approve"));
     await waitFor(() => expect(calls).toHaveLength(4));
     await click(byRole(host, "button", "Approve"));
@@ -212,7 +208,7 @@ describe("operator project detail", () => {
       noCohort,
       { status: 409, body: f.errorBody("invalid_transition") },
     ]);
-    const host = await renderRoutes(detailRoute, `/operator/tenants/${f.TENANT_ID}`);
+    const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
     await waitFor(() => byRole(host, "button", "Remove"));
     await waitFor(() => expect(calls).toHaveLength(4));
     await click(byRole(host, "button", "Remove"));
@@ -232,7 +228,7 @@ describe("operator project detail", () => {
       noOnchain,
       noCohort,
     ]);
-    const host = await renderRoutes(detailRoute, `/operator/tenants/${f.TENANT_ID}`);
+    const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
     await waitFor(() => expect(host.textContent).toContain("Data is still being deleted."));
     expect(host.textContent).toContain("registry");
     expect(host.textContent).toContain("No action is possible from this status.");
@@ -240,7 +236,7 @@ describe("operator project detail", () => {
 
   it("answers 404 for an unknown project", async () => {
     stubFetch([{ status: 404, body: f.errorBody("not_found") }]);
-    const host = await renderRoutes(detailRoute, `/operator/tenants/${f.TENANT_ID}`);
+    const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
     await waitFor(() => expect(host.textContent?.toLowerCase()).toContain("not found"));
   });
 });

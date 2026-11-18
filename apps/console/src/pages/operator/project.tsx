@@ -6,20 +6,22 @@ import { api } from "@/api/endpoints";
 import { operatorTenantQuery } from "@/api/queries";
 import type { OperatorSite, OperatorTenantDetail, TenantAction } from "@/api/schemas";
 import { OperatorCohortPanel } from "@/components/cohort";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DecisionPanel } from "@/components/decision-panel";
 import { ErrorPanel, Loading } from "@/components/error-panel";
 import { StellarTomlSummary, VerificationDetail } from "@/components/evidence";
+import { EvidenceList, evidenceOf } from "@/components/evidence-list";
 import { IntegrityReportView } from "@/components/integrity";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { Fact } from "@/components/panel";
-import { ReasonDialog } from "@/components/reason-dialog";
 import { StatusPill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { isNotFound } from "@/lib/errors";
 import { formatCount, formatDate, formatDateTimeUtc, formatShareOf } from "@/lib/format";
 import { outcomeLabel } from "@/lib/outcomes";
-import { NotFoundPage } from "../not-found";
+import { NotFoundPage } from "@/pages/public/not-found";
 import { AuditEntries } from "./audit";
-import { EvidenceList, evidenceOf, refreshOperator } from "./decision";
+import { refreshOperator } from "./decision";
 import { TenantOnchainSection } from "./onchain-parts";
 
 type ActionSpec = {
@@ -92,7 +94,7 @@ const VARIANT: Record<TenantAction, "default" | "outline" | "destructive"> = {
   remove: "destructive",
 };
 
-export function TenantDetailPage() {
+export function OperatorProjectPage() {
   const { tenantId = "" } = useParams();
   const detail = useQuery(operatorTenantQuery(tenantId));
   if (detail.isPending) return <Loading label="Loading the project" />;
@@ -110,7 +112,7 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
         <div className="flex min-w-0 flex-col gap-2">
           <Link
-            to="/operator/tenants"
+            to="/operator/projects"
             className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring"
           >
             <ArrowLeft aria-hidden className="size-3.5" />
@@ -358,14 +360,14 @@ function Actions({ detail }: { detail: OperatorTenantDetail }) {
           </Button>
         ))
       )}
-      <ReasonDialog
+      <ConfirmDialog
         open={action !== null}
         onOpenChange={(o) => {
           if (!o) setAction(null);
         }}
         title={spec ? spec.title(t.name) : ""}
         description={spec?.description ?? ""}
-        reasonRequired={spec?.reasonRequired ?? true}
+        reason={{ required: spec?.reasonRequired ?? true }}
         confirmLabel={spec?.label ?? ""}
         pendingLabel={spec?.pending ?? ""}
         tone={spec?.tone ?? "destructive"}
@@ -378,15 +380,6 @@ function Actions({ detail }: { detail: OperatorTenantDetail }) {
 }
 
 function SiteEvidence({ site }: { site: OperatorSite }) {
-  const [action, setAction] = useState<"approve" | "reject" | null>(null);
-  const run = useMutation({
-    mutationFn: ({ act, reason }: { act: "approve" | "reject"; reason: string }) =>
-      api.operator.siteAction(site.id, act, reason),
-    onSuccess: async () => {
-      setAction(null);
-      await refreshOperator();
-    },
-  });
   return (
     <article
       aria-labelledby={`op-site-${site.id}`}
@@ -435,37 +428,8 @@ function SiteEvidence({ site }: { site: OperatorSite }) {
         />
       </div>
       {site.in_review ? (
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={() => setAction("approve")}>
-            Approve site
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setAction("reject")}>
-            Reject site
-          </Button>
-        </div>
+        <DecisionPanel subject={{ kind: "site", id: site.id, name: site.domain }} />
       ) : null}
-      <ReasonDialog
-        open={action !== null}
-        onOpenChange={(o) => {
-          if (!o) {
-            setAction(null);
-            run.reset();
-          }
-        }}
-        title={action === "approve" ? `Approve ${site.domain}?` : `Reject ${site.domain}?`}
-        description={
-          action === "approve"
-            ? "The site becomes active and starts receiving traffic."
-            : "The site is removed. Its owners see the reason."
-        }
-        reasonRequired={action === "reject"}
-        confirmLabel={action === "approve" ? "Approve site" : "Reject site"}
-        pendingLabel={action === "approve" ? "Approving" : "Rejecting"}
-        tone={action === "approve" ? "primary" : "destructive"}
-        pending={run.isPending}
-        error={run.error}
-        onConfirm={(reason) => action && run.mutate({ act: action, reason })}
-      />
     </article>
   );
 }

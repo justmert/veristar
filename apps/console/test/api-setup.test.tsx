@@ -1,7 +1,7 @@
 import { Outlet } from "react-router";
 import { describe, expect, it } from "vitest";
 import type { Tenant } from "@/api/schemas";
-import { ApiSetupPage, validateToken } from "@/pages/api-setup";
+import { ConnectApiPage, validateToken } from "@/pages/project/connect-api";
 import * as f from "./fixtures/contract";
 import { byLabel, byRole, click, renderRoutes, stubFetch, type, waitFor } from "./helpers";
 
@@ -15,7 +15,7 @@ function routes(tenant: Tenant = base, termsCurrent = true) {
     {
       path: "/projects/:tenantId",
       element: <Outlet context={ctx} />,
-      children: [{ path: "api", element: <ApiSetupPage /> }],
+      children: [{ path: "api", element: <ConnectApiPage /> }],
     },
   ];
 }

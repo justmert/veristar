@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { clientSnippets, mcpCredential, mcpCredentialCreated } from "@/api/mcp";
-import { McpKeyCreateForm, validateMcpKey } from "@/pages/mcp";
+import { McpKeyCreateForm, validateMcpKey } from "@/pages/project/ai";
 import { byLabel, byRole, click, render, stubFetch, type, waitFor } from "./helpers";
 
 const credential = {

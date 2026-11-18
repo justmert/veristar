@@ -3,8 +3,8 @@ import { ingest, snippet } from "@/api/schemas";
 import { parseBlocks } from "@/lib/markdown";
 import { rejectionRows, sumRejected, sumUnclassified } from "@/lib/outcomes";
 import { snippetGuides } from "@/lib/snippet-guides";
-import { hourSlots } from "@/pages/overview";
-import { safeReturnTo } from "@/pages/sign-in";
+import { hourSlots } from "@/pages/project/overview";
+import { safeReturnTo } from "@/pages/public/sign-in";
 import * as f from "./fixtures/contract";
 
 describe("ingest outcomes", () => {

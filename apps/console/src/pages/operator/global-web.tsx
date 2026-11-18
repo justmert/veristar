@@ -102,8 +102,12 @@ const COLUMNS: { sort: WebSort; label: string; size: (p: WebProject) => number |
 export function GlobalWebPage() {
   const [params, setParams] = useSearchParams();
   const state = readListState(params, webSort.options, DEFAULT_SORT);
-  const set = (next: ListState<WebSort>) =>
-    setParams(writeListState(next, DEFAULT_SORT), { replace: true });
+  // the view stays in the address with the list state
+  const set = (next: ListState<WebSort>) => {
+    const out = writeListState(next, DEFAULT_SORT);
+    out.set("view", "web");
+    setParams(out, { replace: true });
+  };
   // a day pair that ends before it starts is refused by the server; the
   // filters say so and nothing is asked
   const badDays = dayPairError(state.filters) !== null;

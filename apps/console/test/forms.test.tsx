@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { EnrollForm } from "@/pages/enroll";
-import { AddMemberForm } from "@/pages/members";
-import { AddSiteForm } from "@/pages/sites";
+import { EnrollForm } from "@/pages/home/enroll";
+import { AddMemberForm } from "@/pages/project/members";
+import { AddSiteForm } from "@/pages/project/sites";
 import * as f from "./fixtures/contract";
 import { byLabel, byRole, click, render, stubFetch, type, waitFor } from "./helpers";
 

@@ -2,9 +2,9 @@ import { decodeChallenge, encodeChallenge, verifyAssertionSignature } from "@sor
 import { mockAuthenticator } from "@soropass/core/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { members as membersSchema, me as meSchema } from "@/api/schemas";
-import { AccountPage, confirmationText } from "@/pages/account";
-import { memberIdentity, validateAddMember } from "@/pages/members";
-import { SignInPage } from "@/pages/sign-in";
+import { AccountPage, confirmationText } from "@/pages/home/account";
+import { memberIdentity, validateAddMember } from "@/pages/project/members";
+import { SignInPage } from "@/pages/public/sign-in";
 import * as f from "./fixtures/contract";
 import { byRole, click, renderRoutes, stubFetch, waitFor } from "./helpers";
 

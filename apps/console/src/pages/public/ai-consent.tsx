@@ -52,7 +52,7 @@ function forget() {
   }
 }
 
-export function McpConsentPage() {
+export function AiConsentPage() {
   const [params] = useState(() => new URLSearchParams(window.location.search));
   const error = params.get("error");
   const [req] = useState(() => (error ? null : takeRequest()));

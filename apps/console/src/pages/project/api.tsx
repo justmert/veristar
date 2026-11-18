@@ -47,8 +47,6 @@ import {
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { NativeSelect } from "@/components/form-field";
 import { StaggerItem } from "@/components/motion";
-import { projectTabs } from "@/components/nav/nav-items";
-import { NavTabs } from "@/components/nav/nav-tabs";
 import { Notice } from "@/components/notice";
 import { PageHeader, Panel } from "@/components/panel";
 import { Segmented } from "@/components/segmented";
@@ -81,7 +79,7 @@ import {
   writeState,
 } from "@/lib/api-metrics";
 import { formatCount, formatDate, formatShareOf } from "@/lib/format";
-import { useProject } from "./project-layout";
+import { useProject } from "@/pages/project-layout";
 
 // contract 7.3: the one line shown with every trace-derived badge
 export const SPAN_NOTE =
@@ -93,7 +91,7 @@ export const SPAN_NOTE =
 export const IGNORED_NOTE =
   "Counted from its metrics for the whole range. Numbers derived from its traces (sent alongside the metrics, or before it started sending metrics) are left out.";
 
-export function ApiTrafficPage() {
+export function ApiPage() {
   const { tenant } = useProject();
   const [params, setParams] = useSearchParams();
   const state = readState(params);
@@ -109,7 +107,6 @@ export function ApiTrafficPage() {
           title="API traffic"
           description="Requests, errors and latency of your HTTP API, per normalized route. Times are UTC; hourly and daily numbers are updated every few minutes."
         />
-        <NavTabs label="API" items={projectTabs(tenant.id, "api") ?? []} />
       </div>
 
       <Controls
@@ -161,7 +158,7 @@ function EmptyState({ tenantId, range }: { tenantId: string; range: ApiRange }) 
       title="No API requests in this range"
       action={
         <Button asChild>
-          <Link to={`/projects/${tenantId}/api`}>Set up API analytics</Link>
+          <Link to={`/projects/${tenantId}/connect-api`}>Set up API analytics</Link>
         </Button>
       }
     >

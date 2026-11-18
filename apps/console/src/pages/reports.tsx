@@ -12,13 +12,13 @@ import {
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CopyButton } from "@/components/copy-button";
 import { ErrorPanel, FormMessage, Loading, StateBlock } from "@/components/error-panel";
-import { TextField } from "@/components/form-field";
-import { PageHeader, Panel } from "@/components/panel";
+import { Panel } from "@/components/panel";
+import { DateField } from "@/components/range-control";
 import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { formatCount, formatDateRange, formatDateTimeUtc } from "@/lib/format";
 import { isDay, lastDays } from "@/lib/global";
-import { useProject } from "./project-layout";
+import { useProject } from "@/pages/project-layout";
 
 // signed usage reports (contract 20): a member generates a report of closed
 // utc days, signed with the platform's stellar key, and shares its link
@@ -72,7 +72,9 @@ export function downloadFile(file: SignedFile, name: string) {
   URL.revokeObjectURL(url);
 }
 
-export function ReportsPage() {
+// the signed reports of a project, a section of its SCF review: generate a
+// report for closed utc days, open, copy, download or revoke its link
+export function SignedReports() {
   const { tenant } = useProject();
   const list = useQuery(reportsQuery(tenant.id));
   const queryClient = useQueryClient();
@@ -107,28 +109,26 @@ export function ReportsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        title="Signed reports"
-        description="A usage report of your project for a period of closed UTC days: web, API and on-chain numbers from the same aggregates SCF operators read, your integrity grade with its reasons, and your cohort and percentiles. Veristar signs it with its Stellar key, so anyone can check it without an account."
-      />
+    <section aria-labelledby="signed-reports-h" className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1">
+        <h2 id="signed-reports-h" className="text-section text-fg">
+          Signed reports
+        </h2>
+        <p className="max-w-prose text-body text-fg-2">
+          A signed report holds the same figures for closed UTC days. Anyone can check its signature
+          without an account.
+        </p>
+      </div>
       <Panel title="Generate a report" aria-label="Generate a report">
         <form onSubmit={submit} noValidate className="flex flex-col gap-3">
           <div className="grid gap-3 sm:grid-cols-[repeat(2,minmax(0,12rem))_auto] sm:items-start">
-            <TextField
-              label="From"
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              error={errors.from}
-            />
-            <TextField
+            <DateField label="From" value={from} onChange={setFrom} error={errors.from} />
+            <DateField
               label="To"
-              type="date"
               value={to}
-              onChange={(e) => setTo(e.target.value)}
+              onChange={setTo}
               error={errors.to}
-              hint={`Up to ${lastFinalDay(new Date())} (UTC), at most ${MAX_DAYS} days.`}
+              hint={`UTC day, up to ${lastFinalDay(new Date())}, at most ${MAX_DAYS} days.`}
             />
           </div>
           <FormMessage error={create.error} />
@@ -256,6 +256,6 @@ export function ReportsPage() {
         error={revoke.error}
         onConfirm={() => revoking && revoke.mutate(revoking.id)}
       />
-    </div>
+    </section>
   );
 }

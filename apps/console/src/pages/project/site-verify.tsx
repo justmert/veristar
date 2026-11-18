@@ -4,10 +4,9 @@ import { fade } from "@veristar/brand/motion";
 import { Check, CircleAlert, LoaderCircle } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
-import { useParams } from "react-router";
 import { api } from "@/api/endpoints";
-import { keys, sitesQuery, verificationQuery } from "@/api/queries";
-import type { SiteVerification, VerifyMethod } from "@/api/schemas";
+import { keys, verificationQuery } from "@/api/queries";
+import type { Site, SiteVerification, VerifyMethod } from "@/api/schemas";
 import { CopyButton } from "@/components/copy-button";
 import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
 import {
@@ -19,12 +18,8 @@ import {
 import { NativeSelect } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { isNotFound } from "@/lib/errors";
 import { formatDateTimeUtc } from "@/lib/format";
 import { queryClient } from "@/query-client";
-import { NotFoundPage } from "./not-found";
-import { useProject } from "./project-layout";
-import { SetupFrame, useFirstEvent } from "./snippet";
 
 type Choice = "both" | VerifyMethod;
 
@@ -32,35 +27,25 @@ const METHOD_TEXT: Record<VerifyMethod, string> = { dns: "DNS record", file: "fi
 
 // contract 5.8: proves control of the site's domain with a dns txt record or a
 // file under /.well-known. verification never gates traffic; operators see it
-// as evidence.
-export function VerifyPage() {
-  const { tenant } = useProject();
-  const { siteId = "" } = useParams();
-  const sites = useQuery(sitesQuery(tenant.id));
-  const info = useQuery(verificationQuery(siteId));
-  const first = useFirstEvent(siteId);
-  const site = sites.data?.find((s) => s.id === siteId);
-
-  if (isNotFound(info.error)) return <NotFoundPage />;
-
+// as evidence. the third step of a site's setup, with its stellar.toml below.
+export function VerifySection({ site }: { site: Site }) {
+  const info = useQuery(verificationQuery(site.id));
   return (
-    <SetupFrame site={site} step="verify" event={first.event}>
+    <div className="flex flex-col gap-6">
       {info.isPending ? <Loading label="Loading the verification instructions" /> : null}
       {info.error ? <ErrorPanel error={info.error} onRetry={() => info.refetch()} /> : null}
-      {info.data ? <Verify v={info.data} tenantId={tenant.id} /> : null}
-      {site ? (
-        <section
-          aria-label="stellar.toml"
-          className="rounded-lg border border-line bg-raised px-4 py-3 sm:px-5"
-        >
-          <StellarTomlSummary
-            toml={site.stellar_toml}
-            checkedAt={site.stellar_toml_checked_at}
-            domain={site.domain}
-          />
-        </section>
-      ) : null}
-    </SetupFrame>
+      {info.data ? <Verify v={info.data} tenantId={site.tenant_id} /> : null}
+      <section
+        aria-label="stellar.toml"
+        className="rounded-lg border border-line bg-raised px-4 py-3 sm:px-5"
+      >
+        <StellarTomlSummary
+          toml={site.stellar_toml}
+          checkedAt={site.stellar_toml_checked_at}
+          domain={site.domain}
+        />
+      </section>
+    </div>
   );
 }
 

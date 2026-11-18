@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { fade } from "@veristar/brand/motion";
 import { ArrowRight, Check, CircleCheck, Minus } from "lucide-react";
@@ -6,27 +6,19 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import type { TenantListQuery } from "@/api/endpoints";
-import { api } from "@/api/endpoints";
 import { operatorAlertsQuery, operatorTenantQuery, operatorTenantsQuery } from "@/api/queries";
 import type { OperatorSite, OperatorTenantSummary } from "@/api/schemas";
+import { DecisionPanel } from "@/components/decision-panel";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
+import { EvidenceList, evidenceOf } from "@/components/evidence-list";
 import { AnimatedNumber, Stagger, StaggerItem } from "@/components/motion";
 import { Notice } from "@/components/notice";
 import { Kbd } from "@/components/panel";
-import { ReasonDialog } from "@/components/reason-dialog";
 import { StatusDot, StatusPill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { formatCount } from "@/lib/format";
 import { AlertItem, AlertsError, LiveCheck, PipelineDown, useNow } from "./alerts";
-import {
-  ageText,
-  DecisionPanel,
-  EvidenceList,
-  enrolledLine,
-  evidenceOf,
-  refreshOperator,
-  Waiting,
-} from "./decision";
+import { ageText, enrolledLine, Waiting } from "./decision";
 
 // contract 5.3 review=true: pending projects and active projects with a site
 // in review, oldest first so nobody waits longest
@@ -331,7 +323,7 @@ function SelectedProject({
                   <StatusPill status={detail.data.tenant.status} />
                 )}
                 <Button asChild variant="ghost" size="xs">
-                  <Link to={`/operator/tenants/${summary.id}`}>
+                  <Link to={`/operator/projects/${summary.id}`}>
                     Open project page
                     <ArrowRight aria-hidden />
                   </Link>
@@ -374,7 +366,15 @@ function SelectedProject({
             ) : null}
             <div className="px-5 pt-4 pb-5">
               {detail.data.allowed_actions.some((a) => a === "approve" || a === "reject") ? (
-                <DecisionPanel detail={detail.data} onDecided={onDecided} />
+                <DecisionPanel
+                  subject={{
+                    kind: "project",
+                    id: detail.data.tenant.id,
+                    name: detail.data.tenant.name,
+                    allowed: detail.data.allowed_actions,
+                  }}
+                  onDecided={onDecided}
+                />
               ) : (
                 <p className="text-small text-fg-2">
                   The project is {detail.data.tenant.status}; only its sites in review wait for a
@@ -391,17 +391,8 @@ function SelectedProject({
 
 // a site on a domain of a removed project, decided on its own
 function SiteReview({ site }: { site: OperatorSite }) {
-  const [action, setAction] = useState<"approve" | "reject" | null>(null);
-  const run = useMutation({
-    mutationFn: ({ act, reason }: { act: "approve" | "reject"; reason: string }) =>
-      api.operator.siteAction(site.id, act, reason),
-    onSuccess: async () => {
-      setAction(null);
-      await refreshOperator();
-    },
-  });
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line px-3 py-2">
+    <div className="flex flex-col gap-3 rounded-md border border-line px-3 py-3">
       <div className="flex min-w-0 flex-col gap-1">
         <span className="flex items-center gap-2 font-mono text-small text-fg">
           <StatusDot tone="warning" />
@@ -413,36 +404,7 @@ function SiteReview({ site }: { site: OperatorSite }) {
             : "In review."}
         </span>
       </div>
-      <div className="flex gap-2">
-        <Button size="sm" variant="outline" onClick={() => setAction("reject")}>
-          Reject site
-        </Button>
-        <Button size="sm" onClick={() => setAction("approve")}>
-          Approve site
-        </Button>
-      </div>
-      <ReasonDialog
-        open={action !== null}
-        onOpenChange={(o) => {
-          if (!o) {
-            setAction(null);
-            run.reset();
-          }
-        }}
-        title={action === "approve" ? `Approve ${site.domain}?` : `Reject ${site.domain}?`}
-        description={
-          action === "approve"
-            ? "The site becomes active and starts receiving traffic."
-            : "The site is removed. Its owners see the reason."
-        }
-        reasonRequired={action === "reject"}
-        confirmLabel={action === "approve" ? "Approve site" : "Reject site"}
-        pendingLabel={action === "approve" ? "Approving" : "Rejecting"}
-        tone={action === "approve" ? "primary" : "destructive"}
-        pending={run.isPending}
-        error={run.error}
-        onConfirm={(reason) => action && run.mutate({ act: action, reason })}
-      />
+      <DecisionPanel subject={{ kind: "site", id: site.id, name: site.domain }} />
     </div>
   );
 }

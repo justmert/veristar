@@ -116,15 +116,15 @@ export function ComparePage() {
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <Button asChild variant="outline" size="sm">
-                <Link to="/operator/web">Global web</Link>
+                <Link to="/operator/projects?view=web">Projects, web view</Link>
               </Button>
               <Button asChild variant="outline" size="sm">
-                <Link to="/operator/api">Global API</Link>
+                <Link to="/operator/projects?view=api">Projects, API view</Link>
               </Button>
             </div>
           }
         >
-          Select up to five projects in Global web or Global API and choose Compare.
+          Select up to five projects in the web or API view of Projects, then choose Compare.
         </StateBlock>
       </section>
     );
@@ -194,7 +194,7 @@ export function ComparePage() {
             className="border-dashed text-fg-2 max-lg:h-(--vs-control-touch)"
           >
             <Link
-              to={`/operator/web?${addSearch(resolved)}`}
+              to={`/operator/projects?view=web&${addSearch(resolved)}`}
               state={
                 {
                   compare: (refs ?? []).map((t) => ({ id: t.id, name: t.name })),

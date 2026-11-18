@@ -45,7 +45,7 @@ export function StopPage({
       >
         {icon}
       </span>
-      <h1 className="text-page tracking-tight text-fg">{title}</h1>
+      <h1 className="text-heading text-fg">{title}</h1>
       {children ? (
         <div className="flex max-w-prose flex-col gap-1 text-body text-fg-2">{children}</div>
       ) : null}
@@ -104,8 +104,8 @@ export function OperatorsOnlyPage() {
       }
     >
       <p>
-        This area is for operators of the service. Your GitHub account is not on the operator list.
-        If it was added recently, sign out and sign in again.
+        This area is for operators of the service. Your account is not on the operator list. If it
+        was added recently, sign out and sign in again.
       </p>
       <FormMessage error={signOut.error} className="mt-2" />
     </StopPage>

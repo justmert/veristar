@@ -1,57 +1,27 @@
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import {
-  ArrowLeft,
-  Check,
-  ChevronRight,
-  CircleAlert,
-  Code2,
-  Minus,
-  Plus,
-  ShieldCheck,
-  Trash2,
-} from "lucide-react";
-import { type FormEvent, type ReactNode, useId, useState } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
+import { Check, ChevronRight, CircleAlert, Minus, Plus } from "lucide-react";
+import { type FormEvent, type ReactNode, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
 import { ApiError } from "@/api/client";
 import { api, type SiteInput, type SitePatch } from "@/api/endpoints";
 import { ingestMonthQuery, keys, sitesQuery } from "@/api/queries";
 import type { Ingest, Site } from "@/api/schemas";
-import { ConfirmDialog } from "@/components/confirm-dialog";
-import { DbIpAttribution } from "@/components/dbip-attribution";
 import { ErrorPanel, FormMessage, Loading, StateBlock } from "@/components/error-panel";
-import { StellarTomlSummary, VerificationDetail, VerificationPill } from "@/components/evidence";
 import { TextAreaField, TextField } from "@/components/form-field";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { Notice } from "@/components/notice";
 import { PageHeader, Panel } from "@/components/panel";
-import { Segmented } from "@/components/segmented";
-import { Pill, StatusPill } from "@/components/status";
+import { StatusPill } from "@/components/status";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  readWebRange,
-  useWebTraffic,
-  WEB_RANGES,
-  type WebRange,
-  WebTraffic,
-} from "@/components/web-charts";
+import { Table, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCount, formatShareOf } from "@/lib/format";
-import { outcomeHint, rejectionRows, sumRejected, sumUnclassified } from "@/lib/outcomes";
+import { sumRejected } from "@/lib/outcomes";
 import * as v from "@/lib/validate";
 import { webPath } from "@/lib/web-dashboard";
+import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
-import { useProject } from "./project-layout";
 
 export type SiteValues = { name: string; domain: string; origins: string };
 export type SiteErrors = Partial<Record<keyof SiteValues, string>>;
@@ -135,12 +105,12 @@ export function setupDone(site: Site, event: FirstEvent | null): number {
   return 1 + (event === "received" ? 1 : 0) + (site.verification === "verified" ? 1 : 0);
 }
 
-export const snippetPath = (s: Pick<Site, "id" | "tenant_id">) =>
-  `/projects/${s.tenant_id}/sites/${s.id}/snippet`;
-export const verifyPath = (s: Pick<Site, "id" | "tenant_id">) =>
-  `/projects/${s.tenant_id}/sites/${s.id}/verify`;
-export const sitePath = (s: Pick<Site, "id" | "tenant_id">, tab?: "settings" | "setup") =>
-  `/projects/${s.tenant_id}/sites?site=${s.id}${tab ? `&tab=${tab}` : ""}`;
+// a site's own pages: its setup (install, first event, domain) and its
+// settings
+export const siteSetupPath = (s: Pick<Site, "id" | "tenant_id">) =>
+  `/projects/${s.tenant_id}/sites/${s.id}`;
+export const siteSettingsPath = (s: Pick<Site, "id" | "tenant_id">) =>
+  `/projects/${s.tenant_id}/sites/${s.id}/settings`;
 
 type MarkState = "ok" | "wait" | "warn" | "none";
 
@@ -243,7 +213,7 @@ export function SitesTable({ sites, actions }: { sites: Site[]; actions?: ReactN
                 >
                   <TableCell>
                     <Link
-                      to={sitePath(s)}
+                      to={siteSetupPath(s)}
                       className="group/site flex min-w-0 flex-col rounded-sm focus-ring"
                     >
                       <span className="flex items-center gap-2 font-medium text-fg group-hover/site:underline">
@@ -268,7 +238,7 @@ export function SitesTable({ sites, actions }: { sites: Site[]; actions?: ReactN
                     <div className="flex items-center justify-end gap-1">
                       {event === "waiting" || event === "refused" ? (
                         <Button asChild variant="ghost" size="sm" className="text-accent-text">
-                          <Link to={snippetPath(s)}>Continue setup</Link>
+                          <Link to={siteSetupPath(s)}>Continue setup</Link>
                         </Button>
                       ) : null}
                       <Button asChild variant="ghost" size="sm">
@@ -294,7 +264,7 @@ export function SitesTable({ sites, actions }: { sites: Site[]; actions?: ReactN
           return (
             <StaggerItem as="li" key={s.id} className="border-t border-line-subtle">
               <Link
-                to={event === "received" ? sitePath(s) : snippetPath(s)}
+                to={siteSetupPath(s)}
                 className="flex min-h-(--vs-control-touch) items-center gap-3 px-4 py-3 transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring"
               >
                 <span className="flex min-w-0 flex-1 flex-col gap-1">
@@ -438,7 +408,7 @@ export function AddSiteDialog({
             onCancel={() => onOpenChange(false)}
             onDone={(site) => {
               onOpenChange(false);
-              if (site) navigate(snippetPath(site));
+              if (site) navigate(siteSetupPath(site));
             }}
           />
         </div>
@@ -471,7 +441,7 @@ export function AddSiteButton({
   );
 }
 
-function OriginsField({
+export function OriginsField({
   value,
   onChange,
   error,
@@ -517,47 +487,17 @@ function OriginsField({
 // ------------------------------------------------------------ the page
 
 export function SitesPage() {
-  const { tenant, isOwner, termsCurrent } = useProject();
-  // a suspended project's sites cannot be created or changed (contract 5.11);
-  // deleting stays possible
+  const { tenant, termsCurrent } = useProject();
+  // a suspended project's sites cannot be created or changed (contract 5.11)
   const canChange = termsCurrent && tenant.status !== "suspended";
   const sites = useQuery(sitesQuery(tenant.id));
   const location = useLocation();
   const navigate = useNavigate();
-  const [params] = useSearchParams();
   const justEnrolled = (location.state as { enrolled?: boolean } | null)?.enrolled === true;
-  const selected = params.get("site");
 
   if (sites.isPending) return <Loading label="Loading sites" />;
   if (sites.error) return <ErrorPanel error={sites.error} onRetry={() => sites.refetch()} />;
   const live = sites.data.filter((s) => s.status !== "removed");
-
-  if (selected) {
-    const site = live.find((s) => s.id === selected);
-    if (!site)
-      return (
-        <StateBlock
-          kind="empty"
-          title="This site is not in the project"
-          action={
-            <Button asChild variant="outline">
-              <Link to={`/projects/${tenant.id}`}>Back to the overview</Link>
-            </Button>
-          }
-        >
-          The site was deleted, or it belongs to another project.
-        </StateBlock>
-      );
-    return (
-      <SitePage
-        key={site.id}
-        site={site}
-        canEdit={canChange}
-        canDelete={isOwner && termsCurrent}
-        isOwner={isOwner}
-      />
-    );
-  }
 
   if (live.length === 0) {
     return (
@@ -577,7 +517,7 @@ export function SitesPage() {
               tenantId={tenant.id}
               cancellable={false}
               onDone={(site) => {
-                if (site) navigate(snippetPath(site));
+                if (site) navigate(siteSetupPath(site));
               }}
             />
           </Panel>
@@ -602,486 +542,5 @@ export function SitesPage() {
         actions={canChange ? <AddSiteButton tenantId={tenant.id} /> : null}
       />
     </div>
-  );
-}
-
-type SiteTab = "traffic" | "setup" | "settings";
-
-function SitePage({
-  site,
-  canEdit,
-  canDelete,
-  isOwner,
-}: {
-  site: Site;
-  canEdit: boolean;
-  canDelete: boolean;
-  isOwner: boolean;
-}) {
-  const [params, setParams] = useSearchParams();
-  const raw = params.get("tab");
-  const tab: SiteTab = raw === "settings" ? "settings" : raw === "setup" ? "setup" : "traffic";
-  const range = readWebRange(params.get("range"));
-  const set = (k: string, val: string | null) => {
-    const next = new URLSearchParams(params);
-    if (val === null) next.delete(k);
-    else next.set(k, val);
-    setParams(next, { replace: true });
-  };
-
-  return (
-    <div className="flex flex-col gap-5">
-      <Link
-        to={`/projects/${site.tenant_id}`}
-        className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg-2 transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring"
-      >
-        <ArrowLeft aria-hidden className="size-3.5" />
-        Overview
-      </Link>
-      <PageHeader
-        title={site.name}
-        meta={site.status !== "active" ? <StatusPill status={site.status} /> : null}
-        description={
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-small text-fg-2">{site.domain}</span>
-            <VerificationPill verification={site.verification} />
-            {site.stellar_toml?.status === "found" ? (
-              <Pill tone="success">stellar.toml found</Pill>
-            ) : null}
-          </span>
-        }
-        actions={
-          <>
-            {tab === "traffic" ? (
-              <Segmented
-                label="Range"
-                value={range}
-                options={WEB_RANGES}
-                onChange={(r) => set("range", r)}
-                hint={range === "24h" ? "per hour" : "per day"}
-              />
-            ) : null}
-            {site.quarantine_website_id ? (
-              <Button asChild variant="outline">
-                <Link to={`${webPath(site.tenant_id, site.id)}&band=quarantine`}>
-                  Quarantined traffic
-                </Link>
-              </Button>
-            ) : null}
-            <Button asChild>
-              <Link to={webPath(site.tenant_id, site.id)}>Web analytics</Link>
-            </Button>
-          </>
-        }
-      />
-
-      {site.in_review ? (
-        <Notice tone="warning" title="In review">
-          This domain belonged to a removed project, so an operator checks it before it receives
-          traffic.
-        </Notice>
-      ) : null}
-      {site.status_reason ? (
-        <Notice tone="info" title="Reason given by an operator">
-          {site.status_reason}
-        </Notice>
-      ) : null}
-
-      <Tabs
-        value={tab}
-        onValueChange={(t) => set("tab", t === "traffic" ? null : t)}
-        className="gap-5"
-      >
-        <TabsList variant="line" aria-label="Site sections" className="overflow-x-auto">
-          <TabsTrigger value="traffic">Traffic</TabsTrigger>
-          <TabsTrigger value="setup">Setup</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-        </TabsList>
-        <TabsContent value="traffic">
-          <SiteTraffic site={site} range={range} />
-        </TabsContent>
-        <TabsContent value="setup">
-          <SiteSetupSummary site={site} />
-        </TabsContent>
-        <TabsContent value="settings">
-          <SiteSettings site={site} canEdit={canEdit} canDelete={canDelete} isOwner={isOwner} />
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-}
-
-function SiteTraffic({ site, range }: { site: Site; range: WebRange }) {
-  const data = useWebTraffic([site], range);
-  const answer = data.bySite[0];
-  return (
-    <div className="flex flex-col gap-4">
-      <WebTraffic
-        data={data}
-        range={range}
-        label={range === "24h" ? "Last 24 hours" : "Last 30 days"}
-      />
-      {answer ? <Outcomes ingest={answer} range={range} /> : null}
-      <div className="flex flex-col gap-1">
-        <p className="text-caption font-normal text-fg-3">
-          Pages, referrers and countries are in the web dashboard. Counts here are per UTC{" "}
-          {range === "24h" ? "hour" : "day"} and update every few minutes.
-        </p>
-        <DbIpAttribution />
-      </div>
-    </div>
-  );
-}
-
-const n = (totals: Record<string, number>, k: string) => totals[k] ?? 0;
-
-// every outcome of the range by name, so a total never silently loses events,
-// and why events were rejected
-function Outcomes({ ingest, range }: { ingest: Ingest; range: WebRange }) {
-  const t = ingest.totals;
-  const unclassified = sumUnclassified(t);
-  const rows = [
-    { key: "accepted", label: "Accepted", value: n(t, "accepted") },
-    { key: "quarantined", label: "Quarantined", value: n(t, "quarantined") },
-    { key: "bot", label: "Bots", value: n(t, "bot") },
-    { key: "rejected", label: "Rejected", value: sumRejected(t) },
-    { key: "dlq", label: "Not delivered", value: n(t, "dlq") },
-    ...(unclassified > 0 ? [{ key: "other", label: "Other", value: unclassified }] : []),
-  ];
-  const reasons = rejectionRows(t);
-  return (
-    <Panel
-      title="Every outcome"
-      description={`What happened to the events of the ${range === "24h" ? "last 24 hours" : "last 30 days"}`}
-    >
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
-        {rows.map((r) => (
-          <div key={r.key} className="flex flex-col gap-1" title={outcomeHint(r.key) ?? undefined}>
-            <dt className="text-caption text-fg-3">{r.label}</dt>
-            <dd className="font-mono text-title text-fg tabular">{formatCount(r.value)}</dd>
-          </div>
-        ))}
-      </dl>
-      {reasons.length === 0 ? (
-        <p className="mt-4 text-small text-fg-2">No rejected events.</p>
-      ) : (
-        <details className="mt-4 text-small">
-          <summary className="w-fit cursor-pointer rounded-sm text-fg-2 transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring">
-            Why events were rejected
-          </summary>
-          <Table className="mt-2">
-            <TableBody>
-              {reasons.map((r) => (
-                <TableRow key={r.key}>
-                  <TableCell>
-                    <span className="flex flex-col">
-                      <span className="text-fg">{r.label}</span>
-                      {outcomeHint(r.key) ? (
-                        <span className="text-caption font-normal text-fg-3">
-                          {outcomeHint(r.key)}
-                        </span>
-                      ) : null}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right font-mono">{formatCount(r.count)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </details>
-      )}
-    </Panel>
-  );
-}
-
-function SiteSetupSummary({ site }: { site: Site }) {
-  const month = useQuery(ingestMonthQuery(site.id));
-  const event = month.data ? firstEvent(month.data) : null;
-  return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Panel
-        title="Tracker"
-        description="The script tag on the site's pages"
-        actions={
-          <Button asChild variant="outline" size="sm">
-            <Link to={snippetPath(site)}>
-              <Code2 aria-hidden />
-              Snippet
-            </Link>
-          </Button>
-        }
-      >
-        <div className="flex flex-col gap-2 text-small">
-          <SetupMarks site={site} event={event} />
-          <p className="text-fg-2">
-            {event === null
-              ? "Checking the last 30 days."
-              : event === "received"
-                ? "Events from this site were counted in the last 30 days."
-                : event === "refused"
-                  ? "Events arrive, but they are refused. The setup page names the reasons."
-                  : "No events counted in the last 30 days."}
-          </p>
-        </div>
-      </Panel>
-      <Panel
-        title="Domain"
-        description="Proof that the project controls the domain"
-        actions={
-          <Button asChild variant="outline" size="sm">
-            <Link to={verifyPath(site)}>
-              <ShieldCheck aria-hidden />
-              Verify domain
-            </Link>
-          </Button>
-        }
-      >
-        <VerificationDetail
-          verification={site.verification}
-          verifyMethod={site.verify_method}
-          verifiedAt={site.verified_at}
-          lastVerifyAt={site.last_verify_at}
-          lastVerifyError={site.last_verify_error}
-        />
-      </Panel>
-      <Panel className="lg:col-span-2">
-        <StellarTomlSummary
-          toml={site.stellar_toml}
-          checkedAt={site.stellar_toml_checked_at}
-          domain={site.domain}
-        />
-      </Panel>
-    </div>
-  );
-}
-
-function SiteSettings({
-  site,
-  canEdit,
-  canDelete,
-  isOwner,
-}: {
-  site: Site;
-  canEdit: boolean;
-  canDelete: boolean;
-  isOwner: boolean;
-}) {
-  return (
-    <div className="flex max-w-content flex-col gap-4">
-      <Panel title="Name and allowed origins" description="The domain cannot be changed.">
-        {canEdit ? (
-          <EditSiteForm site={site} />
-        ) : (
-          <dl className="flex flex-col gap-3 text-small">
-            <div className="flex flex-col gap-1">
-              <dt className="text-caption text-fg-3">Name</dt>
-              <dd className="text-fg">{site.name}</dd>
-            </div>
-            <div className="flex flex-col gap-1">
-              <dt className="text-caption text-fg-3">Allowed origins</dt>
-              <dd>
-                <ul aria-label="Allowed origins" className="flex flex-wrap gap-1">
-                  {site.origins.map((o) => (
-                    <li
-                      key={o}
-                      className="rounded-sm border border-line bg-sunken px-2 py-1 font-mono text-caption font-normal text-fg"
-                    >
-                      {o}
-                    </li>
-                  ))}
-                </ul>
-              </dd>
-            </div>
-          </dl>
-        )}
-      </Panel>
-      <Panel title="Campaign parameters">
-        <CampaignParams site={site} canEdit={canEdit} isOwner={isOwner} />
-      </Panel>
-      {canDelete ? (
-        <Panel
-          title="Delete site"
-          description="Stops collection and deletes both web dashboards of this site with all their data."
-          actions={<DeleteSite site={site} />}
-          className="border-critical-line"
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function EditSiteForm({ site }: { site: Site }) {
-  const initial = { name: site.name, domain: site.domain, origins: site.origins.join("\n") };
-  const [values, setValues] = useState<SiteValues>(initial);
-  const [errors, setErrors] = useState<SiteErrors>({});
-  const [saved, setSaved] = useState(false);
-  const save = useMutation({
-    mutationFn: (patch: SitePatch) => api.updateSite(site.tenant_id, site.id, patch),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: keys.sites(site.tenant_id) });
-      setSaved(true);
-    },
-    onError: (err) => setErrors(serverSiteErrors(err, values)),
-  });
-  const changed = Object.keys(sitePatch(site, values)).length > 0;
-  const edit = (next: Partial<SiteValues>) => {
-    setSaved(false);
-    setValues((s) => ({ ...s, ...next }));
-  };
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    const found = validateSite(values);
-    setErrors(found);
-    if (Object.keys(found).length > 0) return;
-    const patch = sitePatch(site, values);
-    if (Object.keys(patch).length === 0) return;
-    save.mutate(patch);
-  }
-
-  return (
-    <form
-      noValidate
-      onSubmit={submit}
-      aria-label={`Edit ${site.name}`}
-      className="flex flex-col gap-4"
-    >
-      <TextField
-        label="Name"
-        name="name"
-        maxLength={100}
-        value={values.name}
-        onChange={(e) => edit({ name: e.target.value })}
-        error={errors.name}
-      />
-      <OriginsField
-        value={values.origins}
-        onChange={(origins) => edit({ origins })}
-        error={errors.origins}
-        suggestion={null}
-      />
-      <p className="text-caption font-normal text-fg-2">
-        New origins take effect at the collection endpoint within a minute.
-      </p>
-      <FormMessage
-        error={
-          save.error && Object.keys(serverSiteErrors(save.error, values)).length === 0
-            ? save.error
-            : null
-        }
-      />
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" size="sm" pending={save.isPending} disabled={!changed}>
-          {save.isPending ? "Saving" : "Save changes"}
-        </Button>
-        {changed ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setValues(initial);
-              setErrors({});
-              save.reset();
-            }}
-          >
-            Cancel
-          </Button>
-        ) : null}
-        <span role="status" className="flex items-center gap-1 text-small text-fg-2">
-          {saved && !changed ? (
-            <>
-              <Check aria-hidden className="size-3.5 text-success" />
-              Saved
-            </>
-          ) : null}
-        </span>
-      </div>
-    </form>
-  );
-}
-
-// utm collection (contract 3.1 collect_utm, 4.3.4): off unless an owner turns
-// it on, because campaign parameters can carry identifiers and so change the
-// site's privacy position. saved at once, because it is one switch and not
-// part of the edit form.
-export function CampaignParams({
-  site,
-  canEdit,
-  isOwner,
-}: {
-  site: Site;
-  canEdit: boolean;
-  isOwner: boolean;
-}) {
-  const id = useId();
-  const save = useMutation({
-    mutationFn: (on: boolean) => api.updateSite(site.tenant_id, site.id, { collect_utm: on }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: keys.sites(site.tenant_id) });
-    },
-  });
-  const checked =
-    save.isPending && save.variables !== undefined ? save.variables : site.collect_utm;
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-start gap-3">
-        <Checkbox
-          id={id}
-          checked={checked}
-          disabled={!canEdit || !isOwner || save.isPending}
-          onCheckedChange={(c) => save.mutate(c === true)}
-          aria-describedby={`${id}-d`}
-          className="mt-1"
-        />
-        <label htmlFor={id} className="text-body text-fg">
-          Keep campaign parameters (<code className="font-mono text-small">utm_*</code> and{" "}
-          <code className="font-mono text-small">ref</code>) in page addresses
-        </label>
-      </div>
-      <p id={`${id}-d`} className="pl-6 text-small text-fg-2">
-        Off by default: every query parameter is dropped before storage. Turning this on keeps the
-        campaign parameters, which France's CNIL recommends not collecting for analytics run without
-        consent. It applies to new events within a minute.
-        {canEdit && !isOwner ? " Only an owner of the project can change it." : null}
-      </p>
-      <FormMessage error={save.error} />
-    </div>
-  );
-}
-
-function DeleteSite({ site }: { site: Site }) {
-  const [open, setOpen] = useState(false);
-  const navigate = useNavigate();
-  const remove = useMutation({
-    mutationFn: () => api.deleteSite(site.tenant_id, site.id),
-    onSuccess: async () => {
-      setOpen(false);
-      await queryClient.invalidateQueries({ queryKey: keys.sites(site.tenant_id) });
-      navigate(`/projects/${site.tenant_id}`);
-    },
-  });
-  return (
-    <>
-      <Button variant="destructive" size="sm" onClick={() => setOpen(true)}>
-        <Trash2 aria-hidden />
-        Delete
-      </Button>
-      <ConfirmDialog
-        open={open}
-        onOpenChange={(o) => {
-          setOpen(o);
-          if (!o) remove.reset();
-        }}
-        title={`Delete ${site.name}?`}
-        description={`Events from ${site.domain} stop being accepted, and both web dashboards of this site are deleted with all their data. This cannot be undone.`}
-        cancelLabel="Keep site"
-        confirmLabel="Delete site"
-        pendingLabel="Deleting"
-        pending={remove.isPending}
-        error={remove.error}
-        onConfirm={() => remove.mutate()}
-      />
-    </>
   );
 }

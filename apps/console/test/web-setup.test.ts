@@ -10,7 +10,7 @@ import {
   TITLE_ATTR,
   titleTag,
 } from "@/lib/snippet-guides";
-import { firstEvent } from "@/pages/sites";
+import { firstEvent } from "@/pages/project/sites";
 import * as f from "./fixtures/contract";
 
 const answer = (totals: Record<string, number>) => ingest.parse({ ...f.ingestBody, totals });

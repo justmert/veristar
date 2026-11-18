@@ -2,43 +2,40 @@ import { Mark } from "@veristar/brand/mark";
 import { createBrowserRouter, type LoaderFunctionArgs, redirect } from "react-router";
 import { ApiError } from "@/api/client";
 import { meQuery } from "@/api/queries";
-import { AccountPage } from "@/pages/account";
-import { ApiSetupPage } from "@/pages/api-setup";
-import { ApiTrafficPage } from "@/pages/api-traffic";
 import { AppShell } from "@/pages/app-shell";
-import { EnrollPage } from "@/pages/enroll";
-import { McpPage } from "@/pages/mcp";
-import { McpConsentPage } from "@/pages/mcp-consent";
-import { MembersPage } from "@/pages/members";
-import { NotFoundPage, RouteErrorPage } from "@/pages/not-found";
+import { AccountPage } from "@/pages/home/account";
+import { EnrollPage } from "@/pages/home/enroll";
+import { ProjectsPage } from "@/pages/home/projects";
 import { OnchainPage } from "@/pages/onchain";
 import { AlertsPage } from "@/pages/operator/alerts";
-import { ApiKeysPage } from "@/pages/operator/api-keys";
 import { AuditPage } from "@/pages/operator/audit";
 import { ComparePage } from "@/pages/operator/compare";
-import { GlobalApiPage } from "@/pages/operator/global-api";
-import { GlobalWebPage } from "@/pages/operator/global-web";
+import { AccessKeysPage } from "@/pages/operator/keys";
 import { OperatorLayout } from "@/pages/operator/layout";
-import { OperatorMcpPage } from "@/pages/operator/mcp";
 import { OperatorsPage } from "@/pages/operator/operators";
+import { OperatorProjectPage } from "@/pages/operator/project";
+import { OperatorProjectsPage } from "@/pages/operator/projects";
 import { ReviewQueuePage } from "@/pages/operator/review";
 import { RulesPage } from "@/pages/operator/rules";
 import { SettingsPage } from "@/pages/operator/settings";
-import { TenantDetailPage } from "@/pages/operator/tenant-detail";
-import { TenantsPage } from "@/pages/operator/tenants";
-import { OverviewPage } from "@/pages/overview";
-import { PrivacyPage } from "@/pages/privacy";
+import { AiPage } from "@/pages/project/ai";
+import { ApiPage } from "@/pages/project/api";
+import { ConnectApiPage } from "@/pages/project/connect-api";
+import { MembersPage } from "@/pages/project/members";
+import { OverviewPage } from "@/pages/project/overview";
+import { PrivacyPage } from "@/pages/project/privacy";
+import { ScfReviewPage } from "@/pages/project/scf";
+import { SiteSettingsPage } from "@/pages/project/site-settings";
+import { SiteSetupPage } from "@/pages/project/site-setup";
+import { SitesPage } from "@/pages/project/sites";
+import { WebPage } from "@/pages/project/web";
 import { ProjectLayout } from "@/pages/project-layout";
-import { ProjectsPage } from "@/pages/projects";
+import { AiConsentPage } from "@/pages/public/ai-consent";
+import { NotFoundPage, RouteErrorPage } from "@/pages/public/not-found";
+import { SignInPage } from "@/pages/public/sign-in";
+import { SsoErrorPage } from "@/pages/public/sso-error";
+import { TermsPage } from "@/pages/public/terms";
 import { PublicReportPage } from "@/pages/public-report";
-import { ReportsPage } from "@/pages/reports";
-import { SCFViewPage } from "@/pages/scf-view";
-import { SignInPage } from "@/pages/sign-in";
-import { SitesPage } from "@/pages/sites";
-import { SnippetPage } from "@/pages/snippet";
-import { TermsPage } from "@/pages/terms";
-import { VerifyPage } from "@/pages/verify";
-import { WebPage } from "@/pages/web";
 import { queryClient } from "@/query-client";
 
 // the first paint while the session check runs: the mark breathing in the
@@ -71,12 +68,14 @@ async function requireSession({ request }: LoaderFunctionArgs) {
 
 export const router = createBrowserRouter([
   { path: "/sign-in", element: <SignInPage />, errorElement: <RouteErrorPage /> },
+  // an address older versions sent people to after a single sign-on
+  { path: "/sso-error", element: <SsoErrorPage />, errorElement: <RouteErrorPage /> },
   { path: "/terms", element: <TermsPage />, errorElement: <RouteErrorPage /> },
   // a shared signed report: public, no session (contract 20.5)
   { path: "/r/:reportId", element: <PublicReportPage />, errorElement: <RouteErrorPage /> },
   // the mcp oauth consent screen; it signs the person in itself, so the
   // sealed request survives the github round trip (contract 12.3)
-  { path: "/ai/consent", element: <McpConsentPage />, errorElement: <RouteErrorPage /> },
+  { path: "/ai/consent", element: <AiConsentPage />, errorElement: <RouteErrorPage /> },
   {
     path: "/",
     id: "session",
@@ -95,17 +94,17 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <OverviewPage /> },
           { path: "web", element: <WebPage /> },
+          { path: "api", element: <ApiPage /> },
+          { path: "onchain", element: <OnchainPage /> },
+          { path: "scf", element: <ScfReviewPage /> },
           { path: "sites", element: <SitesPage /> },
-          { path: "sites/:siteId/snippet", element: <SnippetPage /> },
-          { path: "sites/:siteId/verify", element: <VerifyPage /> },
+          { path: "sites/:siteId", element: <SiteSetupPage /> },
+          { path: "sites/:siteId/settings", element: <SiteSettingsPage /> },
+          { path: "connect-api", element: <ConnectApiPage /> },
+          { path: "ai", element: <AiPage /> },
           { path: "members", element: <MembersPage /> },
           { path: "privacy", element: <PrivacyPage /> },
-          { path: "api", element: <ApiSetupPage /> },
-          { path: "api/traffic", element: <ApiTrafficPage /> },
-          { path: "ai", element: <McpPage /> },
-          { path: "onchain", element: <OnchainPage /> },
-          { path: "scf-view", element: <SCFViewPage /> },
-          { path: "reports", element: <ReportsPage /> },
+          { path: "*", element: <NotFoundPage /> },
         ],
       },
       {
@@ -114,17 +113,15 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <ReviewQueuePage /> },
           { path: "alerts", element: <AlertsPage /> },
-          { path: "tenants", element: <TenantsPage /> },
-          { path: "tenants/:tenantId", element: <TenantDetailPage /> },
-          { path: "web", element: <GlobalWebPage /> },
-          { path: "api", element: <GlobalApiPage /> },
+          { path: "projects", element: <OperatorProjectsPage /> },
+          { path: "projects/:tenantId", element: <OperatorProjectPage /> },
           { path: "compare", element: <ComparePage /> },
           { path: "rules", element: <RulesPage /> },
-          { path: "api-keys", element: <ApiKeysPage /> },
-          { path: "ai", element: <OperatorMcpPage /> },
-          { path: "audit", element: <AuditPage /> },
           { path: "settings", element: <SettingsPage /> },
           { path: "operators", element: <OperatorsPage /> },
+          { path: "keys", element: <AccessKeysPage /> },
+          { path: "audit", element: <AuditPage /> },
+          { path: "*", element: <NotFoundPage /> },
         ],
       },
       { path: "*", element: <NotFoundPage /> },

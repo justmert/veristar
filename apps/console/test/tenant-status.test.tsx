@@ -1,10 +1,9 @@
-import { Outlet } from "react-router";
 import { describe, expect, it } from "vitest";
-import type { Me, Tenant } from "@/api/schemas";
+import type { Me, Site, Tenant } from "@/api/schemas";
+import { RemovedNotices } from "@/pages/home/projects";
+import { VerifySection } from "@/pages/project/site-verify";
 import { RemovedNotice, StatusNotice } from "@/pages/project-layout";
-import { RemovedNotices } from "@/pages/projects";
 import { resubmitBody, resubmitValues } from "@/pages/resubmit";
-import { VerifyPage } from "@/pages/verify";
 import * as f from "./fixtures/contract";
 import { byLabel, byRole, click, render, renderRoutes, stubFetch, type, waitFor } from "./helpers";
 
@@ -91,25 +90,18 @@ describe("tenant status banner (contract 5.10)", () => {
   });
 });
 
-describe("domain verification page (contract 5.8)", () => {
-  const ctx = { tenant: base, me: f.meBody, isOwner: true, termsCurrent: true };
+describe("domain verification, the third setup step (contract 5.8)", () => {
   const routes = [
     {
-      path: "/projects/:tenantId",
-      element: <Outlet context={ctx} />,
-      children: [{ path: "sites/:siteId/verify", element: <VerifyPage /> }],
+      path: "/projects/:tenantId/sites/:siteId",
+      element: <VerifySection site={f.siteBody as Site} />,
     },
   ];
-  const path = `/projects/${f.TENANT_ID}/sites/${f.SITE_ID}/verify`;
+  const path = `/projects/${f.TENANT_ID}/sites/${f.SITE_ID}`;
 
-  // the setup frame reads the project's sites (name, stellar.toml) and the
-  // site's ingest counts (the first event step) next to the verification
-  const frame = (verification: unknown) => [
-    { status: 200, body: f.sitePageBody },
-    { status: 200, body: verification },
-    { status: 200, body: f.ingestBody },
-    { status: 200, body: f.ingestBody },
-  ];
+  // the step reads the site's verification; the frame around it is the
+  // setup page's
+  const frame = (verification: unknown) => [{ status: 200, body: verification }];
 
   it("shows both methods with the token and the last error", async () => {
     stubFetch(frame(f.verificationBody));

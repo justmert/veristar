@@ -17,7 +17,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
 import { SelectField, TextField } from "@/components/form-field";
 import { Panel } from "@/components/panel";
-import { ReasonDialog } from "@/components/reason-dialog";
+
 import { Pill } from "@/components/status";
 import { AddPasskeyDialog } from "@/components/step-up";
 import { Button } from "@/components/ui/button";
@@ -225,7 +225,7 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
           </TableBody>
         </Table>
       </div>
-      <ReasonDialog
+      <ConfirmDialog
         open={pending !== null}
         onOpenChange={(o) => {
           if (!o) {
@@ -235,9 +235,7 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
         }}
         title={t && pending ? `${t.title} ${identity(pending.entry)}` : ""}
         description={pending ? ACTION_DETAIL[pending.action] : ""}
-        reasonRequired
-        hint={REASON_HINT}
-        maxLength={500}
+        reason={{ required: true, hint: REASON_HINT, maxLength: 500 }}
         confirmLabel={t?.confirm ?? ""}
         pendingLabel={t?.pending ?? ""}
         tone={t?.tone ?? "primary"}

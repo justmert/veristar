@@ -20,9 +20,10 @@ import { formatBytes, formatCount, formatDate } from "@/lib/format";
 import { outcomeHint, rejectionRows } from "@/lib/outcomes";
 import { CONSENT_START, readsTitleChoice, snippetGuides } from "@/lib/snippet-guides";
 import { webPath } from "@/lib/web-dashboard";
-import { NotFoundPage } from "./not-found";
-import { useProject } from "./project-layout";
-import { type FirstEvent, firstEvent, sitePath, snippetPath, verifyPath } from "./sites";
+import { useProject } from "@/pages/project-layout";
+import { NotFoundPage } from "@/pages/public/not-found";
+import { VerifySection } from "./site-verify";
+import { type FirstEvent, firstEvent, siteSettingsPath } from "./sites";
 
 // ------------------------------------------------------------ setup frame
 
@@ -30,16 +31,14 @@ import { type FirstEvent, firstEvent, sitePath, snippetPath, verifyPath } from "
 // after it is countable without asking more often than it can change
 const FIRST_EVENT_POLL = 30_000;
 
-// the setup of one site as one flow: the snippet and the verify urls are its
-// two steps under a shared header with the progress of all three
+// the setup of one site as one page: install the tracker, see the first
+// event, verify the domain, under a header with the progress of all three
 export function SetupFrame({
   site,
-  step,
   event,
   children,
 }: {
   site: Site | undefined;
-  step: "install" | "verify";
   event: FirstEvent | null;
   children: ReactNode;
 }) {
@@ -92,7 +91,7 @@ export function SetupFrame({
           </span>
         }
       />
-      {site ? <SetupSteps site={site} step={step} event={event} /> : null}
+      {site ? <SetupSteps site={site} event={event} /> : null}
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
         <div className="flex min-w-0 animate-rise-in flex-col gap-6">{children}</div>
         {site ? <SetupAside site={site} /> : null}
@@ -101,26 +100,18 @@ export function SetupFrame({
   );
 }
 
-function SetupSteps({
-  site,
-  step,
-  event,
-}: {
-  site: Site;
-  step: "install" | "verify";
-  event: FirstEvent | null;
-}) {
+function SetupSteps({ site, event }: { site: Site; event: FirstEvent | null }) {
   const steps = [
     {
       key: "install",
       label: "Install and first event",
-      to: snippetPath(site),
+      to: "#install",
       done: event === "received",
     },
     {
       key: "verify",
       label: "Verify the domain",
-      to: verifyPath(site),
+      to: "#verify",
       done: site.verification === "verified",
     },
   ];
@@ -128,18 +119,11 @@ function SetupSteps({
     <nav aria-label="Setup steps">
       <ol className="flex flex-wrap gap-2">
         {steps.map((s, i) => {
-          const current = s.key === step;
           return (
             <li key={s.key}>
-              <Link
-                to={s.to}
-                aria-current={current ? "step" : undefined}
-                className={cn(
-                  "flex h-9 items-center gap-2 rounded-md border px-3 text-small transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-(--vs-control-touch)",
-                  current
-                    ? "border-fg-disabled bg-selected text-fg"
-                    : "border-line text-fg-2 hover:bg-hover hover:text-fg",
-                )}
+              <a
+                href={s.to}
+                className="flex h-9 items-center gap-2 rounded-md border border-line px-3 text-small text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover hover:text-fg focus-ring max-lg:h-(--vs-control-touch)"
               >
                 <span
                   className={cn(
@@ -151,7 +135,7 @@ function SetupSteps({
                 </span>
                 {s.label}
                 {s.done ? <span className="sr-only">(done)</span> : null}
-              </Link>
+              </a>
             </li>
           );
         })}
@@ -179,7 +163,7 @@ function SetupAside({ site }: { site: Site }) {
                 </span>
               ))}
               <Link
-                to={sitePath(site, "settings")}
+                to={siteSettingsPath(site)}
                 className="mt-1 w-fit rounded-sm text-fg-2 underline decoration-line-strong underline-offset-4 transition-colors hover:text-fg hover:decoration-fg focus-ring"
               >
                 Edit origins
@@ -202,10 +186,10 @@ function SetupAside({ site }: { site: Site }) {
         </p>
       </div>
       <Link
-        to={sitePath(site, "settings")}
+        to={siteSettingsPath(site)}
         className="w-fit rounded-sm text-small text-fg-2 transition-colors hover:text-fg focus-ring"
       >
-        Skip setup, go to site settings
+        Site settings
       </Link>
     </aside>
   );
@@ -234,7 +218,7 @@ export function useFirstEvent(siteId: string): {
 
 // ------------------------------------------------------------ install
 
-export function SnippetPage() {
+export function SiteSetupPage() {
   const { tenant } = useProject();
   const { siteId = "" } = useParams();
   const [params, setParams] = useSearchParams();
@@ -247,22 +231,32 @@ export function SnippetPage() {
   if (isNotFound(snippet.error)) return <NotFoundPage />;
 
   return (
-    <SetupFrame site={site} step="install" event={first.event}>
+    <SetupFrame site={site} event={first.event}>
       {snippet.isPending ? <Loading label="Loading the snippet" /> : null}
       {snippet.error ? (
         <ErrorPanel error={snippet.error} onRetry={() => snippet.refetch()} />
       ) : null}
       {snippet.data ? (
-        <Install
-          snippet={snippet.data}
-          site={site}
-          first={first}
-          onVersion={(v) => {
-            const next = new URLSearchParams(params);
-            next.set("version", v);
-            setParams(next, { replace: true });
-          }}
-        />
+        <section id="install" aria-label="Install and first event" className="scroll-mt-6">
+          <Install
+            snippet={snippet.data}
+            site={site}
+            first={first}
+            onVersion={(v) => {
+              const next = new URLSearchParams(params);
+              next.set("version", v);
+              setParams(next, { replace: true });
+            }}
+          />
+        </section>
+      ) : null}
+      {site ? (
+        <section id="verify" aria-labelledby="verify-h" className="flex scroll-mt-6 flex-col gap-4">
+          <h2 id="verify-h" className="text-section text-fg">
+            Verify the domain
+          </h2>
+          <VerifySection site={site} />
+        </section>
       ) : null}
     </SetupFrame>
   );
@@ -610,10 +604,10 @@ function FirstEventState({
             {site ? (
               <div className="flex flex-wrap gap-2">
                 <Button asChild size="sm" className="max-lg:h-(--vs-control-touch)">
-                  <Link to={verifyPath(site)}>
+                  <a href="#verify">
                     Continue to verification
                     <ArrowRight aria-hidden />
-                  </Link>
+                  </a>
                 </Button>
                 <Button
                   asChild
@@ -658,7 +652,7 @@ function FirstEventState({
               <div className="flex flex-wrap gap-2">
                 {originRefused ? (
                   <Button asChild size="sm" className="max-lg:h-(--vs-control-touch)">
-                    <Link to={sitePath(site, "settings")}>Edit allowed origins</Link>
+                    <Link to={siteSettingsPath(site)}>Edit allowed origins</Link>
                   </Button>
                 ) : null}
                 <Button
@@ -667,7 +661,7 @@ function FirstEventState({
                   size="sm"
                   className="max-lg:h-(--vs-control-touch)"
                 >
-                  <Link to={sitePath(site)}>See every outcome</Link>
+                  <Link to={`${webPath(site.tenant_id, site.id)}#outcomes`}>See every outcome</Link>
                 </Button>
               </div>
             ) : null}

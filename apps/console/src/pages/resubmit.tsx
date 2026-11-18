@@ -11,8 +11,8 @@ import { Notice } from "@/components/notice";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
 import * as v from "@/lib/validate";
+import { splitIds } from "@/pages/home/enroll";
 import { queryClient } from "@/query-client";
-import { splitIds } from "./enroll";
 
 export type ResubmitValues = {
   name: string;

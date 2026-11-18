@@ -8,9 +8,9 @@ import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
 import { Notice as ToneNotice } from "@/components/notice";
 import { Button } from "@/components/ui/button";
 import { isNotFound } from "@/lib/errors";
+import { NotFoundPage, ProjectsButton, StopPage } from "@/pages/public/not-found";
 import { ResubmitForm } from "@/pages/resubmit";
 import { queryClient } from "@/query-client";
-import { NotFoundPage, ProjectsButton, StopPage } from "./not-found";
 
 export type ProjectContext = { tenant: Tenant; me: Me; isOwner: boolean; termsCurrent: boolean };
 

@@ -74,7 +74,7 @@ export function TenantTable({
           <tr key={t.id} data-tenant={t.id} className={`group ${ROW}`}>
             <th scope="row" className={`${TD} max-w-80 pl-4 text-left font-normal`}>
               <Link
-                to={`/operator/tenants/${t.id}`}
+                to={`/operator/projects/${t.id}`}
                 className="block truncate rounded-sm text-body font-medium text-fg underline-offset-4 group-hover:underline focus-ring"
               >
                 {t.name}

@@ -22,12 +22,12 @@ import { TextField } from "@/components/form-field";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { Notice } from "@/components/notice";
 import { PageHeader, Panel } from "@/components/panel";
-import { OneTimeSecret } from "@/components/secret";
+import { SecretPanel } from "@/components/secret-panel";
 import { Pill, type Tone } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDateTimeUtc } from "@/lib/format";
-import { useProject } from "./project-layout";
+import { useProject } from "@/pages/project-layout";
 
 // the project's "AI / MCP" page (contract 12.8, docs/onboarding/mcp.md):
 // access keys for AI clients, the connector url for oauth clients, and the
@@ -66,7 +66,7 @@ function serverErrors(err: unknown): McpKeyErrors {
   return out;
 }
 
-export function McpPage() {
+export function AiPage() {
   const { tenant, me, isOwner } = useProject();
   const list = useQuery(tenantMcpQuery(tenant.id));
   const [created, setCreated] = useState<McpCredentialCreated | null>(null);
@@ -303,7 +303,7 @@ export function CreatedKeyPanel({
 }) {
   return (
     <section aria-label="New access key">
-      <OneTimeSecret
+      <SecretPanel
         value={created.key}
         title={`Copy the key now: ${created.name}`}
         description={`It is shown only once; only its hash is stored. It expires ${
