@@ -442,7 +442,7 @@ func (s *Server) addCohortOperatorTools(srv *mcp.Server) {
 		Round    string `json:"round,omitempty" jsonschema:"only this round, such as SCF #38"`
 		Category string `json:"category,omitempty" jsonschema:"only this category, such as Developer Tooling"`
 		Search   string `json:"q,omitempty" jsonschema:"case-insensitive text in the project name, 1 to 100 characters"`
-		Measured *bool  `json:"measured,omitempty" jsonschema:"only awards whose matched project has (true) or lacks (false) web, API or on-chain data in the range"`
+		Measured *bool  `json:"measured,omitempty" jsonschema:"true: only matched awards whose project has web, API or on-chain data in the range; false: every other award"`
 	}
 	addTool(s, srv, &mcp.Tool{
 		Name:  "list_scf_awards",
