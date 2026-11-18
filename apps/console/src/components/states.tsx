@@ -12,8 +12,8 @@ import { MISSING } from "@/lib/format";
 // says what happened, then what to do. the page header is never part of a
 // state: it stays in place while its content loads or fails.
 
-// the frame of every state; error-panel.tsx draws its older blocks with it
-export function StateFrame({
+// the frame of every state
+function StateFrame({
   tone,
   role,
   icon,
