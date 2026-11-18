@@ -6,9 +6,8 @@ package gatewayit
 // capacity benchmark of one gateway, so it is not part of make gateway-it:
 // k6, the gateway and nats share the host, and the result is only a
 // measurement of the gateway on a host with cores to spare for the load
-// generator (the reference run used 10 cores). github's standard runner for
-// private repositories has 2 vcpus, where k6 alone takes about one of them;
-// two runs there gave p99 174 ms and 222 ms (e2e runs 43437576423 and
+// generator (the reference run used 10 cores). on a 2-vcpu github-hosted
+// runner k6 alone takes about one vcpu; two runs there gave p99 174 ms and 222 ms (e2e runs 43437576423 and
 // 43454017432). run it with make gateway-load.
 
 import (
