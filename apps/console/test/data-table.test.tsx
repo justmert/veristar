@@ -1,6 +1,6 @@
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type Column, DataTable } from "@/components/data-table";
+import { type Column, DataTable, useRowPages } from "@/components/data-table";
 import { byRole, click, render, waitFor } from "./helpers";
 
 type Row = { id: string; name: string; visits: number; country: string };
@@ -217,8 +217,12 @@ describe("data table", () => {
     expect(card.querySelector("a")?.getAttribute("href")).toBe("/p/a");
     expect(card.querySelector("dt")?.textContent).toBe("Visits");
     expect(card.textContent).toContain("1,200");
-    // a column not marked for the phone stays in the table only
-    expect(card.textContent).not.toContain("Germany");
+    // a column not marked for the phone is behind the card's Details, never
+    // dropped
+    const details = card.querySelector("details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    expect(details.querySelector("summary")?.textContent).toBe("Details");
+    expect(details.textContent).toContain("Germany");
   });
 
   it("scrolls with the page and sticks its header when the columns fit", async () => {
@@ -319,5 +323,32 @@ describe("data table", () => {
     expect(type?.className).not.toContain("truncate");
     expect(type?.querySelector(".truncate")).toBeNull();
     expect(country?.querySelector(".truncate")?.textContent).toBe("Germany");
+  });
+
+  it("pages a list it holds in full", async () => {
+    const many: Row[] = Array.from({ length: 25 }, (_, i) => ({
+      id: `r${i}`,
+      name: `Row ${i}`,
+      visits: i,
+      country: "Germany",
+    }));
+    function Paged() {
+      const p = useRowPages(many, 10);
+      return (
+        <DataTable
+          label="Paged"
+          columns={columns}
+          rows={p.rows}
+          getRowKey={(r) => r.id}
+          footer={p.footer}
+        />
+      );
+    }
+    const host = await render(<Paged />);
+    await waitFor(() => expect(host.textContent).toContain("1 to 10 of 25"));
+    expect(host.querySelectorAll("tbody tr")).toHaveLength(10);
+    await click(host.querySelector("button[aria-label='Next page']") as HTMLElement);
+    await waitFor(() => expect(host.textContent).toContain("11 to 20 of 25"));
+    expect(host.textContent).toContain("Row 10");
   });
 });
