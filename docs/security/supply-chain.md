@@ -376,7 +376,7 @@ the publish job stops when the variable is not set.
   GitHub's own failure notice reaches the maintainers.
 
 Dependabot (`.github/dependabot.yml`) opens update pull requests for Go, npm, Dockerfiles,
-compose files, GitHub Actions, OpenTofu providers, the Python and Rust examples and the Ansible
+compose files, GitHub Actions, OpenTofu providers, the Python, Rust and Java examples and the Ansible
 controller requirements. Umami is excluded: its digest moves only through `make umami-upgrade`.
 The digests in `infra/ansible/vars/pins.yml` are not a format Dependabot reads; the hourly Trivy
 run covers them.
@@ -523,7 +523,7 @@ Pins moved together in `infra/ansible/vars/pins.yml`, the observability role def
 
 | Image | Finding | Why it is accepted, and when to revisit |
 |---|---|---|
-| Umami 3.5.0 (newest release; 3.5.0 is the newest tag on GHCR) | `undici` 6.28.0: CVE-2026-109383 (TLS options dropped), CVE-2026-109869, CVE-2026-19534, CVE-2026-87018 (client-side denial of service) | All four are in undici's HTTP client. Umami makes no outbound request in this deployment: `PRIVATE_MODE`, `DISABLE_TELEMETRY` and `DISABLE_UPDATES` are set, and `TestWebPath` checks no egress from boot and during a UI session (`threat-model.md`). Inbound requests are served by Next.js, not undici. Revisit at the next Umami release through `make umami-upgrade`. |
+| Umami 3.5.0 (newest release; 3.5.0 is the newest tag on GHCR) | `undici` 6.28.0: CVE-2026-109383 (TLS options dropped), CVE-2026-109869, CVE-2026-19534, CVE-2026-87018 (client-side denial of service) | All four are in undici's HTTP client. Umami makes no outbound request in this deployment: `PRIVATE_MODE`, `DISABLE_TELEMETRY` and `DISABLE_UPDATES` are set, and `TestWebPath` checks that Umami opens no outbound connection from boot through event delivery and reads (`threat-model.md`). Inbound requests are served by Next.js, not undici. Revisit at the next Umami release through `make umami-upgrade`. |
 | etcd 3.6.16 (newest 3.6 release); 3.7.3 since 2026-11-17 | `golang.org/x/net` CVE-2026-78661 (HTML parser denial of service, GO-2026-6860); the symbol is in the binary. 3.7.3 carries the same finding and no other | etcd's client and peer ports are published on the private address only, the firewall accepts the private network only, and the only client is Patroni. No etcd API takes HTML. Revisit at 3.7.4. |
 | Prometheus 3.15.1, Alertmanager 0.34.2 | `golang.org/x/net` CVE-2026-78661 | govulncheck: module present, vulnerable symbols not in either binary. The younger lines (Prometheus 3.16.0, Alertmanager 0.35.0, scanned) carry the same finding, so a bump would not fix it. |
 | node_exporter 1.12.1 (newest) | 16 high: Go 1.26.5 standard library (CVE-2026-111943, -33818, -39821, -46600, -56853, -56858, -56859, -56860, -56862, -78667, -78669, -97031), `x/net` CVE-2026-78661 and -78669, `x/crypto` CVE-2026-56854, `x/text` CVE-2026-56851 | govulncheck: the `x/net/html`, `x/crypto`, `x/text`, CVE-2026-46600 and CVE-2026-78667 symbols are not in the binary. The rest are present and are denial of service in the HTTP server, TLS and parsers, or an x509 client issue. The exporter listens on the private address only (`--web.listen-address`), the firewall drops everything else, it has no TLS configuration and makes no outbound TLS connection, and only Prometheus scrapes it. An attacker must already be on the private network. Revisit at the next node_exporter release. |
