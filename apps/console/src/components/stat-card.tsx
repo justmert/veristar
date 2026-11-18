@@ -74,7 +74,9 @@ export function StatCard({
         "group/stat @container flex min-w-0 flex-col gap-2 rounded-lg border bg-raised p-4 text-left transition duration-(--vs-duration-press) ease-standard",
         onSelect &&
           "focus-ring hover:border-line-strong hover:bg-hover active:translate-y-px disabled:pointer-events-none",
-        selected ? "border-pressed-line bg-pressed hover:bg-pressed" : "border-line",
+        // the card that drives the chart: an ink edge and the chart icon, on
+        // the card's own fill (a grey fill reads as pressed or disabled)
+        selected ? "border-fg ring-1 ring-fg hover:bg-raised" : "border-line",
         className,
       )}
     >
