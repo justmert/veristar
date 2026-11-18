@@ -333,6 +333,18 @@ func TestThresholdRules(t *testing.T) {
 		require.Equal(t, 4, a.Months[1].QualifyingDays)
 		require.Equal(t, RuleDay{Day: "2026-10-01", Value: 100}, a.Months[1].Days[0])
 		require.Equal(t, "A", *a.Integrity.Grade)
+
+		// the list carries what the matches route answers today
+		code, body := f.do(t, http.MethodGet, "/api/operator/rules", nil)
+		require.Equal(t, http.StatusOK, code, string(body))
+		list := decode[RuleList](t, body)
+		require.Len(t, list.Items, 1)
+		require.Equal(t, r.ID, list.Items[0].ID)
+		require.Equal(t, 2, list.Items[0].MatchCount)
+		require.Equal(t, 3, list.Items[0].Evaluated)
+		require.Equal(t, m.AsOf, list.Items[0].MatchesAsOf)
+		require.Contains(t, string(body), `"match_count":2`)
+		require.Contains(t, string(body), `"min_per_day":100`, "the rule's own fields stay at the top level")
 	})
 
 	t.Run("a minimum grade and an update", func(t *testing.T) {
@@ -342,6 +354,9 @@ func TestThresholdRules(t *testing.T) {
 		m := matches()
 		require.Len(t, m.Items, 1)
 		require.Equal(t, "alpha", m.Items[0].Tenant.Slug)
+		code, body = f.do(t, http.MethodGet, "/api/operator/rules", nil)
+		require.Equal(t, http.StatusOK, code, string(body))
+		require.Equal(t, 1, decode[RuleList](t, body).Items[0].MatchCount)
 	})
 
 	t.Run("an earlier evaluation day moves the window", func(t *testing.T) {

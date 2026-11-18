@@ -38,6 +38,7 @@ func TestMachineRules(t *testing.T) {
 	rules := decode[RuleList](t, a.body)
 	require.Len(t, rules.Items, 1)
 	require.Equal(t, "two good days", rules.Items[0].Name)
+	require.NotContains(t, string(a.body), "match_count", "the machine list keeps the saved rules alone")
 
 	a = e.get(t, global.Key, "/rules/"+rule.String()+"/matches", http.StatusOK)
 	m := decode[RuleMatches](t, a.body)
