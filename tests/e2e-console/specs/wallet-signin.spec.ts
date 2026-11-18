@@ -119,7 +119,9 @@ test("a wallet member joins a project by address and opens its dashboard", async
   // the owner's member list shows the short address
   const op2 = await owner.newPage();
   await op2.goto(`${APP}/projects/${shared.id}/members`);
-  await expect(op2.getByText(me.display_name, { exact: true })).toBeVisible();
+  await expect(
+    op2.getByRole("table", { name: "Members" }).getByText(me.display_name, { exact: true }),
+  ).toBeVisible();
   await op2.close();
   await page.close();
 });

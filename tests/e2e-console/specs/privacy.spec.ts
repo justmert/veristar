@@ -185,7 +185,11 @@ test("the privacy page erases one session by its id and leaves the other", async
     (r) => r.request().method() === "POST" && r.url() === `${APP}/api/tenants/${tenant.id}/erasure`,
   );
   await form.getByRole("button", { name: "Request erasure" }).click();
+  // nothing is erased before the confirmation
+  const confirm = page.getByRole("dialog", { name: `Erase this session on ${host}?` });
+  await confirm.getByRole("button", { name: "Erase data" }).click();
   expect((await sent).status()).toBe(202);
+  await expect(page.getByText("The erasure request is sent.")).toBeVisible();
   await expect(page.getByText(`One session on ${host}: erased`)).toBeVisible({ timeout: 120_000 });
   await page.screenshot({ path: join(shots, "02-session-erased.png"), fullPage: true });
 
@@ -199,7 +203,7 @@ test("the privacy page erases one session by its id and leaves the other", async
     events_deleted: 2,
   });
   // the history on the page shows the finished request with its counts
-  const history = page.getByRole("region", { name: "Request history" });
+  const history = page.getByRole("table", { name: "Request history" });
   await expect(history.getByText(`One session: ${host}`)).toBeVisible();
   await expect(history.getByText(/Deleted 1 session, 2 events and 0 undeliverable/)).toBeVisible();
 
@@ -217,14 +221,15 @@ test("the privacy page resets the whole site after the domain is typed and confi
   // the kind is a radio card; a person clicks the card's title
   await form.getByText("Whole site", { exact: true }).click();
   await expect(form.getByRole("radio", { name: "Whole site" })).toBeChecked();
-  await form.getByLabel("Type the site's domain to confirm").fill(`x${host}`);
-  await form.getByRole("button", { name: "Reset site data" }).click();
-  await expect(form.getByText(`Type ${host} exactly.`)).toBeVisible();
-
-  await form.getByLabel("Type the site's domain to confirm").fill(host);
   await form.getByRole("button", { name: "Reset site data" }).click();
   const dialog = page.getByRole("dialog", { name: `Reset all web data of ${host}?` });
   await expect(dialog).toBeVisible();
+  // the domain is typed in the dialog, exactly
+  const reset = dialog.getByRole("button", { name: "Reset site data" });
+  await dialog.getByLabel(`Type ${host} to confirm`).fill(`x${host}`);
+  await expect(reset).toBeDisabled();
+  await dialog.getByLabel(`Type ${host} to confirm`).fill(host);
+  await expect(reset).toBeEnabled();
   await page.screenshot({ path: join(shots, "03-reset-confirm.png"), fullPage: true });
   const sent = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url() === `${APP}/api/tenants/${tenant.id}/erasure`,

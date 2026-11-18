@@ -113,8 +113,9 @@ test("sign in, enroll, add a site and copy the snippet", async ({ browserName })
   // the tag, the integrity shown, and the copy button
   await page.waitForURL(`${APP}/projects/${tenant.id}/sites/${site.id}`);
   await page.goto(`${APP}/projects/${tenant.id}/sites/${site.id}`);
-  await expect(page.getByRole("heading", { name: `Set up ${site.name}` })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Install the tracker" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: site.name, level: 1 })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "Setup progress" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Install the tag" })).toBeVisible();
   // the pinned script, integrity and site id sit under a disclosure
   await page.getByText("Version and what the tag pins").click();
   const newest = manifest().at(-1);

@@ -73,8 +73,8 @@ test("an operator session without a step-up is refused with step_up_required", a
   await page.goto(`${APP}/account`);
   await expect(
     page
-      .getByText("Confirm with your passkey to change sign-in methods.")
-      .or(page.getByText("Register a passkey for the operator area first.")),
+      .getByText("Confirm with your passkey to change sign-in methods")
+      .or(page.getByText("Add a passkey for the operator area first")),
   ).toBeVisible();
   await ctx.close();
 });

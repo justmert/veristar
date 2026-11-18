@@ -96,7 +96,7 @@ test("a token is created through the control plane and shown once", async () => 
 
   // the one-time secret is masked until it is shown on purpose
   const panel = page.getByRole("region", { name: "New secret" });
-  await expect(panel).toContainText("Token Payments API was created");
+  await expect(panel).toContainText("Copy the token Payments API now");
   await expect(panel).not.toContainText(plain);
   await panel.getByRole("button", { name: "Show the secret" }).click();
   await expect(panel.locator("code")).toHaveText(plain);
@@ -105,8 +105,8 @@ test("a token is created through the control plane and shown once", async () => 
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(plain);
   await page.screenshot({ path: join(shots, "created.png"), fullPage: true });
 
-  // the list names it by prefix only
-  const list = page.getByRole("list", { name: "Tokens" });
+  // the table names it by prefix only
+  const list = page.getByRole("table", { name: "Tokens" });
   await expect(list.getByText("Payments API", { exact: true })).toBeVisible();
   await expect(list.getByText(`${body.prefix}...`)).toBeVisible();
   await expect(list).not.toContainText(plain);
@@ -120,7 +120,7 @@ test("a token is created through the control plane and shown once", async () => 
   // a reload shows the token again only as its prefix
   await page.reload();
   await expect(
-    page.getByRole("list", { name: "Tokens" }).getByText("Payments API", { exact: true }),
+    page.getByRole("table", { name: "Tokens" }).getByText("Payments API", { exact: true }),
   ).toBeVisible();
   expect(await page.content()).not.toContain(plain);
 
@@ -134,8 +134,8 @@ test("a token is created through the control plane and shown once", async () => 
 
 test("the token is revoked after a confirmation", async () => {
   const row = page
-    .getByRole("list", { name: "Tokens" })
-    .getByRole("listitem")
+    .getByRole("table", { name: "Tokens" })
+    .getByRole("row")
     .filter({ hasText: "Payments API" });
   await row.getByRole("button", { name: "Revoke" }).click();
   const dialog = page.getByRole("dialog");
@@ -156,6 +156,7 @@ test("the token is revoked after a confirmation", async () => {
   await dialog.getByRole("button", { name: "Revoke token" }).click();
   expect((await revoked).status()).toBe(204);
   await expect(dialog).toBeHidden();
+  await expect(page.getByText("Payments API is revoked.")).toBeVisible();
   await expect(page.getByText("No active tokens.")).toBeVisible();
 
   one = await api<Token>(ctx, "GET", `/api/tenants/${tenant.id}/otlp-tokens/${tokenId}`);
@@ -165,8 +166,8 @@ test("the token is revoked after a confirmation", async () => {
 
   await page.getByLabel("Show revoked tokens").check();
   const shown = page
-    .getByRole("list", { name: "Tokens" })
-    .getByRole("listitem")
+    .getByRole("table", { name: "Tokens" })
+    .getByRole("row")
     .filter({ hasText: "Payments API" });
   await expect(shown.getByText("Revoked", { exact: true })).toBeVisible();
   await expect(shown.getByRole("button", { name: "Revoke" })).toHaveCount(0);
