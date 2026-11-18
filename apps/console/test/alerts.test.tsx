@@ -150,13 +150,16 @@ describe("operator alerts page", () => {
       "/api/operator/alerts",
     ]);
 
-    const headings = [...host.querySelectorAll("h3")].map((h) => h.textContent);
-    expect(headings).toEqual(["Page, act now (1)", "Ticket, act within a working day (1)"]);
+    const headings = [...host.querySelectorAll("h2")].map((h) => h.textContent);
+    expect(headings).toEqual(["Act now1", "Act within a working day1"]);
+    expect(host.querySelector("h1")?.textContent).toBe("Alerts");
     const down = host.querySelector("[data-alert=ServiceDown]") as HTMLElement;
-    expect(down.textContent).toContain("controlplane on core-1 does not answer scrapes");
-    expect(down.textContent).toContain("Nodecore-1");
-    expect(down.textContent).toContain("Servicecontrolplane");
-    expect(down.textContent).toMatch(/Firing for \d+ (d|h|min)/);
+    // the title in sentence case, the labels as a secondary line
+    expect(down.textContent).toContain("Controlplane on core-1 does not answer scrapes");
+    expect(down.querySelector("[data-labels]")?.textContent).toBe(
+      "ServiceDown · node core-1 · service controlplane",
+    );
+    expect(down.textContent).toMatch(/Fires for \d+ (d|h|min)/);
     expect(down.querySelector("a")?.getAttribute("href")).toBe(
       "https://github.com/justmert/veristar/blob/main/docs/runbooks/alerts.md#servicedown",
     );
@@ -172,7 +175,8 @@ describe("operator alerts page", () => {
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
     await waitFor(() => expect(host.textContent).toContain("All clear"));
-    expect(host.textContent).toContain("No alert is firing. Last checked 12:00:05 UTC.");
+    expect(host.textContent).toContain("No alert fires.");
+    expect(host.textContent).toContain("Last checked 12:00:05 UTC");
     expect(host.textContent).not.toContain("critical alert");
     expect(host.querySelector("[data-alert]")).toBeNull();
   });
@@ -187,9 +191,9 @@ describe("operator alerts page", () => {
       },
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
-    await waitFor(() => expect(host.textContent).toContain("Alerting pipeline down"));
+    await waitFor(() => expect(host.textContent).toContain("The alert checks do not run"));
     expect(host.textContent).not.toContain("All clear");
-    expect(host.textContent).toContain("this is not all clear");
+    expect(host.textContent).toContain("An alert can fire without showing here.");
   });
 
   it("names a member that did not answer", async () => {
@@ -213,7 +217,7 @@ describe("operator alerts page", () => {
       },
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
-    await waitFor(() => expect(host.textContent).toContain("1 of 2 Alertmanager members"));
+    await waitFor(() => expect(host.textContent).toContain("1 of 2 alert servers did not answer"));
     expect(host.textContent).toContain("10.0.1.5:9093: dial tcp");
     expect(host.textContent).toContain("BackupTooOld");
     expect(host.textContent).not.toContain("critical alert");
@@ -226,7 +230,7 @@ describe("operator alerts page", () => {
       { status: 503, body: f.errorBody("alert_source_unreachable") },
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
-    await waitFor(() => expect(host.textContent).toContain("Alert source unreachable"));
+    await waitFor(() => expect(host.textContent).toContain("The alert service does not answer"));
     expect(host.textContent).not.toContain("All clear");
     expect(host.querySelector("[data-alert]")).toBeNull();
   });
@@ -238,7 +242,7 @@ describe("operator alerts page", () => {
       { status: 503, body: f.errorBody("alert_source_not_configured") },
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
-    await waitFor(() => expect(host.textContent).toContain("No alert source configured"));
+    await waitFor(() => expect(host.textContent).toContain("No alert service is set up"));
     expect(host.textContent).toContain("deploy settings");
   });
 

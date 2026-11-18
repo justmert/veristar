@@ -1,4 +1,4 @@
-import { type UseQueryResult, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import {
   BookOpen,
@@ -14,9 +14,9 @@ import { useEffect, useState } from "react";
 import { ApiError } from "@/api/client";
 import { ALERTS_REFRESH_MS, operatorAlertsQuery } from "@/api/queries";
 import type { AlertSource, FiringAlert, OperatorAlerts } from "@/api/schemas";
-import { ErrorPanel, Loading } from "@/components/error-panel";
-import { Stagger, StaggerItem } from "@/components/motion";
 import { Notice } from "@/components/notice";
+import { PageHeader } from "@/components/page-header";
+import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { StatusDot } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,13 +24,15 @@ import {
   alertUrgency,
   firingFor,
   groupBySeverity,
+  groupTitle,
   runbookUrl,
   type SeverityGroup,
+  sentenceCase,
 } from "@/lib/alerts";
-import { errorText } from "@/lib/errors";
-import { formatDateTimeUtc, formatTimeUtc } from "@/lib/format";
+import { countOf, formatDateTimeUtc, formatTimeUtc } from "@/lib/format";
 
 const WATCHDOG_RUNBOOK = "docs/runbooks/alerts.md#watchdog";
+const EVERY = `${ALERTS_REFRESH_MS / 1000} seconds`;
 
 // re-renders on an interval, so "firing for" moves between refreshes too
 export function useNow(everyMs: number): number {
@@ -42,47 +44,50 @@ export function useNow(everyMs: number): number {
   return now;
 }
 
-// contract 11: the live alerts of alertmanager. this page is where alerts
-// show when no push channel (the optional discord webhook) is configured.
+// contract 11: the alerts that fire now. this page is where they show when
+// no push channel is set up, so it checks again on its own.
 export function AlertsPage() {
   const alerts = useQuery(operatorAlertsQuery);
   const now = useNow(15_000);
-  const count = alerts.error ? null : (alerts.data?.alerts.length ?? null);
+  const count = alerts.data && !alerts.error ? alerts.data.alerts.length : null;
   const refreshing = alerts.isFetching && !alerts.isPending;
 
   return (
-    <section aria-labelledby="alerts-h" className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h2 id="alerts-h" className="flex items-baseline gap-2 text-section text-fg">
-            Alerts
-            {count !== null ? (
-              <span className="font-mono text-body font-normal text-fg-3">{count}</span>
-            ) : null}
-          </h2>
-          <p className="max-w-prose text-small text-fg-2">
-            What Alertmanager holds right now, without silenced alerts. The page refreshes every{" "}
-            {ALERTS_REFRESH_MS / 1000} seconds. Alerts reach nobody else unless a push channel is
-            configured, so keep an eye on this page.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <LiveCheck alerts={alerts} />
-          <Button
-            variant="outline"
-            size="sm"
-            className="max-lg:h-(--vs-control-touch)"
-            onClick={() => alerts.refetch()}
-            pending={refreshing}
-          >
-            {refreshing ? null : <RotateCcw aria-hidden />}
-            {alerts.isFetching ? "Checking" : "Check now"}
-          </Button>
-        </div>
-      </div>
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader
+        title="Alerts"
+        meta={
+          count !== null ? (
+            <span className="font-mono text-body text-fg-2 tabular" data-count="">
+              {count}
+            </span>
+          ) : null
+        }
+        description={`Alerts that fire now. The page checks again every ${EVERY}.`}
+        secondary={
+          <>
+            <LiveState
+              error={alerts.error}
+              pending={alerts.isPending}
+              checkedAt={alerts.data?.checked_at ?? null}
+            />
+            <Button
+              variant="outline"
+              className="max-lg:h-(--vs-control-touch)"
+              onClick={() => alerts.refetch()}
+              pending={refreshing}
+            >
+              {refreshing ? null : <RotateCcw aria-hidden />}
+              {alerts.isFetching ? "Checking" : "Check now"}
+            </Button>
+          </>
+        }
+      />
 
       {alerts.isPending ? (
-        <Loading label="Loading the alerts" />
+        <LoadingState label="Loading the alerts">
+          <Skeleton.Table rows={3} columns={2} />
+        </LoadingState>
       ) : alerts.error ? (
         <AlertsError
           error={alerts.error}
@@ -92,19 +97,27 @@ export function AlertsPage() {
       ) : (
         <AlertsView data={alerts.data} now={now} />
       )}
-    </section>
+    </div>
   );
 }
 
 // the breathing dot says the page is listening; it stops when the source
-// does not answer, because then nothing is being heard
-export function LiveCheck({ alerts }: { alerts: UseQueryResult<OperatorAlerts> }) {
-  if (alerts.isPending) return null;
-  if (alerts.error)
+// does not answer, because then nothing is heard
+function LiveState({
+  error,
+  pending,
+  checkedAt,
+}: {
+  error: unknown;
+  pending: boolean;
+  checkedAt: string | null;
+}) {
+  if (pending) return null;
+  if (error)
     return (
-      <span className="flex items-center gap-1 text-caption text-fg-3">
+      <span className="flex items-center gap-1 text-caption text-fg-2">
         <StatusDot tone="critical" />
-        {alerts.error instanceof ApiError && alerts.error.code === "alert_source_not_configured"
+        {error instanceof ApiError && error.code === "alert_source_not_configured"
           ? "No alert source"
           : "Not answering"}
       </span>
@@ -112,17 +125,19 @@ export function LiveCheck({ alerts }: { alerts: UseQueryResult<OperatorAlerts> }
   return (
     <span className="flex items-center gap-1 text-caption text-fg-2">
       <StatusDot tone="success" live />
-      <span>
-        Last checked{" "}
-        <time dateTime={alerts.data.checked_at}>
-          {formatTimeUtc(alerts.data.checked_at, { seconds: true })}
-        </time>
-      </span>
+      {checkedAt ? (
+        <span>
+          Last checked{" "}
+          <time dateTime={checkedAt}>{formatTimeUtc(checkedAt, { seconds: true })}</time>
+        </span>
+      ) : (
+        "Live"
+      )}
     </span>
   );
 }
 
-export function AlertsError({
+function AlertsError({
   error,
   lastSuccess,
   onRetry,
@@ -133,33 +148,33 @@ export function AlertsError({
 }) {
   const unreachable = error instanceof ApiError && error.code === "alert_source_unreachable";
   const unconfigured = error instanceof ApiError && error.code === "alert_source_not_configured";
-  if (!unreachable && !unconfigured) {
+  if (!unreachable && !unconfigured)
     return (
       <div className="flex flex-col gap-2">
-        <ErrorPanel error={error} title="The alerts could not be loaded" onRetry={onRetry} />
+        <ErrorState title="The alerts did not load" error={error} onRetry={onRetry} />
         <RetryNote lastSuccess={lastSuccess} />
       </div>
     );
-  }
   return (
     <Notice
       tone={unreachable ? "warning" : "info"}
       role={unreachable ? "alert" : "status"}
       icon={unreachable ? <WifiOff aria-hidden /> : <Info aria-hidden />}
-      title={unreachable ? "Alert source unreachable" : "No alert source configured"}
+      title={unreachable ? "The alert service does not answer" : "No alert service is set up"}
       actions={
         unreachable ? (
           <Button variant="outline" size="sm" onClick={onRetry}>
             <RotateCcw aria-hidden />
-            Retry
+            Try again
           </Button>
         ) : null
       }
     >
       <span className="flex flex-col gap-1">
         <span>
-          No alert list is shown: without an answer from Alertmanager there is no way to tell
-          whether anything fires. {errorText(error)}
+          {unreachable
+            ? "Without an answer there is no list of alerts, so you cannot know if one fires. Check the alert service."
+            : "Set up the alert service in the deploy settings. Until then no alert shows here."}
         </span>
         <RetryNote lastSuccess={lastSuccess} />
       </span>
@@ -169,11 +184,11 @@ export function AlertsError({
 
 function RetryNote({ lastSuccess }: { lastSuccess: number }) {
   return (
-    <span className="text-caption text-fg-3">
+    <span className="text-caption text-fg-2">
       {lastSuccess > 0
-        ? `Last successful check ${formatTimeUtc(new Date(lastSuccess), { seconds: true })}. `
+        ? `Last answer ${formatTimeUtc(new Date(lastSuccess), { seconds: true })}. `
         : null}
-      The page keeps retrying every {ALERTS_REFRESH_MS / 1000} seconds.
+      The page tries again every {EVERY}.
     </span>
   );
 }
@@ -182,16 +197,17 @@ function AlertsView({ data, now }: { data: OperatorAlerts; now: number }) {
   const down = data.sources.filter((s) => !s.reachable);
   const groups = groupBySeverity(data.alerts);
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       {data.watchdog_firing ? null : <PipelineDown />}
       {down.length > 0 ? <SourcesDown down={down} total={data.sources.length} /> : null}
       {data.alerts.length === 0 ? (
         data.watchdog_firing ? (
-          <AllClear checkedAt={data.checked_at} />
+          <Notice tone="success" icon={<ShieldCheck aria-hidden />} title="All clear">
+            No alert fires. The alert checks run, so this list is complete.
+          </Notice>
         ) : (
           <p className="rounded-lg border border-dashed border-line-strong px-4 py-6 text-small text-fg-2">
-            Alertmanager holds no alert, but this is not all clear: the pipeline that delivers
-            alerts to it is down.
+            No alert shows, but the alert checks do not run. An alert can fire without showing here.
           </p>
         )
       ) : (
@@ -201,63 +217,55 @@ function AlertsView({ data, now }: { data: OperatorAlerts; now: number }) {
   );
 }
 
-function AllClear({ checkedAt }: { checkedAt: string }) {
-  return (
-    <Notice tone="success" icon={<ShieldCheck aria-hidden />} title="All clear">
-      <span className="flex flex-col gap-1">
-        <span>
-          No alert is firing. Last checked{" "}
-          <time dateTime={checkedAt}>{formatTimeUtc(checkedAt, { seconds: true })}</time>.
-        </span>
-        <span className="text-caption text-fg-3">
-          Alertmanager answered, holds no alert, and the always-firing Watchdog alert is present, so
-          the pipeline works.
-        </span>
-      </span>
-    </Notice>
-  );
-}
-
-// the watchdog always fires; without it prometheus is not evaluating rules
-// or cannot reach alertmanager, so alerts can be missing from this page
-export function PipelineDown() {
+// the always-on test alert is missing: the rules are not checked, or their
+// results do not reach the alert service, so alerts can be missing here
+function PipelineDown() {
   const runbook = runbookUrl(WATCHDOG_RUNBOOK);
   return (
     <Notice
       tone="critical"
       role="alert"
       icon={<TriangleAlert aria-hidden />}
-      title="Alerting pipeline down"
+      title="The alert checks do not run"
       actions={
         runbook ? (
           <Button asChild variant="outline" size="sm">
             <a href={runbook} target="_blank" rel="noreferrer">
               <BookOpen aria-hidden />
-              Watchdog runbook
+              Open the runbook
             </a>
           </Button>
         ) : null
       }
     >
-      The always-firing Watchdog alert is missing from Alertmanager. Prometheus is not evaluating
-      the alert rules or cannot reach Alertmanager, so this list can miss alerts that fire. Treat it
-      as incomplete until the Watchdog is back.
+      The always-on test alert is missing. An alert can fire without showing here. Treat this list
+      as incomplete until the test alert is back.
     </Notice>
   );
 }
 
 function SourcesDown({ down, total }: { down: AlertSource[]; total: number }) {
   return (
-    <Notice tone="warning" title={`${down.length} of ${total} Alertmanager members did not answer`}>
+    <Notice
+      tone="warning"
+      title={`${down.length} of ${countOf(total, "alert server")} did not answer`}
+    >
       <span className="flex flex-col gap-2">
-        <span>The list comes from the members that answered; each member holds every alert.</span>
-        <ul className="flex flex-col gap-1 font-mono text-caption text-fg-2">
-          {down.map((s) => (
-            <li key={s.address} className="break-all">
-              {s.address}: {s.error}
-            </li>
-          ))}
-        </ul>
+        <span>
+          Each server holds every alert, so the list comes from the servers that answered.
+        </span>
+        <details className="text-caption">
+          <summary className="w-fit cursor-pointer rounded-sm text-fg-2 hover:text-fg focus-ring">
+            Servers and errors
+          </summary>
+          <ul className="mt-1 flex flex-col gap-1 font-mono text-fg-2">
+            {down.map((s) => (
+              <li key={s.address} className="break-all">
+                {s.address}: {s.error}
+              </li>
+            ))}
+          </ul>
+        </details>
       </span>
     </Notice>
   );
@@ -266,19 +274,20 @@ function SourcesDown({ down, total }: { down: AlertSource[]; total: number }) {
 function SeverityList({ group, now }: { group: SeverityGroup; now: number }) {
   const headingId = `severity-${group.key || "none"}`;
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-2">
-      <h3 id={headingId} className="text-title text-fg">
-        {group.label}
-        {group.hint ? <span className="font-normal text-fg-2">, {group.hint}</span> : null}{" "}
-        <span className="font-mono text-small font-normal text-fg-3">({group.alerts.length})</span>
-      </h3>
-      <Stagger as="ul" className="flex flex-col gap-2">
+    <section aria-labelledby={headingId} className="flex flex-col gap-3" data-severity={group.key}>
+      <h2 id={headingId} className="flex items-baseline gap-2 text-title text-fg">
+        {groupTitle(group.key)}
+        <span className="font-mono text-small font-normal text-fg-2 tabular">
+          {group.alerts.length}
+        </span>
+      </h2>
+      <ul className="flex flex-col gap-2">
         {group.alerts.map((a) => (
-          <StaggerItem as="li" key={a.fingerprint}>
+          <li key={a.fingerprint}>
             <AlertItem alert={a} now={now} />
-          </StaggerItem>
+          </li>
         ))}
-      </Stagger>
+      </ul>
     </section>
   );
 }
@@ -295,25 +304,31 @@ const TONE_ICON: Record<AlertTone, typeof CircleAlert> = {
   muted: Clock,
 };
 
-// one alert (system v2 C-AlertItem): what is wrong in words first, its
-// urgency, what it affects, the labels that place it, how long it fires and
-// the runbook as the action
-export function AlertItem({ alert, now }: { alert: FiringAlert; now: number }) {
+const HELD_TEXT = {
+  inhibited: "Held back: another alert that fires explains this one. It sends no message.",
+  suppressed: "Held back: the alert service sends no message for it.",
+  unprocessed: "Just received. The alert service did not process it yet.",
+};
+
+// one alert: what is wrong in words first, how long it fires, the runbook
+// as the action, and the labels that place it as a secondary line
+function AlertItem({ alert, now }: { alert: FiringAlert; now: number }) {
   const runbook = runbookUrl(alert.runbook);
   const urgency = alertUrgency(alert);
   const Icon = TONE_ICON[urgency.tone];
-  const where = [
-    alert.node ? ["Node", alert.node] : null,
-    alert.service ? ["Service", alert.service] : null,
-    alert.instance ? ["Instance", alert.instance] : null,
-  ].filter((x): x is [string, string] => x !== null);
   const held = alert.state === "suppressed";
+  const labels = [
+    alert.name,
+    alert.node ? `node ${alert.node}` : null,
+    alert.service ? `service ${alert.service}` : null,
+    alert.instance ? `instance ${alert.instance}` : null,
+  ].filter((x): x is string => x !== null);
   return (
     <article
-      aria-label={alert.name}
+      aria-label={sentenceCase(alert.summary ?? alert.name)}
       data-alert={alert.name}
       className={cn(
-        "grid h-full grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-3 rounded-lg border border-line bg-raised px-4 py-3 transition-colors duration-(--vs-duration-press) ease-standard hover:border-line-strong sm:grid-cols-[2rem_minmax(0,1fr)_auto]",
+        "grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-3 rounded-lg border border-line bg-raised p-4 sm:grid-cols-[2rem_minmax(0,1fr)_auto]",
         held && "opacity-70",
       )}
     >
@@ -324,60 +339,41 @@ export function AlertItem({ alert, now }: { alert: FiringAlert; now: number }) {
         )}
       >
         <Icon aria-hidden className="size-4" />
+        <span className="sr-only">{urgency.word}</span>
       </span>
       <div className="flex min-w-0 flex-col gap-1">
-        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="text-body font-semibold text-fg">{alert.summary ?? alert.name}</span>
-          <span className={cn("text-caption font-medium", TONE_TEXT[urgency.tone])}>
-            {urgency.word}
-          </span>
+        <p className="text-body font-medium break-words text-fg">
+          {sentenceCase(alert.summary ?? alert.name)}
         </p>
-        {alert.description ? <p className="text-small text-fg-2">{alert.description}</p> : null}
+        <p className="text-small text-fg-2">
+          Fires for{" "}
+          <span className="font-mono text-fg tabular">{firingFor(alert.starts_at, now)}</span>,
+          since <time dateTime={alert.starts_at}>{formatDateTimeUtc(alert.starts_at)}</time>
+        </p>
+        {alert.description ? (
+          <p className="text-small break-words text-fg-2">{sentenceCase(alert.description)}</p>
+        ) : null}
         {held ? (
           <p className="text-small text-fg-2">
-            {alert.inhibited_by.length > 0
-              ? "Inhibited: another firing alert explains this one, so it sends no notification."
-              : "Suppressed: Alertmanager holds back its notifications."}
+            {alert.inhibited_by.length > 0 ? HELD_TEXT.inhibited : HELD_TEXT.suppressed}
           </p>
         ) : alert.state === "unprocessed" ? (
-          <p className="text-small text-fg-2">
-            Just received: Alertmanager has not processed it yet.
-          </p>
+          <p className="text-small text-fg-2">{HELD_TEXT.unprocessed}</p>
         ) : null}
-        <dl className="flex flex-wrap gap-1 pt-1">
-          <div className="flex rounded-sm border border-line px-1 font-mono text-axis text-fg-2">
-            <dt className="sr-only">Rule</dt>
-            <dd className="break-all">{alert.name}</dd>
-          </div>
-          {where.map(([k, v]) => (
-            <div
-              key={k}
-              className="flex gap-1 rounded-sm border border-line px-1 font-mono text-axis"
-            >
-              <dt className="text-fg-3">{k}</dt>
-              <dd className="break-all text-fg-2">{v}</dd>
-            </div>
-          ))}
-        </dl>
+        <p className="font-mono text-caption break-all text-fg-2" data-labels="">
+          {labels.join(" · ")}
+        </p>
       </div>
-      <div className="col-span-2 flex flex-wrap items-center justify-between gap-2 sm:col-span-1 sm:flex-col sm:items-end">
-        <span className="flex flex-col text-caption text-fg-2 sm:items-end">
-          <span>
-            Firing for <span className="font-mono text-fg">{firingFor(alert.starts_at, now)}</span>
-          </span>
-          <span className="text-fg-3">
-            since <time dateTime={alert.starts_at}>{formatDateTimeUtc(alert.starts_at)}</time>
-          </span>
-        </span>
-        {runbook ? (
+      {runbook ? (
+        <div className="col-span-2 sm:col-span-1">
           <Button asChild variant="outline" size="sm" className="max-lg:h-(--vs-control-touch)">
             <a href={runbook} target="_blank" rel="noreferrer">
               <BookOpen aria-hidden />
               Runbook<span className="sr-only"> for {alert.name}</span>
             </a>
           </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </article>
   );
 }

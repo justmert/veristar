@@ -1,16 +1,30 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { ArrowRight, ScrollText, X } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { ArrowRight, Bot, ChevronDown, Cog, ScrollText } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import type { AuditQuery } from "@/api/endpoints";
 import { auditQuery } from "@/api/queries";
 import type { AuditEntry } from "@/api/schemas";
-import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
-import { TextField } from "@/components/form-field";
-import { DateField } from "@/components/range-control";
+import { type Filter, FilterBar } from "@/components/filter-bar";
+import { SelectField, TextField } from "@/components/form-field";
+import { PageHeader } from "@/components/page-header";
+import { DateField, isIsoDay } from "@/components/range-control";
+import { EmptyState, ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { formatCount, formatDate, formatDateTimeUtc, formatTimeUtc, MISSING } from "@/lib/format";
+import {
+  ACTION_FAMILIES,
+  type AuditItem,
+  auditChanges,
+  auditDaysError,
+  auditReason,
+  auditSentence,
+  dayToUtc,
+  foldRuns,
+  initials,
+  utcToDay,
+} from "@/lib/audit";
+import { countOf, formatDate, formatDateTimeUtc, formatTimeUtc } from "@/lib/format";
 
 const FIELDS = ["tenant_id", "action", "actor", "target", "from", "to"] as const;
 type Field = (typeof FIELDS)[number];
@@ -26,511 +40,262 @@ export function auditFromParams(p: URLSearchParams): AuditQuery {
   };
 }
 
-// a date input gives a local calendar day; the audit filter takes rfc 3339
-// in utc (contract 5.9), so the day is read as a utc day. "to" is the start
-// of the day after, so the chosen day is included.
-// 5.9: from before to, at most 400 days apart; the server refuses anything
-// else with invalid_query, so the form says it first
-export function auditDaysError(from: string, to: string): string | null {
-  if (!from || !to) return null;
-  if (to < from) return "End on or after the start day.";
-  if ((Date.parse(to) - Date.parse(from)) / 86_400_000 + 1 > 400)
-    return "The days cover at most 400 days.";
-  return null;
-}
+const TEXT_DELAY_MS = 400;
 
-export function dayToUtc(day: string, end: boolean): string {
-  if (day === "") return "";
-  const d = new Date(`${day}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return "";
-  if (end) d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString().replace(/\.\d{3}Z$/, "Z");
-}
-
-function utcToDay(iso: string, end: boolean): string {
-  if (iso === "") return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  if (end) d.setUTCDate(d.getUTCDate() - 1);
-  return d.toISOString().slice(0, 10);
-}
-
-const FIELD_LABEL: Record<Field, string> = {
-  tenant_id: "Project",
-  action: "Action",
-  actor: "Actor",
-  target: "Target",
-  from: "From",
-  to: "Before",
-};
-
-// one click narrows the log to a family of actions (the action filter takes
-// a prefix ending in a dot)
-const QUICK = [
-  "tenant.",
-  "site.",
-  "member.",
-  "erasure.",
-  "mcp.",
-  "operator.",
-  "cohort.",
-  "rule.",
-  "report.",
-  "onchain.",
-  "export.",
-  "user.",
-];
-
-const EMPTY_DRAFT: Record<Field, string> = {
-  tenant_id: "",
-  action: "",
-  actor: "",
-  target: "",
-  from: "",
-  to: "",
-};
-
-// the operator layout draws the place header and its tabs; this page starts
-// with its own section header
+// who did what, newest first. every filter applies as it changes; the days
+// are utc days. the log reads as sentences, with the codes as details.
 export function AuditPage() {
   const [params, setParams] = useSearchParams();
   const q = auditFromParams(params);
-  const [draft, setDraft] = useState<Record<Field, string>>({
-    ...q,
-    from: utcToDay(q.from, false),
-    to: utcToDay(q.to, true),
-  });
-  const list = useInfiniteQuery(auditQuery(q));
-  const [dayError, setDayError] = useState<string | null>(null);
-  const active = FIELDS.filter((f) => q[f] !== "");
+  const from = utcToDay(q.from, false);
+  const to = utcToDay(q.to, true);
+  const daysError = auditDaysError(from, to);
+  const list = useInfiniteQuery({ ...auditQuery(q), enabled: daysError === null });
+  const entries = list.data?.pages.flatMap((p) => p.items) ?? [];
 
-  function apply(next: URLSearchParams) {
-    setParams(next, { replace: true });
-  }
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    const bad = auditDaysError(draft.from.trim(), draft.to.trim());
-    setDayError(bad);
-    if (bad) return;
-    const next = new URLSearchParams();
-    for (const f of FIELDS) {
-      const raw = draft[f].trim();
-      const value = f === "from" ? dayToUtc(raw, false) : f === "to" ? dayToUtc(raw, true) : raw;
-      if (value) next.set(f, value);
-    }
-    apply(next);
-  }
-
-  // a quick filter or a removed chip changes the applied filters at once and
-  // keeps the form in step with them
   function setOne(f: Field, value: string) {
     const next = new URLSearchParams(params);
     if (value) next.set(f, value);
     else next.delete(f);
-    setDraft((s) => ({
-      ...s,
-      [f]: f === "from" ? utcToDay(value, false) : f === "to" ? utcToDay(value, true) : value,
-    }));
-    apply(next);
+    setParams(next, { replace: true });
   }
+  const clear = () => setParams(new URLSearchParams(), { replace: true });
+  const filtered = FIELDS.some((f) => q[f] !== "");
 
-  function clear() {
-    setDraft(EMPTY_DRAFT);
-    apply(new URLSearchParams());
-  }
-
-  const set = (f: Field) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setDraft((s) => ({ ...s, [f]: e.target.value }));
+  const family = ACTION_FAMILIES.find((a) => a.value === q.action);
+  const filters: Filter[] = [
+    {
+      key: "action",
+      label: "Action",
+      control: (
+        <SelectField
+          label="Action"
+          value={q.action}
+          onChange={(e) => setOne("action", e.target.value)}
+        >
+          <option value="">All actions</option>
+          {q.action && !family ? <option value={q.action}>{q.action}</option> : null}
+          {ACTION_FAMILIES.map((a) => (
+            <option key={a.value} value={a.value}>
+              {a.label}
+            </option>
+          ))}
+        </SelectField>
+      ),
+      active: q.action
+        ? { label: family?.label ?? q.action, onClear: () => setOne("action", "") }
+        : null,
+    },
+    textFilter("tenant_id", "Project id", "The id from the address of a project page.", q, setOne),
+    textFilter("actor", "Actor", "As user:<id>, or system:<job> for the system.", q, setOne),
+    textFilter("target", "Target", "As tenant:<id>, site:<id> or rule:<id>.", q, setOne),
+    {
+      key: "from",
+      label: "From",
+      control: (
+        <DayFilter label="From" value={from} onChange={(d) => setOne("from", dayToUtc(d, false))} />
+      ),
+      active: q.from ? { label: formatDate(from), onClear: () => setOne("from", "") } : null,
+    },
+    {
+      key: "to",
+      label: "To",
+      control: (
+        <DayFilter
+          label="To, included"
+          value={to}
+          error={daysError}
+          onChange={(d) => setOne("to", dayToUtc(d, true))}
+        />
+      ),
+      active: q.to ? { label: formatDate(to), onClear: () => setOne("to", "") } : null,
+    },
+  ];
 
   return (
-    <section aria-labelledby="audit-h" className="flex animate-rise-in flex-col gap-5">
-      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <div className="flex flex-col gap-1">
-          <h2 id="audit-h" className="text-section text-fg">
-            Audit log
-          </h2>
-          <p className="max-w-prose text-body text-fg-2">
-            Every decision by an operator, a project owner or the system, newest first.
-          </p>
-        </div>
-        <span className="text-caption text-fg-3">Times in UTC</span>
-      </header>
-
-      <fieldset className="flex flex-wrap items-center gap-2">
-        <legend className="sr-only">Quick filters</legend>
-        <QuickChip on={q.action === ""} onClick={() => setOne("action", "")}>
-          All
-        </QuickChip>
-        {QUICK.map((a) => (
-          <QuickChip key={a} on={q.action === a} onClick={() => setOne("action", a)} mono>
-            {a}
-          </QuickChip>
-        ))}
-        {active.length > 0 ? (
-          <>
-            <span aria-hidden className="mx-1 h-5 w-px bg-line" />
-            {active.map((f) => (
-              <span
-                key={f}
-                className="inline-flex h-7 max-w-full animate-fade-in items-center gap-1 rounded-md border border-line-strong pr-1 pl-2 text-small"
-              >
-                <span className="text-fg-3">{FIELD_LABEL[f]}</span>
-                <span className="min-w-0 truncate font-mono text-caption text-fg">
-                  {f === "from" || f === "to" ? utcToDay(q[f], false) : q[f]}
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={`Remove filter ${FIELD_LABEL[f]}`}
-                  onClick={() => setOne(f, "")}
-                >
-                  <X aria-hidden />
-                </Button>
-              </span>
-            ))}
-          </>
-        ) : null}
-      </fieldset>
-
-      <form
-        noValidate
-        onSubmit={submit}
-        aria-label="Filter the audit log"
-        className="grid gap-4 rounded-xl border border-line bg-raised p-4 sm:grid-cols-2 sm:px-5 lg:grid-cols-3"
-      >
-        <TextField
-          label="Project id"
-          name="tenant_id"
-          optional
-          spellCheck={false}
-          className="font-mono max-lg:h-(--vs-control-touch)"
-          value={draft.tenant_id}
-          onChange={set("tenant_id")}
-        />
-        <TextField
-          label="Action"
-          name="action"
-          optional
-          spellCheck={false}
-          className="font-mono max-lg:h-(--vs-control-touch)"
-          hint="Exact, or a prefix ending in a dot, like tenant."
-          value={draft.action}
-          onChange={set("action")}
-        />
-        <TextField
-          label="Actor"
-          name="actor"
-          optional
-          spellCheck={false}
-          className="font-mono max-lg:h-(--vs-control-touch)"
-          hint="Like user:<id> or system:purge."
-          value={draft.actor}
-          onChange={set("actor")}
-        />
-        <TextField
-          label="Target"
-          name="target"
-          optional
-          spellCheck={false}
-          className="font-mono max-lg:h-(--vs-control-touch)"
-          hint="Like tenant:<id> or site:<id>."
-          value={draft.target}
-          onChange={set("target")}
-        />
-        <DateField
-          label="From (UTC day)"
-          name="from"
-          optional
-          value={draft.from}
-          onChange={(v) => setDraft((s) => ({ ...s, from: v }))}
-        />
-        <DateField
-          label="To (UTC day, included)"
-          name="to"
-          optional
-          value={draft.to}
-          onChange={(v) => setDraft((s) => ({ ...s, to: v }))}
-          error={dayError}
-        />
-        <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-3">
-          <Button type="submit" className="max-lg:h-(--vs-control-touch)">
-            Apply filters
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className="max-lg:h-(--vs-control-touch)"
-            onClick={clear}
-          >
-            Clear
-          </Button>
-        </div>
-      </form>
-
-      {list.isPending ? (
-        <Loading label="Loading the audit log" rows={5} />
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader
+        title="Audit log"
+        description="Every action of an operator, a project member or the system. Newest first."
+        freshness={list.dataUpdatedAt > 0 ? { at: new Date(list.dataUpdatedAt) } : null}
+      />
+      <FilterBar collapsed filters={filters} onClearAll={filtered ? clear : undefined} />
+      {daysError ? (
+        <p role="alert" className="text-small text-critical">
+          {daysError}
+        </p>
+      ) : null}
+      {daysError ? null : list.isPending ? (
+        <LoadingState label="Loading the audit log">
+          <Skeleton.Table rows={8} columns={2} />
+        </LoadingState>
       ) : list.error ? (
-        <ErrorPanel error={list.error} onRetry={() => list.refetch()} />
+        <ErrorState
+          title="The audit log did not load"
+          error={list.error}
+          onRetry={() => list.refetch()}
+        />
       ) : (
         <>
-          <AuditEntries
-            entries={list.data.pages.flatMap((p) => p.items)}
-            onClear={active.length > 0 ? clear : undefined}
-          />
-          {list.hasNextPage ? (
-            <div className="flex justify-center">
-              <Button
-                variant="outline"
-                onClick={() => list.fetchNextPage()}
-                pending={list.isFetchingNextPage}
-                className="max-lg:h-(--vs-control-touch)"
-              >
-                {list.isFetchingNextPage ? "Loading" : "Load more"}
-              </Button>
+          <AuditEntries entries={entries} onClear={filtered ? clear : undefined} />
+          {entries.length > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-small text-fg-2" aria-live="polite" data-count="">
+                {countOf(entries.length, "entry", "entries")} shown
+                {list.hasNextPage ? ". Older entries load on request." : "."}
+              </p>
+              {list.hasNextPage ? (
+                <Button
+                  variant="outline"
+                  onClick={() => list.fetchNextPage()}
+                  pending={list.isFetchingNextPage}
+                  className="max-lg:h-(--vs-control-touch)"
+                >
+                  {list.isFetchingNextPage ? "Loading" : "Load more"}
+                </Button>
+              ) : null}
             </div>
           ) : null}
         </>
       )}
-    </section>
+    </div>
   );
 }
 
-function QuickChip({
-  on,
-  onClick,
-  mono,
-  children,
+function textFilter(
+  key: "tenant_id" | "actor" | "target",
+  label: string,
+  hint: string,
+  q: AuditQuery,
+  set: (f: Field, v: string) => void,
+): Filter {
+  return {
+    key,
+    label,
+    control: <TextFilter label={label} hint={hint} value={q[key]} onChange={(v) => set(key, v)} />,
+    active: q[key] ? { label: q[key], onClear: () => set(key, "") } : null,
+  };
+}
+
+// a text filter applies after a short pause in typing
+function TextFilter({
+  label,
+  hint,
+  value,
+  onChange,
 }: {
-  on: boolean;
-  onClick: () => void;
-  mono?: boolean;
-  children: React.ReactNode;
+  label: string;
+  hint: string;
+  value: string;
+  onChange: (v: string) => void;
 }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  useEffect(() => {
+    const t = draft.trim();
+    if (t === value) return;
+    const timer = setTimeout(() => onChange(t), TEXT_DELAY_MS);
+    return () => clearTimeout(timer);
+  });
   return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-7 items-center rounded-full border px-3 text-small transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-(--vs-control-touch)",
-        mono && "font-mono text-caption",
-        on
-          ? "border-accent-text bg-selected text-fg"
-          : "border-line text-fg-2 hover:border-line-strong hover:text-fg",
-      )}
-    >
-      {children}
-    </button>
+    <TextField
+      label={label}
+      hint={hint}
+      optional
+      spellCheck={false}
+      autoComplete="off"
+      className="font-mono max-lg:h-(--vs-control-touch)"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+    />
   );
 }
 
-function isObj(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
+// a day applies once the field holds a whole day, or nothing
+function DayFilter({
+  label,
+  value,
+  error,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  error?: string | null;
+  onChange: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <DateField
+      label={label}
+      optional
+      value={draft}
+      error={error}
+      onChange={(v) => {
+        setDraft(v);
+        const t = v.trim();
+        if (t !== value && (t === "" || isIsoDay(t))) onChange(t);
+      }}
+    />
+  );
 }
 
-// the parts of an audit detail a person reads first: the reason and a status
-// change. the whole detail stays available below each row.
-export function auditSummary(e: AuditEntry): string[] {
-  const out: string[] = [];
-  const d = e.detail ?? {};
-  const status = d.status;
-  if (isObj(status) && typeof status.old === "string" && typeof status.new === "string")
-    out.push(`Status ${status.old} to ${status.new}`);
-  const mode = d.mode;
-  if (isObj(mode) && typeof mode.old === "string" && typeof mode.new === "string")
-    out.push(`Mode ${mode.old} to ${mode.new}`);
-  if (typeof d.reason === "string" && d.reason !== "") out.push(`Reason: ${d.reason}`);
-  return out;
+// ---- entries
+
+function dayLabel(day: string, today: string): string {
+  return day === today ? "Today" : formatDate(day);
 }
 
-// one side of a change as a person reads it: a list or an object is spelt
-// out (never "[object Object]"), a missing value is the missing glyph
-export function changeValue(v: unknown): string {
-  if (v === null || v === undefined || v === "") return MISSING;
-  if (typeof v === "boolean") return v ? "on" : "off";
-  if (typeof v === "number") return formatCount(v);
-  if (Array.isArray(v)) return v.length ? v.map(changeValue).join(", ") : MISSING;
-  if (isObj(v)) {
-    const parts = Object.entries(v).map(([k, x]) => `${k.replaceAll("_", " ")} ${changeValue(x)}`);
-    return parts.length ? parts.join(", ") : MISSING;
-  }
-  return String(v);
-}
-
-// every { old, new } pair of the detail, drawn as a change chip
-export function auditChanges(e: AuditEntry): { key: string; from: string; to: string }[] {
-  const out: { key: string; from: string; to: string }[] = [];
-  for (const [key, v] of Object.entries(e.detail ?? {})) {
-    if (isObj(v) && "old" in v && "new" in v)
-      out.push({ key: key.replaceAll("_", " "), from: changeValue(v.old), to: changeValue(v.new) });
-  }
-  return out;
-}
-
-// the action as the verb of a sentence; an action this list does not know
-// is shown by its code, so nothing is hidden
-const VERB: Record<string, string> = {
-  "tenant.create": "enrolled project",
-  "tenant.update": "edited project",
-  "tenant.resubmit": "resubmitted project",
-  "tenant.approve": "approved project",
-  "tenant.reject": "rejected project",
-  "tenant.suspend": "suspended project",
-  "tenant.resume": "resumed project",
-  "tenant.remove": "removed project",
-  "tenant.terms_accept": "accepted the terms for project",
-  "site.create": "added site",
-  "site.update": "edited site",
-  "site.delete": "deleted site",
-  "site.verify": "verified site",
-  "site.approve": "approved site",
-  "site.reject": "rejected site",
-  "member.add": "added member",
-  "member.remove": "removed member",
-  "member.role_change": "changed the role of",
-  "invite.create": "invited",
-  "invite.revoke": "revoked the invite of",
-  "invite.resolve": "resolved the invite of",
-  "erasure.request": "requested erasure on",
-  "erasure.complete": "completed erasure on",
-  "erasure.fail": "recorded a failed erasure on",
-  "mcp.tool_call": "called an MCP tool on",
-  "mcp_credential.create": "created MCP credential",
-  "mcp_credential.revoke": "revoked MCP credential",
-  "operator_api_key.create": "created API key",
-  "operator_api_key.revoke": "revoked API key",
-  "otlp_token.create": "created OTLP token",
-  "otlp_token.revoke": "revoked OTLP token",
-  "settings.enrollment_mode": "changed the enrollment mode",
-  "settings.removal_keep_aggregates": "changed the removal setting",
-  "umami.password_rotate": "rotated dashboard passwords",
-  "user.sign_in": "signed in",
-  "user.sign_out": "signed out",
-  "user.identity_link": "linked a sign-in method to",
-  "user.identity_unlink": "unlinked a sign-in method from",
-  "user.operator_sync": "synced the operator flag of",
-  "operator.add": "added operator",
-  "operator.bootstrap": "added operator from the deploy settings",
-  "operator.remove": "removed operator",
-  "operator.suspend": "suspended operator",
-  "operator.resume": "resumed operator",
-  "operator.role_change": "changed the operator role of",
-  "operator.passkey_add": "added an operator passkey",
-  "operator.passkey_delete": "deleted an operator passkey",
-  "operator.passkeys_reset": "reset the passkeys of",
-  "operator.step_up": "confirmed with a passkey",
-  "cohort.set": "set the cohort of",
-  "cohort.propose": "proposed a cohort for",
-  "cohort.confirm": "confirmed the cohort of",
-  "cohort.proposal_dismiss": "dismissed the cohort proposal of",
-  "rule.create": "created rule",
-  "rule.update": "edited rule",
-  "rule.delete": "deleted rule",
-  "report.create": "signed a report for",
-  "report.revoke": "revoked a report link of",
-  "report.view": "viewed report",
-  "onchain.add": "declared an on-chain id for",
-  "onchain.remove": "removed an on-chain id from",
-  "onchain.challenge": "started on-chain verification for",
-  "onchain.verify": "verified an on-chain id of",
-  "export.csv": "exported CSV of",
-};
-
-export function auditVerb(action: string): string {
-  return VERB[action] ?? `recorded ${action}`;
-}
-
-function verbOf(e: AuditEntry): string {
-  const tool = e.action === "mcp.tool_call" ? detailText(e, "tool") : null;
-  const verb = tool ? `called the MCP tool ${tool} on` : auditVerb(e.action);
-  // without a target the sentence ends at the verb
-  return e.target ? verb : verb.replace(/ (on|of)$/, "");
-}
-
-function targetLink(target: string): string | null {
-  const m = /^tenant:([0-9a-f-]{36})$/.exec(target);
-  return m ? `/operator/projects/${m[1]}` : null;
-}
-
-// a person by their login; an ai client by what it is (its credential id
-// stays in the title and the raw json); the system by its job name
-function actorName(e: AuditEntry): string {
-  if (e.actor_login) return e.actor_login;
-  if (e.actor.startsWith("mcp_credential:")) return "An MCP client";
-  return e.actor;
-}
-
-function initials(e: AuditEntry): string {
-  if (e.actor_login)
-    return (
-      e.actor_login
-        .replace(/[^0-9A-Za-z]/g, "")
-        .slice(0, 2)
-        .toUpperCase() || "?"
-    );
-  return e.actor.startsWith("mcp_credential:") ? "AI" : "SY";
-}
-
-function detailText(e: AuditEntry, key: string): string | null {
-  const v = e.detail?.[key];
-  return typeof v === "string" && v !== "" ? v : null;
-}
-
-function dayLabel(iso: string, today: string): string {
-  const day = iso.slice(0, 10);
-  return day === today ? "Today" : formatDate(`${day}T00:00:00Z`);
-}
-
+// the log in utc days, newest first; a run of the same system event folds
+// into one line. `limit` shows only the newest entries (the project page).
 export function AuditEntries({
   entries,
   onClear,
+  limit,
 }: {
   entries: AuditEntry[];
-  // offered in the empty state when filters narrowed the log
   onClear?: () => void;
+  limit?: number;
 }) {
   if (entries.length === 0)
     return (
-      <StateBlock
-        kind="empty"
+      <EmptyState
         icon={<ScrollText aria-hidden strokeWidth={1.75} />}
-        title="No audit entries match."
+        title={onClear ? "No entry matches these filters" : "No entry yet"}
         action={
           onClear ? (
-            <Button variant="outline" onClick={onClear}>
+            <Button variant="outline" size="sm" onClick={onClear}>
               Clear filters
             </Button>
           ) : null
         }
       >
-        {onClear ? "Widen or clear the filters to see more of the log." : null}
-      </StateBlock>
+        {onClear ? "Change or clear the filters." : "Actions show here when they happen."}
+      </EmptyState>
     );
-  // entries come newest first; a group starts at each new utc day
+  const shown = limit ? entries.slice(0, limit) : entries;
   const today = new Date().toISOString().slice(0, 10);
   const groups: { day: string; items: AuditEntry[] }[] = [];
-  for (const e of entries) {
+  for (const e of shown) {
     const day = e.at.slice(0, 10);
-    const last = groups[groups.length - 1];
+    const last = groups.at(-1);
     if (last && last.day === day) last.items.push(e);
     else groups.push({ day, items: [e] });
   }
   return (
     <ol
       aria-label="Audit entries"
-      className="flex animate-rise-in flex-col overflow-hidden rounded-xl border border-line bg-raised"
+      className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-raised"
     >
       {groups.map((g) => (
         <li key={g.day} className="flex flex-col">
-          <h3 className="border-b border-line-subtle bg-raised px-4 pt-3 pb-1 text-caption font-medium tracking-wide text-fg-3 uppercase">
-            {dayLabel(g.items[0]?.at ?? g.day, today)}
+          <h3 className="border-b border-line-subtle px-4 pt-3 pb-1 text-caption text-fg-2">
+            {dayLabel(g.day, today)}
           </h3>
           <ol className="flex flex-col">
-            {g.items.map((e) => (
-              <li key={e.id}>
-                <AuditRow e={e} />
+            {foldRuns(g.items).map((item) => (
+              <li key={item.kind === "one" ? item.entry.id : `run-${item.key}`}>
+                <ItemRow item={item} />
               </li>
             ))}
           </ol>
@@ -540,99 +305,152 @@ export function AuditEntries({
   );
 }
 
-function AuditRow({ e }: { e: AuditEntry }) {
-  const link = targetLink(e.target);
-  const system = !e.actor_login;
-  const changes = auditChanges(e);
-  const name = detailText(e, "name") ?? detailText(e, "domain") ?? detailText(e, "github_login");
-  const reason =
-    typeof e.detail?.reason === "string" && e.detail.reason !== "" ? e.detail.reason : null;
+function ItemRow({ item }: { item: AuditItem }) {
+  if (item.kind === "one") return <AuditRow e={item.entry} />;
+  const first = item.entries[0] as AuditEntry;
+  const last = item.entries.at(-1) as AuditEntry;
+  const s = auditSentence(first);
   return (
-    <article className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-3 gap-y-1 border-b border-line-subtle px-4 py-3 transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover sm:grid-cols-[1.75rem_minmax(0,1fr)_auto]">
+    <details className="group border-b border-line-subtle" data-run={item.entries.length}>
+      <summary className="grid cursor-pointer grid-cols-[1.75rem_minmax(0,1fr)_auto] items-start gap-x-3 px-4 py-3 transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring">
+        <ActorMark e={first} />
+        <span className="min-w-0 text-body text-fg-2">
+          <span className="font-medium text-fg">{s.actor}</span>{" "}
+          {s.verb.replace(/ (on|of|for|from|to)$/, "")},{" "}
+          <span className="font-medium text-fg">{countOf(item.entries.length, "time")}</span>
+          <span className="block text-caption">
+            {formatTimeUtc(last.at)} to {formatTimeUtc(first.at)}
+          </span>
+        </span>
+        <ChevronDown
+          aria-hidden
+          className="mt-1 size-4 text-fg-2 transition-transform duration-(--vs-duration-change) ease-standard group-open:rotate-180"
+        />
+      </summary>
+      <ol className="border-t border-line-subtle bg-sunken">
+        {item.entries.map((e) => (
+          <li key={e.id}>
+            <AuditRow e={e} nested />
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
+}
+
+// a person is a round mark with initials; the system and an ai assistant
+// are square marks with an icon, so they never look like a person
+function ActorMark({ e }: { e: AuditEntry }) {
+  const s = auditSentence(e);
+  if (s.kind === "person")
+    return (
       <span
         aria-hidden
-        className={cn(
-          "flex size-7 items-center justify-center rounded-full border border-line-strong text-axis font-semibold",
-          system ? "bg-sunken text-fg-3" : "bg-muted text-fg",
-        )}
+        className="flex size-7 items-center justify-center rounded-full border border-line-strong bg-selected text-axis font-semibold text-fg"
       >
-        {initials(e)}
+        {e.actor_login ? initials(e.actor_login) : "?"}
       </span>
+    );
+  const Icon = s.kind === "system" ? Cog : Bot;
+  return (
+    <span
+      aria-hidden
+      data-actor={s.kind}
+      className="flex size-7 items-center justify-center rounded-md border border-dashed border-line-strong text-fg-2"
+    >
+      <Icon className="size-4" strokeWidth={1.75} />
+    </span>
+  );
+}
+
+function AuditRow({ e, nested }: { e: AuditEntry; nested?: boolean }) {
+  const s = auditSentence(e);
+  const changes = auditChanges(e);
+  const reason = auditReason(e);
+  return (
+    <article
+      data-action={e.action}
+      className={cn(
+        "grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-3 gap-y-1 px-4 py-3 sm:grid-cols-[1.75rem_minmax(0,1fr)_auto]",
+        !nested &&
+          "border-b border-line-subtle transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover",
+      )}
+    >
+      <ActorMark e={e} />
       <div className="flex min-w-0 flex-col gap-1">
-        <p className="text-body break-words">
-          <span className={cn("font-semibold", system ? "text-fg-2" : "text-fg")} title={e.actor}>
-            {actorName(e)}
+        <p className="text-body break-words text-fg-2">
+          <span className={cn("font-medium", s.kind === "person" ? "text-fg" : "text-fg-2")}>
+            {s.actor}
           </span>{" "}
-          <span className="text-fg-2">{verbOf(e)}</span>
-          {e.target ? (
+          {s.verb}
+          {s.object ? (
             <>
               {" "}
-              {name ? <span className="font-medium text-fg">{name} </span> : null}
-              {link ? (
+              {s.href ? (
                 <Link
-                  to={link}
-                  className={cn(
-                    "rounded-sm font-mono underline-offset-2 hover:underline focus-ring",
-                    name ? "text-caption text-fg-3" : "text-small font-medium text-fg",
-                  )}
+                  to={s.href}
+                  className="rounded-sm font-medium text-fg underline-offset-4 hover:underline focus-ring"
                 >
-                  {e.target}
+                  {s.object}
                 </Link>
               ) : (
-                <span
-                  className={cn(
-                    "font-mono break-all",
-                    name ? "text-caption text-fg-3" : "text-small font-medium text-fg",
-                  )}
-                >
-                  {e.target}
-                </span>
+                <span className="font-medium text-fg">{s.object}</span>
               )}
             </>
           ) : null}
+          .
         </p>
         {changes.length > 0 || reason ? (
           <div className="flex flex-wrap items-center gap-1">
             {changes.map((c) => (
               <span
                 key={c.key}
-                className="inline-flex items-center gap-1 rounded-sm border border-line px-1 py-px text-caption font-normal"
+                className="inline-flex max-w-full items-center gap-1 rounded-sm border border-line px-1 text-caption"
               >
-                <span className="text-fg-3">{c.key}</span>
+                <span className="text-fg-2">{c.key}</span>
                 <span className="sr-only">changed from</span>
                 <span className="text-fg-2 line-through">{c.from}</span>
-                <ArrowRight aria-hidden className="size-2.5 text-fg-3" />
+                <ArrowRight aria-hidden className="size-3 shrink-0 text-fg-3" />
                 <span className="sr-only">to</span>
                 <span className="text-fg">{c.to}</span>
               </span>
             ))}
             {reason ? (
-              <q className="text-caption font-normal text-fg-2">
+              <q className="text-caption break-words text-fg-2">
                 <span className="sr-only">Reason: </span>
                 {reason}
               </q>
             ) : null}
           </div>
         ) : null}
-        <details className="group">
-          <summary className="w-fit cursor-pointer rounded-sm text-caption font-normal text-fg-3 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring">
-            Raw JSON
+        <details className="text-caption">
+          <summary className="w-fit cursor-pointer rounded-sm text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring">
+            Details
           </summary>
-          <pre className="mt-1 animate-rise-in overflow-x-auto rounded-md border border-line bg-sunken p-2 font-mono text-caption text-fg-2">
-            {JSON.stringify(e, null, 2)}
+          <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+            <dt className="text-fg-2">Action</dt>
+            <dd className="font-mono break-all text-fg">{e.action}</dd>
+            <dt className="text-fg-2">Actor</dt>
+            <dd className="font-mono break-all text-fg">{e.actor}</dd>
+            {e.target ? (
+              <>
+                <dt className="text-fg-2">Target</dt>
+                <dd className="font-mono break-all text-fg">{e.target}</dd>
+              </>
+            ) : null}
+          </dl>
+          <pre className="mt-2 overflow-x-auto rounded-md border border-line bg-sunken p-2 font-mono text-caption text-fg-2">
+            {JSON.stringify(e.detail ?? {}, null, 2)}
           </pre>
         </details>
       </div>
-      <div className="col-start-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 sm:col-start-3 sm:row-start-1 sm:flex-col sm:items-end">
-        <time
-          dateTime={e.at}
-          title={formatDateTimeUtc(e.at)}
-          className="font-mono text-caption text-fg-2 tabular"
-        >
-          {formatTimeUtc(e.at)}
-        </time>
-        <span className="font-mono text-axis text-fg-3">{e.action}</span>
-      </div>
+      <time
+        dateTime={e.at}
+        title={formatDateTimeUtc(e.at)}
+        className="col-start-2 font-mono text-caption text-fg-2 tabular sm:col-start-3 sm:row-start-1"
+      >
+        {formatTimeUtc(e.at)}
+      </time>
     </article>
   );
 }

@@ -2,24 +2,29 @@ import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { auditPath, type TenantListQuery, tenantListPath } from "@/api/endpoints";
 import { tenantAction } from "@/api/schemas";
-import { dayPairError, EMPTY_FILTERS } from "@/lib/global";
 import {
-  AuditPage,
+  actorKind,
+  actorName,
   auditChanges,
   auditDaysError,
-  auditSummary,
+  auditSentence,
   auditVerb,
   dayToUtc,
-} from "@/pages/operator/audit";
+  foldRuns,
+} from "@/lib/audit";
+import { dayPairError, EMPTY_FILTERS } from "@/lib/global";
+import { statusQuery } from "@/lib/operator-projects";
+import { AuditPage } from "@/pages/operator/audit";
 import { OperatorLayout } from "@/pages/operator/layout";
 import { AddOperator, validateAddOperator } from "@/pages/operator/operators";
 import { OperatorProjectPage } from "@/pages/operator/project";
+import { OperatorProjectsPage } from "@/pages/operator/projects";
 import { ReviewQueuePage } from "@/pages/operator/review";
 import { SettingsPage } from "@/pages/operator/settings";
-import { queryFromParams, TenantsPage } from "@/pages/operator/tenants";
 import * as f from "./fixtures/contract";
-import { integrityReportBody } from "./fixtures/global";
+import { apiCompareBody, integrityReportBody, webCompareBody } from "./fixtures/global";
 import { byLabel, byRole, click, renderRoutes, stubFetch, type, waitFor } from "./helpers";
+import { type Route, routeFetch } from "./route-fetch";
 
 const detailRoute = [{ path: "/operator/projects/:tenantId", element: <OperatorProjectPage /> }];
 
@@ -61,6 +66,25 @@ const noOnchain = {
 
 function dialogOpen(host: HTMLElement): HTMLDialogElement | undefined {
   return [...host.querySelectorAll("dialog")].find((d) => d.hasAttribute("open"));
+}
+
+// the one-project comparison the review and the project page read their
+// numbers from
+const oneWeb = { ...webCompareBody, projects: [webCompareBody.projects[0]] };
+const oneApi = { ...apiCompareBody, projects: [apiCompareBody.projects[0]] };
+
+const TENANT = `/api/operator/tenants/${f.TENANT_ID}`;
+
+function detailRoutes(detail: unknown, extra: Route[] = []): Route[] {
+  return [
+    ...extra,
+    { path: TENANT, answer: { status: 200, body: detail } },
+    { path: "/api/operator/web/integrity", answer: { status: 200, body: integrityReportBody } },
+    { path: `${TENANT}/onchain`, answer: noOnchain },
+    { path: `${TENANT}/cohort`, answer: noCohort },
+    { path: "/api/operator/web/compare", answer: { status: 200, body: oneWeb } },
+    { path: "/api/operator/api/compare", answer: { status: 200, body: oneApi } },
+  ];
 }
 
 describe("operator area guard", () => {
@@ -109,129 +133,86 @@ describe("operator area guard", () => {
       "/operator",
     );
     await waitFor(() => expect(host.textContent).toContain("queue"));
-    // the page title is the sidebar's name of the page; no tab bar
-    expect(host.querySelector("h1")?.textContent).toBe("Review");
+    // each page draws its own header; the gate adds none and no tab bar
+    expect(host.querySelector("h1")).toBeNull();
     expect(host.querySelector("nav")).toBeNull();
   });
 });
 
-describe("operator project detail", () => {
-  it("shows enrollment answers, evidence, ingest counts and only the allowed actions", async () => {
-    stubFetch([
-      { status: 200, body: f.operatorDetailBody },
-      { status: 200, body: integrityReportBody },
-      noOnchain,
-      noCohort,
-    ]);
+describe("operator project page", () => {
+  it("shows the decision, the numbers, the evidence once and the record", async () => {
+    routeFetch(detailRoutes(f.operatorDetailBody));
     const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
-    await waitFor(() => expect(host.textContent).toContain("Soroban AMM on mainnet"));
-    await waitFor(() =>
-      expect(host.textContent).toContain("The project declares no accounts or contracts."),
-    );
-    // the integrity report of the project, with the reasons of its days
-    await waitFor(() =>
-      expect(host.textContent).toContain("15% of accepted events went to the quarantine band"),
-    );
-    expect(host.textContent).toContain("not a valid id");
-    expect(host.textContent).toContain("Domain verified");
-    expect(host.textContent).toContain("Public network");
-    expect(host.textContent).toContain("2,810");
-    expect(host.textContent).toContain("90,210");
+    await waitFor(() => expect(host.querySelector("h1")?.textContent).toBe("Stellar DEX"));
+    expect(host.textContent).toContain("Soroban AMM on mainnet");
+    expect(host.textContent).toContain("Not a valid id");
     expect(host.textContent).toContain("Reason: Spam traffic");
-    const actions = host.querySelector("section[aria-label=Actions]");
-    const labels = [...(actions?.querySelectorAll("button") ?? [])]
-      .filter((b) => !b.closest("dialog"))
-      .map((b) => b.textContent);
-    expect(labels).toEqual(["Approve", "Reject", "Remove"]);
+    expect(host.querySelectorAll("ul[aria-label=Evidence]")).toHaveLength(1);
+    // the numbers come from the comparison of this one project
+    await waitFor(() =>
+      expect(host.querySelector("[data-stat=requests]")?.textContent).toContain("300"),
+    );
+    expect(host.querySelector("[data-stat=grade]")?.textContent).toContain("C");
+    // the decision is the one panel; remove sits in the actions menu
+    expect(host.querySelector("form[aria-label='Decision on Stellar DEX']")).not.toBeNull();
+    expect(byRole(host, "button", "Actions")).toBeTruthy();
+    // the last entries of the audit log read as sentences
+    expect(host.textContent).toContain("sa-operator suspended a project");
+    expect(host.querySelector("a[href*='/operator/audit?tenant_id=']")).not.toBeNull();
   });
 
-  it("requires a reason to reject and posts it with the csrf header", async () => {
-    const calls = stubFetch([
-      { status: 200, body: f.operatorDetailBody },
-      { status: 200, body: integrityReportBody },
-      noOnchain,
-      noCohort,
-      {
-        status: 200,
-        body: { ...f.operatorSummaryBody, status: "rejected", status_reason: "Not on Stellar" },
-      },
-    ]);
+  it("removes through the menu with a reason and the typed slug", async () => {
+    const calls = routeFetch(
+      detailRoutes(f.operatorDetailBody, [
+        {
+          method: "POST",
+          path: `${TENANT}/remove`,
+          answer: { status: 409, body: f.errorBody("invalid_transition") },
+        },
+      ]),
+    );
     const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
-    await waitFor(() => byRole(host, "button", "Reject"));
-    await waitFor(() => expect(calls).toHaveLength(4));
-    await click(byRole(host, "button", "Reject"));
-    const dialog = dialogOpen(host);
-    expect(dialog?.textContent).toContain("Reject Stellar DEX?");
-    // the dialog's own confirm button
-    const confirm = [...(dialog?.querySelectorAll("button") ?? [])].find(
-      (b) => b.textContent === "Reject",
-    ) as HTMLElement;
-    await waitFor(() => expect(calls).toHaveLength(4));
-    await click(confirm);
-    expect(calls).toHaveLength(4);
-    expect(dialog?.textContent).toContain("Required.");
-    await type(byLabel(dialog as HTMLElement, "Reason"), "  Not on Stellar ");
-    await click(confirm);
-    await waitFor(() => expect(calls).toHaveLength(5));
-    expect(calls[4]?.method).toBe("POST");
-    expect(calls[4]?.url).toBe(`/api/operator/tenants/${f.TENANT_ID}/reject`);
-    expect(calls[4]?.headers.get("X-Requested-With")).toBe("sa-console");
-    expect(calls[4]?.body).toEqual({ reason: "Not on Stellar" });
-    await waitFor(() => expect(dialogOpen(host)).toBeUndefined());
-  });
-
-  it("approves without a reason by sending an empty body", async () => {
-    const calls = stubFetch([
-      { status: 200, body: f.operatorDetailBody },
-      { status: 200, body: integrityReportBody },
-      noOnchain,
-      noCohort,
-      { status: 200, body: { ...f.operatorSummaryBody, status: "active" } },
-    ]);
-    const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
-    await waitFor(() => byRole(host, "button", "Approve"));
-    await waitFor(() => expect(calls).toHaveLength(4));
-    await click(byRole(host, "button", "Approve"));
+    await waitFor(() => byRole(host, "button", "Actions"));
+    const trigger = byRole(host, "button", "Actions");
+    await act(async () => {
+      trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+    });
+    const item = () =>
+      [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].find(
+        (m) => m.textContent === "Remove project",
+      );
+    await waitFor(() => expect(item()).toBeTruthy());
+    await click(item() as HTMLElement);
     const dialog = dialogOpen(host) as HTMLElement;
-    const confirm = [...dialog.querySelectorAll("button")].find((b) => b.textContent === "Approve");
-    await click(confirm as HTMLElement);
-    await waitFor(() => expect(calls).toHaveLength(5));
-    expect(calls[4]?.url).toBe(`/api/operator/tenants/${f.TENANT_ID}/approve`);
-    expect(calls[4]?.body).toEqual({});
-  });
-
-  it("shows a 409 invalid_transition in the dialog", async () => {
-    const calls = stubFetch([
-      { status: 200, body: f.operatorDetailBody },
-      { status: 200, body: integrityReportBody },
-      noOnchain,
-      noCohort,
-      { status: 409, body: f.errorBody("invalid_transition") },
-    ]);
-    const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
-    await waitFor(() => byRole(host, "button", "Remove"));
-    await waitFor(() => expect(calls).toHaveLength(4));
-    await click(byRole(host, "button", "Remove"));
-    const dialog = dialogOpen(host) as HTMLElement;
+    expect(dialog.textContent).toContain("Remove Stellar DEX?");
+    const confirm = [...dialog.querySelectorAll("button")].find(
+      (b) => b.textContent === "Remove project",
+    ) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
     await type(byLabel(dialog, "Reason"), "Fraud");
-    const confirm = [...dialog.querySelectorAll("button")].find((b) => b.textContent === "Remove");
-    await click(confirm as HTMLElement);
+    await type(byLabel(dialog, "Type stellar-dex to confirm"), "stellar-dex");
+    await click(confirm);
     await waitFor(() =>
       expect(dialog.textContent).toContain("not possible from the current status"),
     );
+    const post = calls.find((c) => c.method === "POST");
+    expect(post?.url).toBe(`${TENANT}/remove`);
+    expect(post?.body).toEqual({ reason: "Fraud" });
   });
 
-  it("shows removal progress and no actions for a removed project", async () => {
-    stubFetch([
-      { status: 200, body: f.removedDetailBody },
-      { status: 200, body: integrityReportBody },
-      noOnchain,
-      noCohort,
-    ]);
+  it("shows the removal steps in words and no decision for a removed project", async () => {
+    routeFetch(detailRoutes(f.removedDetailBody));
     const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
-    await waitFor(() => expect(host.textContent).toContain("Data is still being deleted."));
-    expect(host.textContent).toContain("registry");
-    expect(host.textContent).toContain("No action is possible from this status.");
+    await waitFor(() => expect(host.textContent).toContain("The service is deleting the data."));
+    expect(host.textContent).toContain("Project record closed");
+    expect(host.querySelector("form[aria-label^='Decision on']")).toBeNull();
+  });
+
+  it("keeps the header when the project does not load", async () => {
+    routeFetch([{ path: TENANT, answer: { status: 500, body: f.errorBody("internal") } }]);
+    const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
+    await waitFor(() => expect(host.textContent).toContain("The project did not load"));
+    expect(host.querySelector("h1")?.textContent).toBe("Project");
   });
 
   it("answers 404 for an unknown project", async () => {
@@ -241,8 +222,8 @@ describe("operator project detail", () => {
   });
 });
 
-describe("operator project list", () => {
-  it("builds the contract's query from the filters", () => {
+describe("operator project list, status view", () => {
+  it("builds the contract's query from the address", () => {
     const q: TenantListQuery = {
       status: ["pending", "suspended"],
       review: true,
@@ -253,50 +234,50 @@ describe("operator project list", () => {
     expect(tenantListPath(q, "abc")).toBe(
       "/operator/tenants?status=pending%2Csuspended&review=true&q=dex&sort=name&order=asc&limit=50&cursor=abc",
     );
-    expect(queryFromParams(new URLSearchParams("status=pending,bogus&sort=evil&order=up"))).toEqual(
-      {
-        status: ["pending"],
-        review: false,
-        q: "",
-        sort: "created_at",
-        order: "desc",
-      },
-    );
+    expect(statusQuery(new URLSearchParams("status=pending,bogus&sort=evil&order=up"))).toEqual({
+      status: ["pending"],
+      review: false,
+      q: "",
+      sort: "created_at",
+      order: "desc",
+    });
   });
 
-  it("filters by status, searches and loads the next page", async () => {
-    const calls = stubFetch([
-      { status: 200, body: f.operatorSitePageBody },
-      { status: 200, body: f.operatorSitePageBody },
-      { status: 200, body: f.operatorSitePageBody },
+  it("searches as the person types, sorts by a header and loads the next page", async () => {
+    const calls = routeFetch([
       {
-        status: 200,
-        body: {
-          items: [{ ...f.operatorSummaryBody, id: f.REMOVED_TENANT_ID, name: "Second" }],
-          next_cursor: null,
-        },
+        path: "/api/operator/tenants",
+        answer: [
+          { status: 200, body: f.operatorSitePageBody },
+          { status: 200, body: f.operatorSitePageBody },
+          { status: 200, body: f.operatorSitePageBody },
+          {
+            status: 200,
+            body: {
+              items: [{ ...f.operatorSummaryBody, id: f.REMOVED_TENANT_ID, name: "Second" }],
+              next_cursor: null,
+            },
+          },
+        ],
       },
     ]);
     const host = await renderRoutes(
-      [{ path: "/operator/tenants", element: <TenantsPage /> }],
-      "/operator/tenants",
+      [{ path: "/operator/projects", element: <OperatorProjectsPage /> }],
+      "/operator/projects",
     );
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     expect(calls[0]?.url).toBe("/api/operator/tenants?sort=created_at&order=desc&limit=50");
-    const status = host.querySelector("fieldset") as HTMLElement;
-    const pending = byRole(status, "button", "Pending");
-    await click(pending);
-    await waitFor(() => expect(pending.getAttribute("aria-pressed")).toBe("true"));
-    await waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[1]?.url).toContain("status=pending");
-    await type(byLabel(host, "Search"), "dex");
-    await click(byRole(host, "button", "Search"));
-    await waitFor(() => expect(calls).toHaveLength(3));
-    expect(calls[2]?.url).toContain("q=dex");
+    await type(byLabel(host, "Search projects"), "dex");
+    await waitFor(() => expect(calls.some((c) => c.url.includes("q=dex"))).toBe(true));
+    const name = host.querySelector("th[aria-sort] button") as HTMLElement;
+    await click(name);
+    await waitFor(() =>
+      expect(calls.some((c) => c.url.includes("sort=name&order=asc"))).toBe(true),
+    );
     await waitFor(() => byRole(host, "button", "Load more"));
     await click(byRole(host, "button", "Load more"));
     await waitFor(() => expect(host.textContent).toContain("Second"));
-    expect(calls[3]?.url).toContain("cursor=Y3Vyc29y");
+    expect(calls.at(-1)?.url).toContain("cursor=Y3Vyc29y");
   });
 });
 
@@ -384,31 +365,66 @@ describe("audit log", () => {
     expect(JSON.stringify(auditChanges(e))).not.toContain("[object Object]");
   });
 
-  it("summarises status changes and reasons", () => {
-    expect(auditSummary(f.auditEntryBody)).toEqual([
-      "Status active to suspended",
-      "Reason: Spam traffic",
-    ]);
+  it("reads an entry as a sentence and tells the system from people", () => {
+    const person = auditSentence(f.auditEntryBody);
+    expect(person).toMatchObject({
+      actor: "sa-operator",
+      kind: "person",
+      verb: "suspended",
+      object: "a project",
+      href: `/operator/projects/${f.TENANT_ID}`,
+    });
+    const system = f.auditPageBody.items[1] as typeof f.auditEntryBody;
+    expect(actorKind(system)).toBe("system");
+    expect(actorName(system)).toBe("The system (umami rotate)");
+    expect(auditSentence(system).object).toBeNull();
+    expect(actorName({ ...system, actor: "mcp_credential:x" })).toBe("An AI assistant");
+    expect(actorName({ ...system, actor: `user:${f.TENANT_ID}` })).toBe("A person");
   });
 
-  it("applies filters from the form", async () => {
-    const calls = stubFetch([
-      { status: 200, body: f.auditPageBody },
-      { status: 200, body: f.auditPageBody },
+  it("folds a run of the same system event, never the actions of people", () => {
+    const run = Array.from({ length: 4 }, (_, i) => ({
+      ...f.auditEntryBody,
+      id: 100 - i,
+      actor: "system:verify-domains",
+      actor_login: null,
+      action: "site.verify",
+    }));
+    const people = Array.from({ length: 3 }, (_, i) => ({ ...f.auditEntryBody, id: 10 - i }));
+    const items = foldRuns([...run, ...people]);
+    expect(items.map((i) => (i.kind === "run" ? `run ${i.entries.length}` : "one"))).toEqual([
+      "run 4",
+      "one",
+      "one",
+      "one",
+    ]);
+    expect(foldRuns(run.slice(0, 2)).every((i) => i.kind === "one")).toBe(true);
+  });
+
+  it("applies the filters as they change, with no Apply button", async () => {
+    const calls = routeFetch([
+      { path: "/api/operator/audit", answer: { status: 200, body: f.auditPageBody } },
     ]);
     const host = await renderRoutes(
       [{ path: "/operator/audit", element: <AuditPage /> }],
       "/operator/audit",
     );
-    await waitFor(() => expect(host.textContent).toContain("umami.password_rotate"));
-    expect(host.textContent).toContain("sa-operator");
-    await type(byLabel(host, "Action"), "tenant.");
-    await type(byLabel(host, "From (UTC day)"), "2026-11-01");
-    await click(byRole(host, "button", "Apply filters"));
+    await waitFor(() => expect(host.textContent).toContain("sa-operator suspended a project"));
+    expect(host.querySelector("[data-actor=system]")).not.toBeNull();
+    expect(host.textContent).not.toContain("Apply");
+    const action = byLabel(host, "Action") as unknown as HTMLSelectElement;
+    await act(async () => {
+      action.value = "tenant.";
+      action.dispatchEvent(new Event("change", { bubbles: true }));
+    });
     await waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[1]?.url).toBe(
+    expect(calls[1]?.url).toBe("/api/operator/audit?action=tenant.&limit=50");
+    await type(byLabel(host, "From"), "2026-11-01");
+    await waitFor(() => expect(calls).toHaveLength(3));
+    expect(calls[2]?.url).toBe(
       "/api/operator/audit?action=tenant.&from=2026-11-01T00%3A00%3A00Z&limit=50",
     );
+    expect(host.querySelector("[data-count]")?.textContent).toBe("2 entries shown.");
   });
 });
 
@@ -417,39 +433,45 @@ it("knows every lifecycle action of contract 5.5", () => {
 });
 
 describe("review workspace", () => {
-  const noAlerts = {
-    checked_at: "2026-11-13T12:00:00Z",
-    watchdog_firing: true,
-    sources: [{ address: "10.0.1.4:9093", reachable: true, watchdog_firing: true, error: null }],
-    alerts: [],
-  };
   const pendingDetail = {
     ...f.operatorDetailBody,
     tenant: { ...f.operatorDetailBody.tenant, status: "pending" },
     allowed_actions: ["approve", "reject", "remove"],
   };
 
-  it("shows the queue, the evidence and rejects with a required reason", async () => {
-    const calls = stubFetch([
-      { status: 200, body: noAlerts },
-      {
-        status: 200,
-        body: { items: [{ ...f.operatorSummaryBody, status: "pending" }], next_cursor: null },
-      },
-      { status: 200, body: pendingDetail },
-      { status: 200, body: { ...f.operatorSummaryBody, status: "rejected" } },
-    ]);
+  it("shows the queue, the numbers and the evidence, and rejects with a required reason", async () => {
+    const calls = routeFetch(
+      detailRoutes(pendingDetail, [
+        {
+          path: "/api/operator/tenants",
+          answer: {
+            status: 200,
+            body: { items: [{ ...f.operatorSummaryBody, status: "pending" }], next_cursor: null },
+          },
+        },
+        {
+          method: "POST",
+          path: `${TENANT}/reject`,
+          answer: { status: 200, body: { ...f.operatorSummaryBody, status: "rejected" } },
+        },
+      ]),
+    );
     const host = await renderRoutes(
       [{ path: "/operator", element: <ReviewQueuePage /> }],
       "/operator",
     );
     await waitFor(() => expect(host.textContent).toContain("Soroban AMM on mainnet"));
-    expect(calls[1]?.url).toBe(
+    expect(calls[0]?.url).toBe(
       "/api/operator/tenants?review=true&sort=created_at&order=asc&limit=50",
     );
-    expect(host.textContent).toContain("No alert needs action.");
+    expect(host.querySelector("h1")?.textContent).toBe("Review");
+    // no alerts here: the alerts have their own page
+    expect(calls.some((c) => c.url.includes("/alerts"))).toBe(false);
     expect(host.querySelector("ul[aria-label=Evidence]")?.textContent).toContain(
       "1 of 2 not a valid id",
+    );
+    await waitFor(() =>
+      expect(host.querySelector("[data-stat=pageviews]")?.textContent).not.toContain("Loading"),
     );
 
     const radios = [...host.querySelectorAll<HTMLElement>("[role=radio]")];
@@ -470,13 +492,28 @@ describe("review workspace", () => {
     expect(approve.getAttribute("aria-checked")).toBe("true");
     await click(reject);
     await click(byRole(host, "button", "Reject projectCtrl Enter"));
-    expect(calls).toHaveLength(3);
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
     expect(host.textContent).toContain("Required.");
     await type(byLabel(host, "Reason"), " Not on Stellar ");
     await click(byRole(host, "button", "Reject projectCtrl Enter"));
-    await waitFor(() => expect(calls).toHaveLength(4));
-    expect(calls[3]?.url).toBe(`/api/operator/tenants/${f.TENANT_ID}/reject`);
-    expect(calls[3]?.body).toEqual({ reason: "Not on Stellar" });
+    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
+    const post = calls.find((c) => c.method === "POST");
+    expect(post?.url).toBe(`${TENANT}/reject`);
+    expect(post?.body).toEqual({ reason: "Not on Stellar" });
+  });
+
+  it("says so when nothing waits", async () => {
+    routeFetch([
+      {
+        path: "/api/operator/tenants",
+        answer: { status: 200, body: { items: [], next_cursor: null } },
+      },
+    ]);
+    const host = await renderRoutes(
+      [{ path: "/operator", element: <ReviewQueuePage /> }],
+      "/operator",
+    );
+    await waitFor(() => expect(host.textContent).toContain("Nothing to review"));
   });
 });
 
@@ -568,7 +605,7 @@ describe("operator step-up", () => {
 describe("operator day pairs", () => {
   it("refuse an end before its start before asking", () => {
     expect(auditDaysError("2026-11-10", "2026-11-01")).toBe("End on or after the start day.");
-    expect(auditDaysError("2025-01-01", "2026-11-01")).toBe("The days cover at most 400 days.");
+    expect(auditDaysError("2025-01-01", "2026-11-01")).toBe("Choose at most 400 days.");
     expect(auditDaysError("2026-11-01", "2026-11-01")).toBeNull();
     expect(auditDaysError("", "2026-11-01")).toBeNull();
     expect(
@@ -583,13 +620,15 @@ describe("operator day pairs", () => {
 
 describe("audit sentences", () => {
   it("words the operator, cohort, rule, report, on-chain, export and identity actions", () => {
-    expect(auditVerb("operator.add")).toBe("added operator");
+    expect(auditVerb("operator.add")).toBe("added the operator");
     expect(auditVerb("cohort.confirm")).toBe("confirmed the cohort of");
-    expect(auditVerb("rule.delete")).toBe("deleted rule");
+    expect(auditVerb("rule.delete")).toBe("deleted the rule");
     expect(auditVerb("report.revoke")).toBe("revoked a report link of");
     expect(auditVerb("onchain.verify")).toBe("verified an on-chain id of");
-    expect(auditVerb("export.csv")).toBe("exported CSV of");
-    expect(auditVerb("user.identity_link")).toBe("linked a sign-in method to");
+    expect(auditVerb("export.csv")).toBe("exported a CSV file of");
+    expect(auditVerb("user.identity_link")).toBe("added a sign-in method to");
+    expect(auditVerb("site.stellar_toml")).toBe("checked the stellar.toml of the site");
+    expect(auditVerb("something.new")).toBe("recorded the action something.new on");
   });
 });
 
