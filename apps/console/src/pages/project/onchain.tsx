@@ -167,7 +167,7 @@ export function OnchainPage() {
         <Ids view={v} tenantId={tenant.id} canChange={canChange} isOwner={isOwner} />
         <LinkSection view={v} tenantId={tenant.id} />
         <p className="max-w-prose text-caption text-fg-2">
-          Ledger data is public. Veristar keeps daily counts per id and per contract function. It
+          Ledger data is public. Veristar keeps daily counts per ID and per contract function. It
           keeps no counterparty, caller or transaction.
         </p>
       </>
