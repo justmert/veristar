@@ -2,12 +2,13 @@ import { cn } from "@veristar/brand/cn";
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
+import { Disclosure } from "@/components/disclosure";
 import { EmptyState, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
-import { formatCount } from "@/lib/format";
+import { formatCount, truncateMiddle } from "@/lib/format";
 
 // one table for every list of the console. on a wide screen it is a real
 // <table> with sortable headers (th > button, aria-sort). the table scrolls
@@ -38,9 +39,15 @@ export type Column<Row> = {
   // the name line of the phone card and the cell that carries the row link;
   // the first column when no column says so
   primary?: boolean;
-  // long values are cut with an ellipsis; the full value is in a tooltip
+  // long values are cut with an ellipsis; the full value is in a tooltip.
+  // with `middle`, the cell shows the text cut in its middle instead, so a
+  // slug or an id keeps its start and its end (stress-pro…ct-12)
   truncate?: (row: Row) => string;
-  // numbers are set in mono with tabular figures
+  middle?: number;
+  // the row's actions (a menu, a revoke button): on a phone card they sit
+  // at the right of the name line, not under a label
+  action?: boolean;
+  // numbers are set with tabular figures
   numeric?: boolean;
   className?: string;
 };
@@ -57,6 +64,25 @@ export type TableFooter =
     };
 
 export type Sort = { key: string; order: "asc" | "desc" };
+
+// paging for a list the page already holds in full (30 sites, 45 invites):
+// the rows of the current page and the pager footer. the page goes back to
+// the first when the list shrinks under it (a search narrowed it)
+export function useRowPages<Row>(
+  rows: Row[],
+  pageSize = 10,
+): { rows: Row[]; footer: TableFooter | undefined } {
+  const [page, setPage] = useState(0);
+  const last = Math.max(0, Math.ceil(rows.length / pageSize) - 1);
+  const at = Math.min(page, last);
+  return {
+    rows: rows.slice(at * pageSize, at * pageSize + pageSize),
+    footer:
+      rows.length > pageSize
+        ? { kind: "pager", page: at, pageSize, total: rows.length, onPage: setPage }
+        : undefined,
+  };
+}
 
 export function DataTable<Row>({
   label,
@@ -244,6 +270,7 @@ export function DataTable<Row>({
                             c.numeric && "tabular",
                             c.minWidth,
                             c.className,
+                            ROW_ACTION,
                             href && c !== primary && ABOVE_ROW_LINK,
                           )}
                         >
@@ -329,7 +356,7 @@ export function DataTable<Row>({
                 row={r}
                 rowKey={getRowKey(r)}
                 primary={primary}
-                columns={columns.filter((c) => c.mobile && c !== primary).slice(0, 3)}
+                columns={columns.filter((c) => c !== primary)}
                 href={rowHref?.(r)}
                 name={name(r)}
                 rowProps={rowProps}
@@ -354,12 +381,20 @@ const STICKY = "sticky top-(--vs-header) z-(--vs-layer-sticky) lg:top-0";
 // the edge of a table that scrolls sideways: a fade where more columns are
 const FADE =
   "pointer-events-none absolute inset-y-0 z-(--vs-layer-sticky) w-6 from-raised to-transparent opacity-0 transition-opacity duration-(--vs-duration-press) ease-standard";
-const CELL = "border-b border-line-subtle px-3 align-middle text-fg group-last/row:border-b-0";
+// a cell keeps 8 px above and below, so a two-line cell (name and slug)
+// makes a row of 48 px or more and its lines never touch the rules
+const CELL =
+  "border-b border-line-subtle px-3 py-2 align-middle text-fg group-last/row:border-b-0 [&_.flex-col]:gap-px";
 // the row link stretches over the whole row; a control inside another cell
 // (a menu, a reasons button, a second link) sits above it and gets its own
 // click
 const ABOVE_ROW_LINK =
   "[&_:is(a,button,input,select,textarea,[role=button])]:relative [&_:is(a,button,input,select,textarea,[role=button])]:z-(--vs-layer-raised)";
+// a quiet per-row action (a filter shortcut) marked data-row-action shows
+// on a wide screen only while its row is under the pointer or holds the
+// focus; a touch screen has no hover, so there it always shows
+const ROW_ACTION =
+  "pointer-fine:[&_[data-row-action]]:opacity-0 pointer-fine:group-hover/row:[&_[data-row-action]]:opacity-100 pointer-fine:group-focus-within/row:[&_[data-row-action]]:opacity-100";
 
 function HeaderCell<Row>({
   column: c,
@@ -582,6 +617,19 @@ function FloatingHead<Row>({
 function CellValue<Row>({ column: c, row }: { column: Column<Row>; row: Row }) {
   if (!c.truncate) return <>{c.cell(row)}</>;
   const full = c.truncate(row);
+  if (c.middle !== undefined) {
+    const cut = truncateMiddle(full, c.middle);
+    if (cut === full) return <>{c.cell(row)}</>;
+    return (
+      <Tooltip content={full}>
+        {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the full value opens on keyboard focus too */}
+        <span tabIndex={0} className="rounded-sm whitespace-nowrap focus-ring">
+          <span aria-hidden>{cut}</span>
+          <span className="sr-only">{full}</span>
+        </span>
+      </Tooltip>
+    );
+  }
   return (
     <Tooltip content={full}>
       <span className="block max-w-full truncate">{c.cell(row)}</span>
@@ -603,6 +651,10 @@ function EmptyRow({ empty }: { empty?: { title: string; text?: ReactNode; action
   );
 }
 
+// a phone card: the name line with the row's actions at its right, the
+// columns marked `mobile` under it in two columns, and every other column
+// behind a Details disclosure, so a card never drops a field. a value wraps
+// rather than being cut; a pill keeps its full word
 function PhoneCard<Row>({
   row,
   rowKey,
@@ -625,11 +677,29 @@ function PhoneCard<Row>({
   onToggle: (key: string, on: boolean) => void;
 }) {
   const on = selection?.selected.has(rowKey) ?? false;
+  const isAction = (c: Column<Row>) => c.action === true || c.header === "Actions";
+  const actions = columns.filter(isAction);
+  const shown = columns.filter((c) => c.mobile && !isAction(c));
+  const rest = columns.filter((c) => !c.mobile && !isAction(c));
+  const field = (c: Column<Row>) => (
+    <div key={c.key} className="flex min-w-0 flex-col gap-1">
+      <dt className="text-caption text-fg-2">{c.header}</dt>
+      <dd
+        className={cn(
+          "min-w-0 text-small break-words text-fg",
+          c.numeric && "tabular",
+          href && ABOVE_ROW_LINK,
+        )}
+      >
+        <CellValue column={c} row={row} />
+      </dd>
+    </div>
+  );
   return (
     <li
       {...rowProps?.(row)}
       data-state={on ? "selected" : undefined}
-      className="relative flex items-start gap-3 border-b border-line-subtle p-4 transition-colors duration-(--vs-duration-press) ease-standard last:border-b-0 hover:bg-hover data-[state=selected]:bg-selected"
+      className="relative flex items-start gap-3 border-b border-line-subtle p-4 last:border-b-0 data-[state=selected]:bg-selected"
     >
       {selection ? (
         <span className="relative z-(--vs-layer-raised) pt-1">
@@ -641,36 +711,44 @@ function PhoneCard<Row>({
           />
         </span>
       ) : null}
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <span className="min-w-0 truncate text-body font-medium text-fg">
-          {primary && href ? (
-            <Link to={href} className="rounded-sm focus-ring after:absolute after:inset-0">
-              {primary.cell(row)}
-            </Link>
-          ) : primary ? (
-            primary.cell(row)
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <span className="min-w-0 text-body font-medium break-words text-fg">
+            {primary && href ? (
+              <Link to={href} className="rounded-sm focus-ring after:absolute after:inset-0">
+                {primary.cell(row)}
+              </Link>
+            ) : primary ? (
+              primary.cell(row)
+            ) : null}
+          </span>
+          {actions.length ? (
+            <span
+              className={cn(
+                "-my-1 flex shrink-0 items-center gap-1",
+                href && "relative z-(--vs-layer-raised)",
+              )}
+            >
+              {actions.map((c) => (
+                <span key={c.key} className="flex items-center">
+                  {c.cell(row)}
+                </span>
+              ))}
+            </span>
           ) : null}
-        </span>
-        {columns.length ? (
-          <dl className="grid grid-cols-3 gap-3">
-            {columns.map((c) => (
-              <div key={c.key} className="flex min-w-0 flex-col gap-1">
-                <dt className="text-caption text-fg-2">{c.header}</dt>
-                <dd
-                  className={cn(
-                    // a short value (a type, a status) wraps in the narrow
-                    // column; a column that cuts long values keeps its cut,
-                    // with the full value in a tooltip
-                    "min-w-0 text-small break-words text-fg",
-                    c.numeric && "tabular",
-                    href && ABOVE_ROW_LINK,
-                  )}
-                >
-                  <CellValue column={c} row={row} />
-                </dd>
-              </div>
-            ))}
-          </dl>
+        </div>
+        {shown.length ? (
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3">{shown.map(field)}</dl>
+        ) : null}
+        {rest.length ? (
+          <Disclosure
+            variant="inline"
+            summary="Details"
+            className={cn("text-small", href && "relative z-(--vs-layer-raised)")}
+            bodyClassName="pt-3"
+          >
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3">{rest.map(field)}</dl>
+          </Disclosure>
         ) : null}
       </div>
     </li>
