@@ -274,6 +274,9 @@ here, before they take effect, as the processing terms require
   active `operator_admin` row gets 403 `operator_admin_required`, and the
   control plane never asks Alertmanager for that request. Alert labels and
   descriptions name nodes and internal addresses.
+- The `cp_operator` database role no longer reads `cp.scf_awards` or
+  `cp.scf_award_imports` (migration 00051). The award search and the
+  matching run as `cp_system`, so no route changes.
 
 ### Upgrade notes
 
