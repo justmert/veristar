@@ -145,7 +145,7 @@ test("the token is revoked after a confirmation", async () => {
   await row.getByRole("button", { name: "Revoke" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("Revoke Payments API?");
+  await expect(dialog).toContainText("Revoke the token “Payments API”?");
   // cancelling changes nothing
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
