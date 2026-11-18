@@ -5,7 +5,9 @@ import { enrollmentModeQuery, keepAggregatesQuery, keys } from "@/api/queries";
 import type { EnrollmentMode } from "@/api/schemas";
 import { ChoiceCard } from "@/components/choice-card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ErrorPanel, Loading } from "@/components/error-panel";
+import { PageHeader } from "@/components/page-header";
+import { ErrorState, LoadingState, Skeleton } from "@/components/states";
+import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { queryClient } from "@/query-client";
 
@@ -17,31 +19,38 @@ const MODE_TEXT: Record<EnrollmentMode, { name: string; detail: string }> = {
   approval: {
     name: "Approval required",
     detail:
-      "New projects wait in the review queue. Nothing is set up for them and their sites receive no traffic until an operator approves them.",
+      "New projects wait in Review. Their sites get no traffic until an operator approves them.",
   },
 };
 
-// the operator layout draws the place header and its tabs; this page starts
-// with its own section header
+// settings that apply to every project. each change asks for a
+// confirmation and goes to the audit log.
 export function SettingsPage() {
   return (
-    <div className="flex max-w-prose animate-rise-in flex-col gap-8">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-section text-fg">Settings</h2>
-        <p className="max-w-prose text-body text-fg-2">
-          Platform settings for every project. Each change asks for confirmation and is recorded in
-          the audit log.
-        </p>
-      </header>
-      <EnrollmentModeSetting />
-      <KeepAggregatesSetting />
+    <div className="flex min-w-0 flex-col gap-8">
+      <PageHeader
+        title="Settings"
+        description="Settings for every project. Each change asks for a confirmation and goes to the audit log."
+      />
+      <div className="flex max-w-prose flex-col gap-10">
+        <EnrollmentModeSetting />
+        <KeepAggregatesSetting />
+      </div>
     </div>
+  );
+}
+
+function SettingLoading({ label }: { label: string }) {
+  return (
+    <LoadingState label={label}>
+      <Skeleton.StatRow count={2} />
+    </LoadingState>
   );
 }
 
 function CurrentBadge() {
   return (
-    <span className="inline-flex h-5 items-center rounded-full border border-line-strong px-2 text-axis font-medium text-fg-2">
+    <span className="inline-flex h-5 items-center rounded-full border border-line-strong px-2 text-caption text-fg-2">
       Current
     </span>
   );
@@ -69,9 +78,9 @@ function SettingGroup({
   return (
     <section aria-labelledby={id} className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <h3 id={id} className="text-title text-fg">
+        <h2 id={id} className="text-title text-fg">
           {title}
-        </h3>
+        </h2>
         <p className="text-small text-fg-2">{description}</p>
       </div>
       <div role="radiogroup" aria-labelledby={id} className="grid gap-2 sm:grid-cols-2">
@@ -87,8 +96,10 @@ function SettingGroup({
         >
           Change setting
         </Button>
-        <span className="text-caption font-normal text-fg-3">
-          {changed ? "Asks for confirmation. Recorded in the audit log." : "No change selected."}
+        <span className="text-caption text-fg-2" aria-live="polite">
+          {changed
+            ? "You confirm the change in the next step."
+            : "Choose another option to change it."}
         </span>
       </div>
       {dialog}
@@ -104,14 +115,22 @@ function EnrollmentModeSetting() {
     mutationFn: (m: EnrollmentMode) => api.operator.setEnrollmentMode(m),
     onSuccess: async (r) => {
       queryClient.setQueryData(keys.opMode, r);
+      toast.success(`Enrollment is now ${MODE_TEXT[r.mode].name.toLowerCase()}.`);
       setTarget(null);
       setChoice(null);
       await queryClient.invalidateQueries({ queryKey: [...keys.operator, "audit"] });
     },
   });
 
-  if (mode.isPending) return <Loading label="Loading the enrollment mode" />;
-  if (mode.error) return <ErrorPanel error={mode.error} onRetry={() => mode.refetch()} />;
+  if (mode.isPending) return <SettingLoading label="Loading the enrollment mode" />;
+  if (mode.error)
+    return (
+      <ErrorState
+        title="The enrollment mode did not load"
+        error={mode.error}
+        onRetry={() => mode.refetch()}
+      />
+    );
   const current = mode.data.mode;
   const other: EnrollmentMode = current === "open" ? "approval" : "open";
   const selected = choice ?? current;
@@ -138,7 +157,7 @@ function EnrollmentModeSetting() {
             }
           }}
           title={`Switch enrollment to ${MODE_TEXT[other].name.toLowerCase()}?`}
-          description={`${MODE_TEXT[other].detail} The switch applies to new enrollments only; existing projects keep their status.`}
+          description={`${MODE_TEXT[other].detail} The change applies to new enrollments only. Enrolled projects keep their status.`}
           confirmLabel="Switch mode"
           pendingLabel="Switching"
           tone="primary"
@@ -172,27 +191,39 @@ function KeepAggregatesSetting() {
     mutationFn: (k: boolean) => api.operator.setKeepAggregates(k),
     onSuccess: async (r) => {
       queryClient.setQueryData(keys.opKeep, r);
+      toast.success(
+        r.keep
+          ? "Projects removed from now on keep their daily totals."
+          : "Projects removed from now on lose their daily totals.",
+      );
       setOpen(false);
       setChoice(null);
       await queryClient.invalidateQueries({ queryKey: [...keys.operator, "audit"] });
     },
   });
 
-  if (keep.isPending) return <Loading label="Loading the removal setting" />;
-  if (keep.error) return <ErrorPanel error={keep.error} onRetry={() => keep.refetch()} />;
+  if (keep.isPending) return <SettingLoading label="Loading the removal setting" />;
+  if (keep.error)
+    return (
+      <ErrorState
+        title="The removal setting did not load"
+        error={keep.error}
+        onRetry={() => keep.refetch()}
+      />
+    );
   const current = keep.data.keep;
   const selected = choice ?? current;
 
   return (
     <SettingGroup
       id="keep-h"
-      title="Aggregates of removed projects"
+      title="Daily totals of removed projects"
       description={
         <>
-          When a project is removed, its anonymous daily counts are{" "}
-          <span className="font-medium text-fg">{current ? "kept" : "deleted"}</span>. Web
-          dashboards, their raw data and API minute data are always deleted. The setting is copied
-          into each removal when it starts, so changing it never affects a removal in progress.
+          A removed project now{" "}
+          <span className="font-medium text-fg">{current ? "keeps" : "loses"}</span> its anonymous
+          daily totals. Its dashboards, raw data and API minute data are always deleted. A removal
+          that already started keeps its setting.
         </>
       }
       changed={selected !== current}
@@ -204,11 +235,13 @@ function KeepAggregatesSetting() {
             setOpen(o);
             if (!o) save.reset();
           }}
-          title={current ? "Delete aggregates on removal?" : "Keep aggregates on removal?"}
+          title={
+            current ? "Delete the daily totals on removal?" : "Keep the daily totals on removal?"
+          }
           description={
             current
-              ? "Projects removed from now on lose their anonymous daily counts as well."
-              : "Projects removed from now on keep their anonymous daily counts after removal."
+              ? "Projects removed from now on lose their anonymous daily totals too."
+              : "Projects removed from now on keep their anonymous daily totals."
           }
           confirmLabel="Change setting"
           pendingLabel="Saving"
@@ -226,11 +259,11 @@ function KeepAggregatesSetting() {
           value={k ? "keep" : "delete"}
           checked={selected === k}
           onChange={() => setChoice(k)}
-          title={k ? "Keep aggregates on removal" : "Delete aggregates on removal"}
+          title={k ? "Keep the daily totals" : "Delete the daily totals"}
           description={
             k
-              ? "Projects removed from now on keep their anonymous daily counts after removal."
-              : "Projects removed from now on lose their anonymous daily counts as well."
+              ? "Projects removed from now on keep their anonymous daily totals."
+              : "Projects removed from now on lose their anonymous daily totals too."
           }
           badge={k === current ? <CurrentBadge /> : null}
         />
