@@ -104,10 +104,12 @@ delivery.
 
 ## Bands
 
-Each site has a primary website (id equals the site id) and a quarantine website. Events
-from an address prefix go to the quarantine website from the event that brings the prefix to
-`IPCLUSTER_THRESHOLD` distinct visitor tokens for the site within an hour
-(`internal/gateway/ipcluster.go`). Every metric above is
+Each site has a primary website (id equals the site id) and a quarantine website. Two gateway
+checks send events to the quarantine website: events from an address prefix from the event that
+brings the prefix to its same-network threshold of distinct visitor tokens for the site within an
+hour (`internal/gateway/ipcluster.go`), and a visitor's events past `VISITOR_EVENTS_PER_HOUR` in
+an hour (`internal/gateway/volume.go`); both are in [gateway-limits.md](gateway-limits.md). Every
+metric above is
 computed per website, so quarantined traffic is counted separately and never mixed into the
 primary numbers.
 
