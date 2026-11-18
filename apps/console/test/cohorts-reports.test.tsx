@@ -419,7 +419,7 @@ describe("the public report page (contract 20.5)", () => {
     expect(host.textContent).toContain(SIGNER);
     expect(host.textContent).toContain("4,321");
     expect(host.textContent).toContain("Grade A");
-    expect(host.textContent).toContain("+116.1%");
+    expect(host.textContent).toContain("+116%");
     expect(host.textContent).toContain("P75");
     expect(byRole(host, "button", "Download JSON")).toBeTruthy();
     expect(host.textContent).not.toContain(EM_DASH);
@@ -547,7 +547,7 @@ describe("the reports page (contract 20.3 and 20.4)", () => {
 
     // repeated row buttons name their report
     expect(byRole(host, "button", "Revoke link").getAttribute("aria-label")).toBe(
-      "Revoke link of the report for Oct 1, 2026 to Oct 31, 2026 (UTC)",
+      "Revoke link of the report for Oct 1 to Oct 31, 2026",
     );
     await click(byRole(host, "button", "Revoke link"));
     const dialog = [...host.querySelectorAll("dialog")].find((d) => d.hasAttribute("open"));

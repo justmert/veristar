@@ -224,7 +224,7 @@ describe("global web view", () => {
     const host = await renderRoutes(operatorRoutes, "/operator/web");
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     const a = rowOf(host, c.TENANT_ID);
-    for (const want of ["1,200", "410", "530", "49.1%", "1 min 31 s", "3.2%", "4%", "Germany (DE)"])
+    for (const want of ["1,200", "410", "530", "49%", "1 min 31 s", "3.2%", "4.0%", "Germany"])
       expect(a.textContent).toContain(want);
     // a project without visits has no ratios
     expect(rowOf(host, f.TENANT_B).textContent).toContain("none");
@@ -292,8 +292,8 @@ describe("global api view", () => {
     const a = rowOf(host, c.TENANT_ID);
     for (const want of [
       "182,000",
-      "1.15%",
-      "0.05%",
+      "1.2%",
+      "<0.1%",
       "41 ms",
       "620 ms",
       ">10 s",
@@ -335,7 +335,7 @@ describe("comparison", () => {
     expect(host.textContent).toContain("not read");
     expect(host.textContent).toContain("github.com");
     expect(host.textContent).toContain("13 more");
-    expect(host.textContent).toContain("Germany (DE)");
+    expect(host.textContent).toContain("Germany");
     expect(host.textContent).toContain("IP Geolocation by DB-IP");
     expect(host.textContent).toContain("from traces");
   });

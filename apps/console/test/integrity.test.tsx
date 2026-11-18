@@ -85,14 +85,14 @@ describe("integrity text", () => {
     if (!day) throw new Error("no day");
     const facts = Object.fromEntries(evidenceFacts(day).map((x) => [x.label, x.value]));
     expect(facts["Access networks"]).toBe("85%");
-    expect(facts["Hosting networks"]).toBe("8%");
+    expect(facts["Hosting networks"]).toBe("8.0%");
     expect(facts["Distinct networks"]).toBe("120");
     expect(facts["Proof of work passed"]).toBe("99%");
     expect(facts["Baseline visitors"]).toBe("380 (median of 28 days)");
     const open = integrityReport.parse(f.integrityReportBody).sites[0]?.days[1];
     if (!open) throw new Error("no day");
     const o = Object.fromEntries(evidenceFacts(open).map((x) => [x.label, x.value]));
-    expect(o["Access networks"]).toBe("n/a");
+    expect(o["Access networks"]).toBe("–");
     expect(o["Baseline visitors"]).toBe("no history yet");
   });
 });

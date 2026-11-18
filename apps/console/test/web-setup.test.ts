@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ingest, snippet } from "@/api/schemas";
-import { ingestBuckets, niceTicks } from "@/components/web-charts";
+import { ingestBuckets } from "@/components/web-charts";
+import { niceTicks } from "@/lib/format";
 import {
   CONSENT_ATTR,
   consentTag,

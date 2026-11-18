@@ -21,7 +21,7 @@ import {
 import { ChartCard, type Series } from "@/components/api-charts";
 import { useRevealOnce } from "@/components/motion";
 import { OPEN_BUCKET_CEILING } from "@/lib/api-metrics";
-import { formatDay, formatShortDay } from "@/lib/global";
+import { formatDate, formatTick } from "@/lib/format";
 
 // the fixed slots: colour token, its class for html swatches, and the dash
 // pattern that tells the lines apart without colour
@@ -239,7 +239,7 @@ export function CompareChart({
                   scope="row"
                   className="border-b border-line-subtle px-3 py-1 font-normal whitespace-nowrap text-fg-2"
                 >
-                  {formatDay(day)}
+                  {formatDate(day)}
                 </th>
                 {series.map((s, i) => (
                   <td
@@ -272,7 +272,7 @@ export function CompareChart({
                 (x, i, a): x is string => !!x && a.indexOf(x) === i,
               )}
               interval={0}
-              tickFormatter={formatShortDay}
+              tickFormatter={(d: string) => formatTick(d, "day")}
               tick={{ ...AXIS, fontFamily: "var(--vs-font-sans)" }}
               tickLine={false}
               axisLine={{ stroke: "var(--vs-axis)" }}
@@ -360,7 +360,7 @@ export function CompareChart({
                 if (!active || d < 0) return null;
                 return (
                   <div className="min-w-44 rounded-md border border-line-strong bg-overlay px-3 py-2 text-caption shadow-overlay">
-                    <p className="mb-1 text-fg-3">{formatDay(days[d] ?? "")} (UTC)</p>
+                    <p className="mb-1 text-fg-3">{formatDate(days[d] ?? "")} (UTC)</p>
                     <ul className="flex flex-col gap-1">
                       {series.map((s, i) => (
                         <li key={s.key} className="flex items-center gap-2">
@@ -428,7 +428,7 @@ export function MarkerLegend({ markers }: { markers: ChartMarker[] }) {
               strokeDasharray="2 2"
             />
           </svg>
-          {m.label}, {formatDay(m.day)}
+          {m.label}, {formatDate(m.day)}
         </li>
       ))}
     </ul>

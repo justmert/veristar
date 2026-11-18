@@ -338,7 +338,7 @@ test("the console's web dashboard shows the site's seven metrics for a selected 
     ["Page views", "3"],
     ["Unique visitors", "2"],
     ["Visits", "2"],
-    ["Bounce rate", "50.0%"],
+    ["Bounce rate", "50%"],
   ] as const) {
     await expect(totals.getByText(label, { exact: true })).toBeVisible();
     await expect(totals.getByText(value, { exact: true }).first()).toBeVisible();

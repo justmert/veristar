@@ -2,8 +2,8 @@ import { Outlet } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { webBreakdown, webRealtime, webSessions, webSummary } from "@/api/web";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { countryName } from "@/lib/format";
 import {
-  countryName,
   formatMetric,
   lastDaysOf,
   readWebState,
@@ -90,14 +90,14 @@ describe("web dashboard state", () => {
 
   it("compares with the previous period", () => {
     expect(webTrend("pageviews", 150, 100, 7)).toEqual({
-      text: "50.0%",
+      text: "+50%",
       direction: "up",
       good: true,
       period: "previous 7 days",
     });
     // a higher bounce rate is worse, and it moves in points
     expect(webTrend("bounce_rate", 0.5, 0.4, 1)).toEqual({
-      text: "10.0 pt",
+      text: "+10 pp",
       direction: "up",
       good: false,
       period: "previous day",
@@ -109,8 +109,9 @@ describe("web dashboard state", () => {
 
   it("formats values", () => {
     expect(formatMetric("pageviews", 12345)).toBe("12,345");
-    expect(formatMetric("bounce_rate", 0.4567)).toBe("45.7%");
-    expect(formatMetric("bounce_rate", null)).toBe("n/a");
+    expect(formatMetric("bounce_rate", 0.4567)).toBe("46%");
+    expect(formatMetric("bounce_rate", 0.0456)).toBe("4.6%");
+    expect(formatMetric("bounce_rate", null)).toBe("–");
     expect(countryName("DE")).toBe("Germany");
     expect(countryName("XX")).toBe("XX");
     expect(webPath(f.TENANT_ID, f.SITE_ID)).toBe(`/projects/${f.TENANT_ID}/web?site=${f.SITE_ID}`);
@@ -279,19 +280,19 @@ describe("web dashboard page (contract 18)", () => {
       "Visit duration",
     ])
       expect(totals).toContain(label);
-    expect(totals).toContain("20.0%");
-    expect(totals).toContain("40.0%");
-    expect(totals).toContain("10.0 pt");
+    expect(totals).toContain("20%");
+    expect(totals).toContain("40%");
+    expect(totals).toContain("10 pp");
     await waitFor(() => expect(host.textContent).toContain("Germany"));
     expect(host.textContent).toContain("/pricing");
     expect(host.textContent).toContain("github.com");
     expect(host.textContent).toContain("signup");
     // shares are of the range's visitors
-    expect(host.textContent).toContain("75.0%");
+    expect(host.textContent).toContain("75%");
     await waitFor(() =>
       expect(host.querySelector('[data-testid="web-active"]')?.textContent).toBe("7"),
     );
-    expect(host.textContent).toContain("20.0% of page views were quarantined");
+    expect(host.textContent).toContain("20% of page views were quarantined");
     expect(host.textContent).toContain("Totals updated");
     // the default range is the last 30 utc days, the whole project, counted traffic
     const summary = urls.find((u) => u.includes("/web/summary")) ?? "";

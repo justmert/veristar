@@ -2,6 +2,7 @@
 // long an alert has fired, and the runbook link of an alert.
 
 import type { FiringAlert } from "@/api/schemas";
+import { formatDuration } from "@/lib/format";
 
 // the severities of the alert rules (infra/ansible/roles/observability/
 // files/rules): page means act now, ticket within a working day. page is
@@ -79,11 +80,7 @@ export function firingFor(startsAt: string, now: number): string {
   const ms = now - new Date(startsAt).getTime();
   const min = Math.floor(ms / 60_000);
   if (min < 1) return "less than a minute";
-  if (min < 60) return `${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return min % 60 === 0 ? `${h} h` : `${h} h ${min % 60} min`;
-  const d = Math.floor(h / 24);
-  return h % 24 === 0 ? `${d} d` : `${d} d ${h % 24} h`;
+  return formatDuration(min * 60);
 }
 
 // the runbooks are part of the repository; an alert's runbook annotation is
@@ -97,17 +94,4 @@ const RUNBOOK_PATH = /^docs\/runbooks\/[a-z0-9-]+\.md#[a-z0-9-]+$/;
 export function runbookUrl(runbook: string | null): string | null {
   if (runbook === null || !RUNBOOK_PATH.test(runbook)) return null;
   return REPOSITORY_BLOB + runbook;
-}
-
-const clockFmt = new Intl.DateTimeFormat("en", {
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hourCycle: "h23",
-  timeZone: "UTC",
-});
-
-// the time of the last check, to the second: the page refreshes every 30 s
-export function formatClockUtc(iso: string): string {
-  return `${clockFmt.format(new Date(iso))} UTC`;
 }

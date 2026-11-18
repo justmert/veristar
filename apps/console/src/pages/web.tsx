@@ -49,12 +49,18 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type ChartBucket, TimeChart } from "@/components/web-charts";
 import { errorText } from "@/lib/errors";
-import { formatCount, formatDateTimeUtc } from "@/lib/format";
-import { formatDayRange } from "@/lib/global";
+import {
+  formatCount,
+  formatDate,
+  formatDateRange,
+  formatDateTimeUtc,
+  formatPercent,
+  formatShareOf,
+  formatTick,
+} from "@/lib/format";
 import {
   DIMENSION_LABEL,
   formatMetric,
-  formatShare,
   higherIsBetter,
   isSingleDay,
   keyLabel,
@@ -62,7 +68,6 @@ import {
   metricValue,
   pointValue,
   readWebState,
-  shareOf,
   UTM_DIMENSIONS,
   validateWebDays,
   WEB_PRESETS,
@@ -97,20 +102,6 @@ const METRIC_TILES: { metric: WebMetric; label: string; hint: string }[] = [
     hint: "Average time from the first to the last page view of a visit",
   },
 ];
-
-const tickDay = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" });
-const labelDay = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "UTC",
-});
-const tickHour = new Intl.DateTimeFormat("en", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-  timeZone: "UTC",
-});
 
 export function WebPage() {
   const { tenant } = useProject();
@@ -222,7 +213,7 @@ export function WebPage() {
             intro={
               graded.from === q.from
                 ? "The integrity grade of your web traffic over this range, with the reasons behind it. SCF operators see the same report."
-                : `The integrity grade of your web traffic over the last ${INTEGRITY_MAX_DAYS} days of this range (${formatDayRange(graded.from, graded.to)}), with the reasons behind it. SCF operators see the same report.`
+                : `The integrity grade of your web traffic over the last ${INTEGRITY_MAX_DAYS} days of this range (${formatDateRange(graded.from, graded.to)}), with the reasons behind it. SCF operators see the same report.`
             }
           />
           <ProjectOnchainSection tenantId={tenant.id} range={{ from: q.from, to: q.to }} />
@@ -295,7 +286,7 @@ function RangeBar({
           }}
         />
         <span className="text-caption text-fg-3" aria-live="polite">
-          {formatDayRange(days.from, days.to)}
+          {formatDateRange(days.from, days.to)}
         </span>
       </div>
       {custom ? (
@@ -495,7 +486,7 @@ function FreshnessNote({
           className="rounded-sm text-fg-2 underline-offset-2 hover:text-fg hover:underline focus-ring"
           onClick={() => onBand(band === "primary" ? "quarantine" : "primary")}
         >
-          {formatShare(share)} of page views were quarantined as likely automated.{" "}
+          {formatPercent(share)} of page views were quarantined as likely automated.{" "}
           {band === "primary" ? "Show them" : "Show counted traffic"}
         </button>
       ) : null}
@@ -509,8 +500,8 @@ function DayChart({ summary, metric }: { summary: WebSummary; metric: WebMetric 
     const d = new Date(`${p.day}T00:00:00Z`);
     return {
       at: d.toISOString(),
-      tick: tickDay.format(d),
-      label: `${labelDay.format(d)}, UTC`,
+      tick: formatTick(d, "day"),
+      label: formatDate(d),
       // today is still counting, and a day not read yet is not a zero
       partial: p.day === today || !p.aggregated,
     };
@@ -545,8 +536,8 @@ function HourChart({ tenantId, q, metric }: { tenantId: string; q: WebQuery; met
         const d = new Date(p.at);
         return {
           at: p.at,
-          tick: tickHour.format(d),
-          label: `${tickDay.format(d)}, ${tickHour.format(d)} UTC`,
+          tick: formatTick(d, "hour"),
+          label: formatDateTimeUtc(d),
           partial: d.getTime() + 3_600_000 > Date.now(),
         };
       }),
@@ -774,7 +765,7 @@ function BreakdownList({
               <td className="py-1 text-right tabular-nums text-fg">{formatCount(it.value)}</td>
               {data.unit === "visitors" ? (
                 <td className="py-1 text-right tabular-nums text-fg-2">
-                  {formatShare(shareOf(it.value, visitors))}
+                  {formatShareOf(it.value, visitors)}
                 </td>
               ) : null}
             </motion.tr>

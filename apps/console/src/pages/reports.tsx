@@ -16,8 +16,8 @@ import { TextField } from "@/components/form-field";
 import { PageHeader, Panel } from "@/components/panel";
 import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
-import { formatCount, formatDateTimeUtc } from "@/lib/format";
-import { formatDayRange, isDay, lastDays } from "@/lib/global";
+import { formatCount, formatDateRange, formatDateTimeUtc } from "@/lib/format";
+import { isDay, lastDays } from "@/lib/global";
 import { useProject } from "./project-layout";
 
 // signed usage reports (contract 20): a member generates a report of closed
@@ -171,7 +171,7 @@ export function ReportsPage() {
             <ul className="flex flex-col divide-y divide-line" aria-label="Reports">
               {list.data.items.map((r) => {
                 // the buttons repeat on every row; their names say which report
-                const of = `of the report for ${formatDayRange(r.from, r.to)}`;
+                const of = `of the report for ${formatDateRange(r.from, r.to)}`;
                 return (
                   <li
                     key={r.id}
@@ -180,7 +180,7 @@ export function ReportsPage() {
                   >
                     <span className="flex min-w-0 flex-col gap-1">
                       <span className="text-body font-medium text-fg">
-                        {formatDayRange(r.from, r.to)}
+                        {formatDateRange(r.from, r.to)}
                       </span>
                       <span className="text-caption text-fg-3">
                         Generated {formatDateTimeUtc(r.created_at)}, {formatCount(r.view_count)}{" "}

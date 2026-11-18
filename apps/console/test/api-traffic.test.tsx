@@ -13,12 +13,11 @@ import {
 } from "@/api/schemas";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
-  formatPercentile,
-  formatRate,
-  formatSeconds,
+  latencyText,
   localInputToUtc,
   percentileChange,
   rateChange,
+  rateText,
   readState,
   relativeChange,
   validateCustom,
@@ -118,21 +117,21 @@ describe("api metrics schemas accept the contract's shapes (section 7)", () => {
 
 describe("api metrics formats and url state", () => {
   it("never shows the open-ended top bucket as a number", () => {
-    expect(formatPercentile(">10 s")).toBe(">10 s");
-    expect(formatPercentile(null)).toBeNull();
-    expect(formatPercentile(0.042)).toBe("42 ms");
-    expect(formatPercentile(0.0042)).toBe("4.2 ms");
-    expect(formatSeconds(2.5)).toBe("2.5 s");
-    expect(formatSeconds(10)).toBe("10 s");
+    expect(latencyText(">10 s")).toBe(">10 s");
+    expect(latencyText(null)).toBeNull();
+    expect(latencyText(0.042)).toBe("42 ms");
+    expect(latencyText(0.0042)).toBe("4 ms");
+    expect(latencyText(2.5)).toBe("2.5 s");
+    expect(latencyText(10)).toBe("10 s");
   });
 
   it("formats rates as percentages and changes of rates in points", () => {
-    expect(formatRate(0.025)).toBe("2.5%");
-    expect(formatRate(0.0016666666666666668)).toBe("0.17%");
-    expect(formatRate(0)).toBe("0%");
-    expect(formatRate(0.000001)).toBe("<0.01%");
-    expect(formatRate(null)).toBeNull();
-    expect(rateChange(0.025, 0.02)).toEqual({ text: "+0.5 pt", direction: "up" });
+    expect(rateText(0.025)).toBe("2.5%");
+    expect(rateText(0.0016666666666666668)).toBe("0.2%");
+    expect(rateText(0)).toBe("0%");
+    expect(rateText(0.000001)).toBe("<0.1%");
+    expect(rateText(null)).toBeNull();
+    expect(rateChange(0.025, 0.02)).toEqual({ text: "+0.5 pp", direction: "up" });
     expect(rateChange(0.01, null).direction).toBeNull();
     expect(relativeChange(1200, 1000)).toEqual({ text: "+20%", direction: "up" });
     expect(relativeChange(5, 0).direction).toBeNull();
@@ -317,9 +316,9 @@ describe("api traffic page", () => {
     expect(tile(host, "4xx rate")).toContain("2.5%");
     expect(tile(host, "4xx rate")).toContain("30 client errors");
     // the sign says the direction in text, beside the arrow and its colour
-    expect(tile(host, "4xx rate")).toContain("+0.5 pt");
-    expect(tile(host, "5xx rate")).toContain("0.17%");
-    expect(tile(host, "5xx rate")).toMatch(/-\d[\d.]* pt/);
+    expect(tile(host, "4xx rate")).toContain("+0.5 pp");
+    expect(tile(host, "5xx rate")).toContain("0.2%");
+    expect(tile(host, "5xx rate")).toMatch(/-\d[\d.]* pp/);
     expect(tile(host, "p50")).toContain("42 ms");
     expect(tile(host, "p95")).toContain("310 ms");
     expect(tile(host, "p99")).toContain("was 900 ms");
@@ -389,7 +388,7 @@ describe("api traffic page", () => {
     await waitFor(() => expect(host.querySelector('[data-code="503"]')).not.toBeNull());
     expect(cells(host.querySelector('[data-code="404"]'))).toEqual(["404", "", "30", "2.5%"]);
     const bar = host.querySelector('[role="img"][aria-label^="Requests by status class"]');
-    expect(bar?.getAttribute("aria-label")).toContain("2xx success 1,150, 95.8%");
+    expect(bar?.getAttribute("aria-label")).toContain("2xx success 1,150, 96%");
     expect(bar?.getAttribute("aria-label")).toContain("No status code 0, 0%");
   });
 
@@ -530,8 +529,8 @@ describe("api traffic page", () => {
     );
     const rows = [...(latency?.querySelectorAll("tbody tr") ?? [])];
     expect(rows).toHaveLength(24);
-    expect(cells(rows[22])).toEqual(["Nov 12, 08:00 UTC", "2 s", ">10 s", ">10 s", "yes"]);
-    expect(cells(rows[0])).toEqual(["Nov 11, 10:00 UTC", "-", "-", "-", "no"]);
+    expect(cells(rows[22])).toEqual(["Nov 12, 2026, 08:00 UTC", "2 s", ">10 s", ">10 s", "yes"]);
+    expect(cells(rows[0])).toEqual(["Nov 11, 2026, 10:00 UTC", "–", "–", "–", "no"]);
     expect(text(latency)).toContain("Rings on the 10 s line are above 10 s");
   });
 });

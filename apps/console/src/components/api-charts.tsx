@@ -17,18 +17,25 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   type Change,
   formatBucket,
-  formatPercentile,
-  formatRate,
-  formatSeconds,
-  OPEN_BUCKET,
+  latencyText,
   OPEN_BUCKET_CEILING,
   percentileChange,
   plotPercentile,
   rateChange,
+  rateText,
   relativeChange,
   tickFormatter,
 } from "@/lib/api-metrics";
-import { formatCount } from "@/lib/format";
+import {
+  formatCompact,
+  formatCount,
+  formatLatency,
+  formatPercent,
+  formatShareOf,
+  MISSING,
+  niceTicks,
+  OPEN_BUCKET,
+} from "@/lib/format";
 
 // ---- colours: one role per series, as classes for html and svg
 
@@ -226,27 +233,6 @@ export function PreviousToggle({ on, onToggle }: { on: boolean; onToggle: () => 
 
 // ---- axis
 
-// 3 to 5 round values from 0 up to at least max
-export function niceTicks(max: number, integer = false): number[] {
-  if (!(max > 0)) return [0, 1];
-  const raw = max / 4;
-  const mag = 10 ** Math.floor(Math.log10(raw));
-  const norm = raw / mag;
-  let step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
-  if (integer && step < 1) step = 1;
-  const top = Math.ceil(max / step - 1e-9) * step;
-  const out: number[] = [];
-  for (let i = 0; i * step <= top + step / 2; i++) out.push(Number((i * step).toPrecision(12)));
-  return out;
-}
-
-export function compactCount(n: number): string {
-  return new Intl.NumberFormat("en", {
-    notation: n >= 10_000 ? "compact" : "standard",
-    maximumFractionDigits: 1,
-  }).format(n);
-}
-
 // ---- the plot
 
 export type PlotSeries = {
@@ -324,7 +310,7 @@ export function TimePlot({
     (v): v is number => v !== null,
   );
   const dataMax = all.length ? Math.max(...all) : 0;
-  const ticks = niceTicks(yMax !== undefined ? Math.max(yMax, dataMax) : dataMax, integer);
+  const ticks = niceTicks(yMax !== undefined ? Math.max(yMax, dataMax) : dataMax, { integer });
   const top = ticks[ticks.length - 1] || 1;
   const x = (i: number) => ((i + 0.5) / Math.max(1, n)) * 100;
   const y = (v: number) => H - (Math.min(v, top) / top) * H;
@@ -667,7 +653,7 @@ function SeriesTable({
   );
 }
 
-const dash = (v: string | null) => v ?? "-";
+const dash = (v: string | null) => v ?? MISSING;
 
 // ---- the previous period, bucket by bucket: the same offset into the
 // previous range as the current bucket has into the current one. ranges at
@@ -723,7 +709,7 @@ function prevColumn(
           label,
           value: (_p: ApiPoint, i: number) => {
             const q = previous[i];
-            return q ? value(q) : "-";
+            return q ? value(q) : MISSING;
           },
         },
       ]
@@ -764,7 +750,7 @@ export function VolumeChart(props: ChartProps) {
         range={range}
         times={points.map((p) => p.at)}
         integer
-        yFormat={compactCount}
+        yFormat={formatCompact}
         series={[
           {
             key: "requests",
@@ -782,7 +768,7 @@ export function VolumeChart(props: ChartProps) {
                 values: prev.map((q) => (q ? q.requests : null)),
                 text: (i) => {
                   const q = prev[i];
-                  return q ? formatCount(q.requests) : "-";
+                  return q ? formatCount(q.requests) : MISSING;
                 },
                 delta: (i) => {
                   const q = prev[i];
@@ -826,11 +812,11 @@ export function ErrorChart(props: ChartProps & { focus?: "4xx" | "5xx" }) {
           points={points}
           columns={[
             { label: "4xx", value: (p) => formatCount(p.errors_4xx) },
-            { label: "4xx rate", value: (p) => dash(formatRate(p.rate_4xx)) },
+            { label: "4xx rate", value: (p) => dash(rateText(p.rate_4xx)) },
             { label: "5xx", value: (p) => formatCount(p.errors_5xx) },
-            { label: "5xx rate", value: (p) => dash(formatRate(p.rate_5xx)) },
+            { label: "5xx rate", value: (p) => dash(rateText(p.rate_5xx)) },
             ...prevColumn(previous, `${focus} rate, previous`, (q) =>
-              dash(formatRate(rateOf(q, focus))),
+              dash(rateText(rateOf(q, focus))),
             ),
           ]}
         />
@@ -840,7 +826,7 @@ export function ErrorChart(props: ChartProps & { focus?: "4xx" | "5xx" }) {
         label="Error rates per bucket"
         range={range}
         times={points.map((p) => p.at)}
-        yFormat={(v) => formatRate(v) ?? ""}
+        yFormat={formatPercent}
         series={(["4xx", "5xx"] as const).map((k) => ({
           key: k,
           label: k === "4xx" ? "4xx rate" : "5xx rate",
@@ -849,9 +835,9 @@ export function ErrorChart(props: ChartProps & { focus?: "4xx" | "5xx" }) {
           values: points.map((p) => rateOf(p, k)),
           text: (i: number) => {
             const p = points[i];
-            if (!p) return "-";
+            if (!p) return MISSING;
             const n = k === "4xx" ? p.errors_4xx : p.errors_5xx;
-            return `${dash(formatRate(rateOf(p, k)))} (${formatCount(n)})`;
+            return `${dash(rateText(rateOf(p, k)))} (${formatCount(n)})`;
           },
         }))}
         previous={
@@ -861,7 +847,7 @@ export function ErrorChart(props: ChartProps & { focus?: "4xx" | "5xx" }) {
                 values: prev.map((q) => (q ? rateOf(q, focus) : null)),
                 text: (i) => {
                   const q = prev[i];
-                  return q ? dash(formatRate(rateOf(q, focus))) : "-";
+                  return q ? dash(rateText(rateOf(q, focus))) : MISSING;
                 },
                 delta: (i) => {
                   const q = prev[i];
@@ -920,10 +906,10 @@ export function LatencyChart(props: ChartProps) {
           columns={[
             ...PCT.map((k) => ({
               label: k,
-              value: (p: ApiPoint) => dash(formatPercentile(p[k])),
+              value: (p: ApiPoint) => dash(latencyText(p[k])),
             })),
             { label: "Approximate", value: (p: ApiPoint) => (p.lossy ? "yes" : "no") },
-            ...prevColumn(previous, "p95, previous", (q) => dash(formatPercentile(q.p95))),
+            ...prevColumn(previous, "p95, previous", (q) => dash(latencyText(q.p95))),
           ]}
         />
       }
@@ -932,7 +918,7 @@ export function LatencyChart(props: ChartProps) {
         label="Latency percentiles per bucket"
         range={range}
         times={points.map((p) => p.at)}
-        yFormat={formatSeconds}
+        yFormat={formatLatency}
         yMax={anyOpen ? OPEN_BUCKET_CEILING : undefined}
         ceiling={anyOpen ? { value: OPEN_BUCKET_CEILING, label: ">10 s above" } : null}
         series={PCT.map((k) => ({
@@ -944,8 +930,8 @@ export function LatencyChart(props: ChartProps) {
           open: (i: number) => points[i]?.[k] === OPEN_BUCKET,
           text: (i: number) => {
             const p = points[i];
-            if (!p) return "-";
-            const t = dash(formatPercentile(p[k]));
+            if (!p) return MISSING;
+            const t = dash(latencyText(p[k]));
             return p.lossy && p[k] !== null ? `${t}, approx.` : t;
           },
         }))}
@@ -956,7 +942,7 @@ export function LatencyChart(props: ChartProps) {
                 values: prev.map((q) => (q ? plotPercentile(q.p95) : null)),
                 text: (i) => {
                   const q = prev[i];
-                  return q ? dash(formatPercentile(q.p95)) : "-";
+                  return q ? dash(latencyText(q.p95)) : MISSING;
                 },
                 delta: (i) => {
                   const q = prev[i];
@@ -982,13 +968,6 @@ export const CLASS_META: Record<StatusClass, { label: string; bg: string }> = {
   unknown: { label: "No status code", bg: "bg-series-prev" },
 };
 
-export function share(n: number, total: number): string {
-  if (total === 0 || n === 0) return "0%";
-  const pct = (n / total) * 100;
-  if (pct < 0.1) return "<0.1%";
-  return `${pct.toFixed(1).replace(/\.0$/, "")}%`;
-}
-
 // one whole split into its classes: a segmented bar, widths proportional,
 // a class without requests draws nothing. names and numbers are in the
 // legend list beside it, so the bar itself carries no text.
@@ -1002,7 +981,7 @@ export function StatusClassBar({ status }: { status: ApiStatus }) {
         aria-label={`Requests by status class: ${status.classes
           .map(
             (c) =>
-              `${CLASS_META[c.class].label} ${formatCount(c.requests)}, ${share(c.requests, total)}`,
+              `${CLASS_META[c.class].label} ${formatCount(c.requests)}, ${formatShareOf(c.requests, total)}`,
           )
           .join("; ")}`}
         className="flex h-3 w-full gap-1 overflow-hidden rounded-sm"
@@ -1011,7 +990,7 @@ export function StatusClassBar({ status }: { status: ApiStatus }) {
         {parts.map((c) => (
           <div
             key={c.class}
-            title={`${CLASS_META[c.class].label}: ${formatCount(c.requests)} (${share(c.requests, total)})`}
+            title={`${CLASS_META[c.class].label}: ${formatCount(c.requests)} (${formatShareOf(c.requests, total)})`}
             className={cn("h-full min-w-0.5 rounded-bar", CLASS_META[c.class].bg)}
             // widths are data, so they cannot be classes; react writes them
             // through the cssom
@@ -1031,7 +1010,9 @@ export function StatusClassBar({ status }: { status: ApiStatus }) {
             />
             <span className="min-w-0 flex-1">{CLASS_META[c.class].label}</span>
             <span className="font-mono">{formatCount(c.requests)}</span>
-            <span className="w-12 text-right font-mono text-fg-3">{share(c.requests, total)}</span>
+            <span className="w-12 text-right font-mono text-fg-3">
+              {formatShareOf(c.requests, total)}
+            </span>
           </li>
         ))}
       </ul>

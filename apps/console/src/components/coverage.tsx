@@ -1,7 +1,6 @@
 import { cn } from "@veristar/brand/cn";
 import type { CoverageEstimate } from "@/api/schemas";
-import { formatCount } from "@/lib/format";
-import { formatShare } from "@/lib/global";
+import { formatCount, formatPercent } from "@/lib/format";
 
 // the estimate of visits not measured because of privacy signals (contract
 // 17.5). visitors whose browser sends global privacy control are not
@@ -12,7 +11,7 @@ export const COVERAGE_MIN_REQUESTS = 100;
 
 export function coverageText(c: CoverageEstimate): string {
   if (c.unmeasured_share !== null) {
-    return `About ${formatShare(c.unmeasured_share)} of visits are not measured because of privacy signals.`;
+    return `About ${formatPercent(c.unmeasured_share)} of visits are not measured because of privacy signals.`;
   }
   if (c.script_requests === 0) {
     return "No loads of the tracker file were attributed to this range yet, so the share of visits not measured because of privacy signals is unknown.";
@@ -47,21 +46,21 @@ export function CoverageNote({
 // so keyboard and screen reader users read the meaning too
 export function CoverageCell({ coverage }: { coverage: CoverageEstimate }) {
   const loads = `${formatCount(coverage.gpc_requests)} of ${formatCount(coverage.script_requests)} loads with GPC`;
-  const none = coverage.unmeasured_share === null;
+  const share = coverage.unmeasured_share;
   return (
     <span className="inline-flex flex-col items-end">
-      <span className={none ? "text-fg-3" : undefined} data-col="unmeasured_share">
-        {none ? (
+      <span className={share === null ? "text-fg-3" : undefined} data-col="unmeasured_share">
+        {share === null ? (
           <>
             <span aria-hidden>–</span>
             <span className="sr-only">no estimate</span>
           </>
         ) : (
-          formatShare(coverage.unmeasured_share)
+          formatPercent(share)
         )}
       </span>
       <span className="font-sans text-caption text-fg-3" data-testid="coverage-detail">
-        {none ? `too few loads, ${loads}` : loads}
+        {share === null ? `too few loads, ${loads}` : loads}
       </span>
     </span>
   );

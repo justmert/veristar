@@ -15,7 +15,7 @@ import { ReasonDialog } from "@/components/reason-dialog";
 import { StatusPill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { isNotFound } from "@/lib/errors";
-import { formatCount, formatDate, formatDateTimeUtc } from "@/lib/format";
+import { formatCount, formatDate, formatDateTimeUtc, formatShareOf } from "@/lib/format";
 import { outcomeLabel } from "@/lib/outcomes";
 import { NotFoundPage } from "../not-found";
 import { AuditEntries } from "./audit";
@@ -302,7 +302,7 @@ function IngestTiles({ detail }: { detail: OperatorTenantDetail }) {
   const month = sum(detail.ingest.last_30d);
   const accepted = detail.ingest.last_30d.accepted ?? 0;
   const quarantined = detail.ingest.last_30d.quarantined ?? 0;
-  const share = (n: number) => (month > 0 ? `${((n / month) * 100).toFixed(1)}%` : "none");
+  const share = (n: number) => formatShareOf(n, month);
   const tiles = [
     { k: "Events, 24 hours", v: formatCount(day), d: "All outcomes" },
     { k: "Events, 30 days", v: formatCount(month), d: "All outcomes" },

@@ -11,6 +11,18 @@ import {
   apiRouteSort,
   type Percentile,
 } from "@/api/schemas";
+import {
+  formatChange,
+  formatDate,
+  formatDateRange,
+  formatDateTimeUtc,
+  formatLatency,
+  formatPercent,
+  formatPoints,
+  formatTick,
+  formatTimeRange,
+  OPEN_BUCKET,
+} from "@/lib/format";
 
 export const PRESETS: { value: ApiRangePreset; label: string; span: string }[] = [
   { value: "1h", label: "1 hour", span: "hour" },
@@ -149,60 +161,36 @@ export function validateCustom(
   return out;
 }
 
-// seconds as people read latency: milliseconds below a second
-export function formatSeconds(s: number): string {
-  if (s === 0) return "0 ms";
-  if (s < 1) {
-    const ms = s * 1000;
-    return `${ms < 10 ? trim(ms.toFixed(1)) : Math.round(ms).toString()} ms`;
-  }
-  return `${trim(s.toFixed(2))} s`;
+// a latency percentile or a rate as text; null when the range has no
+// request
+export function latencyText(p: Percentile): string | null {
+  return p === null ? null : formatLatency(p);
 }
 
-function trim(v: string): string {
-  return v.includes(".") ? v.replace(/\.?0+$/, "") : v;
-}
-
-// contract 7.4: the open bucket is never a number
-export const OPEN_BUCKET = ">10 s";
-
-export function formatPercentile(p: Percentile): string | null {
-  if (p === null) return null;
-  return p === OPEN_BUCKET ? OPEN_BUCKET : formatSeconds(p);
-}
-
-export function formatRate(r: number | null): string | null {
-  if (r === null) return null;
-  if (r === 0) return "0%";
-  const pct = r * 100;
-  if (pct < 0.01) return "<0.01%";
-  return `${trim(pct.toFixed(pct < 10 ? 2 : 1))}%`;
+export function rateText(r: number | null): string | null {
+  return r === null ? null : formatPercent(r);
 }
 
 export type Direction = "up" | "down" | "same";
 
 export type Change = { text: string; direction: Direction } | { text: string; direction: null };
 
-const pct = new Intl.NumberFormat("en", { maximumFractionDigits: 1, signDisplay: "always" });
-
 // relative change of a count or a percentile against the previous range
 export function relativeChange(cur: number, prev: number): Change {
   if (prev === 0) return { text: "none in the previous range", direction: null };
   const r = (cur - prev) / prev;
   if (Math.abs(r) < 0.0005) return { text: "no change", direction: "same" };
-  return { text: `${pct.format(r * 100)}%`, direction: r > 0 ? "up" : "down" };
+  return { text: formatChange(r), direction: r > 0 ? "up" : "down" };
 }
-
-const pts = new Intl.NumberFormat("en", { maximumFractionDigits: 2, signDisplay: "always" });
 
 // rates change in percentage points; a relative change of a rate is a
 // number nobody can act on
 export function rateChange(cur: number | null, prev: number | null): Change {
   if (cur === null || prev === null)
     return { text: prev === null ? "no requests in the previous range" : "", direction: null };
-  const d = (cur - prev) * 100;
-  if (Math.abs(d) < 0.005) return { text: "no change", direction: "same" };
-  return { text: `${pts.format(d)} pt`, direction: d > 0 ? "up" : "down" };
+  const d = cur - prev;
+  if (Math.abs(d) < 0.0005) return { text: "no change", direction: "same" };
+  return { text: formatPoints(d), direction: d > 0 ? "up" : "down" };
 }
 
 export function percentileChange(cur: Percentile, prev: Percentile): Change {
@@ -211,64 +199,35 @@ export function percentileChange(cur: Percentile, prev: Percentile): Change {
   if (cur === OPEN_BUCKET || prev === OPEN_BUCKET) {
     if (cur === prev) return { text: "above 10 s in both ranges", direction: "same" };
     return {
-      text: `was ${formatPercentile(prev)}`,
+      text: `was ${formatLatency(prev)}`,
       direction: cur === OPEN_BUCKET ? "up" : "down",
     };
   }
   return relativeChange(cur, prev);
 }
 
-const dayFmt = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "UTC" });
-const minuteFmt = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-  timeZone: "UTC",
-});
-const clockFmt = new Intl.DateTimeFormat("en", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-  timeZone: "UTC",
-});
-const shortDayFmt = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-  timeZone: "UTC",
-});
-const monthFmt = new Intl.DateTimeFormat("en", {
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
 // the half-open range as people read it: day ranges end on their last day
 export function formatRange(r: ApiRange): string {
   if (r.resolution === "day") {
-    const last = new Date(Date.parse(r.to) - DAY).toISOString();
-    return `${dayFmt.format(new Date(r.from))} to ${dayFmt.format(new Date(last))} (UTC)`;
+    const last = new Date(Date.parse(r.to) - DAY);
+    return formatDateRange(r.from, last);
   }
-  return `${minuteFmt.format(new Date(r.from))} to ${minuteFmt.format(new Date(r.to))} UTC`;
+  return formatTimeRange(r.from, r.to);
 }
 
 // one bucket's start, at the precision of its resolution
 export function formatBucket(at: string, r: ApiRange): string {
-  const d = new Date(at);
-  if (r.resolution === "day") return dayFmt.format(d);
-  return `${minuteFmt.format(d)} UTC`;
+  if (r.resolution === "day") return formatDate(at);
+  return formatDateTimeUtc(at);
 }
 
 // axis ticks: short, and the date only where the span needs it
 export function tickFormatter(r: ApiRange): (at: string) => string {
   const span = Date.parse(r.to) - Date.parse(r.from);
   if (r.resolution === "day")
-    return span > 120 * DAY
-      ? (at) => monthFmt.format(new Date(at))
-      : (at) => shortDayFmt.format(new Date(at));
-  if (span <= DAY) return (at) => clockFmt.format(new Date(at));
-  return (at) => shortDayFmt.format(new Date(at));
+    return span > 120 * DAY ? (at) => formatTick(at, "month") : (at) => formatTick(at, "day");
+  if (span <= DAY) return (at) => formatTick(at, "hour");
+  return (at) => formatTick(at, "day");
 }
 
 export const RESOLUTION_LABEL: Record<ApiRange["resolution"], string> = {

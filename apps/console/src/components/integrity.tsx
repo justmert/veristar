@@ -19,8 +19,8 @@ import { Pill, type Tone } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { appealUrl } from "@/lib/appeal";
-import { formatCount, formatDate } from "@/lib/format";
-import { type DayRange, formatShare } from "@/lib/global";
+import { formatCount, formatDate, formatPercent, MISSING } from "@/lib/format";
+import type { DayRange } from "@/lib/global";
 
 // the integrity grade (contract 17): a colour never carries the grade alone,
 // the letter is always written out
@@ -57,7 +57,7 @@ export function evidenceFacts(d: IntegrityDay): { label: string; value: string }
   const e = d.evidence;
   const classified =
     e.net.access + e.net.organisation + e.net.hosting + e.net.anonymiser + e.net.unknown;
-  const shareOf = (n: number) => (classified > 0 ? (formatShare(n / classified) ?? "0%") : "n/a");
+  const shareOf = (n: number) => (classified > 0 ? formatPercent(n / classified) : MISSING);
   return [
     { label: "Accepted events", value: formatCount(e.events) },
     { label: "Access networks", value: shareOf(e.net.access) },
@@ -65,8 +65,14 @@ export function evidenceFacts(d: IntegrityDay): { label: string; value: string }
     { label: "Hosting networks", value: shareOf(e.net.hosting) },
     { label: "Anonymisers", value: shareOf(e.net.anonymiser) },
     { label: "Distinct networks", value: formatCount(e.networks) },
-    { label: "Quarantined", value: formatShare(e.quarantine_share) ?? "n/a" },
-    { label: "Proof of work passed", value: formatShare(e.proof_pass_rate) ?? "n/a" },
+    {
+      label: "Quarantined",
+      value: e.quarantine_share === null ? MISSING : formatPercent(e.quarantine_share),
+    },
+    {
+      label: "Proof of work passed",
+      value: e.proof_pass_rate === null ? MISSING : formatPercent(e.proof_pass_rate),
+    },
     { label: "Visitors", value: formatCount(e.visitors) },
     {
       label: "Baseline visitors",
