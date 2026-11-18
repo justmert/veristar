@@ -1,12 +1,13 @@
 # Contributing
 
 This page covers the toolchain, the checks a change must pass, and the
-conventions of the repository. Security problems are not reported here: use private
-vulnerability reporting ([docs/security/SECURITY.md](docs/security/SECURITY.md)).
+conventions of the repository. Report security problems privately, as described in
+[docs/security/SECURITY.md](docs/security/SECURITY.md).
 
 ## Before you start
 
-- For anything larger than a small fix, open an issue first so the approach can be agreed.
+- For anything larger than a small fix, open an issue first and agree on the approach with the
+  maintainers.
 - Read [docs/architecture.md](docs/architecture.md). Umami runs as its official image,
   unmodified ([ADR 0002](docs/adr/0002-overlay-not-fork.md)); a change that needs Umami's own
   code changed is a change to the design, not a patch.
@@ -89,7 +90,8 @@ ports as before. `SA_E2E_BROWSERS=host` runs the browsers on the host instead, f
 debugging; that mode needs the Playwright browsers installed (`pnpm exec playwright install`).
 
 `.github/workflows/ci.yml` runs `test`, `test-containers`, `isolation`, `supplychain-it`,
-`test-integration` and `promtool` on every change. `.github/workflows/e2e.yml` runs every other
+`test-integration`, `promtool` and `docs-check`, plus the lint, licence, secret scan, OpenTofu
+and Ansible checks, on every change. `.github/workflows/e2e.yml` runs every other
 suite above, plus `db-it`, `local-converge` and `rotate-local`, each night and on demand, one
 matrix job per suite.
 
