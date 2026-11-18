@@ -18,11 +18,11 @@ export const TENANT_DOMAIN = "sa-tenant.example";
 
 export const PORTS = {
   // forward proxy every browser is pointed at; it is how the fake hostnames resolve
-  proxy: 47080,
+  proxy: 27080,
   // tls front behind the proxy, terminates https for every hostname
-  tls: 47443,
+  tls: 27443,
   // control api used by the test runner only, never by the browser
-  control: 47090,
+  control: 27090,
 } as const;
 
 export interface SiteDef {
@@ -77,20 +77,20 @@ function site(
 }
 
 export const SITES: readonly SiteDef[] = [
-  site("static-html", "static", 47101, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e01", "#to-about"),
-  site("vite-react-spa", "spa", 47102, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e02", "#nav-pricing"),
-  site("react-router-ssr", "rr", 47103, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e03", "#nav-pricing"),
-  site("astro-ssr", "astro", 47104, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e04", "#nav-about"),
+  site("static-html", "static", 27101, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e01", "#to-about"),
+  site("vite-react-spa", "spa", 27102, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e02", "#nav-pricing"),
+  site("react-router-ssr", "rr", 27103, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e03", "#nav-pricing"),
+  site("astro-ssr", "astro", 27104, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e04", "#nav-about"),
   // the sites of the vue, sveltekit and next.js onboarding guides
-  site("vue-spa", "vue", 47106, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e06", "#nav-pricing"),
-  site("sveltekit", "svelte", 47107, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e07", "#nav-pricing"),
-  site("nextjs", "next", 47108, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e08", "#nav-pricing"),
+  site("vue-spa", "vue", 27106, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e06", "#nav-pricing"),
+  site("sveltekit", "svelte", 27107, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e07", "#nav-pricing"),
+  site("nextjs", "next", 27108, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e08", "#nav-pricing"),
   // the sites of the documentation site guides. docusaurus and vitepress are
   // standalone npm projects; mintlify runs its local preview (mint dev)
   site(
     "docusaurus",
     "docusaurus",
-    47109,
+    27109,
     "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e09",
     "#nav-pricing",
     "examples/docusaurus",
@@ -98,7 +98,7 @@ export const SITES: readonly SiteDef[] = [
   site(
     "vitepress",
     "vitepress",
-    47110,
+    27110,
     "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e10",
     "#nav-pricing",
     "examples/vitepress",
@@ -108,7 +108,7 @@ export const SITES: readonly SiteDef[] = [
   site(
     "mintlify",
     "mintlify",
-    47111,
+    27111,
     "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e11",
     "#nav-pricing",
     undefined,
@@ -122,7 +122,7 @@ export const SITES: readonly SiteDef[] = [
 export const WALLET_SITE: SiteDef = site(
   "wallets-kit-spa",
   "wk",
-  47105,
+  27105,
   "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e05",
   "#connect",
 );

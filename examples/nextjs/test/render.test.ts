@@ -18,7 +18,7 @@ const next = join(root, "node_modules", "next", "dist", "bin", "next");
 
 test("server rendered html carries the tracker tag", async () => {
   execFileSync(process.execPath, [next, "build"], { cwd: root, env: { ...process.env, ...env } });
-  const port = 47196;
+  const port = 27196;
   const server = spawn(
     process.execPath,
     [next, "start", "--hostname", "127.0.0.1", "--port", String(port)],

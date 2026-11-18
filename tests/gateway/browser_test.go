@@ -55,7 +55,7 @@ func TestBrowserMatrix(t *testing.T) {
 	// the browsers run in a container of their own, out of reach of the
 	// host's network changes; they reach the fixture's proxy
 	// (tests/e2e/sites.ts PORTS.proxy) through it
-	box := browserbox.Start(t, 47080)
+	box := browserbox.Start(t, 27080)
 	eventLog := filepath.Join(t.TempDir(), "events.jsonl")
 	cmd := exec.Command("pnpm", "--filter", "@veristar/e2e", "exec", "playwright", "test")
 	cmd.Dir = repoRoot()

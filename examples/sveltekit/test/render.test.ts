@@ -18,7 +18,7 @@ test("server rendered html carries the snippet once", async () => {
     cwd: root,
     env: { ...process.env, ...env },
   });
-  const port = 47195;
+  const port = 27195;
   const server = spawn(process.execPath, ["build"], {
     cwd: root,
     env: { ...process.env, ...env, PORT: String(port), HOST: "127.0.0.1" },
