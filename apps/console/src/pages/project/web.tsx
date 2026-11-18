@@ -26,6 +26,7 @@ import {
 import { BreakdownList } from "@/components/charts";
 import { DbIpAttribution } from "@/components/dbip-attribution";
 import { Notice } from "@/components/notice";
+import { Panel } from "@/components/panel";
 import { PageHeader } from "@/components/page-header";
 import { RangeControl } from "@/components/range-control";
 import { Segmented } from "@/components/segmented";
@@ -703,43 +704,48 @@ function NotCounted({
         Not counted
       </h2>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-raised px-4 py-3 sm:px-5">
-        <p className="text-body text-fg-2" data-testid="quarantined-pageviews">
-          {quarantined === null ? (
-            <Missing reason="The totals did not load" />
-          ) : (
-            <span className="text-fg tabular">{formatCount(quarantined)}</span>
-          )}{" "}
-          quarantined page views
-          {share !== null && share > 0 ? `, ${formatPercent(share)} of all page views` : ""}
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="max-lg:h-(--vs-control-touch)"
-          onClick={() => onBand(band === "primary" ? "quarantine" : "primary")}
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        {/* one panel: the quarantined page views, then every event by outcome */}
+        <Panel
+          title="Every event, by outcome"
+          actions={
+            <Button
+              variant="outline"
+              size="sm"
+              className="max-lg:h-(--vs-control-touch)"
+              onClick={() => onBand(band === "primary" ? "quarantine" : "primary")}
+            >
+              {band === "primary" ? "Show quarantined traffic" : "Show counted traffic"}
+            </Button>
+          }
+          bodyClassName="flex flex-col"
         >
-          {band === "primary" ? "Show quarantined traffic" : "Show counted traffic"}
-        </Button>
-      </div>
-
-      {span === null ? (
-        <EmptyState compact title="The range has not started">
-          Outcome counts show from the first day of the range. Choose an earlier range.
-        </EmptyState>
-      ) : failed ? (
-        <ErrorState
-          compact
-          title="The outcome counts did not load"
-          error={failed.error}
-          onRetry={() => {
-            for (const a of answers) if (a.error) a.refetch();
-          }}
-        />
-      ) : rows.length === 0 ? null : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5">
-            <h3 className="text-title text-fg">Every event, by outcome</h3>
+          <p
+            className="border-b border-line-subtle pb-3 text-body text-fg-2"
+            data-testid="quarantined-pageviews"
+          >
+            {quarantined === null ? (
+              <Missing reason="The totals did not load" />
+            ) : (
+              <span className="text-fg tabular">{formatCount(quarantined)}</span>
+            )}{" "}
+            quarantined page views
+            {share !== null && share > 0 ? `, ${formatPercent(share)} of all page views` : ""}
+          </p>
+          {span === null ? (
+            <EmptyState compact title="The range has not started">
+              Outcome counts show from the first day of the range. Choose an earlier range.
+            </EmptyState>
+          ) : failed ? (
+            <ErrorState
+              compact
+              title="The outcome counts did not load"
+              error={failed.error}
+              onRetry={() => {
+                for (const a of answers) if (a.error) a.refetch();
+              }}
+            />
+          ) : rows.length === 0 ? null : (
             <dl aria-label="Outcomes" className="flex flex-col">
               {rows.map((o) => (
                 <div
@@ -762,26 +768,25 @@ function NotCounted({
                 </div>
               ))}
             </dl>
-          </div>
-          {!pending && reasons.length === 0 ? null : (
-            <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5">
-              <h3 className="text-title text-fg">Why events were rejected</h3>
-              <BreakdownList
-                label="Reasons"
-                state={pending ? "loading" : undefined}
-                items={reasons.map((r) => ({
-                  key: r.key,
-                  label: r.label,
-                  text: r.label,
-                  value: r.count,
-                }))}
-                valueLabel="Events"
-                emptyTitle="No rejected events in this range"
-              />
-            </div>
           )}
-        </div>
-      )}
+        </Panel>
+        {span === null || failed || (!pending && reasons.length === 0) ? null : (
+          <Panel title="Why events were rejected">
+            <BreakdownList
+              label="Reasons"
+              state={pending ? "loading" : undefined}
+              items={reasons.map((r) => ({
+                key: r.key,
+                label: r.label,
+                text: r.label,
+                value: r.count,
+              }))}
+              valueLabel="Events"
+              emptyTitle="No rejected events in this range"
+            />
+          </Panel>
+        )}
+      </div>
     </section>
   );
 }
