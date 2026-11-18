@@ -545,6 +545,7 @@ function BreakdownPanel({
             };
           })}
           total={events ? null : visitors}
+          shareDefinition="The share of the range's visitors. A visitor can count in several rows, so the shares can add up to more than 100%."
           valueLabel={events ? "Events" : "Visitors"}
           emptyTitle={
             active === "event"
