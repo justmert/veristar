@@ -680,7 +680,7 @@ export function SignedReports() {
           className="flex min-w-0 flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5"
         >
           <h3 className="text-title text-fg">Generate a report</h3>
-          <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+          <form onSubmit={submit} noValidate className="max-w-prose flex flex-col gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <DateField
                 label="From"

@@ -357,7 +357,7 @@ function CreateKeyForm({
 
   const machine = form.type === "machine";
   return (
-    <section aria-labelledby="create-key-h" className="flex max-w-3xl flex-col gap-4">
+    <section aria-labelledby="create-key-h" className="flex max-w-prose flex-col gap-4">
       <h2 id="create-key-h" className="text-title text-fg">
         Create a key
       </h2>
@@ -537,7 +537,7 @@ function ConnectSteps() {
   const origin = window.location.origin;
   const s = clientSnippets(origin, null);
   return (
-    <section aria-labelledby="connect-h" className="flex max-w-3xl flex-col gap-4">
+    <section aria-labelledby="connect-h" className="flex max-w-prose flex-col gap-4">
       <div className="flex flex-col gap-1">
         <h2 id="connect-h" className="text-title text-fg">
           Connect an AI assistant

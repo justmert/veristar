@@ -447,7 +447,12 @@ function RuleEditor({
       <h2 id="rule-editor-h" className="text-title text-fg">
         {title}
       </h2>
-      <form onSubmit={submit} noValidate aria-label={title} className="flex flex-col gap-4">
+      <form
+        onSubmit={submit}
+        noValidate
+        aria-label={title}
+        className="max-w-prose flex flex-col gap-4"
+      >
         <TextField
           label="Name"
           value={form.name}

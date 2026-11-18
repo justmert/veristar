@@ -356,7 +356,7 @@ function AddForm({ tenantId }: { tenantId: string }) {
       onSubmit={submit}
       noValidate
       aria-label="Add an account or contract"
-      className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5"
+      className="max-w-prose flex flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <div className="min-w-0 flex-1">

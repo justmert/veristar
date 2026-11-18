@@ -160,7 +160,7 @@ function EditSiteForm({ site }: { site: Site }) {
       noValidate
       onSubmit={submit}
       aria-label={`Edit ${site.name}`}
-      className="flex flex-col gap-4"
+      className="max-w-prose flex flex-col gap-4"
     >
       <TextField
         label="Name"
