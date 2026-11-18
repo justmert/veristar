@@ -75,7 +75,12 @@ export function onchainNote(s: OnchainSummary): string {
 export function OnchainValue({ s }: { s: OnchainSummary | undefined }) {
   if (!s || s.ids === 0) return <Missing reason="No accounts or contracts declared" />;
   // nothing is measured without a verified id, so no 0 shows
-  if (s.ids_verified === 0) return <Missing reason={`${NO_VERIFIED_IDS}. ${onchainNote(s)}`} />;
+  if (s.ids_verified === 0)
+    return (
+      <span data-col="onchain">
+        <Missing reason={`${NO_VERIFIED_IDS}. ${onchainNote(s)}`} />
+      </span>
+    );
   const note = onchainNote(s);
   return (
     <Tooltip content={note}>
