@@ -82,10 +82,17 @@ test("an operator session without a step-up is refused with step_up_required", a
 test("the admin confirms with a security key and sees the roster", async () => {
   await operatorStepUp(admin.page, OPERATOR);
   await admin.page.goto(`${APP}/operator/operators`);
-  await expect(admin.page.getByRole("heading", { name: "Operators", level: 2 })).toBeVisible();
+  await expect(admin.page.getByRole("heading", { name: "Operators", level: 1 })).toBeVisible();
   const row = admin.page.locator("tr", { hasText: "sa-operator" });
   await expect(row).toContainText("Operator admin");
   await expect(row).toContainText("Deploy settings");
+  // the deploy settings row only offers a passkey reset, in the row menu
+  await row.getByRole("button", { name: "Actions for sa-operator" }).click();
+  await expect(admin.page.getByRole("menuitem")).toHaveText(["Reset passkeys"]);
+  await admin.page.keyboard.press("Escape");
+  // a person's own passkeys are on the account page, not here
+  await expect(admin.page.locator("[data-passkey]")).toHaveCount(0);
+  await admin.page.goto(`${APP}/account`);
   // the passkey the step-up used is listed under the admin's own passkeys
   await expect(admin.page.locator("[data-passkey]")).toHaveCount(1);
 });
@@ -103,6 +110,7 @@ test("the admin adds an operator who registers a first passkey", async ({ browse
   const row = p.locator("tr", { hasText: secondUser.login });
   await expect(row).toContainText("Operator");
   await expect(row).toContainText("First passkey before");
+  await expect(p.getByText(`${secondUser.login} is added.`)).toBeVisible();
 
   const ctx = await browser.newContext();
   second = { ctx, page: await ctx.newPage() };
@@ -131,10 +139,19 @@ test("a suspension ends the operator's access at once", async () => {
   const p = admin.page;
   await p.reload();
   const row = p.locator("tr", { hasText: secondUser.login });
-  await row.getByRole("button", { name: "Suspend" }).click();
+  // one menu per row; the destructive actions come last
+  await row.getByRole("button", { name: `Actions for ${secondUser.login}` }).click();
+  await expect(p.getByRole("menuitem")).toHaveText([
+    "Make operator admin",
+    "Reset passkeys",
+    "Suspend",
+    "Remove from the roster",
+  ]);
+  await p.getByRole("menuitem", { name: "Suspend" }).click();
   const dialog = p.getByRole("dialog");
   await dialog.getByLabel("Reason").fill("left the review team");
   await dialog.getByRole("button", { name: "Suspend" }).click();
+  await expect(p.getByText(`${secondUser.login} is suspended.`)).toBeVisible();
   await expect(row).toContainText("Suspended");
   await expect(row).toContainText("left the review team");
   // the suspended operator's session ended with the suspension
