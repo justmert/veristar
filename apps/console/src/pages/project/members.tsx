@@ -91,6 +91,12 @@ export function matchMembers(list: Member[], q: string): Member[] {
 // a person in a list: the github profile link of a github account, or the
 // short address of a wallet or passkey account without one, with the whole
 // address on hover
+// a member as the table names them: the github login with its @, else the
+// display name; a dialog title names them the same way
+function shownName(m: Member): string {
+  return m.github_login !== null ? `@${m.github_login}` : m.display_name;
+}
+
 function PersonName({
   githubLogin,
   address,
@@ -381,7 +387,7 @@ function MembersBody({
             ? `Make ${p.member.display_name} ${p.role === "owner" ? "an owner" : "a member"}?`
             : p?.self
               ? `Leave ${tenantName}?`
-              : `Remove ${p?.member.display_name ?? ""}?`
+              : `Remove ${p ? shownName(p.member) : ""}?`
         }
         description={
           p?.kind === "role"

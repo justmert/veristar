@@ -306,7 +306,7 @@ export function RulesPage() {
             remove.reset();
           }
         }}
-        title={`Delete ${deleting?.name ?? "the rule"}?`}
+        title={deleting ? `Delete the rule “${deleting.name}”?` : "Delete the rule?"}
         description="The rule goes away for every operator, the machine API and the AI tools. The audit log keeps its definition."
         confirmLabel="Delete rule"
         pendingLabel="Deleting"
