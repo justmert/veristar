@@ -2,7 +2,6 @@ package replayer
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"testing"
 
@@ -32,7 +31,7 @@ func TestLagSampleAfterHoldEndedLeavesNoGauge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &Replayer{m: m, log: slog.New(slog.NewTextHandler(io.Discard, nil)), leads: map[int]*leadRun{}}
+	r := &Replayer{m: m, log: slog.New(slog.DiscardHandler), leads: map[int]*leadRun{}}
 	cons := &blockingInfo{reading: make(chan struct{}), release: make(chan struct{})}
 	lr := &leadRun{r: r, part: 5, name: "replayer-p05", label: "p05", cons: cons, held: map[uint64]*held{}}
 	r.leads[lr.part] = lr
