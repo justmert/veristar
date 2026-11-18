@@ -93,7 +93,14 @@ describe("web helpers of the overview and web", () => {
     });
     expect(sparkOf([p("2026-11-15", 3)], "pageviews")).toBeNull();
     expect(sparkOf([p("2026-11-15", 3), p("2026-11-16", 3)], "pageviews")).toBeNull();
-    expect(sparkOf([p("2026-11-15", 3), p("2026-11-16", null)], "pageviews")).toEqual([3, 0]);
+    // one or two days with data is a spike, not a shape
+    expect(sparkOf([p("2026-11-15", 3), p("2026-11-16", null)], "pageviews")).toBeNull();
+    expect(
+      sparkOf(
+        [p("2026-11-13", 1), p("2026-11-14", 2), p("2026-11-15", 3), p("2026-11-16", null)],
+        "pageviews",
+      ),
+    ).toEqual([1, 2, 3, 0]);
   });
 });
 
