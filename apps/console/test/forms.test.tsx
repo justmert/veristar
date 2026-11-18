@@ -77,7 +77,7 @@ describe("enrollment form", () => {
     ]);
     const host = await render(<EnrollForm termsVersion={f.TERMS_VERSION} />);
     await type(byLabel(host, "Project name"), "Stellar DEX");
-    await type(byLabel(host, "Project address"), "stellar-dex");
+    await type(byLabel(host, "Short name"), "stellar-dex");
     await type(byLabel(host, "Website"), "https://example.org");
     await type(byLabel(host, "How does the project use Stellar?"), "AMM");
     await type(byLabel(host, "Account or contract ids"), `${f.G_KEY}\n${f.C_KEY}`);
@@ -88,7 +88,7 @@ describe("enrollment form", () => {
 
     await click(byRole(host, "button", "Enroll project"));
     await waitFor(() =>
-      expect(errorOf(host, "Project address")).toBe("This address is taken. Choose another one."),
+      expect(errorOf(host, "Short name")).toBe("This short name is taken. Choose another one."),
     );
   });
 });
