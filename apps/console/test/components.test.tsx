@@ -265,7 +265,34 @@ describe("evidence list", () => {
     expect(list.textContent).toContain("Domain");
     expect(list.textContent).toContain("stellar.toml");
     expect(list.textContent).toContain("SCF round");
-    expect(list.textContent).toContain("Integrity grade, risk:Grade B");
+    expect(list.textContent).toContain("Integrity grade:Grade B");
+    const item = (k: string) => list.querySelector(`[data-evidence=${k}]`) as HTMLElement;
+    expect(item("domain").dataset.signal).toBe("ok");
+    expect(item("domain").textContent).toContain("Verified (1 of 1 site)");
+    expect(item("grade").dataset.signal).toBe("partial");
+  });
+
+  it("states a failed or partial check in words, never as a pass", async () => {
+    const site = f.operatorDetailBody.sites[0];
+    const many = {
+      ...detail,
+      sites: [
+        { ...site, id: "s1", verification: "unverified", stellar_toml: null },
+        { ...site, id: "s2", verification: "unverified", stellar_toml: null },
+      ],
+    } as unknown as OperatorTenantDetail;
+    const none = await render(<EvidenceList items={evidenceOf(many)} />);
+    const domain = none.querySelector("[data-evidence=domain]") as HTMLElement;
+    expect(domain.dataset.signal).toBe("missing");
+    expect(domain.textContent).toContain("Not verified (0 of 2 sites)");
+    const some = {
+      ...many,
+      sites: [{ ...site, id: "s1", verification: "verified" }, ...many.sites.slice(1)],
+    } as unknown as OperatorTenantDetail;
+    const part = await render(<EvidenceList items={evidenceOf(some)} />);
+    const d2 = part.querySelector("[data-evidence=domain]") as HTMLElement;
+    expect(d2.dataset.signal).toBe("partial");
+    expect(d2.textContent).toContain("1 of 2 sites verified");
   });
 });
 
