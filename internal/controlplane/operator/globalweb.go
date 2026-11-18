@@ -217,7 +217,8 @@ func (g *Global) webProjects(w http.ResponseWriter, r *http.Request) error {
 			items[i].Onchain = chainSums[items[i].Tenant.ID]
 		}
 		out.Items = items
-		return nil
+		out.ReadAt, err = webReadAt(ctx, tx, ids, lq.Range)
+		return err
 	})
 	if err != nil {
 		return fmt.Errorf("operator: web projects: %w", err)
@@ -331,19 +332,27 @@ type WebCompareProject struct {
 	Tenant    TenantRef             `json:"tenant"`
 	Integrity integrityview.Summary `json:"integrity"`
 	// Coverage estimates the visits not measured because of privacy signals
-	Coverage   coverageview.Estimate `json:"coverage"`
-	Totals     WebTotals             `json:"totals"`
-	Series     []WebPoint            `json:"series"`
-	Breakdowns map[string]Breakdown  `json:"breakdowns"`
-	Onchain    CompareOnchain        `json:"onchain"`
+	Coverage coverageview.Estimate `json:"coverage"`
+	Totals   WebTotals             `json:"totals"`
+	// the same sums over the previous period of equal length
+	// (WebCompare.PreviousFrom to PreviousTo)
+	PreviousTotals WebTotals            `json:"previous_totals"`
+	Series         []WebPoint           `json:"series"`
+	Breakdowns     map[string]Breakdown `json:"breakdowns"`
+	Onchain        CompareOnchain       `json:"onchain"`
 	// the confirmed cohort; its award date annotates the charts
 	Cohort Cohort `json:"cohort"`
 }
 
 // WebCompare is the answer of GET /api/operator/web/compare (contract 8.4).
 type WebCompare struct {
-	From     string              `json:"from"`
-	To       string              `json:"to"`
+	From         string `json:"from"`
+	To           string `json:"to"`
+	PreviousFrom string `json:"previous_from"`
+	PreviousTo   string `json:"previous_to"`
+	// when the aggregation last read a day of the range for a compared
+	// project, null when none has a row
+	ReadAt   *httpx.Timestamp    `json:"read_at"`
 	Days     []string            `json:"days"`
 	Projects []WebCompareProject `json:"projects"`
 }
@@ -372,7 +381,11 @@ func (g *Global) webCompare(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	ctx := r.Context()
-	out := WebCompare{From: rg.From.Format(time.DateOnly), To: rg.To.Format(time.DateOnly), Days: dayStrings(rg)}
+	prev := rg.previous()
+	out := WebCompare{
+		From: rg.From.Format(time.DateOnly), To: rg.To.Format(time.DateOnly), Days: dayStrings(rg),
+		PreviousFrom: prev.From.Format(time.DateOnly), PreviousTo: prev.To.Format(time.DateOnly),
+	}
 	err = g.db.WithOperator(ctx, func(tx pgx.Tx) error {
 		if err := snapshot(ctx, tx); err != nil {
 			return err
@@ -383,6 +396,13 @@ func (g *Global) webCompare(w http.ResponseWriter, r *http.Request) error {
 		}
 		series, quarantineVisitors, err := webSeries(ctx, tx, ids, rg)
 		if err != nil {
+			return err
+		}
+		prevSeries, prevQuarantineVisitors, err := webSeries(ctx, tx, ids, prev)
+		if err != nil {
+			return err
+		}
+		if out.ReadAt, err = webReadAt(ctx, tx, ids, rg); err != nil {
 			return err
 		}
 		tops, err := topValues(ctx, tx, ids, rg, webDims, n)
@@ -404,21 +424,10 @@ func (g *Global) webCompare(w http.ResponseWriter, r *http.Request) error {
 		for _, t := range tenants {
 			p := WebCompareProject{Tenant: t, Series: series[t.ID], Breakdowns: map[string]Breakdown{}, Onchain: chainOf[t.ID],
 				Cohort: cohorts[t.ID]}
-			for _, pt := range p.Series {
-				if !pt.Aggregated {
-					continue
-				}
-				p.Totals.Pageviews += *pt.Pageviews
-				p.Totals.Visitors += *pt.Visitors
-				p.Totals.Visits += *pt.Visits
-				p.Totals.Bounces += *pt.Bounces
-				p.Totals.Totaltime += *pt.Totaltime
-				p.Totals.QuarantinePageviews += *pt.QuarantinePageviews
-			}
-			p.Totals.QuarantineVisitors = quarantineVisitors[t.ID]
+			p.Totals = sumWebSeries(p.Series, quarantineVisitors[t.ID])
+			p.PreviousTotals = sumWebSeries(prevSeries[t.ID], prevQuarantineVisitors[t.ID])
 			p.Integrity = grades[t.ID].Summary
 			p.Coverage = grades[t.ID].Coverage
-			p.Totals.derive()
 			b := tops[t.ID]
 			for _, d := range webDims {
 				p.Breakdowns[d] = Breakdown{Items: b.items[d], TotalKeys: b.keys[d]}
@@ -432,6 +441,37 @@ func (g *Global) webCompare(w http.ResponseWriter, r *http.Request) error {
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 	return nil
+}
+
+// sumWebSeries adds the aggregated points of a series into totals.
+func sumWebSeries(series []WebPoint, quarantineVisitors int64) WebTotals {
+	var t WebTotals
+	for _, pt := range series {
+		if !pt.Aggregated {
+			continue
+		}
+		t.Pageviews += *pt.Pageviews
+		t.Visitors += *pt.Visitors
+		t.Visits += *pt.Visits
+		t.Bounces += *pt.Bounces
+		t.Totaltime += *pt.Totaltime
+		t.QuarantinePageviews += *pt.QuarantinePageviews
+	}
+	t.QuarantineVisitors = quarantineVisitors
+	t.derive()
+	return t
+}
+
+// webReadAt is when the aggregation last read a day of the range for one
+// of the projects (agg.web_daily.read_at), nil when none has a row.
+func webReadAt(ctx context.Context, tx pgx.Tx, ids []uuid.UUID, rg dayRange) (*httpx.Timestamp, error) {
+	var at *time.Time
+	if err := tx.QueryRow(ctx, `select max(read_at) from agg.web_daily
+		where tenant_id = any(@ids::uuid[]) and day between @from_day::date and @to_day::date`,
+		pgx.NamedArgs{"ids": ids, "from_day": rg.From, "to_day": rg.To}).Scan(&at); err != nil {
+		return nil, fmt.Errorf("web read_at: %w", err)
+	}
+	return httpx.TimestampPtr(at), nil
 }
 
 // webSeries reads one point per project and day of the range. a day

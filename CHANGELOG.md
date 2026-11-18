@@ -18,6 +18,13 @@ here, before they take effect, as the processing terms require
 
 ### Added
 
+- The operator web and API lists and compare views carry `read_at`: when
+  the aggregation last read the web data shown, and the time of the read for
+  the API views, which read the metric tables live.
+- The operator compare views (`/api/operator/web/compare`,
+  `/api/operator/api/compare`) add the previous period: `previous_from`,
+  `previous_to` and each project's `previous_totals`, so a one-project view
+  shows its change without a second request.
 - `GET /api/operator/rules` adds to each rule `match_count`, `evaluated` and
   `matches_as_of`: what the rule's matches route answers today, so the
   console's rule list shows the counts without one request per rule.
