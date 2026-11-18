@@ -449,7 +449,10 @@ function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[];
             <span className="font-mono text-title text-fg tabular">
               <Missing reason={activity.gap} />
             </span>
-            <span className="text-small text-fg-2">operations. {activity.gap}.</span>
+            <span className="text-small text-fg-2">
+              operations, {formatCount(activity.verified)} of {formatCount(chain.data.totals.ids)}{" "}
+              verified
+            </span>
           </span>
         ) : (
           <span className="flex flex-wrap items-baseline gap-x-2">
