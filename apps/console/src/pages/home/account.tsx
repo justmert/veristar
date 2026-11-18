@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ThemeChoice, useTheme } from "@veristar/brand/theme";
-import { KeyRound, Trash2, Wallet } from "lucide-react";
+import { KeyRound, Trash2, Unlink, Wallet } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
@@ -15,13 +15,13 @@ import { Notice } from "@/components/notice";
 import { OperatorPasskeys } from "@/components/operator-passkeys";
 import { PageHeader } from "@/components/page-header";
 import { PasskeyDialog } from "@/components/passkey-dialog";
+import { RowMenu } from "@/components/row-menu";
 import { Segmented } from "@/components/segmented";
 import { ErrorState } from "@/components/states";
 import { steppedUp } from "@/components/step-up";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip } from "@/components/ui/tooltip";
 import { WalletPicker } from "@/components/wallet-picker";
 import { connectWallet, shortAddress, signTransaction } from "@/lib/stellar-wallet";
 import { queryClient } from "@/query-client";
@@ -190,7 +190,9 @@ function OperatorStepUp() {
   );
 }
 
-function UnlinkButton({
+// a linked method's one action, unlinking, in its row menu. the only
+// method has no menu: nothing can be done with it
+function UnlinkMenu({
   method,
   alone,
   onClick,
@@ -199,24 +201,14 @@ function UnlinkButton({
   alone: boolean;
   onClick: () => void;
 }) {
-  const button = (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={alone}
-      aria-describedby={alone ? "unlink-note" : undefined}
-      data-method={method}
-      onClick={onClick}
-      className="max-lg:h-(--vs-control-touch)"
-    >
-      Unlink
-    </Button>
-  );
-  if (!alone) return button;
+  if (alone) return null;
   return (
-    <Tooltip content="Link another method first.">
-      <span className="inline-flex">{button}</span>
-    </Tooltip>
+    <RowMenu
+      name={METHOD_NAME[method]}
+      actions={[
+        { label: "Unlink", icon: <Unlink aria-hidden />, destructive: true, onSelect: onClick },
+      ]}
+    />
   );
 }
 
@@ -287,7 +279,7 @@ function SignInMethods({ me }: { me: Me }) {
           }
           action={
             github_login !== null ? (
-              <UnlinkButton
+              <UnlinkMenu
                 method="github"
                 alone={alone}
                 onClick={() => {
@@ -318,7 +310,7 @@ function SignInMethods({ me }: { me: Me }) {
           }
           action={
             stellar_address !== null ? (
-              <UnlinkButton
+              <UnlinkMenu
                 method="stellar"
                 alone={alone}
                 onClick={() => {
@@ -355,7 +347,7 @@ function SignInMethods({ me }: { me: Me }) {
           }
           action={
             passkey_address !== null ? (
-              <UnlinkButton
+              <UnlinkMenu
                 method="passkey"
                 alone={alone}
                 onClick={() => {
@@ -379,11 +371,6 @@ function SignInMethods({ me }: { me: Me }) {
           }
         />
       </ul>
-      {alone ? (
-        <p id="unlink-note" className="text-small text-fg-2">
-          Unlink is off while this is your only sign-in method. Link another method first.
-        </p>
-      ) : null}
 
       <PasskeyDialog
         open={passkey}
