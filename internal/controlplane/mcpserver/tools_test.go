@@ -49,7 +49,7 @@ func TestToolSets(t *testing.T) {
 	}
 	for _, want := range []string{"list_tenants", "get_tenant", "get_global_web_overview", "get_global_api_overview",
 		"compare_tenants_web", "compare_tenants_api", "get_tenant_onchain", "get_tenant_contract_functions", "list_cohorts", "list_threshold_rules",
-		"get_threshold_rule_matches"} {
+		"get_threshold_rule_matches", "list_scf_awards"} {
 		require.True(t, on[want], want)
 		require.False(t, tn[want], "operator tool %s in the tenant set", want)
 	}

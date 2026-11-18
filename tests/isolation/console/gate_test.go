@@ -248,6 +248,10 @@ func catalogue(terms string) []route {
 	add(kindOperator, http.MethodDelete, op+"/rules/{rule_id}", nil)
 	add(kindOperator, http.MethodGet, op+"/rules/{rule_id}/matches", nil)
 	add(kindOperator, http.MethodGet, op+"/rules/{rule_id}/matches.csv", nil)
+	// the scf award directory (contract 19.4)
+	add(kindOperator, http.MethodGet, op+"/scf/awards", nil)
+	add(kindOperator, http.MethodGet, op+"/scf/awards.csv", nil)
+	add(kindOperator, http.MethodGet, op+"/scf/imports", nil)
 	// the operator roster (contract 5.16)
 	add(kindOperator, http.MethodGet, op+"/roster", nil)
 	add(kindOperator, http.MethodPost, op+"/roster", fixed(map[string]any{
@@ -511,6 +515,8 @@ func (e *env) snapshot(t *testing.T, w *gateWorld) map[string]string {
 			from agg.chain_function_daily x where x.tenant_id in ($1, $2)`, ab},
 		{"tenant_cohorts", `select coalesce(json_agg(x order by x.tenant_id)::text, '') from cp.tenant_cohorts x where x.tenant_id in ($1, $2)`, ab},
 		{"threshold_rules", `select coalesce(json_agg(x order by x.id)::text, '') from cp.threshold_rules x`, nil},
+		{"scf_awards", `select coalesce(json_agg(x order by x.id)::text, '') from cp.scf_awards x`, nil},
+		{"scf_award_imports", `select coalesce(json_agg(x order by x.id)::text, '') from cp.scf_award_imports x`, nil},
 		// view_count moves with every public view, by design
 		{"usage_reports", `select coalesce(json_agg(json_build_array(x.id, x.tenant_id, x.body, x.signature, x.revoked_at) order by x.id)::text, '')
 			from cp.usage_reports x where x.tenant_id in ($1, $2)`, ab},
