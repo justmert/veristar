@@ -9,13 +9,6 @@ import (
 	"time"
 )
 
-// runStart is when the test binary started. every live read covers the utc
-// days from this day on: a run takes over an hour and may cross midnight, and
-// a range of the current day alone would then miss the events sent before
-// it. umami clamps each read to the website's reset time, so the wider range
-// never picks up an earlier scenario's events.
-var runStart = time.Now().UTC()
-
 // runWindow is the read range of the live checks at now: from the start of
 // the utc day the run began until an hour past now.
 func runWindow(start, now time.Time) (from, to time.Time) {

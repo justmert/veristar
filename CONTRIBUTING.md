@@ -77,7 +77,8 @@ make test                     # unit tests only, starts no container
 make test-containers          # the packages whose tests start postgresql, nats, umami or caddy
 pnpm install --frozen-lockfile
 pnpm check                    # biome and type checks
-pnpm test                     # vitest suites
+pnpm test                     # vitest and node test suites
+make e2e-matrix               # the browser matrix of tests/e2e, browsers in a container
 ```
 
 `make test` runs every package whose tests do not pull in testcontainers; `make
@@ -106,7 +107,7 @@ Suites that start real services, run when the change touches their area:
 | `make handover-it` | the data migration and transfer rehearsal |
 | `make promtool` | the alert and recording rule tests |
 
-`make webpath`, `make console-e2e`, `make handover-it` and the browser matrix of `make gateway-it` run their
+`make e2e-matrix`, `make webpath`, `make console-e2e`, `make handover-it` and the browser matrix of `make gateway-it` run their
 browsers in the official Playwright image, pinned in `tests/fixtures/browserbox` to the
 workspace's `@playwright/test` version, while the test runner stays on the host. Chromium aborts
 navigations in flight whenever the host's network interfaces change, and in a container of its
