@@ -875,7 +875,7 @@ function ReportRow({
       data-report={r.id}
       className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5"
     >
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
+      <span className="flex min-w-48 flex-1 flex-col gap-1">
         <span className="flex flex-wrap items-center gap-2">
           <span className="text-body font-medium text-fg">{formatDateRange(r.from, r.to)}</span>
           {revoked ? <Pill tone="info">Link revoked</Pill> : null}
