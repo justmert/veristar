@@ -136,11 +136,11 @@ func (s *Stack) metrics(t testing.TB, websiteID, typ string, r umami.Range) map[
 	return out
 }
 
-// today is the utc day of the run up to an hour ahead, the range every live
-// scenario reads.
-func today() umami.Range {
-	now := time.Now().UTC()
-	return umami.Range{Start: now.Truncate(24 * time.Hour), End: now.Add(time.Hour)}
+// runRange is the range every live scenario reads: the utc days of the run
+// so far, up to an hour ahead (runWindow in days_test.go).
+func runRange() umami.Range {
+	from, to := runWindow(runStart, time.Now())
+	return umami.Range{Start: from, End: to}
 }
 
 func dayRange(d time.Time) umami.Range {
@@ -397,7 +397,7 @@ func joinKeys(m map[string]int) string {
 	return strings.Join(parts, " ")
 }
 
-// WaitStored waits until umami lists at least n events of a website today
+// WaitStored waits until umami lists at least n events of a website in this run
 // and returns how long that took after the consumer drained. the replayer
 // acknowledges only after umami's 200, so the wait is expected to be zero;
 // a gap is logged, because it means umami answered before its rows were
@@ -406,7 +406,7 @@ func (s *Stack) WaitStored(t testing.TB, website string, n int) {
 	t.Helper()
 	start := time.Now()
 	for {
-		got := len(s.Events(t, website, today()))
+		got := len(s.Events(t, website, runRange()))
 		if got >= n {
 			if d := time.Since(start); d > 500*time.Millisecond {
 				t.Logf("umami listed %d events of %s only %s after the replayer drained", got, website, d.Round(time.Millisecond))
