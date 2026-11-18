@@ -67,7 +67,14 @@ import {
   validateCustomEnd,
   writeState,
 } from "@/lib/api-metrics";
-import { formatCount, formatDate, formatLatency, formatPercent, OPEN_BUCKET } from "@/lib/format";
+import {
+  formatCount,
+  formatDate,
+  formatDateTimeUtc,
+  formatLatency,
+  formatPercent,
+  OPEN_BUCKET,
+} from "@/lib/format";
 import { useProject } from "@/pages/project-layout";
 import { ApiSkeleton, PAGE_HEADERS } from "./page-frame";
 import { SelectFilter } from "./select-filter";
@@ -104,8 +111,17 @@ export function ApiPage() {
       />
 
       <div className="flex flex-col gap-4">
-        <Controls state={state} set={set} services={services.data?.items ?? []} />
-        {range ? <RangeLine range={range} /> : null}
+        <Controls
+          state={state}
+          set={set}
+          services={services.data?.items ?? []}
+          filtersOff={services.isError}
+        />
+        {range ? (
+          <RangeLine range={range} />
+        ) : services.isError ? (
+          <AskedRangeLine range={state.range} />
+        ) : null}
         {warnings.data ? <WarningNotices warnings={warnings.data} /> : null}
         {warnings.error ? (
           <ErrorState
@@ -154,6 +170,23 @@ function RangeLine({ range }: { range: ApiRange }) {
   );
 }
 
+// the range the person asked for, while the server's answer is missing
+function AskedRangeLine({ range }: { range: DashboardState["range"] }) {
+  const preset = PRESETS.find((p) => p.value === range.range);
+  return (
+    <p className="text-small text-fg-2">
+      <span className="text-fg">
+        {preset
+          ? `Last ${preset.label}`
+          : range.range === "custom"
+            ? `${formatDateTimeUtc(range.from)} to ${formatDateTimeUtc(range.to)}`
+            : ""}
+      </span>
+      , UTC
+    </p>
+  );
+}
+
 // ---- controls: range and filters, applied at once
 
 // select values are prefixed, so a service named like a sentinel cannot
@@ -170,10 +203,13 @@ function Controls({
   state,
   set,
   services,
+  filtersOff = false,
 }: {
   state: DashboardState;
   set: (s: DashboardState) => void;
   services: ApiServiceItem[];
+  // the filters choose among the services, so they wait while those failed
+  filtersOff?: boolean;
 }) {
   const f = state.filters;
   const names = services.map((s) => s.service);
@@ -264,10 +300,15 @@ function Controls({
           return e ? { to: e } : {};
         }}
       />
-      <FilterBar
-        filters={filters}
-        onClearAll={() => set({ ...state, filters: { service: null, route: null, method: null } })}
-      />
+      <fieldset disabled={filtersOff} className="min-w-0 disabled:opacity-60">
+        <legend className="sr-only">Filters</legend>
+        <FilterBar
+          filters={filters}
+          onClearAll={() =>
+            set({ ...state, filters: { service: null, route: null, method: null } })
+          }
+        />
+      </fieldset>
     </div>
   );
 }
@@ -907,6 +948,8 @@ function RoutesSection({
         <Button
           variant="ghost"
           size="icon-sm"
+          // shown on row hover or focus with a mouse, always on touch
+          data-row-action=""
           aria-label={`Filter to ${r.method} ${r.route} of ${serviceName(r.service)}`}
           onClick={() =>
             set({ ...state, filters: { service: r.service, method: r.method, route: r.route } })
