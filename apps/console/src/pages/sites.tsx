@@ -40,14 +40,13 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  formatShare,
   readWebRange,
   useWebTraffic,
   WEB_RANGES,
   type WebRange,
   WebTraffic,
 } from "@/components/web-charts";
-import { formatCount } from "@/lib/format";
+import { formatCount, formatShareOf } from "@/lib/format";
 import { outcomeHint, rejectionRows, sumRejected, sumUnclassified } from "@/lib/outcomes";
 import * as v from "@/lib/validate";
 import { webPath } from "@/lib/web-dashboard";
@@ -263,7 +262,7 @@ export function SitesTable({ sites, actions }: { sites: Site[]; actions?: ReactN
                     {t ? formatCount(t.accepted ?? 0) : pending}
                   </TableCell>
                   <TableCell className="text-right font-mono text-fg-2">
-                    {t ? formatShare(held, all) : pending}
+                    {t ? formatShareOf(held, all) : pending}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">

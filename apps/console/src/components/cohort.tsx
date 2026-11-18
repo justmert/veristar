@@ -17,7 +17,7 @@ import { TextField } from "@/components/form-field";
 import { Fact, Panel } from "@/components/panel";
 import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
-import { formatDay } from "@/lib/global";
+import { formatDate } from "@/lib/format";
 
 export type CohortValues = { program: string; round: string; category: string; award_date: string };
 
@@ -132,7 +132,7 @@ function CohortFacts({ c }: { c: Cohort }) {
       <Fact label="Program">{c.program ?? "Not set"}</Fact>
       <Fact label="Round">{c.round ?? "Not set"}</Fact>
       <Fact label="Category">{c.category ?? "Not set"}</Fact>
-      <Fact label="Award date">{c.award_date ? formatDay(c.award_date) : "Not set"}</Fact>
+      <Fact label="Award date">{c.award_date ? formatDate(c.award_date) : "Not set"}</Fact>
     </dl>
   );
 }
@@ -230,7 +230,7 @@ export function OperatorCohortPanel({ tenantId }: { tenantId: string }) {
                 <Pill tone="info">Proposed by the project</Pill>
                 {q.data.proposed_at ? (
                   <span className="text-caption text-fg-3">
-                    {formatDay(q.data.proposed_at.slice(0, 10))}
+                    {formatDate(q.data.proposed_at.slice(0, 10))}
                   </span>
                 ) : null}
               </div>

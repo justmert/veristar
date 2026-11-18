@@ -20,8 +20,8 @@ import { ErrorPanel, FormMessage, Loading, StateBlock } from "@/components/error
 import { SelectField, TextField } from "@/components/form-field";
 import { Panel } from "@/components/panel";
 import { Button } from "@/components/ui/button";
-import { countOf, formatCount } from "@/lib/format";
-import { formatDayRange, isDay } from "@/lib/global";
+import { countOf, formatCount, formatDateRange } from "@/lib/format";
+import { isDay } from "@/lib/global";
 import { fieldMessage } from "@/lib/validate";
 import { cohortText, TD, TH } from "./global-shared";
 
@@ -506,7 +506,7 @@ function MatchList({ data }: { data: RuleMatches }) {
     <div className="flex flex-col gap-3">
       <p className="text-small text-fg-2" aria-live="polite">
         {data.items.length} of {data.evaluated} evaluated projects meet the rule, over{" "}
-        {formatDayRange(data.from, data.to)} ({data.months.join(", ")}).
+        {formatDateRange(data.from, data.to)} ({data.months.join(", ")}).
       </p>
       {data.items.length === 0 ? null : (
         <ul className="flex flex-col divide-y divide-line" aria-label="Projects that meet the rule">

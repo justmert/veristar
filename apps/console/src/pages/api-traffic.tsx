@@ -42,7 +42,6 @@ import {
   LatencyChart,
   PlotSkeleton,
   StatusClassBar,
-  share,
   VolumeChart,
 } from "@/components/api-charts";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
@@ -61,9 +60,8 @@ import {
   type Change,
   type DashboardState,
   defaultOrder,
-  formatPercentile,
   formatRange,
-  formatRate,
+  latencyText,
   localInputToUtc,
   METHODS,
   OPEN_BUCKET_CEILING,
@@ -74,6 +72,7 @@ import {
   RESOLUTION_LABEL,
   RESOLUTION_NOTE,
   rateChange,
+  rateText,
   readState,
   relativeChange,
   routesQuery,
@@ -81,7 +80,7 @@ import {
   validateCustom,
   writeState,
 } from "@/lib/api-metrics";
-import { formatCount, formatDate } from "@/lib/format";
+import { formatCount, formatDate, formatShareOf } from "@/lib/format";
 import { useProject } from "./project-layout";
 
 // contract 7.3: the one line shown with every trace-derived badge
@@ -749,7 +748,7 @@ function ServicesSection({ services }: { services: ApiServiceItem[] }) {
 }
 
 function percentileText(p: Percentile): string {
-  return formatPercentile(p) ?? "No requests";
+  return latencyText(p) ?? "No requests";
 }
 
 function trend(change: Change, upIsBad: boolean | null): Trend | null {
@@ -800,7 +799,7 @@ function OverviewTiles({
 
   const cur = overview.current.summary;
   const prev = overview.previous.summary;
-  const rate = (r: number) => formatRate(r) ?? "";
+  const rate = (r: number) => rateText(r) ?? "";
   const reqChange = relativeChange(cur.requests, prev.requests);
   const p95Change = percentileChange(cur.p95, prev.p95);
   const words = (c: Change) => (c.direction === null && c.text ? <Note>{c.text}</Note> : null);
@@ -863,7 +862,7 @@ function OverviewTiles({
                 className="flex-1"
                 label={`${k} rate`}
                 hint={`Share of requests answered with a ${k} status`}
-                value={formatRate(r) ?? "No requests"}
+                value={rateText(r) ?? "No requests"}
                 numeric={r ?? undefined}
                 format={rate}
                 trend={trend(c, true)}
@@ -878,7 +877,7 @@ function OverviewTiles({
                     <Note>
                       {formatCount(n)} {k === "4xx" ? "client errors" : "server errors"}
                     </Note>
-                    {words(c) ?? <Note>Previous range: {formatRate(pr) ?? "no requests"}</Note>}
+                    {words(c) ?? <Note>Previous range: {rateText(pr) ?? "no requests"}</Note>}
                   </span>
                 }
               />
@@ -984,7 +983,7 @@ function StatusSection({ status, dim }: { status: ApiStatus; dim: boolean }) {
                     </td>
                     <td className="pr-3 text-right font-mono text-fg">{formatCount(c.requests)}</td>
                     <td className="pr-4 text-right font-mono text-fg-3 sm:pr-5">
-                      {share(c.requests, status.requests)}
+                      {formatShareOf(c.requests, status.requests)}
                     </td>
                   </tr>
                 ))}
@@ -1246,11 +1245,11 @@ function RouteRow({
   onFilter: () => void;
 }) {
   const pct = (p: Percentile) => {
-    const t = formatPercentile(p);
+    const t = latencyText(p);
     return t === null ? <Missing /> : t;
   };
   const rate = (r: number | null, n: number) => {
-    const t = formatRate(r);
+    const t = rateText(r);
     return t === null ? <Missing /> : <span title={`${formatCount(n)} requests`}>{t}</span>;
   };
   return (

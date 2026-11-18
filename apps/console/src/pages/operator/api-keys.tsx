@@ -16,8 +16,13 @@ import { Panel } from "@/components/panel";
 import { OneTimeSecret } from "@/components/secret";
 import { Pill, type Tone } from "@/components/status";
 import { Button } from "@/components/ui/button";
-import { formatCount, formatDateTimeUtc, formatHourUtc } from "@/lib/format";
-import { formatDay } from "@/lib/global";
+import {
+  formatCount,
+  formatDate,
+  formatDateRange,
+  formatDateTimeUtc,
+  formatTimeUtc,
+} from "@/lib/format";
 
 // contract 9.2 and docs/operators/api-keys.md
 export const DEFAULT_EXPIRY_DAYS = 90;
@@ -401,9 +406,7 @@ function Usage({ id }: { id: string }) {
       aria-label="Usage"
     >
       <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-line px-3 py-2">
-        <span className="text-fg-3">
-          {formatDay(d.from)} to {formatDay(d.to)} (UTC)
-        </span>
+        <span className="text-fg-3">{formatDateRange(d.from, d.to)} (UTC)</span>
         <span className="text-fg-2">
           <span className="font-mono font-medium text-fg tabular" data-usage="requests">
             {formatCount(d.totals.requests)}
@@ -446,7 +449,7 @@ function Usage({ id }: { id: string }) {
                     scope="row"
                     className="border-b border-line-subtle px-3 py-1 font-normal whitespace-nowrap text-fg-2"
                   >
-                    {formatDay(h.hour.slice(0, 10))}, {formatHourUtc(h.hour)}
+                    {formatDate(h.hour)}, {formatTimeUtc(h.hour)}
                   </th>
                   <td className="border-b border-line-subtle px-3 py-1 text-right font-mono text-fg tabular">
                     {formatCount(h.requests)}

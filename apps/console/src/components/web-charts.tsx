@@ -25,7 +25,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { errorText } from "@/lib/errors";
-import { formatCount } from "@/lib/format";
+import {
+  formatChange,
+  formatCompact,
+  formatCount,
+  formatDate,
+  formatDateTimeUtc,
+  formatPoints,
+  formatShareOf,
+  formatTick,
+  niceTicks,
+} from "@/lib/format";
 import { sumRejected } from "@/lib/outcomes";
 
 // ---------------------------------------------------------------- the chart
@@ -63,20 +73,6 @@ export type ChartState = "loading" | "error" | "empty" | "data";
 
 const PLOT_H = 200;
 const AXIS_W = 48;
-
-// 3 to 5 round steps from zero to at least the largest value
-export function niceTicks(max: number): number[] {
-  if (!(max > 0)) return [0, 1];
-  const rough = max / 3;
-  const mag = 10 ** Math.floor(Math.log10(rough));
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= rough) ?? 10 * mag;
-  const top = Math.ceil(max / step) * step;
-  const out: number[] = [];
-  for (let v = 0; v <= top + step / 2; v += step) out.push(Number(v.toPrecision(12)));
-  return out;
-}
-
-const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
@@ -415,7 +411,7 @@ export function TimeChart({
                               textAnchor="end"
                               className="fill-fg-3 font-mono text-axis"
                             >
-                              {compact.format(t)}
+                              {formatCompact(t)}
                             </text>
                           </g>
                         ))}
@@ -604,20 +600,6 @@ const PERIOD: Record<WebRange, string> = { "24h": "previous 24 hours", "30d": "p
 const HOUR = 3600_000;
 const DAY = 24 * HOUR;
 
-const tickHour = new Intl.DateTimeFormat("en", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-  timeZone: "UTC",
-});
-const tickDay = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" });
-const labelDay = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
 const iso = (t: number) => new Date(t).toISOString().replace(/\.\d{3}Z$/, "Z");
 
 // the buckets of an ingest answer: every hour or utc day the window touches.
@@ -632,8 +614,8 @@ export function ingestBuckets(i: Pick<Ingest, "from" | "to" | "bucket">): ChartB
       const d = new Date(t);
       out.push({
         at: iso(t),
-        tick: tickHour.format(d),
-        label: `${tickDay.format(d)}, ${tickHour.format(d)} UTC`,
+        tick: formatTick(d, "hour"),
+        label: formatDateTimeUtc(d),
       });
     }
     return out;
@@ -642,8 +624,8 @@ export function ingestBuckets(i: Pick<Ingest, "from" | "to" | "bucket">): ChartB
     const d = new Date(t);
     out.push({
       at: iso(t),
-      tick: tickDay.format(d),
-      label: `${labelDay.format(d)}, UTC`,
+      tick: formatTick(d, "day"),
+      label: formatDate(d),
       partial: t < from || t + DAY > to,
     });
   }
@@ -783,12 +765,6 @@ export function useWebTraffic(
   };
 }
 
-const pctFmt = (r: number) => (r === 0 ? "0%" : r < 0.001 ? "<0.1%" : `${(r * 100).toFixed(1)}%`);
-
-export function formatShare(part: number, all: number): string {
-  return all === 0 ? "n/a" : pctFmt(part / all);
-}
-
 function countTrend(
   cur: number,
   prev: number,
@@ -801,7 +777,7 @@ function countTrend(
     return { text: "no change", direction: "flat", good: null, period: PERIOD[range] };
   const up = r > 0;
   return {
-    text: `${Math.abs(r * 100).toFixed(1)}%`,
+    text: formatChange(r),
     direction: up ? "up" : "down",
     good: up === higherIsBetter,
     period: PERIOD[range],
@@ -810,11 +786,11 @@ function countTrend(
 
 function shareTrend(cur: Outcomes, prev: Outcomes, range: WebRange): Trend | null {
   if (cur.all === 0 || prev.all === 0) return null;
-  const d = (heldBack(cur) / cur.all - heldBack(prev) / prev.all) * 100;
-  if (Math.abs(d) < 0.05)
+  const d = heldBack(cur) / cur.all - heldBack(prev) / prev.all;
+  if (Math.abs(d) < 0.0005)
     return { text: "no change", direction: "flat", good: null, period: PERIOD[range] };
   return {
-    text: `${Math.abs(d).toFixed(1)} pt`,
+    text: formatPoints(d),
     direction: d > 0 ? "up" : "down",
     good: d < 0,
     period: PERIOD[range],
@@ -923,7 +899,7 @@ export function WebTraffic({
         <StatTile
           label="Held back"
           hint="Quarantined, bots and rejected events, as a share of all events"
-          value={formatShare(heldBack(totals), totals.all)}
+          value={formatShareOf(heldBack(totals), totals.all)}
           state={tileState}
           emptyText="No events in this range"
           trend={prevTotals ? shareTrend(totals, prevTotals, range) : null}

@@ -4,7 +4,17 @@
 // docs/reference/control-plane-api.md section 8.
 
 import { type TenantStatus, tenantStatus } from "@/api/schemas";
-import { formatSeconds, OPEN_BUCKET } from "@/lib/api-metrics";
+import {
+  formatDuration as durationText,
+  formatCohortPercentile,
+  formatDate,
+  formatDateRange,
+  formatLatency,
+  formatPercent,
+  formatPoints,
+  OPEN_BUCKET,
+  formatChange as relativeText,
+} from "@/lib/format";
 
 // "" means the filter is not sent
 export type Tri = "" | "true" | "false";
@@ -254,74 +264,34 @@ export function validateDays(
   return out;
 }
 
-// 19.2 a relative change as a signed percentage; the error rate's change is
-// absolute, in percentage points
+// the formats of lib/format.ts under the names and nullable signatures the
+// scf view, the public report and the on-chain section read. one
+// implementation: each only passes null through.
 export function formatChange(v: number | null, kind: "relative" | "points"): string | null {
   if (v === null) return null;
-  if (kind === "points") {
-    const pp = v * 100;
-    if (pp === 0) return "0 pp";
-    const t =
-      Math.abs(pp) < 0.01
-        ? "<0.01"
-        : Math.abs(pp)
-            .toFixed(2)
-            .replace(/\.?0+$/, "");
-    return `${pp > 0 ? "+" : "-"}${t} pp`;
-  }
-  const pct = v * 100;
-  if (pct === 0) return "0%";
-  const t = Math.abs(pct) < 0.1 ? "<0.1" : Math.abs(pct).toFixed(1).replace(/\.0$/, "");
-  return `${pct > 0 ? "+" : "-"}${t}%`;
+  return kind === "points" ? formatPoints(v) : relativeText(v);
 }
 
-// 19.3 a percentile of 0 to 1 as the share of the cohort at or below the
-// project, in whole percent
 export function formatPercentile(v: number | null): string | null {
-  if (v === null) return null;
-  return `P${Math.round(v * 100)}`;
+  return v === null ? null : formatCohortPercentile(v);
 }
 
-// average visit duration as people read it
 export function formatDuration(s: number | null): string | null {
-  if (s === null) return null;
-  const total = Math.round(s);
-  if (total < 60) return `${total} s`;
-  const m = Math.floor(total / 60);
-  const rest = total % 60;
-  if (m < 60) return rest ? `${m} min ${rest} s` : `${m} min`;
-  const h = Math.floor(m / 60);
-  return `${h} h ${m % 60} min`;
+  return s === null ? null : durationText(s);
 }
 
-// a share of 0 to 1 as a percentage with one decimal
 export function formatShare(v: number | null): string | null {
-  if (v === null) return null;
-  if (v === 0) return "0%";
-  const pct = v * 100;
-  if (pct < 0.1) return "<0.1%";
-  return `${pct.toFixed(1).replace(/\.0$/, "")}%`;
+  return v === null ? null : formatPercent(v);
 }
 
 // contract 8.5: seconds, the open bucket above 10 s, or none
 export function formatPct(seconds: number | null, over10s: boolean): string | null {
   if (over10s) return OPEN_BUCKET;
-  if (seconds === null) return null;
-  return formatSeconds(seconds);
+  return seconds === null ? null : formatLatency(seconds);
 }
 
-const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
-
-// an iso country code with its english name; codes intl does not know stay
-// as they are
-export function countryName(code: string): string {
-  try {
-    const n = regionNames.of(code.toUpperCase());
-    return n && n !== code.toUpperCase() ? `${n} (${code.toUpperCase()})` : code;
-  } catch {
-    return code;
-  }
-}
+export const formatDay = (d: string) => formatDate(d);
+export const formatDayRange = (from: string, to: string) => formatDateRange(from, to);
 
 // one fixed categorical slot per compared project, in the order the
 // comparison names them: the data palette series-1 to series-5 of the brand
@@ -332,22 +302,3 @@ export const COMPARE_COLORS = [
   "var(--vs-series-4)",
   "var(--vs-series-5)",
 ];
-
-const dayFmt = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "UTC" });
-const shortDayFmt = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-  timeZone: "UTC",
-});
-
-export function formatDay(d: string): string {
-  return dayFmt.format(new Date(`${d}T00:00:00Z`));
-}
-
-export function formatShortDay(d: string): string {
-  return shortDayFmt.format(new Date(`${d}T00:00:00Z`));
-}
-
-export function formatDayRange(from: string, to: string): string {
-  return from === to ? `${formatDay(from)} (UTC)` : `${formatDay(from)} to ${formatDay(to)} (UTC)`;
-}

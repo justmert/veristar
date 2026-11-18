@@ -9,10 +9,9 @@ import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { IntegrityCell } from "@/components/integrity";
 import { StatusPill } from "@/components/status";
 import { Button } from "@/components/ui/button";
-import { formatCount } from "@/lib/format";
+import { countryName, formatCount } from "@/lib/format";
 import {
   activeFilterCount,
-  countryName,
   type DayRange,
   dayPairError,
   EMPTY_FILTERS,

@@ -5,7 +5,16 @@
 
 import type { WebBand, WebDimension, WebPoint, WebQuery, WebTotals } from "@/api/web";
 import type { Trend } from "@/components/stat-tile";
-import { type DayRange, formatDuration, isDay, lastDays, validateDays } from "@/lib/global";
+import {
+  countryName,
+  formatChange,
+  formatCount,
+  formatDuration,
+  formatPercent,
+  formatPoints,
+  MISSING,
+} from "@/lib/format";
+import { type DayRange, isDay, lastDays, validateDays } from "@/lib/global";
 
 export type WebPreset = "today" | "7" | "30" | "90" | "custom";
 
@@ -120,17 +129,11 @@ export function pointValue(p: WebPoint, m: WebMetric): number | null {
   return p[m];
 }
 
-const pct = (r: number) => (r === 0 ? "0%" : r < 0.001 ? "<0.1%" : `${(r * 100).toFixed(1)}%`);
-
-export function formatShare(r: number | null): string {
-  return r === null ? "n/a" : pct(r);
-}
-
 export function formatMetric(m: WebMetric, v: number | null): string {
-  if (v === null) return "n/a";
-  if (m === "bounce_rate") return pct(v);
-  if (m === "avg_visit_duration") return formatDuration(v) ?? "n/a";
-  return new Intl.NumberFormat("en", { maximumFractionDigits: 0 }).format(v);
+  if (v === null) return MISSING;
+  if (m === "bounce_rate") return formatPercent(v);
+  if (m === "avg_visit_duration") return formatDuration(v);
+  return formatCount(v);
 }
 
 // a lower bounce rate is the better one; every other figure is better higher
@@ -150,10 +153,10 @@ export function webTrend(
   if (cur === null || prev === null) return null;
   const period = periodLabel(days);
   if (m === "bounce_rate") {
-    const d = (cur - prev) * 100;
-    if (Math.abs(d) < 0.05) return { text: "no change", direction: "flat", good: null, period };
+    const d = cur - prev;
+    if (Math.abs(d) < 0.0005) return { text: "no change", direction: "flat", good: null, period };
     return {
-      text: `${Math.abs(d).toFixed(1)} pt`,
+      text: formatPoints(d),
       direction: d > 0 ? "up" : "down",
       good: d < 0,
       period,
@@ -164,7 +167,7 @@ export function webTrend(
   if (Math.abs(r) < 0.0005) return { text: "no change", direction: "flat", good: null, period };
   const up = r > 0;
   return {
-    text: `${Math.abs(r * 100).toFixed(1)}%`,
+    text: formatChange(r),
     direction: up ? "up" : "down",
     good: up === higherIsBetter(m),
     period,
@@ -195,19 +198,6 @@ export const UTM_DIMENSIONS: readonly WebDimension[] = [
   "utm_content",
   "utm_term",
 ];
-
-let regions: Intl.DisplayNames | null = null;
-
-// a country code as people read it; an unknown code stays as it is
-export function countryName(code: string): string {
-  try {
-    regions ??= new Intl.DisplayNames(["en"], { type: "region" });
-    const n = regions.of(code);
-    return n && n !== code ? n : code;
-  } catch {
-    return code;
-  }
-}
 
 const DEVICE_LABEL: Record<string, string> = {
   desktop: "Desktop",

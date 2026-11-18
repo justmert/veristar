@@ -16,6 +16,7 @@ import { Segmented } from "@/components/segmented";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { formatChange, formatCohortPercentile, formatDateRange, formatPoints } from "@/lib/format";
 import {
   activeFilterCount,
   COHORT_KEYS,
@@ -24,9 +25,6 @@ import {
   type DayRange,
   dayPairError,
   EMPTY_FILTERS,
-  formatChange,
-  formatDayRange,
-  formatPercentile,
   type IntegrityFilter,
   lastDays,
   MAX_COMPARE,
@@ -107,7 +105,7 @@ export function RangeControl({
         />
         {resolved ? (
           <span className="text-caption text-fg-3" aria-live="polite">
-            {formatDayRange(resolved.from, resolved.to)}. Today counts what the hourly aggregation
+            {formatDateRange(resolved.from, resolved.to)}. Today counts what the hourly aggregation
             has read so far.
           </span>
         ) : null}
@@ -484,8 +482,9 @@ export function KpiCell({
   on: boolean;
   label: string;
 }) {
-  const change = formatChange(k.change, kind);
-  const pct = formatPercentile(k.percentile);
+  const change =
+    k.change === null ? null : kind === "points" ? formatPoints(k.change) : formatChange(k.change);
+  const pct = k.percentile === null ? null : formatCohortPercentile(k.percentile);
   const title = [
     change === null
       ? `${label}: no previous value to compare with`

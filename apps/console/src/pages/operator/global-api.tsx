@@ -7,7 +7,7 @@ import { type ApiProject, type ApiSort, apiSort } from "@/api/schemas";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { StatusPill } from "@/components/status";
 import { Button } from "@/components/ui/button";
-import { formatRate } from "@/lib/api-metrics";
+import { rateText } from "@/lib/api-metrics";
 import { formatCount } from "@/lib/format";
 import {
   activeFilterCount,
@@ -330,7 +330,7 @@ function ApiRow({
   const t = p.tenant;
   const slot = selection.slot(t.id);
   const rate = (r: number | null, n: number) => {
-    const v = formatRate(r);
+    const v = rateText(r);
     return v === null ? (
       <Missing />
     ) : (

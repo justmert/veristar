@@ -27,11 +27,18 @@ import { CompareIntegrity } from "@/components/integrity";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { StatusDot, statusText, statusTone } from "@/components/status";
 import { Button } from "@/components/ui/button";
-import { formatRate, formatSeconds, OPEN_BUCKET } from "@/lib/api-metrics";
-import { formatCount } from "@/lib/format";
+import { rateText } from "@/lib/api-metrics";
+import {
+  countryName,
+  formatCompact,
+  formatCount,
+  formatLatency,
+  formatPercent,
+  MISSING,
+  OPEN_BUCKET,
+} from "@/lib/format";
 import {
   compareSearch,
-  countryName,
   type DayRange,
   formatDuration,
   formatPct,
@@ -77,10 +84,6 @@ function seriesOf(tenants: TenantRef[]): Series[] {
     color: SERIES_COLOR[i] ?? "var(--vs-fg-3)",
   }));
 }
-
-const compact = (v: number) =>
-  new Intl.NumberFormat("en", { notation: v >= 10_000 ? "compact" : "standard" }).format(v);
-const pctAxis = (v: number) => `${Math.round(v * 1000) / 10}%`;
 
 // the side-by-side view of up to five projects (contract 8.4 and 8.6). with
 // one project it is that project's aggregate drill-down.
@@ -278,7 +281,7 @@ function WebSection({ data }: { data: WebCompare }) {
           markers={markers}
           value={count("pageviews")}
           format={fmtCount}
-          axisFormat={compact}
+          axisFormat={formatCompact}
           missingText="not read"
           gapLabel="not read"
         />
@@ -291,7 +294,7 @@ function WebSection({ data }: { data: WebCompare }) {
           markers={markers}
           value={count("visitors")}
           format={fmtCount}
-          axisFormat={compact}
+          axisFormat={formatCompact}
           missingText="not read"
           gapLabel="not read"
         />
@@ -303,8 +306,8 @@ function WebSection({ data }: { data: WebCompare }) {
           series={series}
           markers={markers}
           value={(s, d) => point(s, d)?.bounce_rate ?? null}
-          format={(v) => (v === "open" ? OPEN_BUCKET : (formatShare(v) ?? "-"))}
-          axisFormat={pctAxis}
+          format={(v) => (v === "open" ? OPEN_BUCKET : (formatShare(v) ?? MISSING))}
+          axisFormat={formatPercent}
         />
         <CompareChart
           kind="count"
@@ -314,7 +317,7 @@ function WebSection({ data }: { data: WebCompare }) {
           series={series}
           markers={markers}
           value={(s, d) => point(s, d)?.avg_visit_duration ?? null}
-          format={(v) => (v === "open" ? OPEN_BUCKET : (formatDuration(v) ?? "-"))}
+          format={(v) => (v === "open" ? OPEN_BUCKET : (formatDuration(v) ?? MISSING))}
           axisFormat={(v) => formatDuration(v) ?? ""}
         />
       </div>
@@ -529,7 +532,7 @@ function ApiSection({ data }: { data: ApiCompare }) {
           markers={markers}
           value={(s, d) => point(s, d)?.requests ?? null}
           format={(v) => (v === "open" ? OPEN_BUCKET : formatCount(v))}
-          axisFormat={compact}
+          axisFormat={formatCompact}
         />
         <CompareChart
           kind="measure"
@@ -542,8 +545,8 @@ function ApiSection({ data }: { data: ApiCompare }) {
             const p = point(s, d);
             return p ? pctValue(p.p95_seconds, p.p95_over_10s) : null;
           }}
-          format={(v) => (v === "open" ? OPEN_BUCKET : formatSeconds(v))}
-          axisFormat={formatSeconds}
+          format={(v) => (v === "open" ? OPEN_BUCKET : formatLatency(v))}
+          axisFormat={formatLatency}
         />
         <CompareChart
           kind="share"
@@ -553,8 +556,8 @@ function ApiSection({ data }: { data: ApiCompare }) {
           series={series}
           markers={markers}
           value={rate("rate_4xx")}
-          format={(v) => (v === "open" ? OPEN_BUCKET : (formatRate(v) ?? "-"))}
-          axisFormat={pctAxis}
+          format={(v) => (v === "open" ? OPEN_BUCKET : (rateText(v) ?? MISSING))}
+          axisFormat={formatPercent}
         />
         <CompareChart
           kind="share"
@@ -564,8 +567,8 @@ function ApiSection({ data }: { data: ApiCompare }) {
           series={series}
           markers={markers}
           value={rate("rate_5xx")}
-          format={(v) => (v === "open" ? OPEN_BUCKET : (formatRate(v) ?? "-"))}
-          axisFormat={pctAxis}
+          format={(v) => (v === "open" ? OPEN_BUCKET : (rateText(v) ?? MISSING))}
+          axisFormat={formatPercent}
         />
       </div>
       <ApiTotalsTable data={data} />
@@ -588,8 +591,8 @@ function ApiTotalsTable({ data }: { data: ApiCompare }) {
   const cols: { label: string; value: (t: ApiCompareProject["totals"]) => string | null }[] = [
     { label: "Requests", value: (t) => formatCount(t.requests) },
     { label: "Infrastructure requests", value: (t) => formatCount(t.infrastructure_requests) },
-    { label: "4xx rate", value: (t) => formatRate(t.rate_4xx) },
-    { label: "5xx rate", value: (t) => formatRate(t.rate_5xx) },
+    { label: "4xx rate", value: (t) => rateText(t.rate_4xx) },
+    { label: "5xx rate", value: (t) => rateText(t.rate_5xx) },
     { label: "p50", value: (t) => pctText(t, "p50") },
     { label: "p95", value: (t) => pctText(t, "p95") },
     { label: "p99", value: (t) => pctText(t, "p99") },
@@ -639,7 +642,7 @@ function ServicesCard({ project, slot }: { project: ApiCompareProject; slot: num
               </div>
               <p className="text-caption text-fg-3">
                 {formatCount(s.routes)} {s.routes === 1 ? "route" : "routes"}, 5xx{" "}
-                {formatRate(s.rate_5xx) ?? "-"}, p95 {pctText(s, "p95") ?? "-"}
+                {rateText(s.rate_5xx) ?? MISSING}, p95 {pctText(s, "p95") ?? MISSING}
                 {s.source === "span" ? ", from traces" : ""}
                 {s.lossy ? ", approximate" : ""}
               </p>

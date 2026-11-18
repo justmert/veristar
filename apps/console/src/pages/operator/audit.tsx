@@ -9,7 +9,7 @@ import type { AuditEntry } from "@/api/schemas";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatDateTimeUtc, formatHourUtc } from "@/lib/format";
+import { formatDate, formatDateTimeUtc, formatTimeUtc } from "@/lib/format";
 
 const FIELDS = ["tenant_id", "action", "actor", "target", "from", "to"] as const;
 type Field = (typeof FIELDS)[number];
@@ -622,7 +622,7 @@ function AuditRow({ e }: { e: AuditEntry }) {
           title={formatDateTimeUtc(e.at)}
           className="font-mono text-caption text-fg-2 tabular"
         >
-          {formatHourUtc(e.at)}
+          {formatTimeUtc(e.at)}
         </time>
         <span className="font-mono text-axis text-fg-3">{e.action}</span>
       </div>

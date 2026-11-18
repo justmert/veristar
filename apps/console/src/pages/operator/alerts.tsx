@@ -23,13 +23,12 @@ import {
   type AlertTone,
   alertUrgency,
   firingFor,
-  formatClockUtc,
   groupBySeverity,
   runbookUrl,
   type SeverityGroup,
 } from "@/lib/alerts";
 import { errorText } from "@/lib/errors";
-import { formatDateTimeUtc } from "@/lib/format";
+import { formatDateTimeUtc, formatTimeUtc } from "@/lib/format";
 
 const WATCHDOG_RUNBOOK = "docs/runbooks/alerts.md#watchdog";
 
@@ -115,7 +114,9 @@ export function LiveCheck({ alerts }: { alerts: UseQueryResult<OperatorAlerts> }
       <StatusDot tone="success" live />
       <span>
         Last checked{" "}
-        <time dateTime={alerts.data.checked_at}>{formatClockUtc(alerts.data.checked_at)}</time>
+        <time dateTime={alerts.data.checked_at}>
+          {formatTimeUtc(alerts.data.checked_at, { seconds: true })}
+        </time>
       </span>
     </span>
   );
@@ -170,7 +171,7 @@ function RetryNote({ lastSuccess }: { lastSuccess: number }) {
   return (
     <span className="text-caption text-fg-3">
       {lastSuccess > 0
-        ? `Last successful check ${formatClockUtc(new Date(lastSuccess).toISOString())}. `
+        ? `Last successful check ${formatTimeUtc(new Date(lastSuccess), { seconds: true })}. `
         : null}
       The page keeps retrying every {ALERTS_REFRESH_MS / 1000} seconds.
     </span>
@@ -206,7 +207,7 @@ function AllClear({ checkedAt }: { checkedAt: string }) {
       <span className="flex flex-col gap-1">
         <span>
           No alert is firing. Last checked{" "}
-          <time dateTime={checkedAt}>{formatClockUtc(checkedAt)}</time>.
+          <time dateTime={checkedAt}>{formatTimeUtc(checkedAt, { seconds: true })}</time>.
         </span>
         <span className="text-caption text-fg-3">
           Alertmanager answered, holds no alert, and the always-firing Watchdog alert is present, so

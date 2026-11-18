@@ -20,7 +20,7 @@ import {
   type WebRange,
   WebTraffic,
 } from "@/components/web-charts";
-import { formatPercentile, percentileChange, relativeChange } from "@/lib/api-metrics";
+import { latencyText, percentileChange, relativeChange } from "@/lib/api-metrics";
 import { formatCount } from "@/lib/format";
 import { webPath } from "@/lib/web-dashboard";
 import { useProject } from "./project-layout";
@@ -249,7 +249,7 @@ function ApiTiles({
       <ArrowRight aria-hidden className="size-3" />
     </Link>
   );
-  const p95 = formatPercentile(cur.p95);
+  const p95 = latencyText(cur.p95);
   return (
     <>
       <StatTile
