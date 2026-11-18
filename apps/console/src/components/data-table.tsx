@@ -642,12 +642,15 @@ function PhoneCard<Row>({
                 <dt className="text-caption text-fg-2">{c.header}</dt>
                 <dd
                   className={cn(
-                    "min-w-0 truncate text-small text-fg",
+                    // a short value (a type, a status) wraps in the narrow
+                    // column; a column that cuts long values keeps its cut,
+                    // with the full value in a tooltip
+                    "min-w-0 text-small break-words text-fg",
                     c.numeric && "font-mono tabular",
                     href && ABOVE_ROW_LINK,
                   )}
                 >
-                  {c.cell(row)}
+                  <CellValue column={c} row={row} />
                 </dd>
               </div>
             ))}
