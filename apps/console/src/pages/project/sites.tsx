@@ -99,7 +99,7 @@ export function AddSiteForm({
   onDone,
   onCancel,
   cancellable,
-  submitLabel = "Add and set up",
+  submitLabel = "Add site",
 }: {
   tenantId: string;
   onDone: (site?: Site) => void;

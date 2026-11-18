@@ -102,7 +102,7 @@ test("sign in, enroll, add a site and copy the snippet", async ({ browserName })
   const created = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url() === `${APP}/api/tenants/${tenant.id}/sites`,
   );
-  await form.getByRole("button", { name: "Add and set up" }).click();
+  await form.getByRole("button", { name: "Add site" }).click();
   expect((await created).status()).toBe(201);
   const sites = await api<{ items: Site[] }>(context, "GET", `/api/tenants/${tenant.id}/sites`);
   expect(sites.body.items).toHaveLength(1);
