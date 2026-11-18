@@ -32,16 +32,16 @@ released file is never rebuilt or replaced. Released so far:
 3. Deploy, then check one page as in the [quickstart](quickstart.md#5-check-that-it-works):
    `sdk.js` with the new version answers 200 and the pageview answers 202.
 
-Moving from 1.0.0 to 1.1.0 changes only these two attributes:
+Moving from 1.3.0 to 1.3.1 changes only these two attributes:
 
-{/* snippet version=1.0.0 */}
+{/* snippet version=1.3.0 */}
 ```html
-<script defer src="https://in.analytics.example/v/1.0.0/sdk.js" integrity="sha384-G7jAlHsp/0HhreHeIKFZIr1Udyb8lXfTJPPZcLC8YcVCAQ9Mr/OS3JOMW4n4OT6j" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
+<script defer src="https://in.analytics.example/v/1.3.0/sdk.js" integrity="sha384-3E+vbTmGHWaU8kaLAWT6ttw70odRH565/3vRal5558SgSitqFlIbsFHlfzWnSUtT" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
 
-{/* snippet version=1.1.0 */}
+{/* snippet version=1.3.1 */}
 ```html
-<script defer src="https://in.analytics.example/v/1.1.0/sdk.js" integrity="sha384-lxlitLtIMAeT/K3ieev+MeMGxZe7oceuWLOy8GZAjK7TMKS2Uh9UPmfGLBczUPsq" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
+<script defer src="https://in.analytics.example/v/1.3.1/sdk.js" integrity="sha384-54fz21LNRgy6RLEdhwecMK8yavckH44JnSX9iSA3p2uiEtCEs6fyFt6LhuOL5kKw" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
 
 Versions can be mixed: pages still carrying the old tag keep working while you roll out the new
