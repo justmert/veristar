@@ -52,10 +52,10 @@ export function AlertsPage() {
   const alerts = useQuery(operatorAlertsQuery);
   const now = useNow(15_000);
   const data = alerts.data && !alerts.error ? alerts.data : null;
-  // the count beside the title is the count of the sidebar badge: the
-  // alerts to act on now while any fires, else every alert
+  // the count beside the title is the count of the sidebar badge: every
+  // firing alert
+  const count = data ? data.alerts.length : null;
   const critical = data ? criticalCount(data.alerts) : 0;
-  const count = data ? (critical > 0 ? critical : data.alerts.length) : null;
   const refreshing = alerts.isFetching && !alerts.isPending;
 
   return (
