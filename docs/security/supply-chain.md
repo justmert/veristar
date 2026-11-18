@@ -57,7 +57,8 @@ runs every step below; it refuses a checkout that is not exactly at the tag or t
 changes. Before it builds anything it runs the licence gate (section 7) into `<work dir>/licences`,
 so a tag whose dependencies fail the gate is never released, and step 4 attaches the report beside
 the manifest. Release `v0.1.0` was built by `release-images.yml`; `v0.2.0`, `v0.2.1` and `v0.2.2` were built
-on a workstation; `v0.2.3` and `v0.3.0` were built by `release-images.yml` in keyless mode. The steps, run from a clean checkout of the tag:
+on a workstation; `v0.2.3` and `v0.3.0` were built by `release-images.yml` in keyless mode; `v0.4.0`
+was built on a workstation again, in key mode, while the repository's GitHub Actions are off. The steps, run from a clean checkout of the tag:
 
 1. **Build and push** each image of the matrix in `release-images.yml` with the same Dockerfile,
    context and build arguments (`VERSION=<tag>`, `DBIP_MONTH` from the tag's commit month,
@@ -184,7 +185,7 @@ byte-identical.
 | `prober` | `v0.2.3` | `sha256:8712c6a2c1da43b52a797824719b3a54fea151adeb61703671abf4313c151ae8` |
 | `replayer` | `v0.2.3` | `sha256:f2830f57443201b2543a03207ee2ddec08183f366b16bb6c28fb0b416f8cdac4` |
 
-**Release `v0.3.0` (2026-11-16), the release production runs.** Built by `release-images.yml` on
+**Release `v0.3.0` (2026-11-16).** Built by `release-images.yml` on
 the tag push (tag `v0.3.0` at commit `cc4df2d` on `main`) in keyless mode, from 19:02:22 to
 19:08:39 UTC: eleven images gated by `scan-image.sh` (no fixable critical or high finding), signed
 with the workflow's Fulcio certificate and logged in Rekor, with build provenance and SBOM
@@ -213,6 +214,39 @@ wallet sign-in, with migrations 00032, 00033 and 00034.
 | `prober` | `v0.3.0` | `sha256:dfc127a00f1f6169c07808f9e58f3ac0e2e6c40f6810989e34001be5d6ecf277` |
 | `replayer` | `v0.3.0` | `sha256:a471b3b135c5ed2caa32a431cbdbd54a30ef7e34e7b4e59ee9515681ff035156` |
 
+**Release `v0.4.0` (2026-11-18), the release production runs.** Built in key mode by
+`scripts/supply-chain/release-workstation.sh v0.4.0 <work dir>` from a clean worktree at the tag
+(annotated tag `v0.4.0` at commit `8b015d7` on `main`), from 03:30:20 to 03:48:01 UTC, while the
+repository's GitHub Actions are off: the licence gate first (`licences.json`, `console-bundle.txt`),
+then eleven images built, pushed and gated by `scan-image.sh` (syft 1.57.1, Trivy 0.76.2; no image
+had a fixable critical or high finding), signed and SBOM-attested with cosign 3.1.4 and the release
+key read from the SOPS file into the process's environment only (`env://`), no transparency log.
+`release-images.json` (SHA-256 `abe90b3d7e7164ec1ee52bc4f9a31d45d28d35fc2e32831c871ba3b9f253b833`)
+was written, every digest verified with `infra/ansible/vars/release-cosign.pub`, and the manifest,
+`licences.json` and `console-bundle.txt` attached to the GitHub release `v0.4.0`. Every digest
+verified again with `cosign verify --key infra/ansible/vars/release-cosign.pub
+--insecure-ignore-tlog=true` from a docker configuration without credentials, and the gateway's
+SBOM attestation with `cosign verify-attestation --type spdxjson`. `deploy.yml` verified every
+digest with the release key (`-e sa_signature_mode=key`) before it touched a node. `postgres-ha`
+has no source change since `v0.2.0` and came out with the `v0.2.0` digest. Since `v0.3.0` it adds
+cohorts and threshold rules, signed usage reports, passkeys for operators, traffic classes,
+etcd 3.7.3 with compaction and its quota, the 8 MiB NATS `max_payload` and the removal of the
+`web.<BASE_DOMAIN>` host, with migrations 00035 to 00046.
+
+| Image | Tag | Digest |
+|---|---|---|
+| `caddy` | `v0.4.0` | `sha256:007bf33a6466dfe2a495fea44ae3c1564e9b3f7aec2d3fdeb9bcd67064c8c5e3` |
+| `collector` | `v0.4.0` | `sha256:d8854d9311109976ebe466ae8d295ab5f03deca3c5c566b3def3631a1d7c944d` |
+| `console` | `v0.4.0` | `sha256:3ec8fda43dc34ae8ecc16f229ec42229ec13c9944becc71bb280ad834b36b90a` |
+| `controlplane` | `v0.4.0` | `sha256:eabf6917fcdb691884af9af33032268323d79f9d861094692936c88c2b4e9c4c` |
+| `gateway` | `v0.4.0` | `sha256:431680339f55b262c4465f0fd10562dd6e41c3d9c89cdf4037cfbf99dafa6ebb` |
+| `jobs` | `v0.4.0` | `sha256:9ced351a51c9cb81d768aa1047d74f731181eaf8fe8688821fde8c4dc482450a` |
+| `metricswriter` | `v0.4.0` | `sha256:866595357fa9b144d6374d32936d33cb6679e0801d366ec10074a87e052a980e` |
+| `platformctl` | `v0.4.0` | `sha256:7dcce75e84f1d80d2dd57db933c271d972ffd671af12a45fef9e7d149b0da067` |
+| `postgres-ha` | `18.7-v0.4.0` | `sha256:ac80c5ba3ca0ab798bfc5d40a00da5cb84fa09fdf0457d06d5f9ed158cddd6e5` (same as `v0.2.0`) |
+| `prober` | `v0.4.0` | `sha256:c366b6e57d75e7cd9f863eab6f3543c4d2d8d23d35c0b3159082b4d0d7c9cefa` |
+| `replayer` | `v0.4.0` | `sha256:701faea12bf2c43c94dead51d84c24e2f0a7a475b98b3949fe83731174415a4e` |
+
 ## 3. Deploy-time verification (every playbook that pulls images)
 
 `site.yml` (first converge and node replacement), `deploy.yml` (rolling deploy), `rotate-all.yml`
@@ -231,7 +265,7 @@ The run stops before any node is touched when:
   `platform_images`;
 - an upstream image in `vars/pins.yml` is not pinned by digest;
 - `cosign verify` fails for any digest in the signature mode of `vars/signing.yml`:
-  - `key` (releases `v0.1.0` to `v0.2.2`): the committed public key
+  - `key` (releases `v0.1.0` to `v0.2.2`, and `v0.4.0` deployed with `-e sa_signature_mode=key`): the committed public key
     `infra/ansible/vars/release-cosign.pub`, with `--insecure-ignore-tlog`. This covers an unsigned
     digest and a signature by any other key;
   - `keyless` (the production mode since `v0.2.3`): identity
