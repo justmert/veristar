@@ -793,6 +793,22 @@ func TestInvalidValuesDroppedAlone(t *testing.T) {
 	emismatch.SetCount(3)
 	emismatch.SetZeroCount(1)
 	emismatch.Positive().BucketCounts().FromRaw([]uint64{1})
+	// points the transform processor cannot convert, which would keep the
+	// whole metric exponential and lose its valid point at the exporter
+	for _, spoil := range []func(pmetric.ExponentialHistogramDataPoint){
+		func(dp pmetric.ExponentialHistogramDataPoint) { dp.SetScale(21) },
+		func(dp pmetric.ExponentialHistogramDataPoint) { dp.SetScale(-11) },
+		func(dp pmetric.ExponentialHistogramDataPoint) { dp.SetZeroThreshold(math.NaN()) },
+		func(dp pmetric.ExponentialHistogramDataPoint) { dp.SetZeroThreshold(-1) },
+		func(dp pmetric.ExponentialHistogramDataPoint) { dp.Positive().SetOffset(math.MaxInt32 - 1) },
+	} {
+		bad := eh.DataPoints().AppendEmpty()
+		bad.SetTimestamp(at)
+		bad.SetCount(2)
+		bad.SetZeroCount(1)
+		bad.Positive().BucketCounts().FromRaw([]uint64{1})
+		spoil(bad)
+	}
 	esum := eh.DataPoints().AppendEmpty()
 	esum.SetTimestamp(at)
 	esum.SetSum(1e308)
@@ -868,7 +884,7 @@ func TestInvalidValuesDroppedAlone(t *testing.T) {
 		}
 	}
 	want := map[string]int64{
-		"metrics/time": 5, "metrics/buckets": 6, "metrics/count": 4, "metrics/sum": 4,
+		"metrics/time": 5, "metrics/buckets": 11, "metrics/count": 4, "metrics/sum": 4,
 		"metrics/temporality": 1, "traces/time": 5,
 	}
 	for k, v := range want {

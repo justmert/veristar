@@ -118,6 +118,11 @@ here, before they take effect, as the processing terms require
   requests (it refused above a billion). At the full rate limit a tenant
   with such points brought a day's request total past the 64-bit limit,
   which parked the daily rollup and failed every read of that day.
+- The collector drops an exponential histogram point it cannot convert to
+  the canonical buckets (a scale outside -10 to 20, a zero threshold that is
+  not a finite non-negative number, buckets beyond the floating point
+  range), counted as `buckets`. One such point kept the whole metric
+  unconverted, and the export lost every valid point of that metric.
 
 ### Fixed
 

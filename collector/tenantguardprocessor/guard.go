@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/expohisto/conversion"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -191,6 +192,20 @@ func checkExponential(dp pmetric.ExponentialHistogramDataPoint) string {
 	}
 	if total != dp.Count() {
 		return invalidCount
+	}
+	// the transform processor converts every exponential point of a metric
+	// or none: one point it cannot convert (a scale outside -10 to 20, a
+	// zero threshold that is not a finite non-negative number, buckets
+	// past the float range) leaves the whole metric exponential, and the
+	// exporter drops it with the valid points of the same metric. the
+	// conversion the processor runs is tried here, so only that point is
+	// dropped. its errors do not depend on the bounds.
+	if _, err := conversion.ToExplicit(conversion.ExponentialHistogram{
+		Count: dp.Count(), Scale: dp.Scale(), ZeroThreshold: dp.ZeroThreshold(), ZeroCount: dp.ZeroCount(),
+		Positive: conversion.Buckets{Offset: dp.Positive().Offset(), Counts: dp.Positive().BucketCounts()},
+		Negative: conversion.Buckets{Offset: dp.Negative().Offset(), Counts: dp.Negative().BucketCounts()},
+	}, schema.Bounds, "uniform"); err != nil {
+		return invalidBuckets
 	}
 	return ""
 }
