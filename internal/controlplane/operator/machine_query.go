@@ -355,7 +355,12 @@ func (k keyset) wrap(inner string, p machinePage, args pgx.NamedArgs) string {
 }
 
 // validAfter checks that a cursor's key has one value per key column, each
-// readable as its type, before it reaches postgresql.
+// readable as its type by postgresql, before it reaches postgresql, and
+// rewrites each value in the form the first page wrote it. the hash has
+// no secret, so a key holder can send any value: a uuid in another form
+// (urn:uuid:...), a year 0 date, an offset postgresql does not take or a
+// nul character in text would otherwise fail the request with 500 instead
+// of 400 invalid_cursor.
 func (k keyset) validAfter(p machinePage) error {
 	if p.After == nil {
 		return nil
@@ -364,18 +369,34 @@ func (k keyset) validAfter(p machinePage) error {
 		return httpx.BadCursor()
 	}
 	for i, v := range p.After {
-		var err error
+		ok := true
 		switch k.casts[i] {
 		case "uuid":
-			_, err = uuid.Parse(v)
+			ok = canonicalUUID.MatchString(v)
 		case "date":
-			_, err = time.Parse(time.DateOnly, v)
+			d, err := time.Parse(time.DateOnly, v)
+			ok = err == nil && d.Year() >= 1
+			if ok {
+				p.After[i] = d.Format(time.DateOnly)
+			}
 		case "timestamptz":
-			_, err = time.Parse(time.RFC3339Nano, v)
+			t, err := time.Parse(time.RFC3339Nano, v)
+			t = t.UTC()
+			ok = err == nil && t.Year() >= 1 && t.Year() <= 9999
+			if ok {
+				p.After[i] = t.Format(time.RFC3339Nano)
+			}
 		case "smallint":
-			_, err = strconv.ParseInt(v, 10, 16)
+			_, err := strconv.ParseInt(v, 10, 16)
+			ok = err == nil
+		case "text":
+			ok = sqlText(v)
+		default:
+			// a keyset with a type this check does not know is a mistake
+			// in the route, not in the cursor
+			return fmt.Errorf("operator: keyset cast %s has no cursor check", k.casts[i])
 		}
-		if err != nil {
+		if !ok {
 			return httpx.BadCursor()
 		}
 	}
