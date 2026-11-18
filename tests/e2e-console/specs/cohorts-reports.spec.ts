@@ -166,7 +166,12 @@ test("a signed report verifies in a browser without a session, until its link is
       r.waitForEvent("download"),
       r.getByRole("button", { name: "Download JSON" }).click(),
     ]);
-    const file = JSON.parse(readFileSync((await download.path()) ?? "", "utf8")) as {
+    // saveAs, not path(): with the browsers in their own container
+    // (tests/fixtures/browserbox) the download lives there, and saveAs
+    // streams it to this machine
+    const saved = test.info().outputPath("signed-report.json");
+    await download.saveAs(saved);
+    const file = JSON.parse(readFileSync(saved, "utf8")) as {
       report: { project: { id: string }; period: { from: string; to: string } };
       signature: { scheme: string; signer: string };
     };
