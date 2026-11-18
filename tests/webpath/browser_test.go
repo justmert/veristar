@@ -60,13 +60,43 @@ type siteRun struct {
 	Site    exampleSite
 	Version string
 	Build   string
+	// SendTitle builds the snippet with data-send-title="true"
+	SendTitle bool
+}
+
+// currentTracker is the current tracker release, the version of
+// packages/tracker, as tests/e2e/sites.ts reads it. the browser checks run
+// the release a tenant copies today.
+func currentTracker(t testing.TB) string {
+	t.Helper()
+	dir := filepath.Join(repoRoot(), "packages", "tracker")
+	var pkg struct{ Version string }
+	var manifest struct{ Versions []struct{ Version string } }
+	for path, v := range map[string]any{"package.json": &pkg, filepath.Join("releases", "manifest.json"): &manifest} {
+		b, err := os.ReadFile(filepath.Join(dir, path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(b, v); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+	}
+	for _, r := range manifest.Versions {
+		if r.Version == pkg.Version {
+			return pkg.Version
+		}
+	}
+	t.Fatalf("tracker %s of packages/tracker is not in the release manifest", pkg.Version)
+	return ""
 }
 
 func startBrowsers(t testing.TB, upstream string) *Browsers {
 	t.Helper()
 	runs := make([]siteRun, 0, len(allSites))
+	version := currentTracker(t)
 	for _, s := range allSites {
-		runs = append(runs, siteRun{Site: s, Version: "1.0.0", Build: "build"})
+		// astro opts in to the title, as in tests/e2e/sites.ts
+		runs = append(runs, siteRun{Site: s, Version: version, Build: "build", SendTitle: s == siteAstro})
 	}
 	return startBrowsersWith(t, upstream, runs)
 }
@@ -101,7 +131,7 @@ func startBrowsersWith(t testing.TB, upstream string, runs []siteRun) *Browsers 
 		s := r.Site
 		b.spawn(t, s.Key, repoRoot(), []string{"sh", "-c", "pnpm --filter " + s.Pkg + " " + r.Build + " && pnpm --filter " + s.Pkg + " start"},
 			"SA_SITE_ID="+s.ID, "SA_TRACKER_VERSION="+r.Version, "SA_GATEWAY_ORIGIN=https://"+gatewayHost,
-			"SA_PUBLIC_HOST="+s.Host, fmt.Sprintf("PORT=%d", s.Port), "HOST=127.0.0.1")
+			"SA_PUBLIC_HOST="+s.Host, fmt.Sprintf("PORT=%d", s.Port), "HOST=127.0.0.1", fmt.Sprintf("SA_SEND_TITLE=%t", r.SendTitle))
 	}
 	for _, r := range runs {
 		waitHTTP(t, fmt.Sprintf("http://127.0.0.1:%d/", r.Site.Port), 4*time.Minute)
