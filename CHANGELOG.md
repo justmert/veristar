@@ -149,6 +149,10 @@ here, before they take effect, as the processing terms require
   other mutating tenant route does.
 - An operator's cohort confirm copies exactly the proposal its audit row
   names, also when the project changes its proposal at the same moment.
+- The operator project lists, compares, "What SCF sees" and the machine
+  metrics API answer when one project's request counts over the range pass
+  the 64-bit limit: its sums stop at that limit and its percentiles come
+  from scaled buckets. Such a project failed the whole list with 500.
 - Operator routes and the machine metrics API answer 400 `invalid_query` or
   `invalid_cursor` for a query value or cursor key that holds a nul
   character, invalid UTF-8, a uuid in another form or a year 0 date; they
