@@ -162,7 +162,7 @@ describe("operator project page", () => {
     expect(host.querySelector("a[href*='/operator/audit?tenant_id=']")).not.toBeNull();
   });
 
-  it("lists many sites as short rows with their checks in words", async () => {
+  it("lists many sites in a paged table with their checks in words", async () => {
     const site = f.operatorDetailBody.sites[0];
     const sites = Array.from({ length: 30 }, (_, i) => ({
       ...site,
@@ -174,17 +174,18 @@ describe("operator project page", () => {
     }));
     routeFetch(detailRoutes({ ...f.operatorDetailBody, sites }));
     const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
-    await waitFor(() => expect(host.querySelectorAll("article[data-site]")).toHaveLength(10));
+    await waitFor(() => expect(host.querySelectorAll("table tr[data-site]")).toHaveLength(10));
     const second = host.querySelector(
-      "[data-site='0193a6f6-5555-7e66-bf77-000000000001']",
+      "table [data-site='0193a6f6-5555-7e66-bf77-000000000001']",
     ) as HTMLElement;
     expect(second.textContent).toContain("Domain not verified");
     expect(second.querySelector("[data-fact=missing]")).not.toBeNull();
     const evidence = host.querySelector("[data-evidence=domain]") as HTMLElement;
     expect(evidence.dataset.signal).toBe("partial");
     expect(evidence.textContent).toContain("1 of 30 sites verified");
-    await click(byRole(host, "button", "Show all 30 sites"));
-    expect(host.querySelectorAll("article[data-site]")).toHaveLength(30);
+    expect(host.textContent).toContain("1 to 10 of 30");
+    await click(host.querySelector('button[aria-label="Checks of s1.example.org"]') as HTMLElement);
+    await waitFor(() => expect(host.textContent).toContain("Checks of s1.example.org"));
   });
 
   it("removes through the menu with a reason and the typed slug", async () => {

@@ -3,6 +3,7 @@ import { cn } from "@veristar/brand/cn";
 import {
   ArrowRight,
   Check,
+  CircleAlert,
   CircleCheck,
   CircleDashed,
   CirclePause,
@@ -16,9 +17,10 @@ import { type ReactNode, useId, useLayoutEffect, useRef, useState } from "react"
 import { Link, useParams } from "react-router";
 import { api } from "@/api/endpoints";
 import { auditQuery, operatorTenantQuery } from "@/api/queries";
-import type { OperatorSite, OperatorTenantDetail, TenantAction } from "@/api/schemas";
+import type { OperatorSite, OperatorTenantDetail, TenantAction, TenantStatus } from "@/api/schemas";
 import { OperatorCohortPanel } from "@/components/cohort";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { type Column, DataTable, useRowPages } from "@/components/data-table";
 import { DecisionPanel } from "@/components/decision-panel";
 import { Disclosure } from "@/components/disclosure";
 import { StellarTomlSummary, VerificationDetail } from "@/components/evidence";
@@ -29,7 +31,9 @@ import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
+import { Tooltip } from "@/components/ui/tooltip";
 import { isNotFound } from "@/lib/errors";
 import { formatCount, formatDate, formatDateTimeUtc } from "@/lib/format";
 import { outcomeLabel } from "@/lib/outcomes";
@@ -199,7 +203,7 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
             </DecisionSection>
           ) : null}
 
-          <Sites sites={detail.sites} decides={!removed} />
+          <Sites sites={detail.sites} decides={!removed} project={t.status} />
 
           {removed ? null : (
             <div className="flex min-w-0 flex-col gap-3">
@@ -472,11 +476,98 @@ function MoreActions({ detail }: { detail: OperatorTenantDetail }) {
 // first rows, then the rest on request
 const SITES_SHOWN = 10;
 
-function Sites({ sites, decides }: { sites: OperatorSite[]; decides: boolean }) {
-  const [all, setAll] = useState(false);
-  // sites that wait for a decision come first
+function Sites({
+  sites,
+  decides,
+  project,
+}: {
+  sites: OperatorSite[];
+  decides: boolean;
+  project: TenantStatus;
+}) {
+  const [open, setOpen] = useState<OperatorSite | null>(null);
+  // sites that wait for a decision come first, and each gets its decision
+  // above the table
   const ordered = [...sites].sort((a, b) => Number(b.in_review) - Number(a.in_review));
-  const shown = all ? ordered : ordered.slice(0, SITES_SHOWN);
+  const waiting = decides ? ordered.filter((s) => s.in_review) : [];
+  const paged = useRowPages(ordered, SITES_SHOWN);
+  const columns: Column<OperatorSite>[] = [
+    {
+      key: "site",
+      header: "Site",
+      primary: true,
+      minWidth: "min-w-48",
+      className: "w-full max-w-0",
+      truncate: (x) => `${x.name}, ${x.domain}`,
+      cell: (x) => (
+        <span className="flex min-w-0 flex-col py-1">
+          <span className="flex min-w-0 items-center gap-1 font-medium text-fg">
+            <span className="truncate">{x.name}</span>
+            {x.domain_previously_removed ? (
+              <Tooltip content="This domain, or a parent or subdomain of it, belonged to a removed project.">
+                <CircleAlert
+                  aria-label="Domain of a removed project"
+                  className="size-3.5 shrink-0 text-warning"
+                />
+              </Tooltip>
+            ) : null}
+          </span>
+          <span className="truncate font-mono text-caption font-normal text-fg-2">{x.domain}</span>
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      mobile: true,
+      cell: (x) => (
+        <StatusBadge
+          kind="site"
+          status={x.in_review ? "pending" : x.status}
+          project={project}
+          operator
+        />
+      ),
+    },
+    {
+      key: "domain",
+      header: "Domain check",
+      mobile: true,
+      minWidth: "min-w-40",
+      cell: (x) => <DomainFact site={x} />,
+    },
+    {
+      key: "toml",
+      header: "stellar.toml",
+      mobile: true,
+      minWidth: "min-w-40",
+      cell: (x) => <TomlFact site={x} />,
+    },
+    {
+      key: "origins",
+      header: "Origins",
+      align: "right",
+      numeric: true,
+      cell: (x) => formatCount(x.origins.length),
+    },
+    {
+      key: "details",
+      header: "Details",
+      align: "right",
+      action: true,
+      cell: (x) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="relative z-(--vs-layer-raised) max-lg:h-(--vs-control-touch)"
+          aria-label={`Checks of ${x.domain}`}
+          onClick={() => setOpen(x)}
+        >
+          Checks
+        </Button>
+      ),
+    },
+  ];
   return (
     <section aria-labelledby="sites-h" className="flex min-w-0 flex-col gap-3">
       <h2 id="sites-h" className="text-title text-fg">
@@ -485,29 +576,116 @@ function Sites({ sites, decides }: { sites: OperatorSite[]; decides: boolean }) 
           <span className="font-normal text-fg-2">({formatCount(sites.length)})</span>
         ) : null}
       </h2>
-      {sites.length === 0 ? (
-        <p className="text-small text-fg-2">The project has no site.</p>
-      ) : (
+      {waiting.length > 0 ? (
         <ul className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-raised">
-          {shown.map((s) => (
-            <li key={s.id} className="border-b border-line-subtle last:border-0">
-              <SiteRow site={s} decides={decides} />
+          {waiting.map((x) => (
+            <li key={x.id} className="border-b border-line-subtle last:border-0">
+              <SiteRow site={x} project={project} />
             </li>
           ))}
         </ul>
-      )}
-      {sites.length > SITES_SHOWN ? (
-        <Button
-          variant="outline"
-          size="sm"
-          className="self-start max-lg:h-(--vs-control-touch)"
-          aria-expanded={all}
-          onClick={() => setAll((v) => !v)}
-        >
-          {all ? `Show the first ${SITES_SHOWN}` : `Show all ${formatCount(sites.length)} sites`}
-        </Button>
       ) : null}
+      {sites.length === 0 ? (
+        <p className="text-small text-fg-2">The project has no site.</p>
+      ) : (
+        <DataTable<OperatorSite>
+          label="Sites"
+          columns={columns}
+          rows={paged.rows}
+          getRowKey={(x) => x.id}
+          rowLabel={(x) => x.name}
+          rowProps={(x) => ({ "data-site": x.id })}
+          footer={paged.footer}
+        />
+      )}
+      <Dialog
+        open={open !== null}
+        onOpenChange={(o) => {
+          if (!o) setOpen(null);
+        }}
+        title={open ? `Checks of ${open.domain}` : ""}
+      >
+        {open ? <SiteChecks site={open} /> : null}
+      </Dialog>
     </section>
+  );
+}
+
+function DomainFact({ site }: { site: OperatorSite }) {
+  return (
+    <SiteFact
+      state={
+        site.verification === "verified"
+          ? "ok"
+          : site.verification === "unchecked"
+            ? "absent"
+            : "missing"
+      }
+    >
+      {site.verification === "verified"
+        ? "Domain verified"
+        : site.verification === "unchecked"
+          ? "Domain not checked yet"
+          : "Domain not verified"}
+    </SiteFact>
+  );
+}
+
+function TomlFact({ site }: { site: OperatorSite }) {
+  const toml = site.stellar_toml?.status;
+  return (
+    <SiteFact state={toml === "found" ? "ok" : toml === undefined ? "absent" : "missing"}>
+      {toml === "found"
+        ? "stellar.toml found"
+        : toml === undefined
+          ? "stellar.toml not checked yet"
+          : "No stellar.toml"}
+    </SiteFact>
+  );
+}
+
+// the full checks of one site: the domain check, the stellar.toml, the
+// allowed origins and the reason of its status
+function SiteChecks({ site }: { site: OperatorSite }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-4 text-small">
+      {site.domain_previously_removed ? (
+        <p className="text-warning">
+          This domain, or a parent or subdomain of it, belonged to a removed project.
+        </p>
+      ) : null}
+      {site.status_reason ? (
+        <p className="break-words text-fg">
+          <span className="text-fg-2">Reason: </span>
+          {site.status_reason}
+        </p>
+      ) : null}
+      <VerificationDetail
+        verification={site.verification}
+        verifyMethod={site.verify_method}
+        verifiedAt={site.verified_at}
+        lastVerifyAt={site.last_verify_at}
+        lastVerifyError={site.last_verify_error}
+      />
+      <StellarTomlSummary
+        toml={site.stellar_toml}
+        checkedAt={site.stellar_toml_checked_at}
+        domain={site.domain}
+      />
+      <div className="flex flex-col gap-1">
+        <h3 className="text-caption text-fg-2">Allowed origins</h3>
+        <ul className="flex flex-wrap gap-1" aria-label="Allowed origins">
+          {site.origins.map((o) => (
+            <li
+              key={o}
+              className="rounded-sm border border-line px-1 font-mono text-caption break-all text-fg-2"
+            >
+              {o}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   );
 }
 
@@ -530,14 +708,13 @@ function SiteFact({ state, children }: { state: "ok" | "missing" | "absent"; chi
   );
 }
 
-// one row per site: name, domain, status, the domain check and the
-// stellar.toml in words. the full checks and origins open on request.
-function SiteRow({ site, decides }: { site: OperatorSite; decides: boolean }) {
-  const toml = site.stellar_toml?.status;
+// a site that waits for a decision: its name, its checks in words, the
+// full checks on request, and the decision
+function SiteRow({ site, project }: { site: OperatorSite; project: TenantStatus }) {
   return (
     <article
       aria-labelledby={`op-site-${site.id}`}
-      data-site={site.id}
+      data-review-site={site.id}
       className="flex min-w-0 flex-col gap-2 px-4 py-3 sm:px-5"
     >
       <div className="grid min-w-0 gap-x-4 gap-y-1 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
@@ -550,79 +727,22 @@ function SiteRow({ site, decides }: { site: OperatorSite; decides: boolean }) {
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-small text-fg-2">
-          {/* a site that waits for an operator reads as in review */}
-          <StatusBadge kind="site" status={site.in_review ? "pending" : site.status} operator />
-          <SiteFact
-            state={
-              site.verification === "verified"
-                ? "ok"
-                : site.verification === "unchecked"
-                  ? "absent"
-                  : "missing"
-            }
-          >
-            {site.verification === "verified"
-              ? "Domain verified"
-              : site.verification === "unchecked"
-                ? "Domain not checked yet"
-                : "Domain not verified"}
-          </SiteFact>
-          <SiteFact state={toml === "found" ? "ok" : toml === undefined ? "absent" : "missing"}>
-            {toml === "found"
-              ? "stellar.toml found"
-              : toml === undefined
-                ? "stellar.toml not checked yet"
-                : "No stellar.toml"}
-          </SiteFact>
+          <StatusBadge kind="site" status="pending" project={project} operator />
+          <DomainFact site={site} />
+          <TomlFact site={site} />
         </div>
       </div>
-      {site.domain_previously_removed ? (
-        <p className="text-small text-warning">
-          This domain, or a parent or subdomain of it, belonged to a removed project.
-        </p>
-      ) : null}
-      {site.status_reason ? (
-        <p className="text-small break-words text-fg">
-          <span className="text-fg-2">Reason: </span>
-          {site.status_reason}
-        </p>
-      ) : null}
       <Disclosure
         variant="inline"
         summary="Checks and allowed origins"
         className="text-small"
-        bodyClassName="flex flex-col gap-4 pt-3"
+        bodyClassName="pt-3"
       >
-        <div className="grid gap-4 md:grid-cols-2">
-          <VerificationDetail
-            verification={site.verification}
-            verifyMethod={site.verify_method}
-            verifiedAt={site.verified_at}
-            lastVerifyAt={site.last_verify_at}
-            lastVerifyError={site.last_verify_error}
-          />
-          <StellarTomlSummary
-            toml={site.stellar_toml}
-            checkedAt={site.stellar_toml_checked_at}
-            domain={site.domain}
-          />
-        </div>
-        <ul className="flex flex-wrap gap-1" aria-label="Allowed origins">
-          {site.origins.map((o) => (
-            <li
-              key={o}
-              className="rounded-sm border border-line px-1 font-mono text-caption break-all text-fg-2"
-            >
-              {o}
-            </li>
-          ))}
-        </ul>
+        <SiteChecks site={site} />
       </Disclosure>
-      {site.in_review && decides ? (
-        <div className="border-t border-line-subtle pt-3">
-          <DecisionPanel subject={{ kind: "site", id: site.id, name: site.domain }} />
-        </div>
-      ) : null}
+      <div className="border-t border-line-subtle pt-3">
+        <DecisionPanel subject={{ kind: "site", id: site.id, name: site.domain }} />
+      </div>
     </article>
   );
 }
