@@ -3,10 +3,10 @@ title: "Stellar Anchor Platform"
 description: "Request metrics from the Stellar Anchor Platform's SEP server and platform server, with the OpenTelemetry Java agent."
 ---
 
-Count the requests your SEP-6, SEP-10, SEP-12, SEP-24, SEP-31, SEP-38 and SEP-45 endpoints and your
-platform API serve, per route and status, without changing the Anchor Platform. The
-[Stellar Anchor Platform](https://github.com/stellar/anchor-platform) is a Spring Boot application
-on Java 17, so the OpenTelemetry Java agent instruments it when the JVM starts. Built from the
+Count the requests your anchor's SEP endpoints and platform API serve, per route and status,
+without changing the Anchor Platform. The
+[Stellar Anchor Platform](https://github.com/stellar/anchor-platform) is a Spring Boot application,
+so the OpenTelemetry Java agent instruments it when the JVM starts. Built from the
 example [`examples/otel-anchor-platform`](https://github.com/justmert/veristar/tree/main/examples/otel-anchor-platform): Anchor Platform 5.0.0
 (`stellar/anchor-platform`) with the OpenTelemetry Java agent 2.33.1. `TestAnchorPlatform` in
 `tests/otelapps` runs it against stock collectors. Read the [API quickstart](quickstart.md) first
@@ -139,7 +139,9 @@ rates and latency.
 ## Try it locally
 
 The example runs the SEP server and the platform server on PostgreSQL with SEP-1, SEP-10 and
-SEP-24 for native XLM. Generate a signing seed with any Stellar SDK or the Stellar CLI, then:
+SEP-24 for native XLM. Generate a signing seed with any Stellar SDK or the Stellar CLI. Set
+`TENANT_OTLP_ENDPOINT` to an OTLP/HTTP backend the containers reach (the value below is an
+example), or change `OTEL_TRACES_EXPORTER` in `compose.yaml` to `none`. Then:
 
 ```sh
 export ANCHOR_SEP10_SIGNING_SEED=S... ANCHOR_JWT_SECRET="$(openssl rand -hex 32)" \

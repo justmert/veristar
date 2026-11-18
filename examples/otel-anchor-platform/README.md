@@ -18,7 +18,7 @@ The Stellar Anchor Platform 5.0.0 (`stellar/anchor-platform`) with the OpenTelem
 | `ANCHOR_JWT_SECRET` | 32 bytes or more, required | the local anchor's SEP-10 and SEP-24 JWT secret |
 | `ANCHOR_DB_PASSWORD` | required | the local PostgreSQL password |
 
-The agent sends metrics only to `PLATFORM_OTLP_ENDPOINT` and traces only to `TENANT_OTLP_ENDPOINT`. Set `OTEL_TRACES_EXPORTER` to `none` when the anchor keeps no traces.
+The agent sends metrics only to `PLATFORM_OTLP_ENDPOINT` and traces only to `TENANT_OTLP_ENDPOINT`. When the anchor keeps no traces, change `OTEL_TRACES_EXPORTER` in `compose.yaml` to `none`.
 
 `tests/otelapps` runs this file against stock collectors (`go test -tags otelapps -run TestAnchorPlatform ./tests/otelapps/`): it creates SEP-24 deposits, reads them through the SEP and platform APIs and checks every route and status that reaches the platform stand-in.
 
