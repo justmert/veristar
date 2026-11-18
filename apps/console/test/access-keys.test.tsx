@@ -171,6 +171,9 @@ describe("access keys", () => {
     );
     expect(host.querySelector("[data-usage=rejected]")?.textContent).toBe("2");
     expect(calls.some((x) => x.url === `/api/operator/api-keys/${f.KEY_ID}/usage`)).toBe(true);
+    // the row menu opens again with the usage open
+    await openMenu(host.querySelector('button[aria-label="Actions for warehouse"]') as HTMLElement);
+    await waitFor(() => expect(menuItem("Revoke")).toBeTruthy());
   });
 });
 
