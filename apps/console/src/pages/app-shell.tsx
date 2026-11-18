@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { cn } from "@veristar/brand/cn";
 import { Mark } from "@veristar/brand/mark";
 import { Menu as MenuIcon, Search, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -10,6 +11,7 @@ import { CommandPalette, isPaletteKey } from "@/components/command-palette";
 import { FormMessage } from "@/components/error-panel";
 import { PageMotion } from "@/components/motion";
 import { areaOf, pageTitle } from "@/components/nav/nav-items";
+import { useOperatorAdmin } from "@/components/nav/operator-role";
 import { AlertsBadge, Sidebar } from "@/components/nav/sidebar";
 import { Kbd } from "@/components/panel";
 import { Toaster, toast } from "@/components/toast";
@@ -21,12 +23,10 @@ import { isNotFound } from "@/lib/errors";
 import { queryClient } from "@/query-client";
 
 // the signed-in frame: the sidebar on a wide screen, a top bar with the
-// page title and a drawer on a phone, the toasts, the command palette
-// (ctrl k) and, on operator pages while a paging alert fires, a note that
-// links to Alerts. the note sits in the row of the Go to button (on a phone,
-// a badge in the top bar), a row that is always there: the page never
-// moves down when the note arrives. the page settles in when the route
-// changes.
+// context and a drawer on a phone, the toasts and the command palette
+// (ctrl k). firing alerts are signalled by the Alerts badge in the sidebar
+// (on a phone, a badge in the top bar), for operator admins only; nothing
+// is drawn above the page title. the page settles in when the route changes.
 export function AppShell() {
   const me = useQuery(meQuery);
   const navigate = useNavigate();
@@ -133,7 +133,6 @@ export function AppShell() {
 
         <div className="flex min-w-0 flex-col">
           <div className="hidden min-h-12 items-start justify-end gap-4 px-6 pt-4 lg:flex xl:px-10">
-            {operatorArea && pathname !== "/operator/alerts" ? <OperatorAlertLine /> : null}
             <Button
               variant="ghost"
               size="sm"
@@ -168,47 +167,25 @@ export function AppShell() {
   );
 }
 
-// the paging (critical) alerts while any fires, read only once the session
-// holds a step-up, as the operator area does. not on Alerts itself
-function useCriticalAlerts() {
-  const stepUp = useQuery(stepUpQuery);
-  const live = stepUp.data?.stepped_up === true;
-  const alerts = useQuery({ ...operatorAlertsQuery, enabled: live });
-  const current = live && !alerts.error ? alerts.data : undefined;
-  return current ? current.alerts.filter((a) => criticalCount([a]) === 1) : [];
-}
-
-function OperatorAlertLine() {
-  const critical = useCriticalAlerts().length;
-  if (critical === 0) return null;
-  return (
-    <div
-      role="alert"
-      className="mr-auto flex h-(--vs-control-sm) min-w-0 animate-fade-in items-center gap-2 rounded-md border border-critical-line bg-raised px-3 text-small text-fg"
-    >
-      <TriangleAlert aria-hidden className="size-4 shrink-0 text-critical" />
-      <span className="min-w-0 truncate">
-        {critical === 1 ? "1 critical alert is firing." : `${critical} critical alerts are firing.`}
-      </span>
-      <Link
-        to="/operator/alerts"
-        className="shrink-0 rounded-sm font-medium text-fg underline decoration-line-strong underline-offset-4 hover:decoration-fg focus-ring"
-      >
-        Open alerts
-      </Link>
-    </div>
-  );
-}
-
-// the same on a phone: a button with the count in the top bar
+// on a phone, the firing alerts as a badge in the top bar, for operator
+// admins once the session holds a step-up. not on Alerts itself
 function OperatorAlertButton() {
-  const critical = useCriticalAlerts();
-  if (critical.length === 0) return null;
+  const stepUp = useQuery(stepUpQuery);
+  const admin = useOperatorAdmin() === true;
+  const live = stepUp.data?.stepped_up === true && admin;
+  const alerts = useQuery({ ...operatorAlertsQuery, enabled: live });
+  const firing = live && !alerts.error ? (alerts.data?.alerts ?? []) : [];
+  if (firing.length === 0) return null;
   return (
-    <Button asChild variant="ghost" size="lg" className="gap-1 px-2 text-critical">
+    <Button
+      asChild
+      variant="ghost"
+      size="lg"
+      className={cn("gap-1 px-2", criticalCount(firing) > 0 ? "text-critical" : "text-warning")}
+    >
       <Link to="/operator/alerts">
         <TriangleAlert aria-hidden />
-        <AlertsBadge alerts={critical} />
+        <AlertsBadge alerts={firing} />
         <span className="sr-only">Open alerts</span>
       </Link>
     </Button>

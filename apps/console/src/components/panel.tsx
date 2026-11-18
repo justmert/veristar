@@ -1,5 +1,6 @@
 import { cn } from "@veristar/brand/cn";
-import type { ReactNode } from "react";
+import { type ReactNode, useId } from "react";
+import { formatCount } from "@/lib/format";
 
 // a raised surface with an optional header. raised = border only; depth
 // comes from the overlay surface, never from a shadow on a card.
@@ -12,6 +13,7 @@ export function Panel({
   bodyClassName,
   as: As = "section",
   flush = false,
+  rows = false,
   ...rest
 }: {
   title?: ReactNode;
@@ -23,6 +25,9 @@ export function Panel({
   as?: "section" | "div" | "article";
   // the body has no padding: a table or a list runs to the panel's edge
   flush?: boolean;
+  // the body is a list of rows: each child is one row, split from the next
+  // by a divider, never a bordered card of its own (no box in a box)
+  rows?: boolean;
 } & Omit<React.HTMLAttributes<HTMLElement>, "title">) {
   return (
     <As
@@ -40,8 +45,10 @@ export function Panel({
       ) : null}
       <div
         className={cn(
-          flush ? "" : "px-4 pb-4 sm:px-5",
-          !title && !actions && !flush && "pt-4",
+          flush ? "" : rows ? "px-4 pb-1 sm:px-5" : "px-4 pb-4 sm:px-5",
+          !title && !actions && !flush && !rows && "pt-4",
+          rows && "flex flex-col divide-y divide-line-subtle [&>*]:py-3",
+          rows && (title || actions) && "[&>*:first-child]:pt-0",
           bodyClassName,
         )}
       >
@@ -74,5 +81,60 @@ export function Kbd({ children }: { children: ReactNode }) {
     <kbd className="inline-flex h-5 min-w-5 items-center justify-center whitespace-nowrap rounded-sm align-middle border border-line-strong px-1 text-axis text-fg-3">
       {children}
     </kbd>
+  );
+}
+
+// a section of a page: its heading is the section's name, with the count of
+// its items as a muted number ("Members 3"), and its actions at the right.
+// a page with one table gives it no heading at all.
+export function Section({
+  title,
+  count,
+  actions,
+  children,
+  className,
+  ...data
+}: {
+  title: ReactNode;
+  count?: number | null;
+  actions?: ReactNode;
+  children?: ReactNode;
+  className?: string;
+  [attr: `data-${string}`]: string | undefined;
+}) {
+  const id = useId();
+  return (
+    <section
+      aria-labelledby={id}
+      className={cn("flex min-w-0 flex-col gap-3", className)}
+      {...data}
+    >
+      <div className="flex min-h-(--vs-control-sm) flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <SectionTitle id={id} title={title} count={count} />
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export function SectionTitle({
+  id,
+  title,
+  count,
+  className,
+}: {
+  id?: string;
+  title: ReactNode;
+  count?: number | null;
+  className?: string;
+}) {
+  return (
+    <h2 id={id} className={cn("flex items-baseline gap-2 text-title text-fg", className)}>
+      {title}
+      {count !== undefined && count !== null ? (
+        <span className="font-normal text-fg-3 tabular">{formatCount(count)}</span>
+      ) : null}
+    </h2>
   );
 }

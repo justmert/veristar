@@ -1,7 +1,7 @@
 import { cn } from "@veristar/brand/cn";
 import { transition } from "@veristar/brand/motion";
 import { LayoutGroup, motion } from "motion/react";
-import { useId } from "react";
+import { type ReactNode, useId } from "react";
 
 // a single choice among a few (a date range, a breakdown). arrow keys move
 // the choice, as in a native radio group; the marker slides to it.
@@ -13,15 +13,19 @@ export function Segmented<T extends string>({
   hint,
   className,
   size = "sm",
+  iconOnly = false,
 }: {
   label: string;
   value: T;
-  options: readonly { value: T; label: string }[];
+  // with `iconOnly`, an option shows its icon and its label is its
+  // accessible name only
+  options: readonly { value: T; label: string; icon?: ReactNode }[];
   onChange: (v: T) => void;
   // a note after the control, e.g. the resolution the range implies
   hint?: string;
   className?: string;
   size?: "sm" | "md";
+  iconOnly?: boolean;
 }) {
   const group = useId();
   function key(e: React.KeyboardEvent, i: number) {
@@ -58,11 +62,13 @@ export function Segmented<T extends string>({
                 type="button"
                 role="radio"
                 aria-checked={on}
+                aria-label={iconOnly ? o.label : undefined}
+                title={iconOnly ? o.label : undefined}
                 tabIndex={on ? 0 : -1}
                 onClick={() => onChange(o.value)}
                 onKeyDown={(e) => key(e, i)}
                 className={cn(
-                  "relative inline-flex items-center rounded-sm px-2 font-medium whitespace-nowrap transition-colors duration-(--vs-duration-reveal) ease-standard focus-ring",
+                  "relative inline-flex items-center justify-center rounded-sm px-2 font-medium [&_svg]:size-4 whitespace-nowrap transition-colors duration-(--vs-duration-reveal) ease-standard focus-ring",
                   size === "sm" ? "h-7 text-small" : "h-8 text-body",
                   on ? "text-fg" : "text-fg-2 hover:text-fg",
                 )}
@@ -75,7 +81,9 @@ export function Segmented<T extends string>({
                     className="absolute inset-0 rounded-sm bg-selected"
                   />
                 ) : null}
-                <span className="relative">{o.label}</span>
+                <span className="relative flex items-center">
+                  {iconOnly && o.icon ? o.icon : o.label}
+                </span>
               </button>
             );
           })}

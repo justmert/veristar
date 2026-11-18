@@ -20,6 +20,38 @@ async function press(el: Element, key: string) {
   });
 }
 
+describe("time chart, sparse data", () => {
+  it("shows the first data at its time instead of an axis with one bar", async () => {
+    const host = await render(
+      <TimeChart
+        title="Page views"
+        state="data"
+        buckets={buckets}
+        series={[{ key: "views", label: "Page views", tone: "series-1", values: [0, 0, 79] }]}
+      />,
+    );
+    const first = host.querySelector("[data-first-data]");
+    expect(first?.getAttribute("data-first-data")).toBe("2026-11-18T00:00:00Z");
+    expect(first?.textContent).toContain("Nov 18, 2026");
+    expect(first?.textContent).toContain("79");
+    expect(host.querySelector("[role=group]")).toBeNull();
+  });
+
+  it("starts a line at its first value, not with a rise from zero", async () => {
+    const host = await render(
+      <TimeChart
+        title="Visitors"
+        kind="line"
+        state="data"
+        buckets={[...buckets, { at: "2026-11-19T00:00:00Z", label: "Nov 19", tick: "Nov 19" }]}
+        series={[{ key: "v", label: "Visitors", tone: "series-1", values: [0, 0, 4, 6] }]}
+      />,
+    );
+    const line = host.querySelector("polyline[data-series=v]");
+    expect(line?.getAttribute("points")?.split(" ")).toHaveLength(2);
+  });
+});
+
 describe("time chart", () => {
   it("shows a loading state and keeps the title", async () => {
     const host = await render(

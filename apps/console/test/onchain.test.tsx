@@ -349,9 +349,9 @@ describe("on-chain first step", () => {
 });
 
 describe("weekly active accounts list", () => {
-  it("lists no week when the range holds none", async () => {
+  it("draws nothing when the range holds no counted week", async () => {
     const host = await render(<WeeklyActiveList weeks={[]} label="Weeks" />);
-    expect(host.textContent).toBe("No complete ISO week in this range.");
+    expect(host.textContent).toBe("");
   });
 });
 
@@ -815,12 +815,11 @@ describe("calls per contract function (contract 15.8)", () => {
     expect(host.textContent).not.toContain("Daily calls");
   });
 
-  it("says an unverified contract's calls do not count", async () => {
+  it("draws nothing for an unverified contract, whose calls do not count", async () => {
     const id = onchainView.parse(viewBody).ids[1];
     if (!id) throw new Error("no id");
     const host = await render(<ContractFunctionsBlock id={id} />);
-    expect(host.textContent).toContain("Calls per function show when the contract is verified");
-    expect(host.querySelector("table")).toBeNull();
+    expect(host.textContent).toBe("");
   });
 
   it("loads the daily calls from the tenant route and links the export", async () => {
