@@ -598,6 +598,24 @@ func TestErasure(t *testing.T) {
 			require.NotContains(t, string(r.body), ipA)
 			require.NotContains(t, string(r.body), uaA)
 		}
+		// a site in review never got its umami websites: it holds no web
+		// data, and the request answers as the contract says instead of
+		// running against websites that do not exist
+		pending := uuid.New()
+		require.NoError(t, e.d.WithSystem(ctx, func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, `insert into cp.sites (id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token)
+				values ($1, $2, 'review', 'review.example', '{https://review.example}', $3, 'pending', 'x')`, pending, e.tenant, uuid.New())
+			return err
+		}))
+		for _, body := range []map[string]any{
+			{"kind": "site_reset", "site_id": pending, "confirm_domain": "review.example"},
+			{"kind": "session", "site_id": pending, "session_id": uuid.NewString()},
+		} {
+			r := e.owner.call(t, http.MethodPost, e.path(), body)
+			require.Equal(t, http.StatusServiceUnavailable, r.status, "%v: %s", body["kind"], r.body)
+			require.Equal(t, "provisioning_pending", r.code(t))
+		}
+		require.Zero(t, e.count(t, `select count(*) from cp.erasure_requests where site_id = $1`, pending))
 	})
 
 	t.Run("visitor today", func(t *testing.T) {
@@ -844,4 +862,11 @@ func (e *env) natsDump(t *testing.T) string {
 		}
 	}
 	return b.String()
+}
+
+func (e *env) count(t *testing.T, q string, args ...any) int {
+	t.Helper()
+	var n int
+	require.NoError(t, e.d.WithSystem(t.Context(), func(tx pgx.Tx) error { return tx.QueryRow(t.Context(), q, args...).Scan(&n) }))
+	return n
 }
