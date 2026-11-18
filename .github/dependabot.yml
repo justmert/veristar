@@ -26,8 +26,9 @@ updates:
     # 24 against engines node 26 with engineStrict, and it never writes pnpm
     # overrides for a transitive package. no option here changes either, so
     # the alerts are patched by hand (docs/runbooks/security-patch.md,
-    # section 4, npm packages)
-    directories: ["/", "/examples/otel-node-express"]
+    # section 4, npm packages). the docusaurus and vitepress examples sit
+    # outside the workspace with lockfiles of their own
+    directories: ["/", "/examples/otel-node-express", "/examples/docusaurus", "/examples/vitepress"]
     schedule: { interval: weekly, day: monday }
     groups:
       npm:
