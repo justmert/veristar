@@ -12,14 +12,15 @@ export type Freshness = {
 };
 
 // the title row of every console page, one anatomy everywhere: the title,
-// one line of purpose, the facts of the object as a key-value row, the
-// freshness of its numbers, and the actions pinned top right. the one
-// primary action (the accent button) goes in `primary`; everything else in
-// `secondary`. no tabs: the sidebar lists every page.
+// the freshness of its numbers in a slot of fixed height right under it,
+// an optional line of purpose (only when it says what the title does not),
+// the facts of the object as a key-value row, and the actions pinned top
+// right. the one primary action (the accent button) goes in `primary`;
+// everything else in `secondary`. no tabs: the sidebar lists every page.
 //
-// `freshness`: leave it out on a page without numbers. `null` while the
-// numbers load (or failed) keeps the line's height, so nothing moves when
-// the time arrives.
+// the freshness slot keeps its height on every page, with a time or
+// without (a page without numbers, numbers that load or failed), so titles
+// and content start at the same height everywhere.
 export function PageHeader({
   title,
   description,
@@ -61,6 +62,11 @@ export function PageHeader({
           </h1>
           {meta}
         </div>
+        {freshness ? (
+          <FreshnessLine freshness={freshness} />
+        ) : (
+          <span aria-hidden className="h-4" data-freshness-pending="" />
+        )}
         {description ? <p className="max-w-prose text-body text-fg-2">{description}</p> : null}
         {details?.length ? (
           <dl className="flex flex-wrap gap-x-6 gap-y-1 text-small">
@@ -71,11 +77,6 @@ export function PageHeader({
               </div>
             ))}
           </dl>
-        ) : null}
-        {freshness ? (
-          <FreshnessLine freshness={freshness} />
-        ) : freshness === null ? (
-          <span aria-hidden className="h-4" data-freshness-pending="" />
         ) : null}
       </div>
       {actions ? (
@@ -92,7 +93,7 @@ function FreshnessLine({ freshness }: { freshness: Freshness }) {
   const text = formatUpdated(freshness.at);
   const iso = freshness.at instanceof Date ? freshness.at.toISOString() : freshness.at;
   const line = (
-    <time dateTime={iso} className="w-fit text-caption text-fg-2" data-freshness="">
+    <time dateTime={iso} className="block h-4 w-fit text-caption text-fg-2" data-freshness="">
       {text}
     </time>
   );
