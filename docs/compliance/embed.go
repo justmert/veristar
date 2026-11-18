@@ -1,5 +1,5 @@
-// Package compliance embeds the compliance documents the control plane
-// serves, so the text a tenant accepts is the text in the binary.
+// Package compliance embeds the terms of use the control plane serves, so
+// the text a project accepts is the text in the binary.
 package compliance
 
 import _ "embed"
