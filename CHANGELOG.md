@@ -40,9 +40,9 @@ here, before they take effect, as the processing terms require
   [docs/onboarding/web/vitepress.md](docs/onboarding/web/vitepress.md),
   [docs/onboarding/web/mintlify.md](docs/onboarding/web/mintlify.md)). The
   examples `examples/docusaurus` (Docusaurus 3.10.2), `examples/vitepress`
-  (VitePress 1.6.4 on Vite 6.4.6 through an npm override) and `examples/mintlify` (Mintlify's local preview, CLI
-  4.3.49) run in the browser test matrix and in the real-gateway browser
-  test.
+  (VitePress 1.6.4 on Vite 6.4.6 through an npm override) and
+  `examples/mintlify` (Mintlify's local preview, CLI 4.3.49) run in the
+  browser test matrix and in the real-gateway browser test.
 
 ## [0.4.0] - 2026-11-18
 
