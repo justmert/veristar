@@ -66,7 +66,7 @@ test("an owner declares an account and gets a challenge to prove it", async () =
   const message = page.locator("pre", { hasText: "Veristar ownership proof" });
   await expect(message).toContainText(`(${tenant.id})`);
   await expect(message).toContainText(`Account: ${ACCOUNT}`);
-  await expect(page.getByText("Or publish a data entry")).toBeVisible();
+  await expect(page.getByText("Publish a data entry")).toBeVisible();
 
   // the view keeps a day without a stored row as missing with its reason
   const view = await api<{
@@ -109,15 +109,14 @@ test("an owner declares an account and gets a challenge to prove it", async () =
   }
   expect(weekly.body.totals.weekly_active_accounts.average).toBeNull();
   expect(weekly.body.totals.weekly_active_accounts.weeks_missing).toBe(weekly.body.weeks.length);
-  // the on-chain page shows every week of its default range with its
-  // reason, and the summary says that none was counted
+  // the on-chain page shows every week of its default range and why it
+  // has no count, and the summary says that none was counted
   await page.goto(`${APP}/projects/${tenant.id}/onchain`);
   await expect(page.getByRole("heading", { name: "Weekly active accounts" })).toBeVisible();
   const weeks = page.getByRole("list", { name: "Weekly active accounts per ISO week" });
   await expect(weeks.locator("[data-week]")).toHaveCount(weekly.body.weeks.length);
-  await expect(
-    weeks.locator("[data-week]").first().locator("[data-missing]").first(),
-  ).toBeAttached();
+  // every week misses for one reason, so the reason shows once under them
+  await expect(weeks.locator("xpath=..").locator("p[data-missing]")).toBeVisible();
   await expect(weeks.locator("[data-week]").first()).not.toContainText(/\b0\b/);
   await expect(page.getByTestId("waa-summary")).toContainText("No complete week counted");
   // the project has no verified id, so its activity counts nothing yet
