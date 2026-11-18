@@ -82,7 +82,12 @@ grant select on cp.scf_award_imports, cp.scf_awards to cp_operator;
 alter table cp.tenant_cohorts
   add column proposed_source text check (proposed_source in ('member', 'scf_import')),
   add column scf_award_id uuid references cp.scf_awards (id);
+-- the migration runs as platform_owner, which forced row-level security
+-- would hide every cohort row from; the force is lifted for the backfill
+-- only and restored before the migration commits
+alter table cp.tenant_cohorts no force row level security;
 update cp.tenant_cohorts set proposed_source = 'member' where proposed_at is not null;
+alter table cp.tenant_cohorts force row level security;
 alter table cp.tenant_cohorts
   add constraint tenant_cohorts_proposal_source_check check ((proposed_at is null) = (proposed_source is null));
 create index tenant_cohorts_scf_award_idx on cp.tenant_cohorts (scf_award_id);
