@@ -17,17 +17,16 @@ import {
 } from "@/api/mcp";
 import { CodeBlock, CopyField } from "@/components/code-block";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { type Column, DataTable } from "@/components/data-table";
 import { FormMessage } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
-import { Stagger, StaggerItem } from "@/components/motion";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
 import { SecretPanel } from "@/components/secret-panel";
-import { EmptyState, ErrorState } from "@/components/states";
+import { Missing } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDateTimeUtc } from "@/lib/format";
 import { siblingUrl } from "@/lib/hosts";
@@ -114,6 +113,7 @@ export function AiPage() {
           ) : canCreate ? (
             <McpKeyCreateForm
               label="Create an access key"
+              takenNames={(list.data ?? []).filter((c) => c.status === "active").map((c) => c.name)}
               create={(b) => mcpApi.createTenantKey(tenant.id, b)}
               onCreated={(k) => {
                 qc.invalidateQueries({ queryKey: mcpKeys.tenant(tenant.id) });
@@ -125,21 +125,21 @@ export function AiPage() {
               You can still revoke the keys below.
             </Notice>
           )}
-          <div className="rounded-lg border border-line bg-raised">
-            <CredentialSection
-              list={list}
-              canRevoke={(c) => isOwner || c.user_id === me.user.id}
-              revoke={(c) => mcpApi.revokeTenantCredential(tenant.id, c.id)}
-              invalidate={() => qc.invalidateQueries({ queryKey: mcpKeys.tenant(tenant.id) })}
-            />
-          </div>
+          <CredentialSection
+            list={list}
+            canRevoke={(c) => isOwner || c.user_id === me.user.id}
+            revoke={(c) => mcpApi.revokeTenantCredential(tenant.id, c.id)}
+            invalidate={() => qc.invalidateQueries({ queryKey: mcpKeys.tenant(tenant.id) })}
+          />
         </section>
       </div>
     </div>
   );
 }
 
-// the list states: loading rows, error, empty, rows
+// keys and connections in the same table form as the api tokens: name,
+// status, created, ends, last used, revoke. the table draws the loading,
+// error and empty states.
 export function CredentialSection({
   list,
   canRevoke,
@@ -151,41 +151,134 @@ export function CredentialSection({
   revoke: (c: McpCredential) => Promise<void>;
   invalidate: () => void;
 }) {
-  if (list.isPending)
-    return (
-      <div role="status" aria-busy="true" className="flex flex-col">
-        <span className="sr-only">Loading keys</span>
-        {[0, 1].map((i) => (
-          <div
-            key={i}
-            aria-hidden
-            className="flex flex-col gap-2 border-b border-line-subtle px-4 py-3 last:border-b-0"
+  const [revoking, setRevoking] = useState<McpCredential | null>(null);
+  const m = useMutation({
+    mutationFn: (c: McpCredential) => revoke(c),
+    onSuccess: (_, c) => {
+      setRevoking(null);
+      toast.success(`${c.name} is revoked.`);
+      invalidate();
+    },
+  });
+  const columns: Column<McpCredential>[] = [
+    {
+      key: "name",
+      header: "Name",
+      primary: true,
+      minWidth: "min-w-56",
+      className: "w-full max-w-0",
+      truncate: (c) => c.name,
+      cell: (c) => (
+        <span className="flex min-w-0 flex-col py-1">
+          <span className="truncate font-medium text-fg">{c.name}</span>
+          <span className="truncate text-caption font-normal text-fg-2">
+            {c.kind === "key" ? "Access key" : "Connector"}
+            {c.prefix ? <code className="ml-2 font-mono">{c.prefix}...</code> : null}
+            {c.display_name ? `, acts as ${c.display_name}` : ""}
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      mobile: true,
+      cell: (c) => <StatusBadge kind="key" status={c.status} />,
+    },
+    {
+      key: "created",
+      header: "Created",
+      cell: (c) => (
+        <span className="whitespace-nowrap text-fg-2">{formatDateTimeUtc(c.created_at)}</span>
+      ),
+    },
+    {
+      key: "ends",
+      header: "Ends",
+      minWidth: "min-w-44",
+      cell: (c) => <span className="text-fg-2">{credentialEnd(c)}</span>,
+    },
+    {
+      key: "used",
+      header: "Last used",
+      mobile: true,
+      cell: (c) =>
+        c.last_seen_at ? (
+          <span className="whitespace-nowrap text-fg-2">{formatDateTimeUtc(c.last_seen_at)}</span>
+        ) : (
+          <Missing reason={NOT_USED} />
+        ),
+    },
+    {
+      key: "action",
+      header: "Actions",
+      align: "right",
+      mobile: true,
+      cell: (c) =>
+        c.status === "active" && canRevoke(c) ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="relative z-(--vs-layer-raised) max-lg:h-(--vs-control-touch)"
+            onClick={() => {
+              m.reset();
+              setRevoking(c);
+            }}
           >
-            <Skeleton className="h-4 w-1/3" />
-            <Skeleton className="h-3 w-2/3" />
-          </div>
-        ))}
-      </div>
-    );
-  if (list.error)
-    return (
-      <div className="p-4">
-        <ErrorState
-          error={list.error}
-          onRetry={() => list.refetch()}
-          compact
-          className="border-0"
-        />
-      </div>
-    );
+            Revoke
+          </Button>
+        ) : null,
+    },
+  ];
   return (
-    <CredentialList
-      items={list.data ?? []}
-      canRevoke={canRevoke}
-      revoke={revoke}
-      invalidate={invalidate}
-    />
+    <>
+      <DataTable<McpCredential>
+        label="MCP keys and connections"
+        columns={columns}
+        rows={list.data ?? []}
+        getRowKey={(c) => c.id}
+        rowLabel={(c) => c.name}
+        rowProps={(c) => ({ "data-credential-id": c.id })}
+        state={list.isPending ? "loading" : list.error ? "error" : "data"}
+        error={list.error}
+        onRetry={() => list.refetch()}
+        loadingRows={2}
+        empty={{
+          title: "No key or connection yet",
+          text: "Create an access key, or connect a client through sign-in.",
+        }}
+      />
+      <ConfirmDialog
+        open={revoking !== null}
+        onOpenChange={(o) => {
+          if (!o) setRevoking(null);
+        }}
+        title={`Revoke ${revoking?.name ?? "the key"}?`}
+        description="The next request of this client is refused. You cannot restore it. Make a new one instead."
+        confirmLabel="Revoke"
+        pendingLabel="Revoking"
+        pending={m.isPending}
+        error={m.error}
+        onConfirm={() => revoking && m.mutate(revoking)}
+      />
+    </>
   );
+}
+
+// one wording for a credential that never sent a request, on this page and
+// on Connect API
+export const NOT_USED = "Not used yet";
+
+// when a credential stops: revoked with the reason, expired, expires, or
+// kept alive by its client
+export function credentialEnd(c: McpCredential): string {
+  if (c.revoked_at)
+    return `Revoked ${formatDateTimeUtc(c.revoked_at)}${
+      c.revoked_reason ? `: ${REVOKED_REASON[c.revoked_reason] ?? c.revoked_reason}` : ""
+    }`;
+  if (c.expires_at)
+    return `${c.status === "expired" ? "Expired" : "Expires"} ${formatDateTimeUtc(c.expires_at)}`;
+  return "Stays valid while the client refreshes it";
 }
 
 // numbered steps of one client
@@ -281,14 +374,24 @@ export function Connect({ created }: { created: McpCredentialCreated | null }) {
   );
 }
 
+// two live credentials with one name can only be told apart by their
+// prefix, so the form warns before it creates a second one
+export function nameTaken(names: string[], name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return n !== "" && names.some((x) => x.trim().toLowerCase() === n);
+}
+
 export function McpKeyCreateForm({
   label,
   create,
   onCreated,
+  takenNames = [],
 }: {
   label: string;
   create: (b: McpKeyInput) => Promise<McpCredentialCreated>;
   onCreated: (k: McpCredentialCreated) => void;
+  // the names of the live keys, to warn on a second key with the same name
+  takenNames?: string[];
 }) {
   const [form, setForm] = useState<McpKeyForm>({ name: "", days: String(MCP_KEY_DEFAULT_DAYS) });
   const [errors, setErrors] = useState<McpKeyErrors>({});
@@ -318,7 +421,15 @@ export function McpKeyCreateForm({
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_11rem_auto] sm:items-start">
         <TextField
           label="Name"
-          hint="Where you use the key, for example laptop or Cursor."
+          hint={
+            nameTaken(takenNames, form.name) ? (
+              <span className="text-warning">
+                A key with this name exists. Use another name to tell them apart.
+              </span>
+            ) : (
+              "Where you use the key, for example laptop or Cursor."
+            )
+          }
           placeholder="laptop"
           maxLength={100}
           className="max-lg:h-(--vs-control-touch)"
@@ -370,131 +481,7 @@ export function CreatedKeyPanel({
           created.expires_at ? formatDateTimeUtc(created.expires_at) : "never"
         }. The commands above now hold it.`}
         onDone={onDone}
-        copyLabel="Copy key"
       />
     </section>
-  );
-}
-
-export function CredentialList({
-  items,
-  canRevoke,
-  revoke,
-  invalidate,
-}: {
-  items: McpCredential[];
-  canRevoke: (c: McpCredential) => boolean;
-  revoke: (c: McpCredential) => Promise<void>;
-  invalidate: () => void;
-}) {
-  if (items.length === 0)
-    return (
-      <div className="p-4">
-        <EmptyState
-          compact
-          className="border-0"
-          icon={<KeyRound aria-hidden strokeWidth={1.75} />}
-          title="No key or connection yet"
-        >
-          Create an access key, or connect a client through sign-in.
-        </EmptyState>
-      </div>
-    );
-  return (
-    <Stagger as="ul" aria-label="MCP keys and connections" className="flex flex-col">
-      {items.map((c) => (
-        <CredentialRow
-          key={c.id}
-          c={c}
-          canRevoke={canRevoke(c)}
-          revoke={() => revoke(c)}
-          invalidate={invalidate}
-        />
-      ))}
-    </Stagger>
-  );
-}
-
-// the sentence under a key: who it acts as, its dates and its last use
-export function credentialLine(c: McpCredential): string {
-  const parts = [
-    c.display_name ? `Acts as ${c.display_name}.` : "",
-    `Created ${formatDateTimeUtc(c.created_at)}.`,
-    c.revoked_at
-      ? `Revoked ${formatDateTimeUtc(c.revoked_at)}${
-          c.revoked_reason ? `: ${REVOKED_REASON[c.revoked_reason] ?? c.revoked_reason}` : ""
-        }.`
-      : c.expires_at
-        ? `${c.status === "expired" ? "Expired" : "Expires"} ${formatDateTimeUtc(c.expires_at)}.`
-        : "Stays valid while the client refreshes it.",
-    c.last_seen_at ? `Last used ${formatDateTimeUtc(c.last_seen_at)}.` : "Not used yet.",
-  ];
-  return parts.filter(Boolean).join(" ");
-}
-
-function CredentialRow({
-  c,
-  canRevoke,
-  revoke,
-  invalidate,
-}: {
-  c: McpCredential;
-  canRevoke: boolean;
-  revoke: () => Promise<void>;
-  invalidate: () => void;
-}) {
-  const [confirm, setConfirm] = useState(false);
-  const m = useMutation({
-    mutationFn: revoke,
-    onSuccess: () => {
-      setConfirm(false);
-      toast.success(`${c.name} is revoked.`);
-      invalidate();
-    },
-  });
-  const kind = c.kind === "key" ? "Access key" : "Connector";
-  return (
-    <StaggerItem
-      as="li"
-      className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line-subtle px-4 py-3 transition-colors duration-(--vs-duration-press) ease-standard last:border-b-0 hover:bg-hover"
-      data-credential-id={c.id}
-      aria-label={`${kind} ${c.name}`}
-    >
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="min-w-0 truncate text-body font-medium text-fg">{c.name}</span>
-          <StatusBadge kind="key" status={c.status} />
-          <span className="text-caption text-fg-2">{kind}</span>
-          {c.prefix ? (
-            <code className="font-mono text-caption text-fg-2">{c.prefix}...</code>
-          ) : null}
-        </div>
-        <p className="text-small text-fg-2">{credentialLine(c)}</p>
-      </div>
-      {c.status === "active" && canRevoke ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="max-lg:h-(--vs-control-touch)"
-          onClick={() => {
-            m.reset();
-            setConfirm(true);
-          }}
-        >
-          Revoke
-        </Button>
-      ) : null}
-      <ConfirmDialog
-        open={confirm}
-        onOpenChange={setConfirm}
-        title={`Revoke ${c.name}?`}
-        description="The next request of this client is refused. You cannot restore it. Make a new one instead."
-        confirmLabel="Revoke"
-        pendingLabel="Revoking"
-        pending={m.isPending}
-        error={m.error}
-        onConfirm={() => m.mutate()}
-      />
-    </StaggerItem>
   );
 }

@@ -24,11 +24,12 @@ import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatDate, formatDateTimeUtc } from "@/lib/format";
+import { formatDateTimeUtc } from "@/lib/format";
 import { siblingUrl } from "@/lib/hosts";
 import { inline } from "@/lib/markdown";
 import { type OtelGuide, otelGuides, otlpEndpoint } from "@/lib/otel-guides";
 import * as v from "@/lib/validate";
+import { NOT_USED, nameTaken } from "@/pages/project/ai";
 import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
 import { PAGE_HEADERS } from "./page-frame";
@@ -119,7 +120,12 @@ export function ConnectApiPage() {
                   </motion.div>
                 ) : null}
               </AnimatePresence>
-              <CreateGate tenant={tenant} canCreate={termsCurrent} onCreated={setCreated} />
+              <CreateGate
+                tenant={tenant}
+                canCreate={termsCurrent}
+                onCreated={setCreated}
+                takenNames={tokens.filter((t) => t.status === "active").map((t) => t.name)}
+              />
             </Step>
             <Step
               n={2}
@@ -189,9 +195,9 @@ function Step({
         </span>
       </span>
       <div className="flex min-w-0 flex-col gap-3">
-        {/* the size stays outside cn: its merge treats a text size and a text
-            colour as one group and keeps only the last */}
-        <h2 className={`pt-1 text-title ${state === "next" ? "text-fg-2" : "text-fg"}`}>{title}</h2>
+        {/* the content of a later step is usable now, so its title reads at
+            full strength too; the number marks the order */}
+        <h2 className="pt-1 text-title text-fg">{title}</h2>
         {children}
       </div>
     </li>
@@ -415,8 +421,9 @@ function TokensSection({
       header: "Name",
       primary: true,
       minWidth: "min-w-48",
-      // a long name truncates, so the dates and Revoke stay in view
-      className: "max-w-64",
+      // the name takes the spare width; a long one truncates, so the dates
+      // and Revoke stay in view
+      className: "w-full max-w-0",
       truncate: (t) => t.name,
       cell: (t) => (
         <span className="flex min-w-0 items-center gap-2">
@@ -441,7 +448,7 @@ function TokensSection({
     {
       key: "created",
       header: "Created",
-      cell: (t) => <span className="whitespace-nowrap">{formatDate(t.created_at)}</span>,
+      cell: (t) => <span className="whitespace-nowrap">{formatDateTimeUtc(t.created_at)}</span>,
     },
     {
       key: "used",
@@ -451,7 +458,7 @@ function TokensSection({
         t.last_seen_at ? (
           <span className="whitespace-nowrap">{formatDateTimeUtc(t.last_seen_at)}</span>
         ) : (
-          <Missing reason="The token was not used yet" />
+          <Missing reason={NOT_USED} />
         ),
     },
     {
@@ -508,7 +515,7 @@ function TokensSection({
         onRetry={() => list.refetch()}
         loadingRows={2}
         empty={{
-          title: showRevoked ? "No tokens yet." : "No active tokens.",
+          title: showRevoked ? "No tokens yet" : "No active tokens",
           text: "Create a token in step 1.",
         }}
       />
@@ -535,10 +542,12 @@ function CreateGate({
   tenant,
   canCreate,
   onCreated,
+  takenNames,
 }: {
   tenant: Tenant;
   canCreate: boolean;
   onCreated: (t: OtlpTokenCreated) => void;
+  takenNames: string[];
 }) {
   if (tenant.status === "suspended")
     return (
@@ -557,18 +566,22 @@ function CreateGate({
         You can create tokens once an owner accepts the current terms. Revoking works now.
       </Notice>
     );
-  return <CreateTokenForm tenantId={tenant.id} onCreated={onCreated} />;
+  return <CreateTokenForm tenantId={tenant.id} onCreated={onCreated} takenNames={takenNames} />;
 }
 
 export function CreateTokenForm({
   tenantId,
   onCreated,
+  takenNames = [],
 }: {
   tenantId: string;
   onCreated: (t: OtlpTokenCreated) => void;
+  // the names of the live tokens, to warn on a second token with one name
+  takenNames?: string[];
 }) {
   const [values, setValues] = useState<TokenValues>({ name: "", environment: "" });
   const [errors, setErrors] = useState<TokenErrors>({});
+  const taken = nameTaken(takenNames, values.name);
   const create = useMutation({
     mutationFn: (body: { name: string; environment?: string }) =>
       api.createOtlpToken(tenantId, body),
@@ -599,6 +612,13 @@ export function CreateTokenForm({
           autoComplete="off"
           maxLength={100}
           placeholder="Payments API"
+          hint={
+            taken ? (
+              <span className="text-warning">
+                A token with this name exists. Use another name to tell them apart.
+              </span>
+            ) : undefined
+          }
           value={values.name}
           onChange={(e) => setValues((s) => ({ ...s, name: e.target.value }))}
           error={errors.name}
