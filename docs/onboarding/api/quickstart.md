@@ -30,20 +30,22 @@ there instead, once for all apps: [collector-fanout.md](collector-fanout.md).
 
 ## 1. Enroll your project
 
-Sign in to the console with GitHub and choose **Enroll a project**, as for web analytics
+Sign in to the console with GitHub, a Stellar wallet or a passkey ([Signing in](../sign-in.md)) and
+choose **Enroll a project**, as for web analytics
 ([web quickstart](../web/quickstart.md#1-enroll-your-project)). A project can have sites and APIs.
 
 ## 2. Create a token
 
-Open the project's **API analytics setup** page. It shows the OTLP endpoint for your service and
-lets project members create tokens: give the token a name and an environment (for example
-`production`), then **Create token**. The token (`sa_otlp_` followed by 40 characters) is shown
-once. Store it as a secret of your app, for example in your secret manager or deployment
-environment. It is never shown again; if it is lost, create a new one and revoke the old one.
+Open your project, choose **API** and then the **Connect** tab (the **Connect your API** page). It
+shows the OTLP endpoint for your service and lets any project member create tokens: give the token
+a name and, optionally, an environment (for example `production`), then choose **Create token**.
+The token (`sa_otlp_` followed by 40 characters) is shown once. Store it as a secret of your app,
+for example in your secret manager or deployment environment. If you lose it, create a new one and
+revoke the old one.
 
-Tokens can be created only once the project is active (not while it waits for review or is
-suspended) and an owner of the project has accepted the current terms of service. Create one token per app or environment, so you
-can revoke one without touching the others.
+You create tokens once the project is active (approved, not waiting for review and not suspended)
+and an owner of the project has accepted the current terms of service. Create one token per app or
+environment, so you can revoke one without touching the others.
 
 ## 3. Add the second exporter
 
@@ -81,10 +83,10 @@ each example, how to set it yourself and what happens without it.
 
 ## 5. See the data
 
-Deploy, send some requests, and open the project's **API traffic** page in the console. Request
-counts, status codes and latency appear per service and route. Metrics arrive at the SDK's export
-interval (the OpenTelemetry default is 60 seconds; the examples use 10 seconds), so allow a
-minute.
+Deploy, send some requests, and open **API** and then the **Traffic** tab (the **API traffic**
+page) in the console. Request counts, status codes and latency appear per service and route.
+Metrics arrive at the SDK's export interval (the OpenTelemetry default is 60 seconds; the examples
+use 10 seconds), so allow a minute.
 
 If nothing appears, see [troubleshooting.md](troubleshooting.md).
 
