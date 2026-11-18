@@ -18,6 +18,10 @@ here, before they take effect, as the processing terms require
 
 ### Added
 
+- `platformctl verify-migration --no-stats` compares two environments without
+  the Umami `/stats` sample, for a restore node that runs no Umami. The env
+  files then need no `UMAMI_URL` or `UMAMI_ADMIN_PASSWORD`, and the report
+  names the comparison it left out.
 - The snippet route answers the npm install of the tracker when
   `TRACKER_NPM_PACKAGE` names the scoped package you publish the releases
   under: package, version, a pinned `npm install` line and the `init` import,

@@ -15,7 +15,7 @@ import (
 )
 
 // verifyUsage lists verify-migration for the main usage text.
-const verifyUsage = `  verify-migration --source <env file> --target <env file> [--sites N] [--days N]
+const verifyUsage = `  verify-migration --source <env file> --target <env file> [--sites N] [--days N] [--no-stats]
                     compare two environments after a data migration: row counts of
                     every table, per-tenant daily web and api aggregates, and umami
                     /stats for a sample of sites and days; exit 1 on any difference.
@@ -23,7 +23,10 @@ const verifyUsage = `  verify-migration --source <env file> --target <env file> 
                     PLATFORM_DB_NAME, PLATFORM_DB_SSLMODE (PLATFORM_DB_SSLROOTCERT for
                     verify-full), PLATFORM_DB_ADMIN_USER,
                     PLATFORM_DB_ADMIN_PASSWORD, UMAMI_DB_NAME, UMAMI_URL and
-                    UMAMI_ADMIN_PASSWORD
+                    UMAMI_ADMIN_PASSWORD. --no-stats leaves the /stats sample out,
+                    for a side that runs no umami (a restore node); the env files
+                    then need no UMAMI_URL or UMAMI_ADMIN_PASSWORD, and the report
+                    names the comparison it left out
 `
 
 // errDiffers makes run exit 1 after the report, without a second error line
@@ -40,11 +43,12 @@ func runVerifyMigration(ctx context.Context, args []string, stdout io.Writer) er
 	dst := fs.String("target", "", "env file of the target environment")
 	sites := fs.Int("sites", 10, "sites in the umami /stats sample")
 	days := fs.Int("days", 7, "most recent days with events per sampled website")
+	noStats := fs.Bool("no-stats", false, "leave out the umami /stats sample")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("verify-migration: %w", err)
 	}
 	if *src == "" || *dst == "" || fs.NArg() != 0 {
-		return errors.New("usage: platformctl verify-migration --source <env file> --target <env file> [--sites N] [--days N]")
+		return errors.New("usage: platformctl verify-migration --source <env file> --target <env file> [--sites N] [--days N] [--no-stats]")
 	}
 	ctx, cancel := context.WithTimeout(ctx, verifyTimeout)
 	defer cancel()
@@ -54,7 +58,11 @@ func runVerifyMigration(ctx context.Context, args []string, stdout io.Writer) er
 		if err != nil {
 			return migration.Side{}, nil, err
 		}
-		ep, err := migration.LoadEndpoint(values)
+		load := migration.LoadEndpoint
+		if *noStats {
+			load = migration.LoadDatabases
+		}
+		ep, err := load(values)
 		if err != nil {
 			return migration.Side{}, nil, fmt.Errorf("%s: %w", path, err)
 		}
@@ -85,9 +93,12 @@ func runVerifyMigration(ctx context.Context, args []string, stdout io.Writer) er
 			sv.Platform, len(sv.Umami), dv.Platform, len(dv.Umami))
 	}
 
-	keys, err := migration.PickStats(ctx, s, migration.Sample{Sites: *sites, Days: *days})
-	if err != nil {
-		return fmt.Errorf("source: %w", err)
+	var keys []migration.StatsKey
+	if !*noStats {
+		keys, err = migration.PickStats(ctx, s, migration.Sample{Sites: *sites, Days: *days})
+		if err != nil {
+			return fmt.Errorf("source: %w", err)
+		}
 	}
 	ss, err := migration.Read(ctx, s, keys)
 	if err != nil {
@@ -103,6 +114,9 @@ func runVerifyMigration(ctx context.Context, args []string, stdout io.Writer) er
 	w.printf("schema: platform goose version %d, %d umami migrations, equal\n", sv.Platform, len(sv.Umami))
 	for _, kind := range []string{"rows", "web", "web-dim", "api", "umami-stats"} {
 		w.printf("compared %-11s %d keys\n", kind, rep.Compared[kind])
+	}
+	if *noStats {
+		w.printf("not compared: umami /stats sample (--no-stats)\n")
 	}
 	for _, e := range rep.Excluded {
 		w.printf("not compared: %s\n", e)
