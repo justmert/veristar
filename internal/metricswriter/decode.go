@@ -132,6 +132,14 @@ func badValues(format string, a ...any) error {
 // 31 years of one process.
 const MaxPointCount = 1_000_000_000_000
 
+// MaxPointSum bounds the magnitude of a point's sum of durations in
+// seconds, as tenantguard does: MaxPointCount requests of a million
+// seconds each. postgresql refuses a double precision addition that
+// overflows, so two sums near the float limit in one minute row or one
+// hour would fail the message or the rollup; with the bound no stored sum
+// can come near it.
+const MaxPointSum = 1e18
+
 // Decode reads one API_METRICS payload for the tenant of its subject. the
 // collector guarantees the schema; anything else means a producer that is
 // not the collector, or a collector bug, and the whole message is refused
@@ -325,7 +333,7 @@ func decodePoint(d *Decoded, dp pmetric.HistogramDataPoint) error {
 	if d.Count > MaxPointCount {
 		return badValues("count %d above %d", d.Count, uint64(MaxPointCount))
 	}
-	if math.IsNaN(d.Sum) || math.IsInf(d.Sum, 0) {
+	if math.IsNaN(d.Sum) || math.IsInf(d.Sum, 0) || math.Abs(d.Sum) > MaxPointSum {
 		return badValues("sum %v", d.Sum)
 	}
 	src := dp.BucketCounts().AsRaw()

@@ -37,7 +37,8 @@ message for names and marker strings that must not be there.
   time of zero or past the year 2262, a start time after the time, a temporality other than
   delta or cumulative (the whole metric), bucket bounds that are not finite and strictly
   increasing, bucket counts that do not match the bounds (including a histogram without
-  buckets), a count above 10^12 and a sum that is not a finite number.
+  buckets), a count above 10^12 and a sum that is not a finite number or exceeds 10^18 seconds in
+  magnitude.
 - **Spans that have no duration**: a span without a start time, one that ends before it starts,
   in the first minute of 1970 or past 2262.
 

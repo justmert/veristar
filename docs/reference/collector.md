@@ -340,8 +340,9 @@ requests, so it is not one of the kept metrics (see "tenantguard" below).
   (`temporality`); explicit bounds that are not finite and strictly
   increasing, or bucket counts that are not one more than the bounds,
   including a point without buckets (`buckets`); a count or a bucket count
-  above 10^12 (`count`); a sum that is NaN or infinite (`sum`). A stale
-  marker (no recorded value) is checked for its times only.
+  above 10^12 (`count`); a sum that is NaN, infinite or above 10^18 seconds
+  in magnitude (`sum`). A stale marker (no recorded value) is checked for
+  its times only.
 - Spans kept: kind SERVER with an HTTP method, a start time, and an end
   time that is not before the start, after the first minute of the epoch
   and before 2262 (others are dropped and counted as `time`, since they have

@@ -93,6 +93,20 @@ func (g *guard) dropped(ctx context.Context, signal, reason string, n int) {
 // overflow the sums the platform stores.
 const MaxPointCount = 1_000_000_000_000
 
+// MaxPointSum bounds the magnitude of a point's sum of durations in
+// seconds: MaxPointCount requests of a million seconds (11.5 days) each.
+// postgresql refuses a double precision addition that overflows, so an
+// unbounded sum (1e308 twice in one minute or one hour) would fail the
+// writer's or the rollup's transaction; with the bound no sum the
+// platform keeps can come near the limit. the writer refuses a larger
+// point too.
+const MaxPointSum = 1e18
+
+// validSum reports whether a point's sum can be stored and added up.
+func validSum(sum float64) bool {
+	return !math.IsNaN(sum) && !math.IsInf(sum, 0) && math.Abs(sum) <= MaxPointSum
+}
+
 // validTimes reports whether a point's or span's times can be stored: a
 // time after the epoch that fits a signed 64-bit nanosecond count, and a
 // start not after it. a zero start is a point without one.
@@ -113,7 +127,7 @@ func checkHistogram(dp pmetric.HistogramDataPoint) string {
 	if dp.Count() > MaxPointCount {
 		return invalidCount
 	}
-	if dp.HasSum() && (math.IsNaN(dp.Sum()) || math.IsInf(dp.Sum(), 0)) {
+	if dp.HasSum() && !validSum(dp.Sum()) {
 		return invalidSum
 	}
 	bounds, counts := dp.ExplicitBounds(), dp.BucketCounts()
@@ -146,7 +160,7 @@ func checkExponential(dp pmetric.ExponentialHistogramDataPoint) string {
 	if dp.Count() > MaxPointCount {
 		return invalidCount
 	}
-	if dp.HasSum() && (math.IsNaN(dp.Sum()) || math.IsInf(dp.Sum(), 0)) {
+	if dp.HasSum() && !validSum(dp.Sum()) {
 		return invalidSum
 	}
 	return ""
