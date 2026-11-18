@@ -18,6 +18,18 @@ here, before they take effect, as the processing terms require
 
 ### Added
 
+- SCF awards: `platformctl scf import` imports an SCF awards file (tab or
+  comma separated, with or without a header row, from a file or standard
+  input) and keeps organisation data only; names of people, profiles, links,
+  descriptions and traction text are dropped at parse time. The enrollment
+  form searches the awards (`GET /api/scf/awards/search`) by project name or
+  website, and `POST /api/tenants` takes the picked award's `scf_award_id` as
+  the project's cohort proposal. Awards also match enrolled projects on exact
+  evidence (website host or verified on-chain id, never a name; a project
+  funded in several rounds matches all its awards), and a matched project
+  without a cohort gets a proposal from its most recent award, for an
+  operator to confirm. `platformctl scf match` runs the matching again
+  (migration 00050, [docs/operators/scf-awards.md](docs/operators/scf-awards.md)).
 - `platformctl verify-migration --no-stats` compares two environments without
   the Umami `/stats` sample, for a restore node that runs no Umami. The env
   files then need no `UMAMI_URL` or `UMAMI_ADMIN_PASSWORD`, and the report

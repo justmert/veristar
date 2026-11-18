@@ -40,6 +40,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/otlptokens"
 	"github.com/justmert/veristar/internal/controlplane/provision"
 	"github.com/justmert/veristar/internal/controlplane/reports"
+	"github.com/justmert/veristar/internal/controlplane/scfawards"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/sites"
 	"github.com/justmert/veristar/internal/controlplane/stepup"
@@ -369,6 +370,18 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// the scf award search of the enrollment form (contract 4.2.7) and the
+	// award matching on enrollment and site creation (19.5); background
+	// matches finish before the pools close
+	scfSearch, err := scfawards.NewSearch(d, time.Now)
+	if err != nil {
+		return err
+	}
+	scfHooks, err := scfawards.NewHooks(d, log)
+	if err != nil {
+		return err
+	}
+	defer scfHooks.Wait()
 	// signed usage reports (contract 20)
 	reportRoutes, err := reports.New(reports.Config{
 		Scope: scope, DB: d, Signing: reportKey, ConsoleOrigin: cfg.ConsoleOrigin, Platform: buildVersion(), Now: time.Now,
@@ -456,9 +469,10 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		Private: []controlplane.Routes{
 			controlplane.RoutesFunc(authH.Private),
 			accountRoutes,
-			tenants.NewRoutes(scope),
+			tenants.NewRoutes(scope).OnEnroll(scfHooks),
+			scfSearch,
 			memberRoutes,
-			sites.NewRoutes(scope).OnCreate(checks),
+			sites.NewRoutes(scope).OnCreate(checks, scfHooks),
 			checks,
 			ingest.NewRoutes(scope),
 			otlpRoutes,

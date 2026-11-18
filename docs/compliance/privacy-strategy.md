@@ -70,7 +70,8 @@ file-backed stream. "Stored" means PostgreSQL.
 | Control plane (`cp.*`) | GitHub numeric id and login, the Stellar account address of a wallet sign-in, and the credential id, public key and soropass account address of a passkey sign-in, of console users; session token hashes; tenants, sites, OTLP token hashes, audit log, erasure requests | stored | while the account or tenant exists; the audit log is append-only |
 | Control plane (`cp.operators`) | the operator roster: per identity, the GitHub id and login or the Stellar address (`G...` or `C...`), role, status and status reason, enrollment window, the user id of the admin who added it | stored | until an operator admin removes the row or the person deletes the account |
 | Control plane (`cp.operator_passkeys`) | the passkeys an operator adds for the operator area's step-up: credential id, public key, name, creation and last use; the session holds the time of the last step-up | stored | until the operator removes the passkey, an admin resets the operator's passkeys, a removal leaves the person no active roster row, or the person deletes the account |
-| Control plane (`cp.tenant_cohorts`, `cp.threshold_rules`) | a project's SCF program, round, category and award date, confirmed and proposed, with the user ids of who proposed and confirmed them; the operators' saved threshold rules | stored | while the tenant exists; rules until an operator deletes them |
+| Control plane (`cp.tenant_cohorts`, `cp.threshold_rules`) | a project's SCF program, round, category and award date, confirmed and proposed, with the user ids of who proposed and confirmed them and whether the proposal came from the project or the SCF award import; the operators' saved threshold rules | stored | while the tenant exists; rules until an operator deletes them |
+| Control plane (`cp.scf_awards`, `cp.scf_award_imports`) | the SCF award directory: per funded project and round, the project name, category, program, award date, award amount, tranche, website host and declared Stellar ids; per import, the file's SHA-256, size, counts and the actor. Organisation data only (section 12) | stored | until removed from the database; an import adds and updates rows and never deletes them; a tenant removal leaves them |
 | Control plane (`cp.usage_reports`) | signed usage reports: the canonical report (project aggregates, grade, cohort and percentiles), its signature, the user id of the member who created or revoked it, a view count and the time of the last view | stored | while the tenant exists; a revoked link answers no one; removal of the tenant deletes them |
 | `agg.chain_daily` | per declared id and UTC day: operations, transactions, distinct counterparties, and whether the day's initiating accounts went into its week | stored | while the id's project exists; removal follows `removal_keep_aggregates` |
 | `agg.chain_weeks` | per project and ISO week: while open, a random 32-byte key; once closed, the count of weekly active accounts or the reason it has none | stored | the key until the week closes; the count while the project exists, removal follows `removal_keep_aggregates` |
@@ -143,6 +144,7 @@ day replaces the day's secrets, so visitors seen before it count again.
 | `api.metrics_hourly` | `API_HOURLY_RETENTION_MONTHS`, at least 24 | `jobs` task `api-retention` |
 | Control plane sessions | 7 days absolute, 24 hours idle | `jobs` task `session-prune` |
 | `cp.tenant_cohorts` | while the tenant row exists | deleted with the tenant row; a removal keeps the row and the cohort |
+| `cp.scf_awards`, `cp.scf_award_imports` | until removed from the database | not tenant data: no tenant purge touches them; an import never deletes |
 | `cp.operators` | until removed | an operator admin's removal; account deletion |
 | `cp.operator_passkeys` | until removed | the operator's removal of a passkey; an admin's reset; a roster removal that leaves the person no active row; account deletion |
 | `cp.usage_reports` | until the tenant is removed | removal purge (`reports` step, `cp.purge_usage_reports`), whatever `removal_keep_aggregates` says; a removed tenant's links answer 404 at once |
@@ -498,6 +500,39 @@ The cohort of a project (program, round, category and award date) is
 business data of the project, not personal data. The user id of the member who
 proposed it and of the operator who confirmed it is kept for the audit, like
 every other change in the console.
+
+### SCF award directory
+
+Operators import an SCF awards file so the enrollment form can search the
+awards and the service can propose a funded project's cohort (contract
+sections 4.2.7 and 19.5). An awards file can hold personal data next to the
+organisation data: names of people, LinkedIn and X profiles, images, document
+and DocSend links, descriptions and traction text. The import keeps
+organisation data only, and drops the rest at parse time:
+
+- `platformctl scf import` reads the file from standard input or a path into
+  memory once. The service never writes the file to disk, and records only its
+  SHA-256 and size.
+- The parser maps the columns it keeps (project name, round, category, award
+  type, award date, award amount, tranche percent and status, website) and
+  reads past every other column. From the whole row it keeps only the Stellar
+  account and contract ids with a valid checksum, never the text around them.
+  These are the public ledger ids the project declared to SCF.
+- The website is reduced to its host.
+- A rejected row is reported by record number, line, field and reason, never
+  with its values, on the command's output and in the audit log.
+
+The directory has no tenant: it describes SCF's funded projects, enrolled or
+not, so no tenant reads it and no tenant purge touches it
+(`internal/db/removal_coverage_test.go` covers tables with a tenant only). An
+award matches an enrolled project only on exact evidence, a website host or a
+verified on-chain id, never a name, and the match writes no personal data: the
+cohort proposal it makes holds the award's program, round, category and award
+date, and its audit row names the evidence. The award search of the
+enrollment form answers a signed-in person with, per matching project, its
+name, round, category, program, award date, website and Stellar ids, at most
+ten projects and thirty searches a minute; the amounts, tranches and counts
+stay in the database.
 
 The report signing key signs reports only. It is a Stellar key that holds no
 funds and signs no transaction; its public account id is published.

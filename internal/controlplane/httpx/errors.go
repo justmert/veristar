@@ -112,6 +112,8 @@ const (
 	FieldInvalidRole           = "invalid_role"
 	FieldDuplicate             = "duplicate"
 	FieldUnknownTrackerVersion = "unknown_tracker_version"
+	// an scf_award_id that names no award of the directory (4.2.1)
+	FieldUnknownSCFAward = "unknown_scf_award"
 	// a value outside an enumerated set, such as the enrollment mode
 	FieldInvalidValue = "invalid_value"
 )

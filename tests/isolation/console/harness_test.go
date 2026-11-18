@@ -58,6 +58,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/otlptokens"
 	"github.com/justmert/veristar/internal/controlplane/provision"
 	"github.com/justmert/veristar/internal/controlplane/reports"
+	"github.com/justmert/veristar/internal/controlplane/scfawards"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/sites"
 	"github.com/justmert/veristar/internal/controlplane/tenants"
@@ -320,6 +321,13 @@ func start(t *testing.T) *env {
 	require.NoError(t, err)
 	ruleRoutes, err := operator.NewRules(e.conn, time.Now)
 	require.NoError(t, err)
+	// the scf award search of the enrollment form (contract 4.2.7) and the
+	// award matching on enrollment and site creation (19.5)
+	scfSearch, err := scfawards.NewSearch(e.conn, time.Now)
+	require.NoError(t, err)
+	scfHooks, err := scfawards.NewHooks(e.conn, log)
+	require.NoError(t, err)
+	t.Cleanup(scfHooks.Wait)
 	reportKey := keypair.MustRandom()
 	signing, err := config.LoadReportSigning(config.FromMap(map[string]string{
 		"REPORT_SIGNING_SEED": reportKey.Seed(), "REPORT_SIGNING_KEY": reportKey.Address(),
@@ -358,9 +366,10 @@ func start(t *testing.T) *env {
 		Private: []controlplane.Routes{
 			controlplane.RoutesFunc(ah.Private),
 			accountRoutes,
-			tenants.NewRoutes(scope),
+			tenants.NewRoutes(scope).OnEnroll(scfHooks),
+			scfSearch,
 			memberRoutes,
-			sites.NewRoutes(scope).OnCreate(checks),
+			sites.NewRoutes(scope).OnCreate(checks, scfHooks),
 			checks,
 			ingest.NewRoutes(scope),
 			otlpRoutes,

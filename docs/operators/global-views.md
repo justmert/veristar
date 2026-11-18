@@ -85,10 +85,12 @@ come from the daily aggregates in SQL, in one snapshot with the rest of the tabl
 ## Cohorts
 
 SCF decides by program, round, category and award date, so every project carries those four
-values. SCF publishes no machine-readable directory of its awards, so they come from two sides:
+values. They come from three sides:
 
 1. A project proposes them, at enrollment or later on its **SCF review** page.
-2. You confirm the proposal on the project's detail page, edit it before confirming, set the
+2. The SCF award matching proposes them for a matched project that has no proposal
+   ([scf-awards.md](scf-awards.md)).
+3. You confirm the proposal on the project's detail page, edit it before confirming, set the
    values yourself, or dismiss the proposal. Only confirmed values count.
 
 Every proposal, confirmation, change and dismissal is in the audit log with the old and new
