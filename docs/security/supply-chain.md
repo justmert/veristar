@@ -407,6 +407,11 @@ found, fails the gate.
 | shipped | Go modules linked into a platform binary; npm packages of the console bundle, `sdk.js` and the npm package of the tracker | `go list -deps ./cmd/...` in the root module and `go list -deps .` in the collector distribution that ocb generates (`dist/scf-otelcol`, from `collector/builder-config.yaml`); the `dependencies` and `optionalDependencies` closure of the shipped importers `apps/console` and `packages/tracker` in `pnpm-lock.yaml` | any licence not on the OSI list |
 | not shipped | everything else in `go.mod`, the collector module, `pnpm-lock.yaml`, the example lockfiles (`package-lock.json`, `uv.lock`, `Cargo.lock`, `go.mod`, the Java example's `pom.xml`) and `infra/ansible/requirements.txt`, each with the importers that pull it in | the rest of the same graphs | a non-OSI licence without a matching allowlist entry, and any allowlist entry that no longer matches (package gone, upgraded, relicensed or now shipped) |
 
+Trivy reads the Java example's dependency tree from the poms in the local Maven repository. The
+gate first resolves `examples/otel-java-spring/pom.xml` into `~/.m2` with Maven, in the image the
+example's `Dockerfile` builds with, and then scans with `--offline-scan`, so Trivy does not fetch
+poms from Maven Central itself (which answers such bursts with 429 and blocks the address).
+
 Three checks keep the shipped section honest instead of trusting `package.json`:
 
 - The console bundle is built with its own Vite configuration and every npm package whose code lands
