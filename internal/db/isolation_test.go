@@ -102,8 +102,8 @@ var tenantTables = []tenantTable{
 	{name: "cp.web_signals_daily", key: "tenant_id", denied: true},
 	// cohorts (00035): a member proposes its own project's cohort
 	{name: "cp.tenant_cohorts", key: "tenant_id", insert: func(tenant, user, _ uuid.UUID) (string, []any) {
-		return `insert into cp.tenant_cohorts (tenant_id, proposed_program, proposed_by, proposed_at)
-		        values ($1, 'Build Award', $2, now())
+		return `insert into cp.tenant_cohorts (tenant_id, proposed_program, proposed_by, proposed_at, proposed_source)
+		        values ($1, 'Build Award', $2, now(), 'member')
 		        on conflict (tenant_id) do update set proposed_program = excluded.proposed_program,
 		          proposed_by = excluded.proposed_by, proposed_at = excluded.proposed_at`, []any{tenant, user}
 	}},

@@ -188,8 +188,8 @@ func TestCohortsGrowthAndPercentiles(t *testing.T) {
 		require.Equal(t, "2026-11-03", *rec.Confirmed.AwardDate)
 
 		// a proposal written as the project, then confirmed by the operator
-		superExec(t, f.pg, `insert into cp.tenant_cohorts (tenant_id, proposed_program, proposed_round, proposed_by, proposed_at)
-			values ($1, 'Build Award', 'SCF #38', $2, now())`, f.tenants["gamma"], f.op)
+		superExec(t, f.pg, `insert into cp.tenant_cohorts (tenant_id, proposed_program, proposed_round, proposed_by, proposed_at, proposed_source)
+			values ($1, 'Build Award', 'SCF #38', $2, now(), 'member')`, f.tenants["gamma"], f.op)
 		code, body = f.do(t, http.MethodGet, "/api/operator/cohorts", nil)
 		require.Equal(t, http.StatusOK, code, string(body))
 		cl := decode[CohortList](t, body)
@@ -204,7 +204,8 @@ func TestCohortsGrowthAndPercentiles(t *testing.T) {
 		require.Equal(t, http.StatusConflict, code)
 
 		// a dismissed proposal leaves the confirmed values
-		superExec(t, f.pg, `update cp.tenant_cohorts set proposed_category = 'Wallets', proposed_by = $2, proposed_at = now()
+		superExec(t, f.pg, `update cp.tenant_cohorts set proposed_category = 'Wallets', proposed_by = $2, proposed_at = now(),
+			proposed_source = 'member'
 			where tenant_id = $1`, f.tenants["gamma"], f.op)
 		code, body = f.do(t, http.MethodDelete, "/api/operator/tenants/"+f.tenants["gamma"].String()+"/cohort/proposal", nil)
 		require.Equal(t, http.StatusOK, code, string(body))
