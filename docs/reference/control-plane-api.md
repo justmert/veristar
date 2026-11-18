@@ -229,7 +229,7 @@ List routes answer:
 | 403 | `owner_required` | the action needs role `owner` |
 | 403 | `terms_not_accepted` | the tenant has not accepted the current terms version (4.2.6) |
 | 403 | `operator_required` | an `/api/operator` route without operator rights (5.1) |
-| 403 | `operator_admin_required` | a roster change by an operator who is not an operator admin (5.16) |
+| 403 | `operator_admin_required` | a roster change (5.16) or the alerts route (11.1) by an operator who is not an operator admin |
 | 403 | `challenge_invalid` | a signed wallet challenge that does not verify: no `__Host-sa_stellar` cookie, a challenge of another console, another network, another account, another purpose or another session, or a signature that is not the account's (4.1.7); or a passkey answer that does not verify: no `__Host-sa_passkey` cookie, another challenge, origin, relying party, purpose or session, no user verification, or a signature that is not the passkey's key (4.1.9) |
 | 403 | `challenge_expired` | the wallet or passkey challenge is older than 5 minutes (4.1.7, 4.1.9) |
 | 403 | `challenge_used` | the wallet or passkey challenge was verified before (4.1.7, 4.1.9) |
@@ -3116,7 +3116,7 @@ lets the page say "all clear" without having asked Alertmanager.
 
 Returns the alerts Alertmanager holds right now.
 
-Operator (5.1). No query parameters. The control plane asks every configured
+Operator admin (5.1, 5.16). No query parameters. The control plane asks every configured
 Alertmanager member at once (`GET /api/v2/alerts` without filters, 5 seconds
 per member) and merges the answers.
 
@@ -3175,8 +3175,11 @@ per member) and merges the answers.
   each member and its reason. There is no list in this case: an empty list
   would read as all clear.
 - 503 `alert_source_not_configured` when `ALERTMANAGER_URLS` is unset.
-- As every operator route: 401 without a session, 403 `operator_required`
-  for everyone else, and the route then never asks Alertmanager.
+- 401 without a session, 403 `operator_required` for a user who is not an
+  operator, and 403 `operator_admin_required` for an operator without an
+  active `operator_admin` row. In each case the route never asks
+  Alertmanager: alert labels and descriptions name nodes and internal
+  addresses.
 
 ### 11.3 Configuration
 

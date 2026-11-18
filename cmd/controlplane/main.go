@@ -315,7 +315,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	alertRoutes, err := newAlertRoutes(amCfg, log)
+	alertRoutes, err := newAlertRoutes(amCfg, guard, log)
 	if err != nil {
 		return err
 	}
@@ -524,10 +524,10 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 // newAlertRoutes builds the operator alerts route (contract 11). without
 // ALERTMANAGER_URLS the route exists and answers alert_source_not_configured,
 // so the console says why it shows no alerts instead of showing none.
-func newAlertRoutes(c config.Alertmanager, log *slog.Logger) (*operator.Alerts, error) {
+func newAlertRoutes(c config.Alertmanager, guard *operator.Guard, log *slog.Logger) (*operator.Alerts, error) {
 	if !c.Configured() {
 		log.Warn("no alertmanager configured (ALERTMANAGER_URLS): the operator alerts page answers alert_source_not_configured")
-		return operator.NewAlerts(nil, time.Now), nil
+		return operator.NewAlerts(nil, guard, time.Now)
 	}
 	tlsCfg, err := c.ClientTLS()
 	if err != nil {
@@ -537,7 +537,7 @@ func newAlertRoutes(c config.Alertmanager, log *slog.Logger) (*operator.Alerts, 
 	if err != nil {
 		return nil, err
 	}
-	return operator.NewAlerts(am, time.Now), nil
+	return operator.NewAlerts(am, guard, time.Now)
 }
 
 // requestPoolSizes are the pools the api requests use, sized explicitly

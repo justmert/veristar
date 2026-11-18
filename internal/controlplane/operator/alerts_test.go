@@ -20,6 +20,7 @@ import (
 
 	"github.com/justmert/veristar/internal/alertmanager"
 	"github.com/justmert/veristar/internal/controlplane"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/controlplane/session"
 )
 
@@ -142,7 +143,8 @@ type alertsBody struct {
 func getAlerts(t *testing.T, src AlertReader) (int, alertsBody, string) {
 	t.Helper()
 	r := chi.NewRouter()
-	NewAlerts(src, func() time.Time { return checked }).Routes(r)
+	h := &Alerts{src: src, now: func() time.Time { return checked }}
+	r.Method(http.MethodGet, "/alerts", httpx.HandlerFunc(h.list))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/alerts", nil))
 	var b alertsBody
@@ -286,14 +288,16 @@ func TestAlertsNotConfigured(t *testing.T) {
 
 // TestAlertsNeedAnOperator mounts the route the way the control plane does
 // (sessions, RequireUser, the operator guard): anonymous is 401, a signed-in
-// user who is not an operator is 403 operator_required and alertmanager is
-// never asked, an operator gets the list.
-func TestAlertsNeedAnOperator(t *testing.T) {
+// user who is not an operator is 403 operator_required, an operator without
+// the admin role is 403 operator_admin_required, and in both cases
+// alertmanager is never asked; an operator admin gets the list.
+func TestAlertsNeedAnOperatorAdmin(t *testing.T) {
 	d, pg := reviewDB(t)
-	operatorID, plainID := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	operatorID, plainID, viewerID := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
 	rosterAdmin(t, pg, 7)
-	superExec(t, pg, `insert into cp.users (id, github_id, github_login, is_operator) values ($1, 7, 'op', true), ($2, 8, 'plain', false)`,
-		operatorID, plainID)
+	superExec(t, pg, `insert into cp.operators (github_id, role) values (9, 'operator')`)
+	superExec(t, pg, `insert into cp.users (id, github_id, github_login, is_operator) values ($1, 7, 'op', true), ($2, 8, 'plain', false), ($3, 9, 'viewer', true)`,
+		operatorID, plainID, viewerID)
 
 	var asked atomic.Int32
 	am := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -309,7 +313,6 @@ func TestAlertsNeedAnOperator(t *testing.T) {
 	require.NoError(t, err)
 
 	sessions := session.New(d)
-	routes := NewAlerts(client(t, amURL), time.Now)
 	var api atomic.Pointer[http.Handler]
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		(*api.Load()).ServeHTTP(w, r)
@@ -317,6 +320,8 @@ func TestAlertsNeedAnOperator(t *testing.T) {
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	guard, stepUp := testGuard(t, d, sessions, srv.URL)
+	routes, err := NewAlerts(client(t, amURL), guard, time.Now)
+	require.NoError(t, err)
 	h := controlplane.NewHandler(controlplane.Options{
 		Log: slog.New(slog.DiscardHandler), ConsoleOrigin: srv.URL, Sessions: sessions,
 		// a sign-in shortcut for the test: the session is the real one,
@@ -367,6 +372,11 @@ func TestAlertsNeedAnOperator(t *testing.T) {
 	require.Contains(t, body, `"code":"operator_required"`)
 	require.NotContains(t, body, "ServiceDown")
 	require.Zero(t, asked.Load(), "a non-operator request must not reach alertmanager")
+	code, body = get(signedIn(&viewerID))
+	require.Equal(t, http.StatusForbidden, code, body)
+	require.Contains(t, body, `"code":"operator_admin_required"`)
+	require.NotContains(t, body, "ServiceDown")
+	require.Zero(t, asked.Load(), "an operator without the admin role must not reach alertmanager")
 
 	code, body = get(signedIn(&operatorID))
 	require.Equal(t, http.StatusOK, code, body)
