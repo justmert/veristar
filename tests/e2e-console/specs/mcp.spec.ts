@@ -32,7 +32,7 @@ async function mcp(ctx: BrowserContext, token: string, method: string, params: u
 
 async function projectPage(page: Page, tenantId: string) {
   await page.goto(`${APP}/projects/${tenantId}/ai`);
-  await expect(page.getByRole("heading", { name: "AI assistants (MCP)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "AI assistants", level: 1 })).toBeVisible();
 }
 
 test("a member makes an access key on the AI page, uses it and revokes it", async ({

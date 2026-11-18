@@ -156,9 +156,14 @@ test("a passkey member joins a project by its address and opens its dashboard", 
 
   // the owner's member form takes the C-address
   await op.goto(`${APP}/projects/${shared.id}/members`);
-  await op.getByLabel("GitHub username or Stellar address").fill(me.passkey_address ?? "");
-  await op.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(op.getByText(me.display_name, { exact: true })).toBeVisible();
+  await op.getByRole("button", { name: "Add a person" }).click();
+  const add = op.getByRole("dialog", { name: "Add a person" });
+  await add.getByLabel("GitHub username or Stellar address").fill(me.passkey_address ?? "");
+  await add.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(add).toBeHidden();
+  await expect(
+    op.getByRole("table", { name: "Members" }).getByText(me.display_name, { exact: true }),
+  ).toBeVisible();
   await op.close();
 
   const page = await device.newPage();
