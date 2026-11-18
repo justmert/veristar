@@ -84,15 +84,11 @@ test("an owner declares an account and gets a challenge to prove it", async () =
     expect(p.missing).not.toBeNull();
   }
 
-  // the overview sums the on-chain activity up in one card, next to web
-  // and api, and links to the on-chain page
+  // a declared id that is not proven counts for nothing: the overview has
+  // no on-chain card, and its setup step marks on-chain as not connected
   await page.goto(`${APP}/projects/${tenant.id}`);
-  const card = page.getByRole("region", { name: "On-chain" });
-  await expect(card).toContainText("0 of 1 verified");
-  await expect(card.getByRole("link", { name: "On-chain" })).toHaveAttribute(
-    "href",
-    `/projects/${tenant.id}/onchain`,
-  );
+  await expect(page.getByRole("region", { name: "On-chain" })).toHaveCount(0);
+  await expect(page.locator('[data-part="onchain"]')).not.toHaveAttribute("data-done", "");
 
   // weekly active accounts: the project has no verified id and the task
   // has not counted a week of it, so every iso week of the range shows its
