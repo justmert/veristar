@@ -84,9 +84,9 @@ describe("api client", () => {
     expect(calls[1]?.url).toContain("cursor=abc");
   });
 
-  it("asks for the 30-day window in whole utc hours", async () => {
+  it("asks for the 30-day window in whole utc hours, the running hour included", async () => {
     const { thirtyDayRange } = await import("@/api/queries");
     const r = thirtyDayRange(new Date("2026-11-12T09:41:12.345Z"));
-    expect(r).toEqual({ from: "2026-10-13T09:00:00Z", to: "2026-11-12T09:00:00Z", bucket: "day" });
+    expect(r).toEqual({ from: "2026-10-13T10:00:00Z", to: "2026-11-12T10:00:00Z", bucket: "day" });
   });
 });

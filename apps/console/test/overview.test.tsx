@@ -61,7 +61,7 @@ describe("web helpers of the overview and web", () => {
   it("reads outcome counts up to the current whole hour", () => {
     expect(ingestWindow({ from: "2026-11-10", to: "2026-11-16" }, NOW)).toEqual({
       from: "2026-11-10T00:00:00Z",
-      to: "2026-11-16T15:00:00Z",
+      to: "2026-11-16T16:00:00Z",
       bucket: "day",
     });
     expect(ingestWindow({ from: "2026-11-01", to: "2026-11-02" }, NOW)?.to).toBe(
@@ -69,7 +69,8 @@ describe("web helpers of the overview and web", () => {
     );
     expect(
       ingestWindow({ from: "2026-11-16", to: "2026-11-16" }, new Date("2026-11-16T00:20:00Z")),
-    ).toBeNull();
+    ).toEqual({ from: "2026-11-16T00:00:00Z", to: "2026-11-16T01:00:00Z", bucket: "day" });
+    expect(ingestWindow({ from: "2026-11-17", to: "2026-11-17" }, NOW)).toBeNull();
     expect(
       sumOutcomes([{ totals: { accepted: 2 } }, undefined, { totals: { accepted: 3, bot: 1 } }]),
     ).toEqual({
