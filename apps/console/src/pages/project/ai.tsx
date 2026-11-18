@@ -32,6 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDateTimeUtc } from "@/lib/format";
 import { siblingUrl } from "@/lib/hosts";
 import { useProject } from "@/pages/project-layout";
+import { PAGE_HEADERS } from "./page-frame";
 
 // the project's ai assistants page (contract 12.8): the server url, the
 // steps for each client, access keys, and the list of everything that can
@@ -82,8 +83,7 @@ export function AiPage() {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        title="AI assistants"
-        description="Ask Claude, ChatGPT, Cursor or another MCP client about this project. A connection only reads data, and only of this project."
+        {...PAGE_HEADERS.ai}
         secondary={
           docs ? (
             <Button asChild variant="outline">

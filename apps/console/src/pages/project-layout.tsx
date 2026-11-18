@@ -1,14 +1,15 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CirclePause, CircleX, Clock, FileText, LoaderCircle } from "lucide-react";
-import { Link, Outlet, useOutletContext, useParams } from "react-router";
+import { Link, Outlet, useLocation, useOutletContext, useParams } from "react-router";
 import { api } from "@/api/endpoints";
 import { keys, meQuery, tenantQuery } from "@/api/queries";
 import type { Me, Tenant } from "@/api/schemas";
 import { FormMessage } from "@/components/error-panel";
 import { Notice as ToneNotice } from "@/components/notice";
-import { ErrorState, LoadingState, Skeleton } from "@/components/states";
+import { ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { isNotFound } from "@/lib/errors";
+import { ProjectPagePending } from "@/pages/project/page-frame";
 import { NotFoundPage, ProjectsButton, StopPage } from "@/pages/public/not-found";
 import { ResubmitForm } from "@/pages/resubmit";
 import { queryClient } from "@/query-client";
@@ -21,16 +22,14 @@ export function useProject(): ProjectContext {
 
 export function ProjectLayout() {
   const { tenantId = "" } = useParams();
+  const { pathname } = useLocation();
   const me = useQuery(meQuery);
   const tenant = useQuery(tenantQuery(tenantId));
 
+  // the shell and the sidebar are drawn already; the page keeps its own
+  // title line and the shape of its content until the project lands
   if (tenant.isPending || me.isPending)
-    return (
-      <LoadingState label="Loading the project">
-        <Skeleton.StatRow count={3} />
-        <Skeleton.Table rows={3} />
-      </LoadingState>
-    );
+    return <ProjectPagePending tenantId={tenantId} pathname={pathname} />;
   if (isNotFound(tenant.error)) {
     // a removed project answers 404 everywhere (contract 1.3); /api/me still
     // lists it with the operator's reason (5.10)

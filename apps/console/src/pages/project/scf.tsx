@@ -54,6 +54,7 @@ import {
   validatePeriod,
 } from "@/lib/reports";
 import { useProject } from "@/pages/project-layout";
+import { PAGE_HEADERS, ScfSkeleton } from "./page-frame";
 
 const RANGE = {};
 
@@ -64,11 +65,11 @@ export function ScfReviewPage() {
 
   const header = (
     <PageHeader
-      title="SCF review"
+      title={PAGE_HEADERS.scf.title}
       description={
         v
           ? `What SCF reviewers see about your project for ${formatDateRange(v.from, v.to)}, UTC. They read the same figures.`
-          : "What SCF reviewers see about your project. They read the same figures."
+          : PAGE_HEADERS.scf.description
       }
       secondary={
         v ? (
@@ -84,13 +85,7 @@ export function ScfReviewPage() {
   );
 
   let body: ReactNode;
-  if (q.isPending)
-    body = (
-      <LoadingState label="Loading what SCF reviewers see">
-        <Skeleton.StatRow count={3} />
-        <Skeleton.Table rows={5} columns={5} />
-      </LoadingState>
-    );
+  if (q.isPending) body = <ScfSkeleton />;
   else if (q.error || !v)
     body = (
       <ErrorState

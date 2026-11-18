@@ -31,7 +31,7 @@ import { PageHeader } from "@/components/page-header";
 import { RangeControl } from "@/components/range-control";
 import { Segmented } from "@/components/segmented";
 import { Sparkline, StatCard } from "@/components/stat-card";
-import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
+import { EmptyState, ErrorState, Missing } from "@/components/states";
 import { StatusDot } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
@@ -60,6 +60,7 @@ import {
   writeWebState,
 } from "@/lib/web-dashboard";
 import { useProject } from "@/pages/project-layout";
+import { PAGE_HEADERS, WebSkeleton } from "./page-frame";
 import { SelectFilter } from "./select-filter";
 import { METRIC_LABEL, WebTrendChart } from "./web-chart";
 
@@ -102,7 +103,7 @@ export function WebPage() {
 
   const header = (
     <PageHeader
-      title="Web"
+      {...PAGE_HEADERS.web}
       freshness={summary.data?.read_at ? { at: summary.data.read_at, cadence: CADENCE } : null}
     />
   );
@@ -253,21 +254,6 @@ function Page({ header, children }: { header: ReactNode; children: ReactNode }) 
     </div>
   );
 }
-
-// the layout of the dashboard while it loads, so nothing moves when it lands
-function WebSkeleton() {
-  return (
-    <LoadingState label="Loading the web numbers">
-      <Skeleton.StatRow count={5} />
-      <Skeleton.Chart />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Skeleton.Table rows={5} columns={2} />
-        <Skeleton.Table rows={5} columns={2} />
-      </div>
-    </LoadingState>
-  );
-}
-
 // whether a live read of the project waits for its analytics access (409
 // provisioning_pending). the query client keeps asking; this only says why
 // a section still loads.

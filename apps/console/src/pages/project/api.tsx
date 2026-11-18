@@ -34,7 +34,7 @@ import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
 import { parseUtcDayTime, RangeControl } from "@/components/range-control";
 import { Sparkline, StatCard } from "@/components/stat-card";
-import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
+import { EmptyState, ErrorState, Missing } from "@/components/states";
 import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,6 +69,7 @@ import {
 } from "@/lib/api-metrics";
 import { formatCount, formatDate, formatLatency, formatPercent, OPEN_BUCKET } from "@/lib/format";
 import { useProject } from "@/pages/project-layout";
+import { ApiSkeleton, PAGE_HEADERS } from "./page-frame";
 import { SelectFilter } from "./select-filter";
 
 // contract 7.3: the one line shown with every trace-derived badge
@@ -96,7 +97,7 @@ export function ApiPage() {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        title="API"
+        {...PAGE_HEADERS.api}
         freshness={
           services.dataUpdatedAt ? { at: new Date(services.dataUpdatedAt), cadence: CADENCE } : null
         }
@@ -138,17 +139,6 @@ export function ApiPage() {
     </div>
   );
 }
-
-function ApiSkeleton() {
-  return (
-    <LoadingState label="Loading the API numbers">
-      <Skeleton.StatRow count={4} />
-      <Skeleton.Chart />
-      <Skeleton.Table rows={6} columns={7} />
-    </LoadingState>
-  );
-}
-
 // the resolved range in words with its resolution, and why the resolution
 // is coarser than the range asks for, when it is
 function RangeLine({ range }: { range: ApiRange }) {

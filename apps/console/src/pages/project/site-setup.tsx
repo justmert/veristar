@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { fade } from "@veristar/brand/motion";
-import { ArrowLeft, Check, ChevronRight, CircleAlert, ExternalLink, Settings } from "lucide-react";
+import { Check, ChevronRight, CircleAlert, ExternalLink, Settings } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useId, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
@@ -35,6 +35,7 @@ import { CONSENT_START, readsTitleChoice, snippetGuides } from "@/lib/snippet-gu
 import { webPath } from "@/lib/web-dashboard";
 import { useProject } from "@/pages/project-layout";
 import { NotFoundPage } from "@/pages/public/not-found";
+import { SitePageLoading, SitesBackLink } from "./page-frame";
 import { VerifyDomain } from "./site-verify";
 import { useFirstEvent } from "./sites";
 
@@ -42,19 +43,6 @@ import { useFirstEvent } from "./sites";
 // event arrive, verify the domain, and the stellar.toml the service reads.
 // one progress model (lib/site-setup.ts) drives the header, the steps and
 // the sites list.
-
-function BackLink({ tenantId }: { tenantId: string }) {
-  return (
-    <Link
-      to={`/projects/${tenantId}/sites`}
-      className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring"
-    >
-      <ArrowLeft aria-hidden className="size-4" />
-      Sites
-    </Link>
-  );
-}
-
 export function SiteSetupPage() {
   const { tenant } = useProject();
   const { siteId = "" } = useParams();
@@ -62,23 +50,15 @@ export function SiteSetupPage() {
   const site = sites.data?.find((s) => s.id === siteId && s.status !== "removed");
 
   if (sites.data && !site) return <NotFoundPage />;
-  if (!site)
+  if (sites.error)
     return (
       <div className="flex flex-col gap-6">
-        <BackLink tenantId={tenant.id} />
+        <SitesBackLink tenantId={tenant.id} />
         <PageHeader title="Site setup" />
-        {sites.error ? (
-          <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
-        ) : (
-          <div role="status" aria-busy="true" className="flex flex-col gap-4">
-            <span className="sr-only">Loading the site</span>
-            <Skeleton className="h-2 w-48" />
-            <Skeleton className="h-40 w-full" />
-            <Skeleton className="h-24 w-full" />
-          </div>
-        )}
+        <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
       </div>
     );
+  if (!site) return <SitePageLoading tenantId={tenant.id} page="setup" />;
   return <SiteSetup site={site} />;
 }
 
@@ -106,7 +86,7 @@ function SiteSetup({ site }: { site: Site }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <BackLink tenantId={site.tenant_id} />
+      <SitesBackLink tenantId={site.tenant_id} />
       <PageHeader
         title={site.name}
         meta={site.status !== "active" ? <StatusBadge kind="site" status={site.status} /> : null}

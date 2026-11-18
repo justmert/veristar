@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Me, Site, Tenant } from "@/api/schemas";
 import { RemovedNotices } from "@/pages/home/projects";
 import { VerifyDomain } from "@/pages/project/site-verify";
-import { RemovedNotice, StatusNotice } from "@/pages/project-layout";
+import { ProjectLayout, RemovedNotice, StatusNotice } from "@/pages/project-layout";
 import { resubmitBody, resubmitValues } from "@/pages/resubmit";
 import * as f from "./fixtures/contract";
 import { byLabel, byRole, click, render, renderRoutes, stubFetch, type, waitFor } from "./helpers";
@@ -151,5 +151,63 @@ describe("domain verification, the third setup step (contract 5.8)", () => {
     await waitFor(() => byRole(host, "button", "Check now"));
     await click(byRole(host, "button", "Check now"));
     await waitFor(() => expect(host.textContent).toContain("Try again in 10 minutes"));
+  });
+});
+
+describe("a project page while the project loads", () => {
+  // the project and the account never answer: the frame stays pending
+  function pending() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
+  }
+  const routes = [
+    {
+      path: "/projects/:tenantId/*",
+      element: <ProjectLayout />,
+      children: [{ path: "*", element: <p>page</p> }],
+    },
+  ];
+  const at = (rest: string) => `/projects/${f.TENANT_ID}${rest}`;
+  const title = (host: HTMLElement) => host.querySelector("h1")?.textContent;
+
+  it("draws the page title from the route, never a skeleton header", async () => {
+    pending();
+    const cases: [string, string][] = [
+      ["", "Overview"],
+      ["/web", "Web"],
+      ["/api", "API"],
+      ["/onchain", "On-chain"],
+      ["/scf", "SCF review"],
+      ["/sites", "Sites"],
+      ["/connect-api", "Connect your API"],
+      ["/ai", "AI assistants"],
+      ["/members", "Members"],
+      ["/privacy", "Privacy"],
+    ];
+    for (const [rest, name] of cases) {
+      const host = await renderRoutes(routes, at(rest));
+      expect(title(host)).toBe(name);
+      // the data areas are skeletons, marked busy for screen readers
+      expect(host.querySelector('[aria-busy="true"]')).not.toBeNull();
+      // the page itself waits for the project
+      expect([...host.querySelectorAll("p")].some((e) => e.textContent === "page")).toBe(false);
+    }
+  });
+
+  it("keeps the description of a page that has one", async () => {
+    pending();
+    const host = await renderRoutes(routes, at("/members"));
+    expect(host.querySelector("header p")?.textContent).toBe("The people who manage this project.");
+  });
+
+  it("names a site page and links back to Sites", async () => {
+    pending();
+    const setup = await renderRoutes(routes, at(`/sites/${f.SITE_ID}`));
+    expect(title(setup)).toBe("Site setup");
+    expect(setup.querySelector("a")?.getAttribute("href")).toBe(at("/sites"));
+    const settings = await renderRoutes(routes, at(`/sites/${f.SITE_ID}/settings`));
+    expect(title(settings)).toBe("Site settings");
   });
 });

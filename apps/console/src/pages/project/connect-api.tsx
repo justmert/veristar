@@ -31,6 +31,7 @@ import { type OtelGuide, otelGuides, otlpEndpoint } from "@/lib/otel-guides";
 import * as v from "@/lib/validate";
 import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
+import { PAGE_HEADERS } from "./page-frame";
 
 export type TokenValues = { name: string; environment: string };
 export type TokenErrors = Partial<Record<keyof TokenValues, string>>;
@@ -98,10 +99,7 @@ export function ConnectApiPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader
-        title="Connect your API"
-        description="Add a second exporter to your app. It sends request counts, status codes and latency here."
-      />
+      <PageHeader {...PAGE_HEADERS["connect-api"]} />
 
       <div className="grid items-start gap-x-10 gap-y-8 xl:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="flex min-w-0 flex-col gap-8">
