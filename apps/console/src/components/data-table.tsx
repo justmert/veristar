@@ -235,7 +235,7 @@ export function DataTable<Row>({
                           className={cn(
                             CELL,
                             c.align === "right" && "text-right",
-                            c.numeric && "font-mono tabular",
+                            c.numeric && "tabular",
                             c.minWidth,
                             c.className,
                             href && c !== primary && ABOVE_ROW_LINK,
@@ -646,7 +646,7 @@ function PhoneCard<Row>({
                     // column; a column that cuts long values keeps its cut,
                     // with the full value in a tooltip
                     "min-w-0 text-small break-words text-fg",
-                    c.numeric && "font-mono tabular",
+                    c.numeric && "tabular",
                     href && ABOVE_ROW_LINK,
                   )}
                 >

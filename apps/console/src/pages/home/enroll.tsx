@@ -362,7 +362,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 hint={
                   <span className="flex justify-between gap-4">
                     <span>For example: a lending protocol on Soroban, or a Stellar wallet.</span>
-                    <span className="shrink-0 font-mono tabular text-fg-2">
+                    <span className="shrink-0 tabular text-fg-2">
                       {values.stellarUsage.length} / 2000
                     </span>
                   </span>
@@ -519,7 +519,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 key={step.title}
                 className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2 border-t border-line py-3"
               >
-                <span className="font-mono text-small text-fg-2 tabular">{i + 1}</span>
+                <span className="text-small text-fg-2 tabular">{i + 1}</span>
                 <span className="flex flex-col gap-1">
                   <span className="text-body font-medium text-fg">{step.title}</span>
                   <span className="text-small text-fg-2">{step.text}</span>

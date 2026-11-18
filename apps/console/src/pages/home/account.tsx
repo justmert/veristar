@@ -281,7 +281,7 @@ function SignInMethods({ me }: { me: Me }) {
           detail={
             github_login !== null ? (
               <>
-                {github_login} <span className="font-mono tabular">· id {github_id}</span>
+                {github_login} <span className="font-mono">· id {github_id}</span>
               </>
             ) : (
               "Not linked"

@@ -540,7 +540,7 @@ function Counts({ title, counts }: { title: string; counts: Record<string, numbe
           {rows.map(([k, n]) => (
             <div key={k} className="contents">
               <dt className="border-b border-line-subtle py-1 text-fg-2">{outcomeLabel(k)}</dt>
-              <dd className="border-b border-line-subtle py-1 text-right font-mono text-fg tabular">
+              <dd className="border-b border-line-subtle py-1 text-right text-fg tabular">
                 {formatCount(n)}
               </dd>
             </div>

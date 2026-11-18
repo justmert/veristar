@@ -78,7 +78,7 @@ export function DateField({
       pattern={time ? "\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}" : "\\d{4}-\\d{2}-\\d{2}"}
       autoComplete="off"
       spellCheck={false}
-      className="font-mono tabular max-lg:h-(--vs-control-touch)"
+      className="tabular max-lg:h-(--vs-control-touch)"
     />
   );
 }

@@ -635,11 +635,11 @@ function Usage({ row, onClose }: { row: KeyRow; onClose: () => void }) {
         <>
           <p className="text-small text-fg-2">
             {formatDateRange(u.data.from, u.data.to)}, UTC:{" "}
-            <span className="font-mono text-fg tabular" data-usage="requests">
+            <span className="text-fg tabular" data-usage="requests">
               {formatCount(u.data.totals.requests)}
             </span>{" "}
             requests,{" "}
-            <span className="font-mono text-fg tabular" data-usage="rejected">
+            <span className="text-fg tabular" data-usage="rejected">
               {formatCount(u.data.totals.rejected)}
             </span>{" "}
             refused. A request is refused when the key is revoked or expired, over the rate limit,

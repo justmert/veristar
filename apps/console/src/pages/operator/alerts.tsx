@@ -58,7 +58,7 @@ export function AlertsPage() {
         title="Alerts"
         meta={
           count !== null ? (
-            <span className="font-mono text-body text-fg-2 tabular" data-count="">
+            <span className="text-body text-fg-2 tabular" data-count="">
               {count}
             </span>
           ) : null
@@ -277,9 +277,7 @@ function SeverityList({ group, now }: { group: SeverityGroup; now: number }) {
     <section aria-labelledby={headingId} className="flex flex-col gap-3" data-severity={group.key}>
       <h2 id={headingId} className="flex items-baseline gap-2 text-title text-fg">
         {groupTitle(group.key)}{" "}
-        <span className="font-mono text-small font-normal text-fg-2 tabular">
-          {group.alerts.length}
-        </span>
+        <span className="text-small font-normal text-fg-2 tabular">{group.alerts.length}</span>
       </h2>
       <ul className="flex flex-col gap-2">
         {group.alerts.map((a) => (
@@ -346,8 +344,7 @@ function AlertItem({ alert, now }: { alert: FiringAlert; now: number }) {
           {sentenceCase(alert.summary ?? alert.name)}
         </p>
         <p className="text-small text-fg-2">
-          Fires for{" "}
-          <span className="font-mono text-fg tabular">{firingFor(alert.starts_at, now)}</span>,
+          Fires for <span className="text-fg tabular">{firingFor(alert.starts_at, now)}</span>,
           since <time dateTime={alert.starts_at}>{formatDateTimeUtc(alert.starts_at)}</time>
         </p>
         {alert.description ? (

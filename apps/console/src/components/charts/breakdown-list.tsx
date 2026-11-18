@@ -119,7 +119,7 @@ export function BreakdownList({
               <span className="relative min-w-0 flex-1 truncate text-fg" title={it.text}>
                 {it.label}
               </span>
-              <span className="relative flex shrink-0 gap-4 font-mono text-small tabular">
+              <span className="relative flex shrink-0 gap-4 text-small tabular">
                 {showShare ? (
                   <span className="w-12 text-right text-fg-2">
                     {formatShareOf(it.value, total ?? 0)}

@@ -78,7 +78,7 @@ export function ReviewQueuePage() {
         title="Review"
         meta={
           count ? (
-            <span className="font-mono text-body text-fg-2 tabular" data-count="">
+            <span className="text-body text-fg-2 tabular" data-count="">
               {count}
             </span>
           ) : null

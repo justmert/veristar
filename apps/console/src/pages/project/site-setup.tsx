@@ -211,7 +211,7 @@ function Progress({
           ))}
       </span>
       <span className="text-small text-fg-2">
-        <span className="font-mono tabular">
+        <span className="tabular">
           {done} of {total}
         </span>{" "}
         done. {text}
@@ -628,8 +628,8 @@ function FirstEventState({
               {reasons.map((r) => (
                 <li key={r.key} className="flex flex-col">
                   <span className="text-fg">
-                    {r.label}: <span className="font-mono tabular">{formatCount(r.count)}</span> in
-                    the last {period}
+                    {r.label}: <span className="tabular">{formatCount(r.count)}</span> in the last{" "}
+                    {period}
                   </span>
                   {outcomeHint(r.key) ? (
                     <span className="text-fg-2">{outcomeHint(r.key)}</span>
