@@ -62,9 +62,9 @@ export function trackerTag(): { src: string; integrity: string; siteId: string }
 In your site, write the values from the console's tag directly into the entry: `src`, `integrity`
 and `data-website-id` of
 
-{/* snippet version=1.3.0 */}
+{/* snippet version=1.3.1 */}
 ```html
-<script defer src="https://in.analytics.example/v/1.3.0/sdk.js" integrity="sha384-3E+vbTmGHWaU8kaLAWT6ttw70odRH565/3vRal5558SgSitqFlIbsFHlfzWnSUtT" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
+<script defer src="https://in.analytics.example/v/1.3.1/sdk.js" integrity="sha384-54fz21LNRgy6RLEdhwecMK8yavckH44JnSX9iSA3p2uiEtCEs6fyFt6LhuOL5kKw" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
 
 With the entry above, VitePress writes exactly the console's tag into every built page.

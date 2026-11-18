@@ -42,11 +42,11 @@ count towards yours.
 ## 3. Copy the tag
 
 Choose **Snippet** next to the site. The console shows the tag for the newest tracker version.
-The guides use version 1.3.0, which looks like this:
+The guides use version 1.3.1, the newest release, which looks like this:
 
-{/* snippet version=1.3.0 */}
+{/* snippet version=1.3.1 */}
 ```html
-<script defer src="https://in.analytics.example/v/1.3.0/sdk.js" integrity="sha384-3E+vbTmGHWaU8kaLAWT6ttw70odRH565/3vRal5558SgSitqFlIbsFHlfzWnSUtT" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
+<script defer src="https://in.analytics.example/v/1.3.1/sdk.js" integrity="sha384-54fz21LNRgy6RLEdhwecMK8yavckH44JnSX9iSA3p2uiEtCEs6fyFt6LhuOL5kKw" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
 
 The tag pins one tracker version. The `integrity` value makes the browser refuse the file if a
@@ -84,7 +84,7 @@ tab shows three requests to the gateway:
 
 | Request | Answer | What it is |
 |---|---|---|
-| `GET /v/1.3.0/sdk.js` | 200 | the tracker file |
+| `GET /v/1.3.1/sdk.js` | 200 | the tracker file |
 | `GET /v1/c?w=<site id>` | 200 | a challenge, once per page load |
 | `POST /v1/e` | 202 | the pageview, accepted and queued |
 
