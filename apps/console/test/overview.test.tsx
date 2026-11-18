@@ -2,13 +2,8 @@ import { Outlet } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import type { Site } from "@/api/schemas";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import {
-  apiRangeOfDays,
-  nextSetupStep,
-  overviewDays,
-  readOverviewPreset,
-  siteFirstEvent,
-} from "@/lib/overview";
+import { apiRangeOfDays, overviewDays, readOverviewPreset } from "@/lib/overview";
+import { combineFirstEvent, firstEvent, nextSetupStep } from "@/lib/site-setup";
 import { ingestWindow, sparkOf, sumOutcomes } from "@/lib/web-dashboard";
 import { OverviewPage } from "@/pages/project/overview";
 import type { ProjectContext } from "@/pages/project-layout";
@@ -35,13 +30,15 @@ describe("overview range", () => {
 
 describe("next setup step", () => {
   it("completes the first event on either source", () => {
-    expect(siteFirstEvent(undefined, undefined)).toBeUndefined();
-    expect(siteFirstEvent({ totals: {} }, undefined)).toBe("waiting");
-    expect(siteFirstEvent({ totals: { rejected_origin: 3 } }, undefined)).toBe("refused");
+    const edge = (totals: Record<string, number>) =>
+      firstEvent({ ...f.ingestBody, totals } as never);
+    expect(combineFirstEvent(null, null)).toBeNull();
+    expect(combineFirstEvent(edge({}), null)).toBe("waiting");
+    expect(combineFirstEvent(edge({ rejected_origin: 3 }), null)).toBe("refused");
     // the web totals saw a page view the edge counts do not hold yet
-    expect(siteFirstEvent({ totals: {} }, 4)).toBe("received");
-    expect(siteFirstEvent(undefined, 4)).toBe("received");
-    expect(siteFirstEvent({ totals: { quarantined: 1 } }, 0)).toBe("received");
+    expect(combineFirstEvent(edge({}), true)).toBe("received");
+    expect(combineFirstEvent(null, true)).toBe("received");
+    expect(combineFirstEvent(edge({ quarantined: 1 }), false)).toBe("received");
   });
 
   it("names one step of the first site that is not set up", () => {
@@ -56,7 +53,7 @@ describe("next setup step", () => {
     expect(nextSetupStep([b], () => "refused")?.step).toBe("refused");
     expect(nextSetupStep([a], () => "received")).toBeNull();
     // an answer still missing names no step yet, so nothing jumps
-    expect(nextSetupStep([b], () => undefined)).toBeNull();
+    expect(nextSetupStep([b], () => null)).toBeNull();
   });
 });
 

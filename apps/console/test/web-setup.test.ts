@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ingest, snippet } from "@/api/schemas";
 import { niceTicks } from "@/lib/format";
+import { firstEvent } from "@/lib/site-setup";
 import {
   CONSENT_ATTR,
   consentTag,
@@ -9,7 +10,6 @@ import {
   TITLE_ATTR,
   titleTag,
 } from "@/lib/snippet-guides";
-import { firstEvent } from "@/pages/project/sites";
 import * as f from "./fixtures/contract";
 
 const answer = (totals: Record<string, number>) => ingest.parse({ ...f.ingestBody, totals });

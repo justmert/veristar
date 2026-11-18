@@ -34,14 +34,6 @@ import * as v from "@/lib/validate";
 import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
 
-export {
-  type FirstEvent,
-  firstEvent,
-  setupDone,
-  siteSettingsPath,
-  siteSetupPath,
-} from "@/lib/site-setup";
-
 export type SiteValues = { name: string; domain: string; origins: string };
 export type SiteErrors = Partial<Record<keyof SiteValues, string>>;
 
