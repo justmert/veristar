@@ -76,7 +76,7 @@ Costs:
 - More moving parts to deploy and monitor than a single patched application.
 - Features Umami has but the platform does not want (session replay, heatmaps,
   error tracking and others) cannot be compiled out. They are disabled by not
-  shipping their client code and by blocking their routes.
+  shipping their client code, and no public host reaches their routes.
 
 ## Sources
 
