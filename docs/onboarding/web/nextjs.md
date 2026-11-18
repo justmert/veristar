@@ -77,8 +77,9 @@ current URL. Tracker 1.2.0 and newer ignore a call that does not change the URL,
 keeps the previous page as its referrer. With 1.0.0 and 1.1.0 the referrer of that pageview becomes
 the page itself. The dashboards show the same numbers either way, because the gateway drops
 referrers inside your own site (they arrive as paths); only a `data-before-send` hook that reads the
-referrer sees the difference. The example pins 1.1.0, so its browser test checks the referrer on
-forward navigations.
+referrer sees the difference. The browser test matrix runs tracker 1.0.0, so it checks the
+referrer on forward navigations; the tracker's own tests check the back and forward case for 1.2.0
+and newer.
 
 ## Custom events
 

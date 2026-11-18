@@ -79,4 +79,4 @@ events to the origin it was loaded from:
 
 Events always go from the browser straight to `in.<BASE_DOMAIN>`. Do not relay events through
 your own server: every visitor would then share your server's address, which the same-IP checks
-treat as suspicious ([bot-and-inflation.md](bot-and-inflation.md) section 6).
+treat as suspicious ([same-network skepticism](bot-and-inflation.md#8-same-network-skepticism-and-the-quarantine-band)).

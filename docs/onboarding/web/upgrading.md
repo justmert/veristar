@@ -24,8 +24,9 @@ released file is never rebuilt or replaced. Released so far:
 
 ## Steps
 
-1. Open the site's **Snippet** page in the console and choose the new version in **Tracker
-   version**. The recommended version, the newest, is marked. The page shows the new tag, its release date and its size.
+1. Open the site's setup page in the console (**Snippet** on the site's **Setup** tab). Under
+   **Version and what the tag pins**, choose the new version in **Tracker version**; the newest is
+   marked recommended. The page shows the new tag, its release date and its size.
 2. Replace the whole tag on your pages with the new one. Both `src` and `integrity` change; copying
    only one of them makes the browser refuse the file. Keep any attributes you added yourself
    (`data-auto-track`, `data-domains` and so on).
