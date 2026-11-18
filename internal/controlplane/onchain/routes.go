@@ -92,6 +92,8 @@ type Routes struct {
 	network string
 	console string
 	now     func() time.Time
+	// proofs running in this process, counted by the rate limit
+	inflight tenants.Inflight
 }
 
 // NewRoutes needs the scope, both ledger apis, which the proofs read, and
@@ -530,21 +532,29 @@ func (h *Routes) projectName(ctx context.Context, a tenants.Access) (string, err
 }
 
 // limit answers 429 after verifyLimit console checks of an id within the
-// window, counted from the audit rows the route writes.
-func (h *Routes) limit(ctx context.Context, id uuid.UUID) error {
+// window, counted from the audit rows the route writes and the checks of
+// the id still running in this process. the returned func gives the slot
+// back once the check is recorded.
+func (h *Routes) limit(ctx context.Context, id uuid.UUID) (func(), error) {
 	now := h.now()
 	var n int
 	var oldest time.Time
-	err := h.scope.DB().WithSystem(ctx, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `select count(*), coalesce(min(at), now()) from cp.audit_log
-			where target = $1 and action = $2 and at > $3`, AuditTarget(id), ActionVerify, now.Add(-verifyWindow)).Scan(&n, &oldest)
+	ok, release, err := h.inflight.Reserve(id, verifyLimit, func() (int, error) {
+		err := h.scope.DB().WithSystem(ctx, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, `select count(*), coalesce(min(at), now()) from cp.audit_log
+				where target = $1 and action = $2 and at > $3`, AuditTarget(id), ActionVerify, now.Add(-verifyWindow)).Scan(&n, &oldest)
+		})
+		return n, err
 	})
 	if err != nil {
-		return fmt.Errorf("onchain: rate count: %w", err)
+		return nil, fmt.Errorf("onchain: rate count: %w", err)
 	}
-	if n < verifyLimit {
-		return nil
+	if ok {
+		return release, nil
 	}
-	wait := max(oldest.Add(verifyWindow).Sub(now), time.Second)
-	return httpx.RateLimited(wait)
+	wait := time.Second
+	if n >= verifyLimit {
+		wait = max(oldest.Add(verifyWindow).Sub(now), time.Second)
+	}
+	return nil, httpx.RateLimited(wait)
 }

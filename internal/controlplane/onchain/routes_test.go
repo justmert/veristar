@@ -704,3 +704,42 @@ func (e *env) count(t *testing.T, q string, args ...any) int {
 	e.sys(t, func(tx pgx.Tx) error { return tx.QueryRow(t.Context(), q, args...).Scan(&n) })
 	return n
 }
+
+// TestVerifyLimitConcurrent: a burst of proofs of one id keeps the limit of
+// ten attempts per hour; proofs still reading the ledger count against it.
+func TestVerifyLimitConcurrent(t *testing.T) {
+	e := start(t)
+	owner := e.user(t)
+	account := keypair.MustRandom().Address()
+	tenant := e.tenant(t, owner, []string{account})
+	c := e.client(t, owner)
+	base := "/api/tenants/" + tenant.String() + "/onchain"
+	id := idOf(t, c.call(t, http.MethodGet, base, nil), account)["id"].(string)
+	e.l.mu.Lock()
+	e.l.data[account] = map[string]string{}
+	e.l.mu.Unlock()
+	r := c.call(t, http.MethodPost, base+"/ids/"+id+"/challenge", nil)
+	require.Equal(t, http.StatusOK, r.status, string(r.raw))
+
+	const n = 25
+	codes := make(chan int, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() {
+			codes <- c.call(t, http.MethodPost, base+"/ids/"+id+"/verify", map[string]any{"method": "manage_data"}).status
+		})
+	}
+	wg.Wait()
+	close(codes)
+	ok := 0
+	for code := range codes {
+		if code == http.StatusOK {
+			ok++
+		} else {
+			require.Equal(t, http.StatusTooManyRequests, code)
+		}
+	}
+	require.LessOrEqual(t, ok, 10)
+	require.LessOrEqual(t, e.count(t, `select count(*) from cp.audit_log where target = $1 and action = $2`,
+		onchain.AuditTarget(uuid.MustParse(id)), onchain.ActionVerify), 10)
+}

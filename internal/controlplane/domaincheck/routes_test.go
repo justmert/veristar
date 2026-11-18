@@ -11,6 +11,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -355,4 +356,36 @@ func TestAfterSiteCreate(t *testing.T) {
 	rows = e.auditRows(t, "site:"+site.String(), domaincheck.ActionStellarToml)
 	require.Len(t, rows, 2)
 	require.Equal(t, map[string]any{"old": nil, "new": "public"}, rows[1]["network"])
+}
+
+// TestVerifyLimitConcurrent: a burst of checks of one site keeps the limit
+// of six per hour; checks still running count against it.
+func TestVerifyLimitConcurrent(t *testing.T) {
+	e := startRoutes(t)
+	owner := e.user(t)
+	tenant := e.tenant(t, owner, "active")
+	domain := "burst." + zone
+	site := e.site(t, tenant, domain, token)
+	e.files.set(domain, token)
+	c := e.client(t, owner)
+	path := "/api/sites/" + site.String() + "/verify"
+
+	const n = 20
+	codes := make(chan int, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() { codes <- c.call(t, http.MethodPost, path, map[string]any{"method": "file"}).status })
+	}
+	wg.Wait()
+	close(codes)
+	ok := 0
+	for code := range codes {
+		if code == http.StatusOK {
+			ok++
+		} else {
+			require.Equal(t, http.StatusTooManyRequests, code)
+		}
+	}
+	require.LessOrEqual(t, ok, 6)
+	require.LessOrEqual(t, len(e.auditRows(t, "site:"+site.String(), domaincheck.ActionVerify)), 6)
 }

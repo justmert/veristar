@@ -1532,7 +1532,9 @@ the file), writes the result under `cp_system` (1.3), audit `site.verify` (detai
 method tried, result code). **200** the object above. 409 `site_removed`. 429
 `rate_limited` above 6 checks per site per hour (`Retry-After` set). The limit
 counts the site's `site.verify` audit rows of the last hour, so it holds across
-all control plane instances without shared memory.
+all control plane instances without shared memory, plus the checks of the site
+still running on the instance, so a burst of concurrent requests cannot pass
+it together.
 
 - DNS check: a TXT record at `dns.name` whose value (strings of one record
   joined) equals `dns.value` exactly.
@@ -3427,7 +3429,7 @@ shows the signer which project asks.
 
 **`POST /api/tenants/{tenant_id}/onchain/ids/{chain_id}/verify`**: any member,
 terms accepted, not `suspended`, at most 10 attempts per id and hour (429
-`rate_limited`). Body by method:
+`rate_limited`), proofs still running on the instance included. Body by method:
 
 | Method | Kind | Body | The proof holds when |
 |---|---|---|---|
