@@ -259,9 +259,10 @@ flowchart TB
   under a role with row-level security forced on every tenant table. No application role can
   bypass it. The isolation gate `tests/isolation` checks every route and the role matrix in CI
   ([security/threat-model.md](security/threat-model.md)).
-- **Operators** see aggregates only: the role `cp_operator` reads `agg`, hourly and daily `api`
-  data and non-secret project facts, cannot read raw events or sessions, and cannot connect to
-  the `umami` database. Operators get no Umami access
+- **Operators** see aggregate numbers, plus each project's enrollment answers, members and
+  audit log for review: the role `cp_operator` reads `agg`, hourly and daily `api` data and
+  non-secret project facts, cannot read raw events or sessions, and cannot connect to the
+  `umami` database. Operators get no Umami access
   ([operators/overview.md](operators/overview.md)).
 - **Machine consumers** read the same aggregates with operator API keys under
   `/api/metrics/v1/`, which has no session handling at all
