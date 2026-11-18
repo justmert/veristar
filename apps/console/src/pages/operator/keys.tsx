@@ -45,6 +45,7 @@ import {
   formatDateTimeUtc,
   formatTimeUtc,
 } from "@/lib/format";
+import { nameTaken } from "@/pages/project/ai";
 
 // one row of the list: a machine api key, an ai assistant key, or the
 // connection of an ai client that signed in through this console
@@ -265,6 +266,7 @@ export function AccessKeysPage() {
         <CreateKeyForm
           tenants={tenants.data?.map((t) => ({ id: t.id, name: t.name })) ?? []}
           tenantsError={tenants.error}
+          takenNames={rows.filter((r) => r.status === "active").map((r) => r.name)}
           onCancel={() => setCreating(false)}
           onCreated={(c) => {
             setCreating(false);
@@ -332,11 +334,14 @@ export function AccessKeysPage() {
 function CreateKeyForm({
   tenants,
   tenantsError,
+  takenNames,
   onCancel,
   onCreated,
 }: {
   tenants: { id: string; name: string }[];
   tenantsError: unknown;
+  // the names of the live keys, to warn on a second key with the same name
+  takenNames: string[];
   onCancel: () => void;
   onCreated: (
     c: { type: "machine"; key: ApiKeyCreated } | { type: "assistant"; key: McpCredentialCreated },
@@ -406,9 +411,15 @@ function CreateKeyForm({
           <TextField
             label="Name"
             hint={
-              machine
-                ? "Who uses the key, for example warehouse."
-                : "Where you use the key, for example laptop."
+              nameTaken(takenNames, form.name) ? (
+                <span className="text-warning">
+                  A key with this name exists. Use another name to tell them apart.
+                </span>
+              ) : machine ? (
+                "Who uses the key, for example warehouse."
+              ) : (
+                "Where you use the key, for example laptop."
+              )
             }
             placeholder={machine ? "warehouse" : "laptop"}
             maxLength={100}
