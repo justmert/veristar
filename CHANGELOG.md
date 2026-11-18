@@ -130,6 +130,19 @@ here, before they take effect, as the processing terms require
   with `verify-migration` before the reconcile writes to the new cluster. The
   security patch and incident runbooks stop every Umami process too, and
   `tests/docs` refuses a runbook command that stops `umami` without `umami-2`.
+- A contract proven through an account that the project removes while the
+  proof reads the ledger stays unverified (`admin_not_verified` or
+  `deployer_not_verified`); before, it could be stored as verified through
+  the removed account.
+- Usage report creation (20 per project and day) and link revocation (60 per
+  project and hour) keep their limits under concurrent requests.
+- The domain check (6 per site and hour) and the on-chain proof (10 per id
+  and hour) count the checks still running, so a burst of requests no longer
+  passes the limit together.
+- An erasure request for a site that is pending (a pending or rejected
+  project, or a site in review) answers 503 `provisioning_pending`, as the
+  contract says, instead of starting a run against Umami websites that do
+  not exist.
 
 ### Upgrade notes
 
