@@ -698,13 +698,17 @@ function NotCounted({
     (o) => pending || value(o.key) > 0,
   );
 
+  // the reasons stand beside the outcomes only when there are any; alone,
+  // the outcomes take the width
+  const whyShown = span !== null && !failed && (pending || reasons.length > 0);
+
   return (
     <section aria-labelledby="not-counted" className="flex flex-col gap-4">
       <h2 id="not-counted" className="text-section text-fg">
         Not counted
       </h2>
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className={cn("grid items-start gap-4", whyShown && "lg:grid-cols-2")}>
         {/* one panel: the quarantined page views, then every event by outcome */}
         <Panel
           title="Every event, by outcome"
@@ -770,7 +774,7 @@ function NotCounted({
             </dl>
           )}
         </Panel>
-        {span === null || failed || (!pending && reasons.length === 0) ? null : (
+        {!whyShown ? null : (
           <Panel title="Why events were rejected">
             <BreakdownList
               label="Reasons"
