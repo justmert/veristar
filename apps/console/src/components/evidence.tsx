@@ -264,7 +264,9 @@ export function StellarTomlSummary({
               {accounts} listed, {toml.accounts_valid ?? 0} valid
             </EvidenceRow>
             <EvidenceRow
-              mark={toml.signing_key_present ? (toml.signing_key_valid ? "ok" : "missing") : "absent"}
+              mark={
+                toml.signing_key_present ? (toml.signing_key_valid ? "ok" : "missing") : "absent"
+              }
               label="Signing key"
               advice="Set SIGNING_KEY to a valid G address."
             >
