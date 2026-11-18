@@ -45,7 +45,13 @@ import {
   formatTick,
   OPEN_BUCKET,
 } from "@/lib/format";
-import { DAYS_WITHOUT_DATA, shortKey, weeklyActiveText } from "@/lib/onchain";
+import {
+  chainGap,
+  DAYS_WITHOUT_DATA,
+  NO_VERIFIED_IDS,
+  shortKey,
+  weeklyActiveText,
+} from "@/lib/onchain";
 import {
   closedDays,
   downloadFile,
@@ -145,6 +151,7 @@ function Standing({ v, tenantId, isOwner }: { v: SCFView; tenantId: string; isOw
 // shared badge, what it means, and the days behind it
 function GradeCard({ v }: { v: SCFView }) {
   const g = v.integrity;
+  const sites = v.sites?.sites ?? null;
   return (
     <div
       data-testid="standing-grade"
@@ -154,8 +161,17 @@ function GradeCard({ v }: { v: SCFView }) {
       {g ? (
         <>
           <StatusBadge kind="grade" grade={g.grade} className="w-fit" />
-          <p className="text-small text-fg">{gradeMeaning(g.grade)}</p>
-          <p className="text-caption text-fg-2">{dayCountsText(g)}</p>
+          {sites === 0 ? (
+            <p className="text-small text-fg">No site to grade. Add a site to get a grade.</p>
+          ) : (
+            <>
+              <p className="text-small text-fg">{gradeMeaning(g.grade)}</p>
+              {/* without a graded day the meaning above says it already */}
+              {g.graded_days > 0 ? (
+                <p className="text-caption text-fg-2">{dayCountsText(g)}</p>
+              ) : null}
+            </>
+          )}
         </>
       ) : (
         <p className="text-small text-fg-2">
@@ -193,6 +209,12 @@ function CohortPlace({ v }: { v: SCFView }) {
       ? `the projects confirmed in ${[pc.program, pc.round].filter(Boolean).join(", ")}`
       : "every listed project, because no cohort is confirmed for yours";
   const hidden = percentileHiddenReason(c.cohort_size);
+  // on-chain operations follow the one missing-value rule of the figures:
+  // without a verified id neither range is measured
+  const chain = v.onchain;
+  const chainNow = chain ? chainGap(chain.ids_verified, v.onchain_series) : null;
+  const chainBefore = chain && chain.ids_verified === 0 ? NO_VERIFIED_IDS : null;
+  const gapOf = (r: KpiRow, gap: string | null) => (r.key === "onchain_operations" ? gap : null);
   const columns: Column<KpiRow>[] = [
     { key: "metric", header: "Metric", primary: true, cell: (r) => r.label },
     {
@@ -201,14 +223,20 @@ function CohortPlace({ v }: { v: SCFView }) {
       align: "right",
       numeric: true,
       mobile: true,
-      cell: (r) => kpiText(r.k.value, r.kind),
+      cell: (r) => {
+        const gap = gapOf(r, chainNow);
+        return gap ? <Missing reason={gap} /> : kpiText(r.k.value, r.kind);
+      },
     },
     {
       key: "previous",
       header: "Previous range",
       align: "right",
       numeric: true,
-      cell: (r) => kpiText(r.k.previous, r.kind),
+      cell: (r) => {
+        const gap = gapOf(r, chainBefore);
+        return gap ? <Missing reason={gap} /> : kpiText(r.k.previous, r.kind);
+      },
     },
     {
       key: "change",
@@ -371,11 +399,14 @@ function Figure({
   definition,
   children,
   name,
+  text = false,
 }: {
   label: string;
   definition?: string;
   children: ReactNode;
   name?: string;
+  // a word or a badge, not a number: set in the sans face
+  text?: boolean;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-1" data-figure={name}>
@@ -392,7 +423,9 @@ function Figure({
           label
         )}
       </dt>
-      <dd className="min-w-0 text-body text-fg tabular">{children}</dd>
+      <dd className={text ? "min-w-0 text-body text-fg" : "min-w-0 text-body text-fg tabular"}>
+        {children}
+      </dd>
     </div>
   );
 }
@@ -433,6 +466,7 @@ function Figures({ v }: { v: SCFView }) {
   const web = v.web;
   const api = v.api;
   const chain = v.onchain;
+  const chainMissing = chain ? chainGap(chain.ids_verified, v.onchain_series) : null;
   const award = v.comparison?.cohort.award_date ?? null;
   const marker = award ? { day: award, label: `Award date ${formatDate(award)}` } : null;
   const awardInRange = marker !== null && v.days.includes(marker.day);
@@ -448,7 +482,7 @@ function Figures({ v }: { v: SCFView }) {
       <div className="grid min-w-0 gap-3 lg:grid-cols-2">
         <FigureCard title="Project">
           <dl className="grid grid-cols-2 gap-4">
-            <Figure label="Status">
+            <Figure label="Status" text>
               {v.tenant ? (
                 <StatusBadge kind="project" status={v.tenant.status as TenantStatus} />
               ) : (
@@ -552,13 +586,21 @@ function Figures({ v }: { v: SCFView }) {
         {chain ? (
           <>
             <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <Figure label="Operations">{formatCount(chain.operations)}</Figure>
-              <Figure label="Transactions">{formatCount(chain.transactions)}</Figure>
+              <Figure label="Operations">
+                {chainMissing ? <Missing reason={chainMissing} /> : formatCount(chain.operations)}
+              </Figure>
+              <Figure label="Transactions">
+                {chainMissing ? <Missing reason={chainMissing} /> : formatCount(chain.transactions)}
+              </Figure>
               <Figure label="Verified ids">
                 {formatCount(chain.ids_verified)} of {formatCount(chain.ids)}
               </Figure>
               <Figure label="Days without data" definition={DAYS_WITHOUT_DATA} name="days-missing">
-                {formatCount(chain.days_missing)}
+                {chain.ids_verified === 0 ? (
+                  <Missing reason={NO_VERIFIED_IDS} />
+                ) : (
+                  formatCount(chain.days_missing)
+                )}
               </Figure>
             </dl>
             <div className="flex flex-col gap-1">
@@ -842,52 +884,51 @@ function ReportRow({
           Generated {formatDateTimeUtc(r.created_at)}, {countOf(r.view_count, "view")}
         </span>
       </span>
+      {/* the same slots on every row, right aligned: copy link while the
+          link is live, download always in one place, then the menu */}
       <span className="flex items-center gap-1">
+        {revoked ? null : (
+          <CopyButton text={r.url} label="Copy link" accessibleLabel={`Copy link of ${of}`} />
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onDownload}
+          pending={downloading}
+          aria-label={`Download JSON of ${of}`}
+          className="max-lg:h-(--vs-control-touch)"
+        >
+          <Download aria-hidden />
+          Download JSON
+        </Button>
         {revoked ? (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onDownload}
-            pending={downloading}
-            aria-label={`Download JSON of ${of}`}
-            className="max-lg:h-(--vs-control-touch)"
-          >
-            <Download aria-hidden />
-            Download JSON
-          </Button>
+          <span aria-hidden className="size-(--vs-control-sm) max-lg:size-(--vs-control-touch)" />
         ) : (
-          <>
-            <CopyButton text={r.url} label="Copy link" accessibleLabel={`Copy link of ${of}`} />
-            <Menu>
-              <MenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Actions for ${of}`}
-                  className="max-lg:size-(--vs-control-touch)"
-                >
-                  <MoreHorizontal aria-hidden />
-                </Button>
-              </MenuTrigger>
-              <MenuContent align="end">
-                <MenuItem asChild>
-                  <a href={r.url} target="_blank" rel="noopener">
-                    <ExternalLink aria-hidden />
-                    Open the report
-                  </a>
-                </MenuItem>
-                <MenuItem onSelect={onDownload}>
-                  <Download aria-hidden />
-                  Download JSON
-                </MenuItem>
-                <MenuSeparator />
-                <MenuItem tone="critical" onSelect={onRevoke}>
-                  <Ban aria-hidden />
-                  Revoke link
-                </MenuItem>
-              </MenuContent>
-            </Menu>
-          </>
+          <Menu>
+            <MenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Actions for ${of}`}
+                className="max-lg:size-(--vs-control-touch)"
+              >
+                <MoreHorizontal aria-hidden />
+              </Button>
+            </MenuTrigger>
+            <MenuContent align="end">
+              <MenuItem asChild>
+                <a href={r.url} target="_blank" rel="noopener">
+                  <ExternalLink aria-hidden />
+                  Open the report
+                </a>
+              </MenuItem>
+              <MenuSeparator />
+              <MenuItem tone="critical" onSelect={onRevoke}>
+                <Ban aria-hidden />
+                Revoke link
+              </MenuItem>
+            </MenuContent>
+          </Menu>
         )}
       </span>
     </li>

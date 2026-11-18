@@ -15,6 +15,7 @@ import {
   reportDocument,
 } from "@/api/reports";
 import { percentileHiddenReason } from "@/components/cohort";
+import { CopyButton } from "@/components/copy-button";
 import { CoverageNote } from "@/components/coverage";
 import { Disclosure } from "@/components/disclosure";
 import { gradeMeaning } from "@/components/integrity";
@@ -46,7 +47,14 @@ import {
   formatPoints,
   OPEN_BUCKET,
 } from "@/lib/format";
-import { DAYS_WITHOUT_DATA, shortKey, weeklyActiveText } from "@/lib/onchain";
+import { siblingUrl } from "@/lib/hosts";
+import {
+  chainGap,
+  DAYS_WITHOUT_DATA,
+  NO_VERIFIED_IDS,
+  shortKey,
+  weeklyActiveText,
+} from "@/lib/onchain";
 import { type Verdict, verifyReport } from "@/lib/report-verify";
 import { downloadFile } from "@/lib/reports";
 
@@ -65,7 +73,11 @@ export function PublicReportPage() {
     // a revoked link, a removed project and an unknown id answer the same
     // 404, so the page cannot tell them apart and names all three
     body = (
-      <MessagePage icon={<FileX aria-hidden />} title="This report link is not available">
+      <MessagePage
+        icon={<FileX aria-hidden />}
+        title="This report link is not available"
+        actions={<AboutLink />}
+      >
         <p>
           The project revoked the link, the project was removed, or the address is not complete. Ask
           the project for a new link.
@@ -91,6 +103,17 @@ export function PublicReportPage() {
   );
 }
 
+// a reader who followed a dead link learns what Veristar is from the docs
+function AboutLink() {
+  const docs = siblingUrl(window.location.hostname, "docs");
+  if (!docs) return null;
+  return (
+    <Button asChild variant="outline" size="sm">
+      <a href={docs}>What is Veristar</a>
+    </Button>
+  );
+}
+
 function useVerdict(r: PublicReport): Verdict | null {
   const [v, setV] = useState<Verdict | null>(null);
   useEffect(() => {
@@ -109,19 +132,20 @@ function useVerdict(r: PublicReport): Verdict | null {
 export function ReportView({ r }: { r: PublicReport }) {
   const verdict = useVerdict(r);
   const parsed = reportDocument.safeParse(r.file.report);
+  const signature = <Signature verdict={verdict} r={r} />;
+  // a report whose signature does not hold, or is still being checked,
+  // shows no figure: the reader would take it for a signed one. a signed
+  // report leads with its title and period, the signature right under them
+  if (verdict?.ok && parsed.success) return <ReportBody doc={parsed.data} signature={signature} />;
   return (
     <>
-      <Signature verdict={verdict} r={r} />
-      {/* a report whose signature does not hold, or is still being checked,
-          shows no figure: the reader would take it for a signed one */}
-      {!verdict?.ok ? null : parsed.success ? (
-        <ReportBody doc={parsed.data} />
-      ) : (
+      {signature}
+      {verdict?.ok ? (
         <EmptyState icon={<CircleAlert aria-hidden />} title="This page cannot show this report">
           The report has a layout this page does not know. The signature check above still holds.
           Download the JSON file to read it.
         </EmptyState>
-      )}
+      ) : null}
     </>
   );
 }
@@ -193,7 +217,7 @@ function Signature({ verdict, r }: { verdict: Verdict | null; r: PublicReport })
   return (
     <section
       aria-label="Signature"
-      className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5 print:border-line-strong"
+      className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-raised p-3 sm:p-4 print:border-line-strong"
     >
       <div className="flex flex-wrap items-start gap-3">
         <span className="mt-1 flex shrink-0 [&_svg]:size-5">{icon}</span>
@@ -303,7 +327,7 @@ const KPI_LABEL: Record<string, string> = {
   onchain_operations: "On-chain operations",
 };
 
-function ReportBody({ doc }: { doc: ReportDocument }) {
+function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactNode }) {
   // version 2 adds coverage, has_data, lossy, infrastructure requests and
   // weekly active accounts, version 3 the calls per contract function; a
   // stored older report shows without them
@@ -316,6 +340,11 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
       ? [c.percentile_program, c.percentile_round].filter(Boolean).join(", ")
       : "every enrolled project";
   const hidden = percentileHiddenReason(c.cohort_size);
+  // a table of dashes says nothing; one line says it instead
+  const noCohortValue = Object.keys(KPI_LABEL).every((k) => {
+    const v = c.kpis[k];
+    return num(v?.change) === null && (hidden !== null || num(v?.percentile) === null);
+  });
   const waa = v2
     ? {
         ...v2.onchain.weekly_active_accounts,
@@ -323,6 +352,9 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
       }
     : null;
   const g = doc.integrity;
+  // the signed figures carry 0 where no verified id was read; the report
+  // reads them with the same missing-value rule as the console
+  const chainMissing = chainGap(doc.onchain.ids_verified, doc.onchain.series);
   return (
     <article className="flex min-w-0 flex-col gap-8">
       <header className="flex flex-col gap-1">
@@ -333,11 +365,15 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
         </p>
       </header>
 
+      {signature}
+
       <dl aria-label="Key figures" className="grid grid-cols-2 gap-3">
         <Hero label="Verified visitors">{formatCount(doc.web.visitors)}</Hero>
         <Hero label="Page views">{formatCount(doc.web.pageviews)}</Hero>
         <Hero label="API requests">{formatCount(doc.api.requests)}</Hero>
-        <Hero label="On-chain operations">{formatCount(doc.onchain.operations)}</Hero>
+        <Hero label="On-chain operations">
+          {chainMissing ? <Missing reason={chainMissing} /> : formatCount(doc.onchain.operations)}
+        </Hero>
       </dl>
 
       <Section title="Integrity">
@@ -430,12 +466,22 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
         }
       >
         <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Figure label="Transactions">{formatCount(doc.onchain.transactions)}</Figure>
+          <Figure label="Transactions">
+            {chainMissing ? (
+              <Missing reason={chainMissing} />
+            ) : (
+              formatCount(doc.onchain.transactions)
+            )}
+          </Figure>
           <Figure label="Verified ids">
             {formatCount(doc.onchain.ids_verified)} of {formatCount(doc.onchain.ids)}
           </Figure>
           <Figure label="Days without data" title={DAYS_WITHOUT_DATA}>
-            {formatCount(doc.onchain.days_missing)}
+            {doc.onchain.ids_verified === 0 ? (
+              <Missing reason={NO_VERIFIED_IDS} />
+            ) : (
+              formatCount(doc.onchain.days_missing)
+            )}
           </Figure>
           {waa ? (
             <div className="col-span-2 flex min-w-0 flex-col gap-1 sm:col-span-3">
@@ -468,55 +514,61 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
             : "No confirmed cohort."
         } Percentiles place the project among ${population}: ${countOf(c.cohort_size, "project")}.`}
       >
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-small" aria-label="Key metrics">
-            <thead>
-              <tr className="text-caption text-fg-2">
-                <th scope="col" className="py-2 pr-3 font-normal">
-                  Metric
-                </th>
-                <th scope="col" className="py-2 pr-3 text-right font-normal">
-                  Change
-                </th>
-                <th scope="col" className="py-2 text-right font-normal">
-                  Percentile
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(KPI_LABEL).map(([k, label]) => {
-                const v = c.kpis[k];
-                const change = num(v?.change);
-                const pct = num(v?.percentile);
-                return (
-                  <tr key={k} data-kpi={k} className="border-t border-line-subtle">
-                    <th scope="row" className="py-2 pr-3 font-normal text-fg-2">
-                      {label}
-                    </th>
-                    <td className="py-2 pr-3 text-right text-fg tabular">
-                      {change === null ? (
-                        <Missing reason="No value in the previous period" />
-                      ) : k === "error_rate" ? (
-                        formatPoints(change)
-                      ) : (
-                        formatChange(change)
-                      )}
-                    </td>
-                    <td className="py-2 text-right text-fg tabular">
-                      {hidden ? (
-                        <Missing reason={hidden} />
-                      ) : pct === null ? (
-                        <Missing reason="No value in this period" />
-                      ) : (
-                        formatCohortPercentile(pct)
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        {noCohortValue ? (
+          <p className="text-small text-fg" data-testid="cohort-no-values">
+            No metric has a change or a percentile in this period.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-small" aria-label="Key metrics">
+              <thead>
+                <tr className="text-caption text-fg-2">
+                  <th scope="col" className="py-2 pr-3 font-normal">
+                    Metric
+                  </th>
+                  <th scope="col" className="py-2 pr-3 text-right font-normal">
+                    Change
+                  </th>
+                  <th scope="col" className="py-2 text-right font-normal">
+                    Percentile
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(KPI_LABEL).map(([k, label]) => {
+                  const v = c.kpis[k];
+                  const change = num(v?.change);
+                  const pct = num(v?.percentile);
+                  return (
+                    <tr key={k} data-kpi={k} className="border-t border-line-subtle">
+                      <th scope="row" className="py-2 pr-3 font-normal text-fg-2">
+                        {label}
+                      </th>
+                      <td className="py-2 pr-3 text-right text-fg tabular">
+                        {change === null ? (
+                          <Missing reason="No value in the previous period" />
+                        ) : k === "error_rate" ? (
+                          formatPoints(change)
+                        ) : (
+                          formatChange(change)
+                        )}
+                      </td>
+                      <td className="py-2 text-right text-fg tabular">
+                        {hidden ? (
+                          <Missing reason={hidden} />
+                        ) : pct === null ? (
+                          <Missing reason="No value in this period" />
+                        ) : (
+                          formatCohortPercentile(pct)
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
         {hidden ? (
           <p className="text-caption text-fg-2" data-testid="percentile-hidden">
             Percentiles show from a cohort of 5 projects. This cohort has{" "}
@@ -553,10 +605,35 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
             {[doc.methods.integrity_rules].flat().join(", ") || <Missing reason="Not graded" />}
           </Build>
           <Build label="Route rules">{doc.methods.route_normaliser}</Build>
-          <Build label="Platform">{doc.methods.platform}</Build>
+          <Build label="Platform">
+            <PlatformBuild value={doc.methods.platform} />
+          </Build>
         </dl>
       </footer>
     </article>
+  );
+}
+
+// the platform build is a name and a commit hash; the hash shows short,
+// with the full value in the tooltip and on the copy button
+function PlatformBuild({ value }: { value: string }) {
+  const parts = value.split(" ");
+  const hash = parts.find((p) => /^[0-9a-f]{12,}$/.test(p));
+  if (!hash) return <span className="break-all">{value}</span>;
+  const short = parts.map((p) => (p === hash ? p.slice(0, 7) : p)).join(" ");
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1">
+      <span title={value}>{short}</span>
+      <span className="print:hidden">
+        <CopyButton
+          text={value}
+          label="Copy the platform build"
+          iconOnly
+          size="xs"
+          variant="ghost"
+        />
+      </span>
+    </span>
   );
 }
 

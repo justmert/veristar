@@ -44,12 +44,15 @@ import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { WalletPicker } from "@/components/wallet-picker";
-import { countOf, formatDateTimeUtc } from "@/lib/format";
+import { countOf, formatCount, formatDateTimeUtc } from "@/lib/format";
 import { isDay, lastDays } from "@/lib/global";
 import {
   DAYS_WITHOUT_DATA,
   METHOD_TEXT,
+  missingText,
+  NO_VERIFIED_IDS,
   shortKey,
+  type VerifiedActivity,
   verifiedActivity,
   verifyErrorText,
   weeklyActiveText,
@@ -190,7 +193,10 @@ function freshnessOf(v: OnchainView) {
 function Activity({ view }: { view: OnchainView }) {
   const a = verifiedActivity(view);
   const w = view.totals.weekly_active_accounts;
-  const none = a.verified === 0 ? "No verified account or contract" : undefined;
+  // days without data stay countable while no read landed, only a project
+  // without a verified id has none to count
+  const none = a.verified === 0 ? NO_VERIFIED_IDS : undefined;
+  const gap = a.gap ?? undefined;
   return (
     <section aria-labelledby="activity-h" className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-col gap-1">
@@ -208,15 +214,15 @@ function Activity({ view }: { view: OnchainView }) {
           data-stat="operations"
           label="Operations"
           definition="Successful operations that involve your verified accounts and contracts."
-          value={none ? null : a.operations}
-          missingReason={none}
+          value={gap ? null : a.operations}
+          missingReason={gap}
         />
         <StatCard
           data-stat="transactions"
           label="Transactions"
           definition="Transactions that hold those operations."
-          value={none ? null : a.transactions}
-          missingReason={none}
+          value={gap ? null : a.transactions}
+          missingReason={gap}
         />
         <StatCard
           data-stat="waa"
@@ -236,9 +242,7 @@ function Activity({ view }: { view: OnchainView }) {
       <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-raised p-4 sm:p-5">
         <h3 className="text-caption text-fg-2">Daily operations, UTC days</h3>
         <DayStrip label="Daily operations of the project" points={a.daily} />
-        <p className="text-caption text-fg-2">
-          A dashed day has no data. Point at it for the reason.
-        </p>
+        <DailyReasons daily={a.daily} />
       </div>
       <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -254,6 +258,26 @@ function Activity({ view }: { view: OnchainView }) {
         <WeeklyActiveList weeks={view.weeks} label="Weekly active accounts per ISO week" />
       </div>
     </section>
+  );
+}
+
+// why the dashed days of the strip have no data, printed so a touch screen
+// reads it too: one line per reason, most days first
+function DailyReasons({ daily }: { daily: VerifiedActivity["daily"] }) {
+  const by = new Map<string, number>();
+  for (const d of daily)
+    if (d.value === null && d.missing && d.missing !== "day_not_complete")
+      by.set(d.missing, (by.get(d.missing) ?? 0) + 1);
+  const reasons = [...by.entries()].sort((x, y) => y[1] - x[1]);
+  if (reasons.length === 0) return null;
+  return (
+    <ul className="flex flex-col gap-1 text-caption text-fg-2" aria-label="Days without data">
+      {reasons.map(([code, n]) => (
+        <li key={code} data-missing-reason={code}>
+          {countOf(n, "dashed day")}. {missingText(code)}.
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -556,53 +580,55 @@ function AccountProof({ id, tenantId }: { id: ChainId; tenantId: string }) {
     <div className="flex animate-rise-in flex-col gap-4 rounded-md border border-line bg-sunken p-4">
       <p className="text-small text-fg-2">
         Prove that the project controls this account before{" "}
-        {formatDateTimeUtc(challenge.expires_at)}. Use one of the two methods.
+        {formatDateTimeUtc(challenge.expires_at)}. Use one of the two ways. Either one is enough.
       </p>
-      <ProofStep n="1" title="Sign with a wallet">
-        <p className="text-small text-fg-2">
-          The wallet signs this message. Signing moves no funds and sends no transaction.
-        </p>
-        <pre className="overflow-x-auto rounded-md border border-line bg-raised p-2 font-mono text-caption whitespace-pre-wrap break-all text-fg-2">
-          {challenge.message}
-        </pre>
-        <Button
-          size="sm"
-          variant="outline"
-          className="w-fit max-lg:h-(--vs-control-touch)"
-          onClick={() => setPicker(true)}
-        >
-          Sign with a wallet
-        </Button>
-      </ProofStep>
-      <ProofStep n="2" title="Or publish a data entry">
-        <p className="text-small text-fg-2">
-          Send a manage data operation from the account with this name and value. Then check it. You
-          can delete the entry after the check.
-        </p>
-        <dl className="grid gap-3 sm:grid-cols-2">
-          <div className="flex min-w-0 flex-col gap-1">
-            <dt className="text-caption text-fg-2">Entry name</dt>
-            <dd className="min-w-0">
-              <CopyBox label="the entry name" value={challenge.manage_data.name} />
-            </dd>
-          </div>
-          <div className="flex min-w-0 flex-col gap-1">
-            <dt className="text-caption text-fg-2">Entry value</dt>
-            <dd className="min-w-0">
-              <CopyBox label="the entry value" value={challenge.manage_data.value} />
-            </dd>
-          </div>
-        </dl>
-        <Button
-          size="sm"
-          variant="outline"
-          className="w-fit max-lg:h-(--vs-control-touch)"
-          pending={check.isPending}
-          onClick={() => check.mutate({ method: "manage_data" })}
-        >
-          {check.isPending ? "Checking" : "Check the data entry"}
-        </Button>
-      </ProofStep>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <ProofOption title="Sign with a wallet">
+          <p className="text-small text-fg-2">
+            The wallet signs this message. Signing moves no funds and sends no transaction.
+          </p>
+          <pre className="overflow-x-auto rounded-md border border-line bg-raised p-2 font-mono text-caption whitespace-pre-wrap break-all text-fg-2">
+            {challenge.message}
+          </pre>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-fit max-lg:h-(--vs-control-touch)"
+            onClick={() => setPicker(true)}
+          >
+            Sign with a wallet
+          </Button>
+        </ProofOption>
+        <ProofOption title="Publish a data entry">
+          <p className="text-small text-fg-2">
+            Send a manage data operation from the account with this name and value. Then check it.
+            You can delete the entry after the check.
+          </p>
+          <dl className="grid gap-3 sm:grid-cols-2">
+            <div className="flex min-w-0 flex-col gap-1">
+              <dt className="text-caption text-fg-2">Entry name</dt>
+              <dd className="min-w-0">
+                <CopyBox label="the entry name" value={challenge.manage_data.name} />
+              </dd>
+            </div>
+            <div className="flex min-w-0 flex-col gap-1">
+              <dt className="text-caption text-fg-2">Entry value</dt>
+              <dd className="min-w-0">
+                <CopyBox label="the entry value" value={challenge.manage_data.value} />
+              </dd>
+            </div>
+          </dl>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-fit max-lg:h-(--vs-control-touch)"
+            pending={check.isPending}
+            onClick={() => check.mutate({ method: "manage_data" })}
+          >
+            {check.isPending ? "Checking" : "Check the data entry"}
+          </Button>
+        </ProofOption>
+      </div>
       <FormMessage error={check.error} />
       <WalletPicker
         open={picker}
@@ -627,13 +653,12 @@ function AccountProof({ id, tenantId }: { id: ChainId; tenantId: string }) {
   );
 }
 
-function ProofStep({ n, title, children }: { n: string; title: string; children: ReactNode }) {
+// one of two equal ways to prove control: an option card, not a numbered
+// step, as either one is enough
+function ProofOption({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <h4 className="flex items-baseline gap-2 text-body font-medium text-fg">
-        <span className="font-mono text-small text-fg-2">{n}</span>
-        {title}
-      </h4>
+    <div className="flex min-w-0 flex-col gap-2 rounded-md border border-line bg-raised p-3 sm:p-4">
+      <h4 className="text-body font-medium text-fg">{title}</h4>
       <div className="flex min-w-0 flex-col gap-2">{children}</div>
     </div>
   );
@@ -679,51 +704,54 @@ function ContractProof({ id, tenantId }: { id: ChainId; tenantId: string }) {
     <div className="flex flex-col gap-4 rounded-md border border-line bg-sunken p-4">
       <p className="text-small text-fg-2">
         Prove the contract through an account that the project verified. Use one of the two checks.
+        Either one is enough.
       </p>
-      <ProofStep n="1" title="The account is the contract's admin">
-        <Button
-          size="sm"
-          variant="outline"
-          className="w-fit max-lg:h-(--vs-control-touch)"
-          pending={check.isPending && check.variables?.method === "contract_admin"}
-          disabled={check.isPending}
-          onClick={() => check.mutate({ method: "contract_admin" })}
-        >
-          Check the admin
-        </Button>
-      </ProofStep>
-      <ProofStep n="2" title="Or the account deployed the contract">
-        <form
-          className="flex flex-col gap-3 sm:flex-row sm:items-start"
-          onSubmit={(e) => {
-            e.preventDefault();
-            check.mutate({ method: "contract_deployer", tx_hash: tx.trim().toLowerCase() });
-          }}
-        >
-          <div className="min-w-0 flex-1">
-            <TextField
-              label="Deploying transaction"
-              hint="The hash of the transaction that created the contract, from the last year."
-              value={tx}
-              onChange={(e) => setTx(e.target.value)}
-              placeholder="64 hex characters"
-              spellCheck={false}
-              autoComplete="off"
-              className="font-mono"
-            />
-          </div>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <ProofOption title="The account is the contract's admin">
           <Button
-            type="submit"
             size="sm"
             variant="outline"
-            className="sm:mt-6 max-lg:h-(--vs-control-touch)"
-            pending={check.isPending && check.variables?.method === "contract_deployer"}
-            disabled={check.isPending || tx.trim().length !== 64}
+            className="w-fit max-lg:h-(--vs-control-touch)"
+            pending={check.isPending && check.variables?.method === "contract_admin"}
+            disabled={check.isPending}
+            onClick={() => check.mutate({ method: "contract_admin" })}
           >
-            Check the deployer
+            Check the admin
           </Button>
-        </form>
-      </ProofStep>
+        </ProofOption>
+        <ProofOption title="The account deployed the contract">
+          <form
+            className="flex flex-col gap-3 sm:flex-row sm:items-start"
+            onSubmit={(e) => {
+              e.preventDefault();
+              check.mutate({ method: "contract_deployer", tx_hash: tx.trim().toLowerCase() });
+            }}
+          >
+            <div className="min-w-0 flex-1">
+              <TextField
+                label="Deploying transaction"
+                hint="The hash of the transaction that created the contract, from the last year."
+                value={tx}
+                onChange={(e) => setTx(e.target.value)}
+                placeholder="64 hex characters"
+                spellCheck={false}
+                autoComplete="off"
+                className="font-mono"
+              />
+            </div>
+            <Button
+              type="submit"
+              size="sm"
+              variant="outline"
+              className="sm:mt-6 max-lg:h-(--vs-control-touch)"
+              pending={check.isPending && check.variables?.method === "contract_deployer"}
+              disabled={check.isPending || tx.trim().length !== 64}
+            >
+              Check the deployer
+            </Button>
+          </form>
+        </ProofOption>
+      </div>
       <FormMessage error={check.error} />
     </div>
   );
@@ -732,7 +760,14 @@ function ContractProof({ id, tenantId }: { id: ChainId; tenantId: string }) {
 // ---- the two-way stellar.toml link: one checklist per verified site, one
 // action per line that is not done
 
+// a long site list shows its first cards and a toggle for the rest
+const LINK_SITES_SHOWN = 5;
+
 function LinkSection({ view, tenantId }: { view: OnchainView; tenantId: string }) {
+  const [showAll, setShowAll] = useState(false);
+  const hasVerifiedAccount = view.ids.some(
+    (id) => id.kind === "account" && id.verification.status === "verified",
+  );
   return (
     <section aria-labelledby="link-h" className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -747,7 +782,14 @@ function LinkSection({ view, tenantId }: { view: OnchainView; tenantId: string }
         </div>
         {view.ids.length > 0 ? <LinkStatus view={view} /> : null}
       </div>
-      {view.link.sites.length === 0 ? (
+      {view.link.sites.length > 0 && !hasVerifiedAccount ? (
+        // every line of the checklist needs an account, so with none the
+        // page says that once instead of a checklist per domain
+        <EmptyState compact title="Add and verify an account first">
+          The link pairs a site domain with a verified Stellar account. Add an account above and
+          prove control of it.
+        </EmptyState>
+      ) : view.link.sites.length === 0 ? (
         <EmptyState
           compact
           title="No site to link"
@@ -761,9 +803,20 @@ function LinkSection({ view, tenantId }: { view: OnchainView; tenantId: string }
         </EmptyState>
       ) : (
         <div className="flex flex-col gap-3">
-          {view.link.sites.map((s) => (
+          {(showAll ? view.link.sites : view.link.sites.slice(0, LINK_SITES_SHOWN)).map((s) => (
             <LinkSiteCard key={s.site_id} s={s} tenantId={tenantId} />
           ))}
+          {view.link.sites.length > LINK_SITES_SHOWN ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-fit max-lg:h-(--vs-control-touch)"
+              aria-expanded={showAll}
+              onClick={() => setShowAll((x) => !x)}
+            >
+              {showAll ? "Show fewer" : `Show all ${formatCount(view.link.sites.length)} sites`}
+            </Button>
+          ) : null}
         </div>
       )}
     </section>
@@ -802,7 +855,7 @@ function LinkSiteCard({ s, tenantId }: { s: LinkSite; tenantId: string }) {
         </CheckLine>
         <CheckLine
           ok={s.org_url_matches}
-          text="The file names this domain as your organisation website."
+          text="The file names this domain as your organization website."
           note={s.org_url ? `It names ${s.org_url} now.` : "Add these lines to the file."}
         >
           <CopyButton
@@ -862,7 +915,7 @@ function CheckLine({
   return (
     <li
       data-check={ok ? "done" : "open"}
-      className="flex flex-wrap items-start gap-x-3 gap-y-2 py-3 first:pt-0 last:pb-0"
+      className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 py-3 first:pt-0 last:pb-0 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
     >
       <span
         className={
@@ -877,14 +930,14 @@ function CheckLine({
           <X aria-hidden className="size-3" strokeWidth={2.6} />
         )}
       </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
+      <span className="flex min-w-0 flex-col gap-1">
         <span className="text-small text-fg">
           {text}
           <span className="sr-only">{ok ? " Done." : " Not done."}</span>
         </span>
         {!ok && note ? <span className="text-caption text-fg-2">{note}</span> : null}
       </span>
-      {ok ? null : <span className="flex shrink-0 items-center">{children}</span>}
+      {ok ? null : <span className="col-start-2 flex items-center sm:col-start-3">{children}</span>}
     </li>
   );
 }

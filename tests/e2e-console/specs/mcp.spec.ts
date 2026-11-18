@@ -76,7 +76,11 @@ test("a member makes an access key on the AI page, uses it and revokes it", asyn
   await expect(shown).toHaveCount(0);
 
   // the list shows the prefix, never the key
-  const row = page.getByRole("listitem", { name: "Access key e2e laptop" });
+  const row = page
+    .getByRole("table", { name: "MCP keys and connections" })
+    .getByRole("row")
+    .filter({ hasText: "e2e laptop" });
+  await expect(row).toContainText("Not used yet");
   await expect(row).toContainText(key.slice(0, 11));
   await expect(page.locator("body")).not.toContainText(key);
 
@@ -88,7 +92,7 @@ test("a member makes an access key on the AI page, uses it and revokes it", asyn
   const projects = await mcp(context, key, "tools/call", { name: "list_projects", arguments: {} });
   expect(projects.text).toContain(tenant.id);
   await page.reload();
-  await expect(row).toContainText("Last used");
+  await expect(row).not.toContainText("Not used yet");
 
   // revoke: the next request is refused
   await row.getByRole("button", { name: "Revoke" }).click();
@@ -216,7 +220,10 @@ test("a connector is approved on the consent page after a github sign-in", async
 
   // the grant is listed on the project's page and can be revoked there
   await page.goto(`${APP}/projects/${tenant.id}/ai`);
-  const row = page.getByRole("listitem", { name: "Connector E2E connector" });
+  const row = page
+    .getByRole("table", { name: "MCP keys and connections" })
+    .getByRole("row")
+    .filter({ hasText: "E2E connector" });
   await expect(row).toContainText("Active");
   await row.getByRole("button", { name: "Revoke" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Revoke" }).click();

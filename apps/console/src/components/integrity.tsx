@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { ExternalLink, ShieldCheck } from "lucide-react";
+import { ChevronRight, ExternalLink, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { integrityQuery, operatorTenantQuery } from "@/api/queries";
 import type {
@@ -62,8 +62,8 @@ export function gradeMeaning(grade: IntegrityGrade | null): string {
 // "10 graded site days: 7 A, 2 B, 1 C"; the counts behind a range grade
 export function dayCountsText(s: IntegrityRow): string {
   if (s.graded_days === 0) return "No site day with enough traffic for a grade in this range.";
-  const days = s.graded_days === 1 ? "graded site day" : "graded site days";
-  return `${formatCount(s.graded_days)} ${days}: ${formatCount(s.days_a)} A, ${formatCount(s.days_b)} B, ${formatCount(s.days_c)} C.`;
+  const days = s.graded_days === 1 ? "site day" : "site days";
+  return `Graded on ${formatCount(s.graded_days)} ${days}: ${formatCount(s.days_a)} A, ${formatCount(s.days_b)} B, ${formatCount(s.days_c)} C.`;
 }
 
 // the evidence of one day as label and value pairs, platform observations
@@ -80,9 +80,9 @@ export function evidenceFacts(
   return [
     { label: "Accepted events", value: formatCount(e.events) },
     { label: "Access networks", value: shareOf(e.net.access) },
-    { label: "Organisation networks", value: shareOf(e.net.organisation) },
+    { label: "Organization networks", value: shareOf(e.net.organisation) },
     { label: "Hosting networks", value: shareOf(e.net.hosting) },
-    { label: "Anonymisers", value: shareOf(e.net.anonymiser) },
+    { label: "Anonymizers", value: shareOf(e.net.anonymiser) },
     { label: "Distinct networks", value: formatCount(e.networks) },
     {
       label: "Quarantined",
@@ -180,6 +180,52 @@ function SiteDays({ site, name }: { site: IntegritySite; name: string }) {
         ))}
       </ol>
     </Disclosure>
+  );
+}
+
+// the sites of a report. sites without a graded day all say the same, so
+// they are one line with their names behind a toggle; only the graded
+// sites, the exceptions, get a row each
+function SiteList({
+  sites,
+  siteNames,
+}: {
+  sites: IntegritySite[];
+  siteNames?: Record<string, string>;
+}) {
+  const nameOf = (s: IntegritySite) => siteNames?.[s.site_id] ?? `Site ${s.site_id.slice(0, 8)}`;
+  const graded = sites.filter((s) => s.graded_days > 0 || s.grade !== null);
+  const idle = sites.filter((s) => !(s.graded_days > 0 || s.grade !== null));
+  // a few sites stay one row each; the group starts where rows repeat
+  const group = idle.length >= 3;
+  return (
+    <div className="flex flex-col gap-2">
+      {(group ? graded : sites).map((s) => (
+        <SiteDays key={s.site_id} site={s} name={nameOf(s)} />
+      ))}
+      {group ? (
+        <details className="group rounded-md border border-line bg-sunken" data-sites-idle>
+          <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 focus-ring [&::-webkit-details-marker]:hidden">
+            <ChevronRight
+              aria-hidden
+              className="size-4 text-fg-3 transition-transform duration-(--vs-duration-press) ease-standard group-open:rotate-90"
+            />
+            <span className="text-small font-medium text-fg">{formatCount(idle.length)} sites</span>
+            <GradeBadge grade={null} />
+            <span className="text-caption text-fg-3">
+              No site day with enough traffic for a grade in this range.
+            </span>
+          </summary>
+          <ul className="flex flex-col gap-1 border-t border-line px-3 py-2 text-small text-fg-2">
+            {idle.map((s) => (
+              <li key={s.site_id} data-site={s.site_id} className="break-words">
+                {nameOf(s)}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </div>
   );
 }
 
@@ -285,17 +331,7 @@ export function IntegrityPanel({
         <p className="text-small text-fg-2">{dayCountsText(report)}</p>
         <RangeReasons reasons={report.reasons} />
         <CoverageNote coverage={report.coverage} />
-        {report.sites.length > 0 ? (
-          <div className="flex flex-col gap-2">
-            {report.sites.map((s) => (
-              <SiteDays
-                key={s.site_id}
-                site={s}
-                name={siteNames?.[s.site_id] ?? `Site ${s.site_id.slice(0, 8)}`}
-              />
-            ))}
-          </div>
-        ) : null}
+        {report.sites.length > 0 ? <SiteList sites={report.sites} siteNames={siteNames} /> : null}
         <p className="max-w-prose text-caption text-fg-3">
           The grade rests on what the platform observes at its edge: the class of each visitor's
           network, the distinct networks, the proof of work and the quarantine band, checked against

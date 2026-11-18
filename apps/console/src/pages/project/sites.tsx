@@ -5,7 +5,7 @@ import { Link, useNavigate } from "react-router";
 import { ApiError } from "@/api/client";
 import { api, type SiteInput, type SitePatch } from "@/api/endpoints";
 import { ingestDayQuery, ingestMonthQuery, keys, sitesQuery } from "@/api/queries";
-import type { Ingest, Site } from "@/api/schemas";
+import type { Ingest, Site, TenantStatus } from "@/api/schemas";
 import { webHourlyQuery } from "@/api/web";
 import { type Column, DataTable, type Sort } from "@/components/data-table";
 import { FormMessage } from "@/components/error-panel";
@@ -224,6 +224,13 @@ export function AddSiteDialog({
   );
 }
 
+// the site rule of the control plane: a suspended project refuses new sites
+// (409 tenant_suspended); a project that is not approved takes them, and
+// they wait for review with the project
+export function canAddSites(status: TenantStatus, termsCurrent: boolean): boolean {
+  return termsCurrent && status !== "suspended" && status !== "removed";
+}
+
 export function AddSiteButton({
   tenantId,
   variant = "outline",
@@ -387,7 +394,16 @@ function SetupCell({ row }: { row: Row }) {
 // the project's sites with how far each is set up and its last 30 days:
 // search, sort and pages for long lists, one status and one next action per
 // site. rows stack on a phone.
-export function SitesTable({ sites, actions }: { sites: Site[]; actions?: ReactNode }) {
+export function SitesTable({
+  sites,
+  actions,
+  nextStep = true,
+}: {
+  sites: Site[];
+  actions?: ReactNode;
+  // false while no setup step can finish (a suspended project)
+  nextStep?: boolean;
+}) {
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<Sort>({ key: "setup", order: "asc" });
   const [page, setPage] = useState(0);
@@ -420,6 +436,25 @@ export function SitesTable({ sites, actions }: { sites: Site[]; actions?: ReactN
   const current = Math.min(page, pages - 1);
   const slice = shown.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
 
+  const nextColumn: Column<Row> = {
+    key: "next",
+    header: "Next",
+    // the next step is the card's action on a phone, never behind Details
+    action: true,
+    minWidth: "min-w-36",
+    cell: (r) => {
+      if (r.event === null) return null;
+      const a = nextAction(r.site, setupStatus(r.site, r.event));
+      return (
+        <Link
+          to={a.to}
+          className="relative z-(--vs-layer-raised) rounded-sm whitespace-nowrap text-fg underline decoration-line-strong underline-offset-4 transition-colors duration-(--vs-duration-press) ease-standard hover:decoration-fg focus-ring"
+        >
+          {a.label}
+        </Link>
+      );
+    },
+  };
   const columns: Column<Row>[] = [
     {
       key: "site",
@@ -478,26 +513,8 @@ export function SitesTable({ sites, actions }: { sites: Site[]; actions?: ReactN
         return formatShareOf((t.quarantined ?? 0) + (t.bot ?? 0) + sumRejected(t), all);
       },
     },
-    {
-      key: "next",
-      header: "Next",
-      // the next step is the card's action on a phone, never behind Details
-      action: true,
-      minWidth: "min-w-36",
-      cell: (r) => {
-        if (r.event === null) return null;
-        const a = nextAction(r.site, setupStatus(r.site, r.event));
-        return (
-          <Link
-            to={a.to}
-            className="relative z-(--vs-layer-raised) rounded-sm whitespace-nowrap text-fg underline decoration-line-strong underline-offset-4 transition-colors duration-(--vs-duration-press) ease-standard hover:decoration-fg focus-ring"
-          >
-            {a.label}
-          </Link>
-        );
-      },
-    },
   ];
+  if (nextStep) columns.push(nextColumn);
 
   return (
     <div className="flex flex-col gap-4">
@@ -564,8 +581,14 @@ export function SitesTable({ sites, actions }: { sites: Site[]; actions?: ReactN
 
 export function SitesPage() {
   const { tenant, termsCurrent } = useProject();
-  // a suspended project's sites cannot be created or changed (contract 5.11)
-  const canChange = termsCurrent && tenant.status !== "suspended";
+  // the control plane's rule: a suspended project's sites cannot be created
+  // or changed (contract 5.11); a project that is not approved takes sites,
+  // and they wait for review with it
+  const canChange = canAddSites(tenant.status, termsCurrent);
+  // the resubmit form above holds the main action of a project that is not
+  // approved, and no setup step can finish while it is suspended
+  const rejected = tenant.status === "rejected";
+  const suspended = tenant.status === "suspended";
   const sites = useQuery(sitesQuery(tenant.id));
   const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
@@ -582,7 +605,11 @@ export function SitesPage() {
 
   const add =
     canChange && live.length > 0 ? (
-      <Button onClick={() => setAdding(true)} className="max-lg:h-(--vs-control-touch)">
+      <Button
+        variant={rejected ? "outline" : "default"}
+        onClick={() => setAdding(true)}
+        className="max-lg:h-(--vs-control-touch)"
+      >
         <Plus aria-hidden />
         Add site
       </Button>
@@ -615,6 +642,7 @@ export function SitesPage() {
                 </h2>
                 <p className="text-small text-fg-2">
                   Name the website to measure. Its setup page shows the tag to install.
+                  {rejected ? " The site waits until operators approve the project." : ""}
                 </p>
               </div>
             </div>
@@ -637,7 +665,7 @@ export function SitesPage() {
           </EmptyState>
         )
       ) : (
-        <SitesTable sites={live} />
+        <SitesTable sites={live} nextStep={!suspended} />
       )}
       <AddSiteDialog tenantId={tenant.id} open={adding} onOpenChange={setAdding} />
     </div>

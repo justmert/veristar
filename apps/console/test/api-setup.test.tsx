@@ -30,7 +30,7 @@ describe("api analytics setup page (contract section 6)", () => {
     expect(calls[0]?.url).toBe(listPath);
     expect(host.textContent).toContain("sa_otlp_Ab3x...");
     expect(host.textContent).toContain("production");
-    expect(host.textContent).toContain("not used yet");
+    expect(host.textContent).toContain("Not used yet");
     // the plaintext never comes from a list
     expect(host.textContent).not.toContain(f.OTLP_PLAIN);
   });

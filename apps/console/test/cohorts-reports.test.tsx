@@ -786,7 +786,7 @@ describe("scf review with cohorts (contract 19.3)", () => {
     expect(host.querySelector("[data-award]")?.textContent).toContain("award date");
     expect(host.querySelector("[data-marker='2026-11-15']")).not.toBeNull();
 
-    await click(byRole(host, "button", "Propose a cohort"));
+    await click(byRole(host, "button", "Edit"));
     await type(byLabel(host, "Round") as HTMLInputElement, "SCF #40");
     await click(byRole(host, "button", "Send proposal"));
     await waitFor(() => expect(calls.find((x) => x.method === "PUT")).toBeDefined());

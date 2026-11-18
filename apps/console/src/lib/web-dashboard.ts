@@ -259,11 +259,14 @@ export function webPath(tenantId: string, site?: string | null): string {
 
 // the values of a metric per day, for a stat card's sparkline. a day not
 // read yet is a gap in the chart, but the sparkline only shows the shape, so
-// it reads as zero there; null when there is no shape to show (fewer than
-// two days, or every day the same)
+// it reads as zero there; null when there is no shape to show: fewer than
+// three days with a value above zero (a flat line with one spike at the end
+// reads as a glitch), or every day the same
+export const SPARK_MIN_DAYS = 3;
+
 export function sparkOf(series: WebPoint[], m: WebMetric): number[] | null {
   const v = series.map((p) => pointValue(p, m) ?? 0);
-  if (v.length < 2) return null;
+  if (v.filter((x) => x > 0).length < SPARK_MIN_DAYS) return null;
   return Math.max(...v) === Math.min(...v) ? null : v;
 }
 

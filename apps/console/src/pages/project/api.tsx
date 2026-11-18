@@ -924,7 +924,7 @@ function RoutesSection({
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <h2 className="text-section text-fg">Routes</h2>
         <ul
-          aria-label="Rate colours"
+          aria-label="Rate colors"
           className="flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-fg-2"
         >
           <li className="flex items-center gap-1">

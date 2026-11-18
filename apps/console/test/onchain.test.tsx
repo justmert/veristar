@@ -5,6 +5,7 @@ import { webProject } from "@/api/schemas";
 import { WeeklyActiveList } from "@/components/onchain";
 import { ContractFunctionsBlock, FunctionsDaily } from "@/components/onchain-functions";
 import { EMPTY_FILTERS } from "@/lib/global";
+import { chainGap, NO_LEDGER_READ, NO_VERIFIED_IDS } from "@/lib/onchain";
 import { listExportHref } from "@/lib/operator-projects";
 import { OnchainValue } from "@/pages/operator/shared";
 import { OnchainPage } from "@/pages/project/onchain";
@@ -291,7 +292,7 @@ describe("on-chain page activity (contract 15.3)", () => {
     const open = [...(card?.querySelectorAll('[data-check="open"]') ?? [])];
     expect(open).toHaveLength(3);
     // the main text is plain words; the file's keys are only in what to copy
-    expect(open[0]?.textContent).toContain("names this domain as your organisation website");
+    expect(open[0]?.textContent).toContain("names this domain as your organization website");
     expect(open[0]?.textContent).toContain("It names https://other.org now.");
     expect(open[0]?.textContent).not.toContain("ORG_URL");
     for (const line of open) expect(line.querySelectorAll("button")).toHaveLength(1);
@@ -392,7 +393,7 @@ describe("accounts and contracts page (contract 15.4)", () => {
     const host = await renderRoutes(routes(<OnchainPage />, "onchain"), path);
     await waitFor(() => expect(host.textContent).toContain("Prove again"));
     await click(byRole(host, "button", "Prove again"));
-    await waitFor(() => expect(host.textContent).toContain("Or publish a data entry"));
+    await waitFor(() => expect(host.textContent).toContain("Publish a data entry"));
     expect(host.textContent).toContain("00112233445566778899aabbccddeeff");
     expect(host.textContent).toContain("Veristar ownership proof");
     await click(byRole(host, "button", "Check the data entry"));
@@ -596,7 +597,7 @@ describe("scf review figures (contract 16.3)", () => {
     expect(card?.querySelector("[data-grade]")?.getAttribute("data-grade")).toBe("B");
     expect(card?.textContent).toContain("Grade B");
     expect(card?.textContent).toContain("A quarter or more of the graded site days");
-    expect(card?.textContent).toContain("8 graded site days: 5 A, 3 B, 0 C.");
+    expect(card?.textContent).toContain("Graded on 8 site days: 5 A, 3 B, 0 C.");
   });
 
   it("says when the project is not in the scf views", async () => {
@@ -817,5 +818,13 @@ describe("calls per contract function (contract 15.8)", () => {
     expect(
       exportPaths.functions({ tenantId: f.TENANT_ID, operator: true, range: {} }, FN_CONTRACT_ID),
     ).toBe(`/api/operator/tenants/${f.TENANT_ID}/onchain/ids/${FN_CONTRACT_ID}/functions.csv`);
+  });
+});
+
+describe("one missing-value rule for on-chain figures", () => {
+  it("shows 0 only after a read of a verified id", () => {
+    expect(chainGap(0, [{ operations: 4 }])).toBe(NO_VERIFIED_IDS);
+    expect(chainGap(1, [{ operations: null }, { operations: null }])).toBe(NO_LEDGER_READ);
+    expect(chainGap(1, [{ operations: null }, { operations: 0 }])).toBeNull();
   });
 });

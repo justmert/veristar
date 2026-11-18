@@ -74,10 +74,15 @@ describe("members", () => {
     expect(calls[1]?.method).toBe("PATCH");
   });
 
-  it("shows an invite as a neutral waiting state", async () => {
+  it("lists open invites with their count, as a neutral waiting state", async () => {
     stubFetch([{ status: 200, body: f.membersBody }]);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("Not signed in yet"));
+    await waitFor(() =>
+      expect(host.querySelector("#invites-h")?.textContent).toBe(
+        `Open invites (${f.membersBody.invites.length})`,
+      ),
+    );
+    expect(host.querySelectorAll("[data-invite]").length).toBeGreaterThan(0);
     expect(host.querySelector(".text-warning")).toBeNull();
   });
 });

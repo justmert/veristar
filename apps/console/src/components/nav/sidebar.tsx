@@ -40,6 +40,7 @@ import {
   MenuTrigger,
 } from "@/components/ui/menu";
 import { criticalCount } from "@/lib/alerts";
+import { isNotFound } from "@/lib/errors";
 import { formatCount } from "@/lib/format";
 import { siblingUrl } from "@/lib/hosts";
 import {
@@ -61,6 +62,9 @@ export const REVIEW_QUEUE: TenantListQuery = {
   order: "asc",
 };
 
+// the project the person opened last in this tab
+let lastProject: string | null = null;
+
 // from this many projects on, the switcher has a search field
 const SWITCHER_SEARCH_FROM = 8;
 
@@ -80,7 +84,22 @@ export function Sidebar({
   // the desktop sidebar and the phone drawer are two instances; each needs
   // its own group, or their current-item markers would crossfade
   const group = useId();
-  const projectId = area.kind === "project" ? area.id : null;
+  // a project that answers 404 (removed, or not the person's) gets the
+  // shell without a project: no switcher name and no project pages
+  const asked = area.kind === "project" ? area.id : null;
+  const tenant = useQuery({ ...tenantQuery(asked ?? ""), enabled: asked !== null });
+  const projectId = asked && !isNotFound(tenant.error) ? asked : null;
+  if (projectId) lastProject = projectId;
+  // the account page keeps the project the person came from, as a global
+  // page should not drop the project context
+  const kept =
+    area.kind === "home" &&
+    area.rest === "account" &&
+    lastProject &&
+    me.tenants.some((t) => t.id === lastProject)
+      ? lastProject
+      : null;
+  const navProject = projectId ?? kept;
   return (
     <LayoutGroup id={group}>
       {/* the brand and the switcher stay at the top and the account at the
@@ -97,14 +116,14 @@ export function Sidebar({
             <span className="text-title">Veristar</span>
           </Link>
 
-          <ProjectSwitcher me={me} id={projectId} onNavigate={onNavigate} />
+          <ProjectSwitcher me={me} id={navProject} onNavigate={onNavigate} />
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3">
-          {projectId ? (
+          {navProject ? (
             <Groups
               label="Project"
-              groups={projectNav(projectId)}
-              rest={area.rest}
+              groups={projectNav(navProject)}
+              rest={projectId ? area.rest : null}
               onNavigate={onNavigate}
             />
           ) : (
