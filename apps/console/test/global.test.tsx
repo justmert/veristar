@@ -402,7 +402,13 @@ describe("comparison", () => {
     ]);
     // one row per compared project with data, one cell per metric; a project
     // without web data is one row of names instead of empty lines and cells
-    expect(columnOf(host, "Web totals", "Visitors")).toEqual(["18"]);
+    // the time is when the aggregation read the numbers, not when they arrived
+    expect(host.querySelector("[data-freshness]")?.getAttribute("datetime")).toBe(
+      "2026-11-12T14:05:00Z",
+    );
+    // the change against the previous period follows the count: 18 from 20
+    expect(columnOf(host, "Web totals", "Visitors")).toEqual(["18-10% vs previous period"]);
+    expect(columnOf(host, "API totals", "Requests")).toEqual(["300+50% vs previous period"]);
     const none = host.querySelector("[data-no-data]") as HTMLElement;
     expect(none.textContent).toContain("No web data");
     expect(none.querySelector(`[data-tenant="${f.TENANT_B}"]`)).not.toBeNull();

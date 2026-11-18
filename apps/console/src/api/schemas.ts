@@ -818,6 +818,9 @@ function globalPage<T extends z.ZodType>(item: T) {
   return z.object({
     from: day,
     to: day,
+    // 8.3 when the aggregation last read a day of the range for a project of
+    // the page (null without a row); 8.5 the time of the live read
+    read_at: time.nullable(),
     total: count,
     items: z.array(item),
     next_cursor: z.string().nullable(),
@@ -972,22 +975,26 @@ export type WebPoint = z.infer<typeof webPoint>;
 export const breakdown = z.object({ items: z.array(keyValue), total_keys: count });
 export type Breakdown = z.infer<typeof breakdown>;
 
+const webCompareTotals = z.object({
+  pageviews: count,
+  visitors: count,
+  visits: count,
+  bounces: count,
+  totaltime: count,
+  bounce_rate: share01,
+  avg_visit_duration: z.number().nonnegative().nullable(),
+  quarantine_pageviews: count,
+  quarantine_visitors: count,
+  quarantine_share: share01,
+});
+
 export const webCompareProject = z.object({
   tenant: tenantRef,
   integrity: integritySummary,
   coverage: coverageEstimate,
-  totals: z.object({
-    pageviews: count,
-    visitors: count,
-    visits: count,
-    bounces: count,
-    totaltime: count,
-    bounce_rate: share01,
-    avg_visit_duration: z.number().nonnegative().nullable(),
-    quarantine_pageviews: count,
-    quarantine_visitors: count,
-    quarantine_share: share01,
-  }),
+  totals: webCompareTotals,
+  // the same totals over the previous period of equal length
+  previous_totals: webCompareTotals,
   series: z.array(webPoint),
   breakdowns: z.object({
     referrer: breakdown,
@@ -1011,10 +1018,20 @@ function aligned<T extends { days: string[]; projects: { series: { day: string }
   );
 }
 
+// the previous period ends the day before `from` and has as many days;
+// read_at is when the aggregation last read a day of the range (8.4), or the
+// time of the live read on the api compare (8.6)
+const compareRange = {
+  from: day,
+  to: day,
+  previous_from: day,
+  previous_to: day,
+  read_at: time.nullable(),
+};
+
 export const webCompare = z
   .object({
-    from: day,
-    to: day,
+    ...compareRange,
     days: z.array(day),
     projects: z.array(webCompareProject).min(1).max(5),
   })
@@ -1032,9 +1049,11 @@ export const apiCompareService = z.object({
   lossy: z.boolean(),
 });
 export type ApiCompareService = z.infer<typeof apiCompareService>;
+const apiCompareTotals = z.object({ ...apiNumbers, ...apiShape });
 export const apiCompareProject = z.object({
   tenant: tenantRef,
-  totals: z.object({ ...apiNumbers, ...apiShape }),
+  totals: apiCompareTotals,
+  previous_totals: apiCompareTotals,
   series: z.array(apiComparePoint),
   services: z.array(apiCompareService),
   onchain: compareOnchain.optional(),
@@ -1044,8 +1063,7 @@ export const apiCompareProject = z.object({
 export type ApiCompareProject = z.infer<typeof apiCompareProject>;
 export const apiCompare = z
   .object({
-    from: day,
-    to: day,
+    ...compareRange,
     days: z.array(day),
     projects: z.array(apiCompareProject).min(1).max(5),
   })

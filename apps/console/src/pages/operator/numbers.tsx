@@ -11,13 +11,14 @@ import { ArrowRight } from "lucide-react";
 import { Link } from "react-router";
 import { apiCompareQuery, webCompareQuery } from "@/api/queries";
 import type { EvidenceItem } from "@/components/evidence-list";
+import { ChangeLine, countChange, type StatChange } from "@/components/stat-card";
 import { ErrorState } from "@/components/states";
 import { formatCount, formatDateRange, formatPercent } from "@/lib/format";
 import { compareSearch } from "@/lib/global";
 
 const DEFAULT_RANGE = { from: "", to: "" };
 
-type Figure = { key: string; label: string; value: string };
+type Figure = { key: string; label: string; value: string; change?: StatChange | null };
 
 // the figures of one project, the ones that hold data only
 export function useProjectNumbers(tenantId: string, enabled = true) {
@@ -29,13 +30,28 @@ export function useProjectNumbers(tenantId: string, enabled = true) {
   const range = web.data ?? api.data;
   const figures: Figure[] = [];
   if (w && w.totals.pageviews > 0) {
-    figures.push({ key: "pageviews", label: "Page views", value: formatCount(w.totals.pageviews) });
-    figures.push({ key: "visitors", label: "Visitors", value: formatCount(w.totals.visitors) });
+    figures.push({
+      key: "pageviews",
+      label: "Page views",
+      value: formatCount(w.totals.pageviews),
+      change: countChange(w.totals.pageviews, w.previous_totals.pageviews),
+    });
+    figures.push({
+      key: "visitors",
+      label: "Visitors",
+      value: formatCount(w.totals.visitors),
+      change: countChange(w.totals.visitors, w.previous_totals.visitors),
+    });
   }
   if (w?.integrity.grade)
     figures.push({ key: "grade", label: "Integrity grade", value: w.integrity.grade });
   if (a && a.totals.requests > 0) {
-    figures.push({ key: "requests", label: "API requests", value: formatCount(a.totals.requests) });
+    figures.push({
+      key: "requests",
+      label: "API requests",
+      value: formatCount(a.totals.requests),
+      change: countChange(a.totals.requests, a.previous_totals.requests),
+    });
     if (a.totals.rate_5xx !== null)
       figures.push({ key: "rate_5xx", label: "5xx rate", value: formatPercent(a.totals.rate_5xx) });
   }
@@ -114,7 +130,10 @@ export function ProjectNumbers({
         {numbers.figures.map((f) => (
           <div key={f.key} data-stat={f.key} className="flex min-w-0 flex-col-reverse gap-1">
             <dt className="text-caption text-fg-2">{f.label}</dt>
-            <dd className="text-heading text-fg tabular">{f.value}</dd>
+            <dd className="flex flex-wrap items-baseline gap-x-2 text-heading text-fg tabular">
+              {f.value}
+              {f.change ? <ChangeLine change={f.change} className="self-center" /> : null}
+            </dd>
           </div>
         ))}
       </dl>

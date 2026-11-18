@@ -139,6 +139,7 @@ export const webProjectB = {
 export const webProjectsBody = {
   from: "2026-10-14",
   to: "2026-11-12",
+  read_at: "2026-11-12T14:05:00Z",
   total: 3,
   items: [webProjectA, webProjectB],
   next_cursor: "cG9zOjI",
@@ -146,6 +147,7 @@ export const webProjectsBody = {
 export const webProjectsPage2Body = {
   from: "2026-10-14",
   to: "2026-11-12",
+  read_at: "2026-11-12T14:05:00Z",
   total: 3,
   items: [{ ...webProjectA, tenant: refC, visitors: 5 }],
   next_cursor: null,
@@ -202,6 +204,7 @@ export const apiProjectB = {
 export const apiProjectsBody = {
   from: "2026-10-14",
   to: "2026-11-12",
+  read_at: "2026-11-12T14:05:00Z",
   total: 2,
   items: [apiProjectA, apiProjectB],
   next_cursor: null,
@@ -221,6 +224,9 @@ const emptyBreakdowns = {
 export const webCompareBody = {
   from: "2026-11-10",
   to: "2026-11-12",
+  previous_from: "2026-11-07",
+  previous_to: "2026-11-09",
+  read_at: "2026-11-12T14:05:00Z",
   days: DAYS,
   projects: [
     {
@@ -254,6 +260,18 @@ export const webCompareBody = {
         quarantine_visitors: 1,
         quarantine_share: 0.1,
       },
+      previous_totals: {
+        pageviews: 30,
+        visitors: 20,
+        visits: 22,
+        bounces: 9,
+        totaltime: 1500,
+        bounce_rate: 0.409,
+        avg_visit_duration: 68,
+        quarantine_pageviews: 0,
+        quarantine_visitors: 0,
+        quarantine_share: 0,
+      },
       series: DAYS.map((day, i) => ({
         day,
         aggregated: true,
@@ -278,6 +296,18 @@ export const webCompareBody = {
       coverage: { script_requests: 500, gpc_requests: 60, unmeasured_share: 0.12 },
       integrity: { grade: null, graded_days: 0, days_a: 0, days_b: 0, days_c: 0, reasons: [] },
       totals: {
+        pageviews: 0,
+        visitors: 0,
+        visits: 0,
+        bounces: 0,
+        totaltime: 0,
+        bounce_rate: null,
+        avg_visit_duration: null,
+        quarantine_pageviews: 0,
+        quarantine_visitors: 0,
+        quarantine_share: null,
+      },
+      previous_totals: {
         pageviews: 0,
         visitors: 0,
         visits: 0,
@@ -355,6 +385,9 @@ const someRequests = {
 export const apiCompareBody = {
   from: "2026-11-10",
   to: "2026-11-12",
+  previous_from: "2026-11-07",
+  previous_to: "2026-11-09",
+  read_at: "2026-11-12T14:05:00Z",
   days: DAYS,
   projects: [
     {
@@ -365,6 +398,17 @@ export const apiCompareBody = {
         requests: 300,
         requests_4xx: 15,
         requests_5xx: 3,
+        services: 2,
+        routes: 7,
+        span_services: 1,
+        source: "mixed",
+        lossy: false,
+      },
+      previous_totals: {
+        ...someRequests,
+        requests: 200,
+        requests_4xx: 10,
+        requests_5xx: 2,
         services: 2,
         routes: 7,
         span_services: 1,
@@ -395,6 +439,14 @@ export const apiCompareBody = {
       tenant: refB,
       cohort: noCohort,
       totals: {
+        ...noRequests,
+        services: 0,
+        routes: 0,
+        span_services: 0,
+        source: null,
+        lossy: false,
+      },
+      previous_totals: {
         ...noRequests,
         services: 0,
         routes: 0,
