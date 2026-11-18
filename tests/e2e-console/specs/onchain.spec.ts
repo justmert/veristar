@@ -124,9 +124,13 @@ test("scf review and the overview export answer for the project", async () => {
   const { page, ctx } = owner;
   await page.goto(`${APP}/projects/${tenant.id}/scf`);
   await expect(page.getByRole("heading", { name: "SCF review", level: 1 })).toBeVisible();
+  // no id is verified: the verdict carries no on-chain number, and the
+  // figures, on demand, say how many ids are verified and draw no strip
+  await expect(page.locator("[data-key-number=onchain_operations]")).toHaveCount(0);
+  await page.locator("details#figures > summary").click();
   const chain = page.getByRole("region", { name: "On-chain" });
   await expect(chain).toContainText("0 of 1");
-  await expect(chain.getByText("Weekly active accounts", { exact: true })).toBeVisible();
+  await expect(chain.getByText("Weekly active accounts", { exact: true })).toHaveCount(0);
   const href = await page.getByRole("link", { name: "Export CSV" }).getAttribute("href");
   expect(href).toMatch(new RegExp(`^/api/tenants/${tenant.id}/overview\\.csv\\?from=`));
 

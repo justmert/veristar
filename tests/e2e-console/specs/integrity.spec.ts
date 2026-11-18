@@ -226,7 +226,9 @@ test("the project reads its own grade on the overview, as operators see it", asy
     "data-grade",
     "A",
   );
-  await expect(page.getByTestId("standing-grade")).toContainText("Fewer than a quarter");
+  // nothing lowered a day: the day counts stand where the reasons would
+  await expect(page.getByTestId("standing-grade").locator("[data-day-counts]")).toBeVisible();
+  await page.locator("details#integrity > summary").click();
   await expect(page.getByRole("region", { name: "Integrity report" })).toContainText(site.domain);
   await expect(page.getByRole("link", { name: "Appeal this grade" })).toHaveCount(0);
 });
