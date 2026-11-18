@@ -45,7 +45,7 @@ func TestSCFCommand(t *testing.T) {
 	out.Reset()
 	require.NoError(t, runSCF(ctx, []string{"import", "-"}, env, strings.NewReader(scfExport), &out))
 	s := out.String()
-	for _, want := range []string{"\nrecords=2\n", "\ninserted=1\n", "\nrejected=1\n", "\nmatched=0\n", "\nnot_enrolled=1\n",
+	for _, want := range []string{"\nrecords=2\n", "\ninserted=1\n", "\nrejected=1\n", "\nmatched_awards=0\n", "\nmatched_projects=0\n", "\nnot_enrolled=1\n",
 		"\nproposals_written=0\n", "rejected record=2 line=3 field=award_date reason=invalid\n"} {
 		require.Contains(t, s, want)
 	}
@@ -54,5 +54,5 @@ func TestSCFCommand(t *testing.T) {
 	require.Contains(t, out.String(), "\nunchanged=1\n")
 	out.Reset()
 	require.NoError(t, runSCF(ctx, []string{"match"}, env, nil, &out))
-	require.Equal(t, "matched=0\nambiguous=0\nnot_enrolled=1\nproposals_written=0\n", out.String())
+	require.Equal(t, "matched_awards=0\nmatched_projects=0\nambiguous=0\nnot_enrolled=1\nproposals_written=0\n", out.String())
 }

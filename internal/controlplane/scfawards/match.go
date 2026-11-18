@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -80,9 +82,17 @@ type Match struct {
 	// Candidates are the projects the award points to: one for a match,
 	// several (or one shared with other awards) when ambiguous
 	Candidates []Candidate
-	// SharedWith are the other awards pointing to the same project, which
-	// make a single candidate ambiguous
+	// SharedWith are, for an ambiguous award, the other awards that point
+	// to one of its candidates
 	SharedWith []uuid.UUID
+	// Primary is true for the matched award a project's cohort proposal
+	// comes from: its most recent award
+	Primary bool
+	// PrimaryAward is the most recent award of the matched project
+	PrimaryAward uuid.UUID
+	// OtherAwards are the matched project's other awards, the earlier
+	// rounds of the same project
+	OtherAwards []uuid.UUID
 }
 
 // Tenant returns the matched project, or uuid.Nil unless State is matched.
@@ -238,9 +248,14 @@ func LoadAwards(ctx context.Context, tx pgx.Tx) ([]AwardRow, error) {
 // award's website host equals a host of the project's sites (domain or an
 // origin) or of its enrollment website, or one of the award's strkeys is a
 // verified on-chain id of the project. names are never compared, and a
-// host many organisations share is never evidence. an award that points
-// to several projects, or to a project another award also points to, is
-// ambiguous and matches nothing.
+// host many organisations share is never evidence.
+//
+// a project funded in several rounds matches all its awards: every award
+// that points to it points to it alone, so they are one organisation, and
+// its most recent award (latest award date, then highest round) is the
+// primary one its cohort proposal comes from. an award that points to
+// several projects is ambiguous, and so is every award of a project that
+// such an award points to: the evidence no longer tells the projects apart.
 func MatchAll(awards []AwardRow, tenants map[uuid.UUID]*Tenant) map[uuid.UUID]Match {
 	ids := make([]uuid.UUID, 0, len(tenants))
 	for id := range tenants {
@@ -248,9 +263,13 @@ func MatchAll(awards []AwardRow, tenants map[uuid.UUID]*Tenant) map[uuid.UUID]Ma
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i].String() < ids[j].String() })
 
+	byID := make(map[uuid.UUID]AwardRow, len(awards))
 	cands := make(map[uuid.UUID][]Candidate, len(awards))
 	byTenant := map[uuid.UUID][]uuid.UUID{}
+	// shared marks projects that an award pointing to several projects names
+	shared := map[uuid.UUID]bool{}
 	for _, a := range awards {
+		byID[a.ID] = a
 		for _, id := range ids {
 			t := tenants[id]
 			var ev []Evidence
@@ -268,6 +287,30 @@ func MatchAll(awards []AwardRow, tenants map[uuid.UUID]*Tenant) map[uuid.UUID]Ma
 				byTenant[id] = append(byTenant[id], a.ID)
 			}
 		}
+		if c := cands[a.ID]; len(c) > 1 {
+			for _, x := range c {
+				shared[x.TenantID] = true
+			}
+		}
+	}
+	primary := map[uuid.UUID]uuid.UUID{}
+	for t, list := range byTenant {
+		best := list[0]
+		for _, id := range list[1:] {
+			if newer(byID[id], byID[best]) {
+				best = id
+			}
+		}
+		primary[t] = best
+	}
+	others := func(t, self uuid.UUID) []uuid.UUID {
+		var out []uuid.UUID
+		for _, id := range byTenant[t] {
+			if id != self {
+				out = append(out, id)
+			}
+		}
+		return out
 	}
 	out := make(map[uuid.UUID]Match, len(awards))
 	for _, a := range awards {
@@ -276,16 +319,24 @@ func MatchAll(awards []AwardRow, tenants map[uuid.UUID]*Tenant) map[uuid.UUID]Ma
 		switch {
 		case len(c) > 1:
 			m.State = StateAmbiguous
-		case len(c) == 1:
-			m.State = StateMatched
-			for _, other := range byTenant[c[0].TenantID] {
-				if other != a.ID {
-					m.SharedWith = append(m.SharedWith, other)
+			seen := map[uuid.UUID]bool{}
+			for _, x := range c {
+				for _, id := range others(x.TenantID, a.ID) {
+					if !seen[id] {
+						seen[id] = true
+						m.SharedWith = append(m.SharedWith, id)
+					}
 				}
 			}
-			if len(m.SharedWith) > 0 {
-				m.State = StateAmbiguous
-			}
+		case len(c) == 1 && shared[c[0].TenantID]:
+			m.State = StateAmbiguous
+			m.SharedWith = others(c[0].TenantID, a.ID)
+		case len(c) == 1:
+			t := c[0].TenantID
+			m.State = StateMatched
+			m.PrimaryAward = primary[t]
+			m.Primary = primary[t] == a.ID
+			m.OtherAwards = others(t, a.ID)
 		}
 		if m.Candidates == nil {
 			m.Candidates = []Candidate{}
@@ -293,6 +344,30 @@ func MatchAll(awards []AwardRow, tenants map[uuid.UUID]*Tenant) map[uuid.UUID]Ma
 		out[a.ID] = m
 	}
 	return out
+}
+
+// newer reports whether award a is more recent than b: a later award date
+// (an award with a date is more recent than one without), then a higher
+// round, then the later id, so the choice never depends on order.
+func newer(a, b AwardRow) bool {
+	switch {
+	case a.AwardDate != nil && b.AwardDate == nil:
+		return true
+	case a.AwardDate == nil && b.AwardDate != nil:
+		return false
+	case a.AwardDate != nil && !a.AwardDate.Equal(*b.AwardDate):
+		return a.AwardDate.After(*b.AwardDate)
+	}
+	if ra, rb := RoundNumber(a.Round), RoundNumber(b.Round); ra != rb {
+		return ra > rb
+	}
+	return a.ID.String() > b.ID.String()
+}
+
+// RoundNumber is n of "SCF #n".
+func RoundNumber(r string) int {
+	n, _ := strconv.Atoi(strings.TrimPrefix(r, "SCF #"))
+	return n
 }
 
 // evidenceRank orders evidence from the strongest kind

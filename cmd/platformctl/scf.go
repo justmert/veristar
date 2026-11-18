@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/justmert/veristar/internal/config"
@@ -140,22 +139,12 @@ func printReport(w io.Writer, r scfawards.Report) error {
 }
 
 func printAutofill(w io.Writer, a scfawards.AutofillResult) error {
-	if _, err := fmt.Fprintf(w, "matched=%d\nambiguous=%d\nnot_enrolled=%d\nproposals_written=%d\n",
-		a.Matched, a.Ambiguous, a.NotEnrolled, a.Proposed); err != nil {
+	if _, err := fmt.Fprintf(w, "matched_awards=%d\nmatched_projects=%d\nambiguous=%d\nnot_enrolled=%d\nproposals_written=%d\n",
+		a.Matched, a.Projects, a.Ambiguous, a.NotEnrolled, a.Proposed); err != nil {
 		return err
 	}
 	for _, s := range a.SortedStates() {
 		if _, err := fmt.Fprintf(w, "cohort_%s=%d\n", s, a.States[s]); err != nil {
-			return err
-		}
-	}
-	for _, x := range a.AmbiguousAwards {
-		slugs := make([]string, 0, len(x.Candidates))
-		for _, t := range x.Candidates {
-			slugs = append(slugs, t.Slug)
-		}
-		if _, err := fmt.Fprintf(w, "ambiguous award=%s round=%q project=%q tenants=%s shared_with=%d\n",
-			x.Award.ID, x.Award.Round, x.Award.Project, strings.Join(slugs, ","), len(x.SharedWith)); err != nil {
 			return err
 		}
 	}

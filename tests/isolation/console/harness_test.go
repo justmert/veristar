@@ -321,9 +321,9 @@ func start(t *testing.T) *env {
 	require.NoError(t, err)
 	ruleRoutes, err := operator.NewRules(e.conn, time.Now)
 	require.NoError(t, err)
-	// the scf award directory (contract 19.5) and its matching on
-	// enrollment and site creation
-	scfAwards, err := operator.NewSCFAwards(e.conn, time.Now)
+	// the scf award search of the enrollment form (contract 4.2.8) and the
+	// award matching on enrollment and site creation (19.5)
+	scfSearch, err := scfawards.NewSearch(e.conn, time.Now)
 	require.NoError(t, err)
 	scfHooks, err := scfawards.NewHooks(e.conn, log)
 	require.NoError(t, err)
@@ -343,7 +343,7 @@ func start(t *testing.T) *env {
 		Guard: guard,
 		Reads: []mcpserver.Routes{
 			tenants.NewRoutes(scope), sites.NewRoutes(scope), metricRoutes, onchainRoutes, scfView, tenantCohort,
-			controlplane.RoutesFunc(guard.Mount(review, global, onchainOperator, cohortRoutes, ruleRoutes, scfAwards)),
+			controlplane.RoutesFunc(guard.Mount(review, global, onchainOperator, cohortRoutes, ruleRoutes)),
 		},
 		Web:      webReader,
 		Issuer:   e.srv.URL,
@@ -367,6 +367,7 @@ func start(t *testing.T) *env {
 			controlplane.RoutesFunc(ah.Private),
 			accountRoutes,
 			tenants.NewRoutes(scope).OnEnroll(scfHooks),
+			scfSearch,
 			memberRoutes,
 			sites.NewRoutes(scope).OnCreate(checks, scfHooks),
 			checks,
@@ -384,7 +385,7 @@ func start(t *testing.T) *env {
 			e.mcp.TenantRoutes(scope),
 			e.mcp.ConsentRoutes(),
 			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys,
-				e.mcp.OperatorRoutes(), onchainOperator, operatorExports, cohortRoutes, ruleRoutes, scfAwards, roster)),
+				e.mcp.OperatorRoutes(), onchainOperator, operatorExports, cohortRoutes, ruleRoutes, roster)),
 		},
 		Mounts: []controlplane.Mount{
 			{Path: operator.MachinePath, Handler: machine.Handler()},

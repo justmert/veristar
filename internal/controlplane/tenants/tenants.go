@@ -151,6 +151,9 @@ type createBody struct {
 	AcceptedTermsVersion *string     `json:"accepted_terms_version"`
 	// an optional cohort proposal (contract 19.1)
 	Cohort *CohortInput `json:"cohort"`
+	// an optional award of the scf award search (4.2.8): its program,
+	// round, category and award date become the cohort proposal
+	SCFAwardID *string `json:"scf_award_id"`
 }
 
 func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
@@ -188,6 +191,19 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 	var cohort CohortValues
 	if b.Cohort != nil {
 		cohort = CheckCohort(&f, "cohort", b.Cohort, time.Now().UTC(), false)
+	}
+	var awardID uuid.UUID
+	if b.SCFAwardID != nil {
+		id, err := uuid.Parse(*b.SCFAwardID)
+		switch {
+		case err != nil || len(*b.SCFAwardID) != 36:
+			f.Add("scf_award_id", httpx.FieldInvalidFormat)
+		case b.Cohort != nil:
+			// the award is the proposal; a second one would contradict it
+			f.Add("scf_award_id", httpx.FieldInvalidValue)
+		default:
+			awardID = id
+		}
 	}
 	if b.AcceptedTermsVersion == nil {
 		f.Add("accepted_terms_version", httpx.FieldRequired)
@@ -241,6 +257,13 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 		detail := map[string]any{
 			"slug": t.Slug, "name": t.Name, "status": t.Status,
 			"accepted_terms_version": h.s.termsVersion, "enrollment": stored,
+		}
+		if awardID != uuid.Nil {
+			cohort, err = awardCohort(ctx, tx, awardID)
+			if err != nil {
+				return err
+			}
+			detail["scf_award_id"] = awardID.String()
 		}
 		if !cohort.Empty() {
 			if err := ProposeCohort(ctx, tx, t.ID, u.ID, cohort); err != nil {
@@ -501,3 +524,19 @@ func notFoundOnNoRows(err error) error {
 
 // NotFoundOnNoRows is notFoundOnNoRows for the other route packages.
 func NotFoundOnNoRows(err error) error { return notFoundOnNoRows(err) }
+
+// awardCohort reads the cohort of an award of the scf award directory
+// (00050) as a proposal: 422 unknown_scf_award when no award has the id.
+func awardCohort(ctx context.Context, tx pgx.Tx, id uuid.UUID) (CohortValues, error) {
+	var program, round, category string
+	var date *time.Time
+	err := tx.QueryRow(ctx, `select program, round, category, award_date from cp.scf_awards where id = $1`, id).
+		Scan(&program, &round, &category, &date)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return CohortValues{}, httpx.Validation("no scf award has this id", map[string]string{"scf_award_id": httpx.FieldUnknownSCFAward})
+	}
+	if err != nil {
+		return CohortValues{}, err
+	}
+	return CohortValues{Program: &program, Round: &round, Category: &category, AwardDate: date}, nil
+}
