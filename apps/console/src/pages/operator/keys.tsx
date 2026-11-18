@@ -179,19 +179,18 @@ export function AccessKeysPage() {
     },
     {
       key: "until",
-      header: "Ends",
+      header: "Expires",
+      // the cell holds only the value; the status column says active,
+      // expired or revoked
       cell: (r) =>
         r.revoked ? (
-          <span className="whitespace-nowrap">
-            Revoked {formatDate(r.revoked)}
-            {r.revokedReason ? `, ${r.revokedReason}` : ""}
-          </span>
+          <Missing
+            reason={`Revoked ${formatDate(r.revoked)}${r.revokedReason ? `, ${r.revokedReason}` : ""}`}
+          />
         ) : r.expires ? (
-          <span className="whitespace-nowrap">
-            {r.status === "expired" ? "Expired" : "Expires"} {formatDate(r.expires)}
-          </span>
+          <span className="whitespace-nowrap">{formatDateTimeUtc(r.expires)}</span>
         ) : (
-          <span className="whitespace-nowrap">While the client renews it</span>
+          <span className="whitespace-nowrap">Renewed by the client</span>
         ),
     },
     {
