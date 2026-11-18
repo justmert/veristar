@@ -69,6 +69,8 @@ test.afterAll(async () => {
 test("the owner proposes a cohort and an operator confirms it", async () => {
   const page = owner.page;
   await page.goto(`${APP}/projects/${tenant.id}/scf`);
+  // the cohort is on demand, under the verdict
+  await page.locator("details#cohort > summary").click();
   const panel = page.getByRole("region", { name: "SCF cohort" });
   await expect(panel).toContainText("No cohort is confirmed for your project yet.");
   await panel.getByRole("button", { name: "Propose a cohort" }).click();
@@ -148,11 +150,14 @@ test("a signed report verifies in a browser without a session, until its link is
   const page = owner.page;
   const period = lastWeek();
   await page.goto(`${APP}/projects/${tenant.id}/scf`);
-  const gen = page.getByRole("region", { name: "Generate a report" });
+  await page.getByRole("button", { name: "Sign a report" }).click();
+  const gen = page.getByRole("dialog", { name: "Sign a report" });
   await gen.getByLabel("From").fill(period.from);
   await gen.getByLabel("To").fill(period.to);
   await gen.getByRole("button", { name: "Generate and sign" }).click();
-  const link = gen.getByRole("status").getByRole("link");
+  // the link shows in the same dialog, now titled for the signed report
+  const signed = page.getByRole("dialog", { name: "Report signed" });
+  const link = signed.getByRole("status").getByRole("link");
   await expect(link).toHaveAttribute("href", new RegExp(`^${APP}/r/[a-z2-7]{26}$`));
   const url = (await link.getAttribute("href")) ?? "";
 

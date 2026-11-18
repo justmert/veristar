@@ -603,7 +603,15 @@ describe("scf review figures (contract 16.3)", () => {
     expect(host.querySelector("[data-figure=days-missing]")?.textContent).toContain(
       "before today without a ledger read",
     );
-    expect(host.querySelector("[data-figure=routes]")?.textContent).toContain("Distinct routes");
+    // the verdict carries the three counts with data, in a funder's order;
+    // the api has no request, so neither a key number nor a figure group
+    const keys = [...host.querySelectorAll("[data-key-number]")].map((e) =>
+      e.getAttribute("data-key-number"),
+    );
+    expect(keys).toEqual(["visitors", "onchain_operations", "pageviews"]);
+    expect(host.querySelector("[data-key-number=visitors]")?.textContent).toContain("+50%");
+    expect(host.querySelector("[data-figure=routes]")).toBeNull();
+    expect(host.querySelector('section[aria-label="API"]')).toBeNull();
     // a value the view does not have is the missing glyph, never n/a
     expect(host.textContent).not.toContain("n/a");
     // each verified contract's calls per function, failed missing for accounts
@@ -626,9 +634,9 @@ describe("scf review figures (contract 16.3)", () => {
     await waitFor(() => expect(host.querySelector("[data-testid=standing-grade]")).not.toBeNull());
     const card = host.querySelector("[data-testid=standing-grade]");
     expect(card?.querySelector("[data-grade]")?.getAttribute("data-grade")).toBe("B");
-    expect(card?.textContent).toContain("Grade B");
-    expect(card?.textContent).toContain("A quarter or more of the graded site days");
-    expect(card?.textContent).toContain("Graded on 8 site days: 5 A, 3 B, 0 C.");
+    // nothing in the report lowered a day, so the day counts stand in for
+    // the reasons, as numbers
+    expect(card?.querySelector("[data-day-counts]")?.textContent).toBe("5 A · 3 B · 0 C");
   });
 
   it("says when the project is not in the scf views", async () => {
