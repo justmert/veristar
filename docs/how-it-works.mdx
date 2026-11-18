@@ -3,8 +3,8 @@ title: "How it works"
 description: "The path a pageview or an API request takes from your site or app to your dashboard, in plain terms."
 ---
 
-Veristar has two inputs, one for websites and one for backends, and one console where project
-members and operators read the results. This page follows each path at a high level. The
+Veristar has three inputs: websites, backends and the Stellar ledger. Project members and
+operators read the results in one console. This page follows each path at a high level. The
 [architecture](/architecture) page has the full detail, with every service and store.
 
 ```mermaid
@@ -15,8 +15,11 @@ flowchart LR
   collector --> queue
   queue --> web["Web analytics engine<br/>(Umami)"]
   queue --> api["API metrics<br/>(PostgreSQL)"]
+  ledger["Stellar ledger<br/>(Horizon, RPC)"] --> chain["Daily on-chain job"]
+  chain --> chainstore[("On-chain counts<br/>(PostgreSQL)")]
   web --> console["Console"]
   api --> console
+  chainstore --> console
   console --> members["Project members"]
   console --> operators["SCF operators"]
 ```
@@ -75,10 +78,28 @@ flowchart LR
   </Step>
 </Steps>
 
+## On-chain activity
+
+<Steps>
+  <Step title="You declare your accounts and contracts">
+    You list your project's Stellar accounts and Soroban contracts in the console and prove that
+    your project controls each one.
+  </Step>
+  <Step title="A daily job reads the public ledger">
+    Once a day, a job reads the activity of every declared id from public ledger APIs (Horizon
+    for accounts, Stellar RPC events for contracts) and stores daily counts
+    ([on-chain sources](/reference/onchain-sources)).
+  </Step>
+  <Step title="You read the counts next to your web and API usage">
+    The console shows daily operations, transactions and counterparties, weekly active accounts
+    and calls per contract function ([on-chain activity](/onboarding/onchain)).
+  </Step>
+</Steps>
+
 ## Projects and operators
 
-Each project is a tenant. Members sign in with GitHub, a Stellar wallet or a passkey and see only their own project's data:
-every request runs under database row-level security for that project. SCF operators see
+Each project is a tenant. Members sign in with GitHub, a Stellar wallet or a passkey and see only
+their own project's data: every request runs under database row-level security for that project. SCF operators see
 aggregates across projects, never raw events or sessions, and machine consumers can read the
 same aggregates through the [metrics API](/operators/api-keys).
 
