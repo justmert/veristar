@@ -6,6 +6,7 @@ import { Link, useSearchParams } from "react-router";
 import type { AuditQuery } from "@/api/endpoints";
 import { auditQuery } from "@/api/queries";
 import type { AuditEntry } from "@/api/schemas";
+import { Avatar } from "@/components/avatar";
 import { Disclosure } from "@/components/disclosure";
 import { type Filter, FilterBar } from "@/components/filter-bar";
 import { SelectField, TextField } from "@/components/form-field";
@@ -22,7 +23,6 @@ import {
   auditSentence,
   dayToUtc,
   foldRuns,
-  initials,
   utcToDay,
 } from "@/lib/audit";
 import { countOf, formatDate, formatDateTimeUtc, formatTimeUtc } from "@/lib/format";
@@ -339,19 +339,11 @@ function ItemRow({ item }: { item: AuditItem }) {
   );
 }
 
-// a person is a round mark with initials; the system and an ai assistant
+// a person is the round avatar; the system and an ai assistant
 // are square marks with an icon, so they never look like a person
 function ActorMark({ e }: { e: AuditEntry }) {
   const s = auditSentence(e);
-  if (s.kind === "person")
-    return (
-      <span
-        aria-hidden
-        className="flex size-7 items-center justify-center rounded-full border border-line-strong bg-selected text-axis font-semibold text-fg"
-      >
-        {e.actor_login ? initials(e.actor_login) : "?"}
-      </span>
-    );
+  if (s.kind === "person") return <Avatar name={e.actor_login ?? "?"} />;
   const Icon = s.kind === "system" ? Cog : Bot;
   return (
     <span
