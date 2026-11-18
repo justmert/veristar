@@ -597,7 +597,7 @@ describe("scf review figures (contract 16.3)", () => {
     expect(card?.querySelector("[data-grade]")?.getAttribute("data-grade")).toBe("B");
     expect(card?.textContent).toContain("Grade B");
     expect(card?.textContent).toContain("A quarter or more of the graded site days");
-    expect(card?.textContent).toContain("8 graded site days: 5 A, 3 B, 0 C.");
+    expect(card?.textContent).toContain("Graded on 8 site days: 5 A, 3 B, 0 C.");
   });
 
   it("says when the project is not in the scf views", async () => {

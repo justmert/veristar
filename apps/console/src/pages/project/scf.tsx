@@ -5,6 +5,7 @@
 // the rules met, the figures, and the reports.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { cn } from "@veristar/brand/cn";
 import { Download, ExternalLink, FileSignature, MoreHorizontal } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import type { Kpi, KpiKey } from "@/api/cohorts";
@@ -151,6 +152,7 @@ function Standing({ v, tenantId, isOwner }: { v: SCFView; tenantId: string; isOw
 // shared badge, what it means, and the days behind it
 function GradeCard({ v }: { v: SCFView }) {
   const g = v.integrity;
+  const sites = v.sites?.sites ?? null;
   return (
     <div
       data-testid="standing-grade"
@@ -160,8 +162,17 @@ function GradeCard({ v }: { v: SCFView }) {
       {g ? (
         <>
           <StatusBadge kind="grade" grade={g.grade} className="w-fit" />
-          <p className="text-small text-fg">{gradeMeaning(g.grade)}</p>
-          <p className="text-caption text-fg-2">{dayCountsText(g)}</p>
+          {sites === 0 ? (
+            <p className="text-small text-fg">No site to grade. Add a site to get a grade.</p>
+          ) : (
+            <>
+              <p className="text-small text-fg">{gradeMeaning(g.grade)}</p>
+              {/* without a graded day the meaning above says it already */}
+              {g.graded_days > 0 ? (
+                <p className="text-caption text-fg-2">{dayCountsText(g)}</p>
+              ) : null}
+            </>
+          )}
         </>
       ) : (
         <p className="text-small text-fg-2">
@@ -389,11 +400,14 @@ function Figure({
   definition,
   children,
   name,
+  text = false,
 }: {
   label: string;
   definition?: string;
   children: ReactNode;
   name?: string;
+  // a word or a badge, not a number: set in the sans face
+  text?: boolean;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-1" data-figure={name}>
@@ -410,7 +424,9 @@ function Figure({
           label
         )}
       </dt>
-      <dd className="min-w-0 font-mono text-body text-fg tabular">{children}</dd>
+      <dd className={cn("min-w-0 text-body text-fg", text ? "font-sans" : "font-mono tabular")}>
+        {children}
+      </dd>
     </div>
   );
 }
@@ -467,7 +483,7 @@ function Figures({ v }: { v: SCFView }) {
       <div className="grid min-w-0 gap-3 lg:grid-cols-2">
         <FigureCard title="Project">
           <dl className="grid grid-cols-2 gap-4">
-            <Figure label="Status">
+            <Figure label="Status" text>
               {v.tenant ? (
                 <StatusBadge kind="project" status={v.tenant.status as TenantStatus} />
               ) : (
