@@ -74,7 +74,7 @@ function SettingGroup({
         </h3>
         <p className="text-small text-fg-2">{description}</p>
       </div>
-      <div role="radiogroup" aria-labelledby={id} className="grid gap-2.5 sm:grid-cols-2">
+      <div role="radiogroup" aria-labelledby={id} className="grid gap-2 sm:grid-cols-2">
         {children}
       </div>
       <div className="flex flex-wrap items-center gap-3">

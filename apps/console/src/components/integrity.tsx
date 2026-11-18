@@ -84,7 +84,7 @@ function RangeReasons({ reasons }: { reasons: IntegrityRangeReason[] }) {
     return <p className="text-small text-fg-2">No rule lowered the grade on any day.</p>;
   }
   return (
-    <ul className="flex flex-col gap-1.5" aria-label="Reasons over the range">
+    <ul className="flex flex-col gap-1" aria-label="Reasons over the range">
       {reasons.map((r) => (
         <li key={r.code} data-reason={r.code} className="flex flex-wrap items-baseline gap-x-2">
           {r.level === "B" || r.level === "C" ? <GradeBadge grade={r.level} /> : null}
@@ -114,7 +114,7 @@ function SiteDays({ site, name }: { site: IntegritySite; name: string }) {
       </summary>
       <ol className="flex flex-col divide-y divide-line border-t border-line">
         {days.map((d) => (
-          <li key={d.day} className="flex flex-col gap-2 px-3 py-2.5" data-day={d.day}>
+          <li key={d.day} className="flex flex-col gap-2 px-3 py-2" data-day={d.day}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="text-small font-medium text-fg tabular">
                 {formatDate(`${d.day}T00:00:00Z`)}

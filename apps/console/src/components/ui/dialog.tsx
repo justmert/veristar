@@ -52,7 +52,7 @@ export function Dialog({
   const body = (
     <>
       <div className="flex items-start gap-3 px-5 pt-5">
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h2 id={titleId} className="text-title text-fg">
             {title}
           </h2>

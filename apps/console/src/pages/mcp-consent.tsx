@@ -198,7 +198,7 @@ function Consent({
         if (choice) approve.mutate();
       }}
     >
-      <div className="flex flex-col gap-2.5 border-b border-line px-5 pt-6 pb-5 sm:px-6">
+      <div className="flex flex-col gap-2 border-b border-line px-5 pt-6 pb-5 sm:px-6">
         <h1 className="text-section text-fg">Connect {info.client_name} to Veristar</h1>
         <p className="text-body text-fg-2">
           Signed in as <span className="font-medium text-fg">{login}</span>.{" "}
@@ -207,9 +207,9 @@ function Consent({
           <code className="font-mono text-small break-all text-fg">{info.redirect_origin}</code>.
         </p>
       </div>
-      <ul className="flex flex-col gap-2.5 border-b border-line px-5 py-4 text-small sm:px-6">
-        <li className="flex gap-2.5">
-          <ShieldCheck aria-hidden className="mt-0.5 size-4 shrink-0 text-success" />
+      <ul className="flex flex-col gap-2 border-b border-line px-5 py-4 text-small sm:px-6">
+        <li className="flex gap-2">
+          <ShieldCheck aria-hidden className="mt-1 size-4 shrink-0 text-success" />
           <span>
             <span className="font-medium text-fg">Read-only.</span>{" "}
             <span className="text-fg-2">
@@ -218,8 +218,8 @@ function Consent({
             </span>
           </span>
         </li>
-        <li className="flex gap-2.5">
-          <ShieldCheck aria-hidden className="mt-0.5 size-4 shrink-0 text-success" />
+        <li className="flex gap-2">
+          <ShieldCheck aria-hidden className="mt-1 size-4 shrink-0 text-success" />
           <span>
             <span className="font-medium text-fg">One project only, the one you choose.</span>{" "}
             <span className="text-fg-2">
@@ -233,13 +233,13 @@ function Consent({
         {nothing ? (
           <p
             role="alert"
-            className="flex items-start gap-2 rounded-md border border-warning-line bg-warning-soft px-3 py-2.5 text-small text-fg"
+            className="flex items-start gap-2 rounded-md border border-warning-line bg-warning-soft px-3 py-2 text-small text-fg"
           >
-            <CircleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0 text-warning" />
+            <CircleAlert aria-hidden className="mt-1 size-3.5 shrink-0 text-warning" />
             You are not a member of a project that can be connected.
           </p>
         ) : (
-          <fieldset className="flex flex-col gap-1.5">
+          <fieldset className="flex flex-col gap-1">
             <legend className="mb-2 text-small font-medium text-fg">Give access to</legend>
             {info.tenants.map((t) => (
               <Choice
@@ -303,18 +303,18 @@ function Choice({
   return (
     <label
       className={cn(
-        "grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2.5 rounded-lg border px-3 py-2.5 transition-colors duration-(--vs-duration-press)",
+        "grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 rounded-lg border px-3 py-2 transition-colors duration-(--vs-duration-press)",
         checked ? "border-accent-text bg-selected" : "border-line hover:bg-hover",
       )}
     >
       <input
         type="radio"
         name="scope"
-        className="mt-0.5 size-4 accent-accent focus-ring"
+        className="mt-1 size-4 accent-accent focus-ring"
         checked={checked}
         onChange={onChange}
       />
-      <span className="flex min-w-0 flex-col gap-0.5">
+      <span className="flex min-w-0 flex-col gap-1">
         <span className="text-body font-medium text-fg">{name}</span>
         <span className="text-caption font-normal text-fg-2">{detail}</span>
       </span>

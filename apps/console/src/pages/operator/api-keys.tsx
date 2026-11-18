@@ -400,7 +400,7 @@ function Usage({ id }: { id: string }) {
       className="flex animate-rise-in flex-col overflow-hidden rounded-lg border border-line bg-sunken text-small"
       aria-label="Usage"
     >
-      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-line px-3 py-2.5">
+      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-line px-3 py-2">
         <span className="text-fg-3">
           {formatDay(d.from)} to {formatDay(d.to)} (UTC)
         </span>
@@ -428,13 +428,13 @@ function Usage({ id }: { id: string }) {
           <table className="w-full border-separate border-spacing-0 text-left text-caption">
             <thead className="sticky top-0 bg-sunken text-fg-3">
               <tr>
-                <th scope="col" className="border-b border-line px-3 py-1.5 font-medium">
+                <th scope="col" className="border-b border-line px-3 py-1 font-medium">
                   Hour (UTC)
                 </th>
-                <th scope="col" className="border-b border-line px-3 py-1.5 text-right font-medium">
+                <th scope="col" className="border-b border-line px-3 py-1 text-right font-medium">
                   Requests
                 </th>
-                <th scope="col" className="border-b border-line px-3 py-1.5 text-right font-medium">
+                <th scope="col" className="border-b border-line px-3 py-1 text-right font-medium">
                   Refused
                 </th>
               </tr>

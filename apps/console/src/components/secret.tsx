@@ -40,7 +40,7 @@ export function OneTimeSecret({
         <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-line-strong text-success">
           <KeyRound aria-hidden className="size-4" />
         </span>
-        <div className="flex min-w-0 flex-col gap-0.5">
+        <div className="flex min-w-0 flex-col gap-1">
           <span className="text-body font-semibold text-fg">{title}</span>
           {description ? <span className="text-small text-fg-2">{description}</span> : null}
         </div>

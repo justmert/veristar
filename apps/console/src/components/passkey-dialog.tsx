@@ -153,7 +153,7 @@ export function PasskeyDialog({
         ) : created ? (
           <div className="flex flex-col gap-3">
             <p role="status" className="flex items-start gap-2 text-small text-fg">
-              <CircleCheck aria-hidden className="mt-0.5 size-3.5 shrink-0 text-success" />
+              <CircleCheck aria-hidden className="mt-1 size-3.5 shrink-0 text-success" />
               Your passkey is created. Confirm it once to finish.
             </p>
             <Button

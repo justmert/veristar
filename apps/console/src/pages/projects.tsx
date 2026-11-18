@@ -145,18 +145,18 @@ function ProjectCard({ tenant: t }: { tenant: MeTenant }) {
       to={`/projects/${t.id}`}
       className="group flex w-full flex-col rounded-lg border border-line bg-raised transition duration-(--vs-duration-reveal) ease-standard hover:border-line-strong hover:bg-hover focus-ring"
     >
-      <div className="flex items-start gap-3.5 p-5 pb-4">
+      <div className="flex items-start gap-3 p-5 pb-4">
         <span
           aria-hidden
           className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-selected text-title text-fg uppercase"
         >
           {t.name.slice(0, 1)}
         </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="truncate text-title text-fg">{t.name}</span>
           <span className="truncate text-small text-fg-3">{t.slug}</span>
         </span>
-        <span className="flex shrink-0 flex-col items-end gap-1.5">
+        <span className="flex shrink-0 flex-col items-end gap-1">
           <StatusPill status={t.status} />
           <span className="text-caption font-normal text-fg-3">{ROLE[t.role]}</span>
         </span>
@@ -176,7 +176,7 @@ function ProjectCard({ tenant: t }: { tenant: MeTenant }) {
         <Metric label="Sites" pending={sites.isPending} failed={sites.isError}>
           {list.length}
           {list.length > 0 ? (
-            <span className="ml-1.5 font-sans text-caption font-normal text-fg-3">
+            <span className="ml-1 font-sans text-caption font-normal text-fg-3">
               {verified} verified
             </span>
           ) : null}
@@ -215,7 +215,7 @@ function Metric({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 border-r border-line-subtle px-5 py-3.5 last:border-r-0">
+    <div className="flex min-w-0 flex-col gap-1 border-r border-line-subtle px-5 py-3 last:border-r-0">
       <dt className="truncate text-caption font-normal text-fg-3">{label}</dt>
       <dd className="flex items-baseline font-mono text-title font-medium text-fg tabular">
         {pending ? (

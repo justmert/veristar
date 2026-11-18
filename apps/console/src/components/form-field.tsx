@@ -127,7 +127,7 @@ export function NativeSelect({
             ? "h-(--vs-control-sm) text-small max-lg:h-(--vs-control-touch)"
             : "h-(--vs-control)",
           bare &&
-            "h-full border-0 bg-transparent pl-1.5 hover:border-0 focus:outline-none focus-visible:outline-none",
+            "h-full border-0 bg-transparent pl-1 hover:border-0 focus:outline-none focus-visible:outline-none",
         )}
         {...props}
       />

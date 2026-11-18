@@ -101,7 +101,7 @@ export function AnimatedNumber({
     void el.offsetWidth;
     el.classList.add("animate-flash");
     const controls = animate(from, value, {
-      ...transition.change,
+      ...transition.number,
       onUpdate: (v) => {
         el.textContent = fmt.current(v);
       },

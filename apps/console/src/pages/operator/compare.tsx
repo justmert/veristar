@@ -150,14 +150,14 @@ export function ComparePage() {
       </h2>
 
       {/* the compared projects and the range stay in view while the charts scroll */}
-      <div className="sticky top-0 z-20 -mx-4 flex flex-wrap items-center gap-2 border-b border-line bg-ground px-4 py-2.5 max-lg:top-(--vs-header) sm:-mx-8 sm:px-8">
+      <div className="sticky top-0 z-20 -mx-4 flex flex-wrap items-center gap-2 border-b border-line bg-ground px-4 py-2 max-lg:top-(--vs-header) sm:-mx-8 sm:px-8">
         <span className="text-small text-fg-3">Compared projects</span>
         {refs ? (
           <ul aria-label="Compared projects" className="flex flex-wrap gap-2">
             {refs.map((t, i) => (
               <li
                 key={t.id}
-                className="inline-flex h-8 max-w-96 animate-reveal-in items-center gap-2 rounded-md border border-line-strong pr-1 pl-2.5 text-small text-fg"
+                className="inline-flex h-8 max-w-96 animate-reveal-in items-center gap-2 rounded-md border border-line-strong pr-1 pl-2 text-small text-fg"
               >
                 <SeriesLine slot={i} />
                 <span className="truncate font-medium">{t.name}</span>
@@ -449,7 +449,7 @@ function BreakdownRow({
       aria-label={label}
       className="flex flex-col gap-3 rounded-lg border border-line bg-raised px-4 py-4"
     >
-      <div className="flex flex-col gap-0.5">
+      <div className="flex flex-col gap-1">
         <h3 className="text-title text-fg">{label}</h3>
         <p className="text-caption text-fg-3">
           Top values over the range, counted in daily visitors.
@@ -463,7 +463,7 @@ function BreakdownRow({
           const max = Math.max(1, ...b.items.map((x) => x.value));
           return (
             <StaggerItem key={tenant.id} className="min-w-0">
-              <p className="flex items-center gap-1.5 text-small font-medium text-fg">
+              <p className="flex items-center gap-1 text-small font-medium text-fg">
                 <SeriesLine slot={i} />
                 <span className="truncate">{tenant.name}</span>
               </p>
@@ -493,7 +493,7 @@ function BreakdownRow({
                 </ul>
               )}
               {b.total_keys > b.items.length ? (
-                <p className="mt-1.5 text-caption text-fg-3">
+                <p className="mt-1 text-caption text-fg-3">
                   {formatCount(b.total_keys - b.items.length)} more
                 </p>
               ) : null}
@@ -613,9 +613,9 @@ function ServicesCard({ project, slot }: { project: ApiCompareProject; slot: num
   return (
     <section
       aria-label={`Services of ${project.tenant.name}`}
-      className="flex h-full min-w-0 flex-col gap-2 rounded-lg border border-line bg-raised px-4 py-3.5"
+      className="flex h-full min-w-0 flex-col gap-2 rounded-lg border border-line bg-raised px-4 py-3"
     >
-      <p className="flex items-center gap-1.5 text-body font-medium text-fg">
+      <p className="flex items-center gap-1 text-body font-medium text-fg">
         <SeriesLine slot={slot} />
         <span className="truncate">{project.tenant.name}</span>
       </p>
@@ -628,7 +628,7 @@ function ServicesCard({ project, slot }: { project: ApiCompareProject; slot: num
       ) : (
         <ul className="flex flex-col text-small">
           {project.services.map((s) => (
-            <li key={s.service} className="border-b border-line-subtle py-1.5 last:border-0">
+            <li key={s.service} className="border-b border-line-subtle py-1 last:border-0">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="min-w-0 truncate font-mono text-caption text-fg">
                   {s.service === "" ? "(no service name)" : s.service}

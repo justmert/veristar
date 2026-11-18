@@ -760,7 +760,7 @@ function BreakdownList({
                   // the width is data; react writes it through the cssom
                   style={{ width: `${(it.value / top) * 100}%` }}
                 />
-                <span className="relative flex min-w-0 items-baseline gap-2 px-1.5">
+                <span className="relative flex min-w-0 items-baseline gap-2 px-1">
                   <span className="truncate text-fg" title={it.key}>
                     {keyLabel(data.dimension, it.key)}
                   </span>

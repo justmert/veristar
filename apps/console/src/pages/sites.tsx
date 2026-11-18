@@ -757,11 +757,7 @@ function Outcomes({ ingest, range }: { ingest: Ingest; range: WebRange }) {
     >
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
         {rows.map((r) => (
-          <div
-            key={r.key}
-            className="flex flex-col gap-0.5"
-            title={outcomeHint(r.key) ?? undefined}
-          >
+          <div key={r.key} className="flex flex-col gap-1" title={outcomeHint(r.key) ?? undefined}>
             <dt className="text-caption text-fg-3">{r.label}</dt>
             <dd className="font-mono text-title text-fg tabular">{formatCount(r.value)}</dd>
           </div>
@@ -878,18 +874,18 @@ function SiteSettings({
           <EditSiteForm site={site} />
         ) : (
           <dl className="flex flex-col gap-3 text-small">
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-1">
               <dt className="text-caption text-fg-3">Name</dt>
               <dd className="text-fg">{site.name}</dd>
             </div>
             <div className="flex flex-col gap-1">
               <dt className="text-caption text-fg-3">Allowed origins</dt>
               <dd>
-                <ul aria-label="Allowed origins" className="flex flex-wrap gap-1.5">
+                <ul aria-label="Allowed origins" className="flex flex-wrap gap-1">
                   {site.origins.map((o) => (
                     <li
                       key={o}
-                      className="rounded-sm border border-line bg-sunken px-2 py-0.5 font-mono text-caption font-normal text-fg"
+                      className="rounded-sm border border-line bg-sunken px-2 py-1 font-mono text-caption font-normal text-fg"
                     >
                       {o}
                     </li>
@@ -993,7 +989,7 @@ function EditSiteForm({ site }: { site: Site }) {
             Cancel
           </Button>
         ) : null}
-        <span role="status" className="flex items-center gap-1.5 text-small text-fg-2">
+        <span role="status" className="flex items-center gap-1 text-small text-fg-2">
           {saved && !changed ? (
             <>
               <Check aria-hidden className="size-3.5 text-success" />
@@ -1037,14 +1033,14 @@ export function CampaignParams({
           disabled={!canEdit || !isOwner || save.isPending}
           onCheckedChange={(c) => save.mutate(c === true)}
           aria-describedby={`${id}-d`}
-          className="mt-0.5"
+          className="mt-1"
         />
         <label htmlFor={id} className="text-body text-fg">
           Keep campaign parameters (<code className="font-mono text-small">utm_*</code> and{" "}
           <code className="font-mono text-small">ref</code>) in page addresses
         </label>
       </div>
-      <p id={`${id}-d`} className="pl-7 text-small text-fg-2">
+      <p id={`${id}-d`} className="pl-6 text-small text-fg-2">
         Off by default: every query parameter is dropped before storage. Turning this on keeps the
         campaign parameters, which France's CNIL recommends not collecting for analytics run without
         consent. It applies to new events within a minute.

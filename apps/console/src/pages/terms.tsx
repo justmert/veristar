@@ -20,26 +20,26 @@ export function TermsPage() {
       header={
         <Link
           to="/"
-          className="rounded-md px-2 py-1.5 text-body text-fg-2 transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring"
+          className="rounded-md px-2 py-1 text-body text-fg-2 transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring"
         >
           Back to the console
         </Link>
       }
     >
-      <div className="mx-auto grid w-full max-w-content gap-10 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] lg:gap-14">
+      <div className="mx-auto grid w-full max-w-content gap-10 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] lg:gap-12">
         {sections.length > 0 ? (
           <nav
             aria-label="Sections"
             className="sticky top-6 hidden flex-col gap-px self-start lg:flex"
           >
-            <span className="px-2.5 pb-2 text-caption text-fg-3">On this page</span>
+            <span className="px-2 pb-2 text-caption text-fg-3">On this page</span>
             {sections.map((s) => (
               <a
                 key={s.id}
                 href={`#${s.id}`}
                 aria-current={current === s.id ? "location" : undefined}
                 className={cn(
-                  "rounded-md px-2.5 py-1.5 text-body transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring",
+                  "rounded-md px-2 py-1 text-body transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring",
                   current === s.id ? "bg-selected text-fg" : "text-fg-2",
                 )}
               >
@@ -58,13 +58,13 @@ export function TermsPage() {
               <Markdown
                 source={terms.data.markdown}
                 afterTitle={
-                  <p className="flex flex-wrap items-center gap-2.5 text-small text-fg-2">
+                  <p className="flex flex-wrap items-center gap-2 text-small text-fg-2">
                     <span>Version</span>
-                    <span className="rounded-sm border border-line bg-sunken px-2 py-0.5 font-mono text-fg">
+                    <span className="rounded-sm border border-line bg-sunken px-2 py-1 font-mono text-fg">
                       {terms.data.version}
                     </span>
                     {terms.data.status === "draft" ? (
-                      <span className="flex items-center gap-1.5 text-warning">
+                      <span className="flex items-center gap-1 text-warning">
                         <StatusDot tone="warning" />
                         Draft
                       </span>

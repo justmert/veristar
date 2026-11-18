@@ -46,7 +46,7 @@ export function AppShell() {
       <div className="min-h-dvh lg:grid lg:grid-cols-[var(--vs-sidebar)_minmax(0,1fr)]">
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-4 focus:z-50 focus:rounded-md focus:bg-overlay focus:px-3 focus:py-2 focus:shadow-overlay"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-4 focus:z-(--vs-layer-toast) focus:rounded-md focus:bg-overlay focus:px-3 focus:py-2 focus:shadow-overlay"
         >
           Skip to content
         </a>
@@ -54,7 +54,7 @@ export function AppShell() {
           {side}
         </aside>
 
-        <header className="sticky top-0 z-30 flex h-(--vs-header) items-center gap-2 border-b border-line bg-ground px-2 lg:hidden">
+        <header className="sticky top-0 z-(--vs-layer-header) flex h-(--vs-header) items-center gap-2 border-b border-line bg-ground px-2 lg:hidden">
           <Button
             variant="ghost"
             size="icon-lg"

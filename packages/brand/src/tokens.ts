@@ -1,6 +1,6 @@
 // the veristar brand, as data. this file is the single source of every
-// colour, type step, radius, shadow, motion value and layout size the
-// console and the website use. `pnpm --filter
+// colour, type step, spacing step, radius, shadow, motion value, layer and
+// layout size the console and the website use. `pnpm --filter
 // @veristar/brand generate` writes the css from it; `check` fails when a
 // committed css file no longer matches.
 //
@@ -115,6 +115,16 @@ export type Roles = {
   // selected, so a caption keeps its contrast in a selected row
   "fg-3": string;
   "fg-disabled": string;
+  // a control that cannot be used: a flat neutral fill, quiet text and a
+  // quiet edge, so a disabled primary never reads as a dim accent and a
+  // disabled outline never reads as enabled
+  "disabled-fill": string;
+  "disabled-fg": string;
+  "disabled-line": string;
+  // a toggle that is on (a chart option, a table view): the surface and its
+  // edge
+  pressed: string;
+  "pressed-line": string;
   "on-accent": string; // text on the accent fill
   "on-critical": string; // text on the destructive fill
   // the one primary action; never a status. `accent` is the fill under
@@ -146,6 +156,9 @@ export type Roles = {
   "series-5": string;
   "series-prev": string; // the previous period, dashed
   "series-focus": string; // the halo of a focused mark
+  // the stripes cut into a bar of a period that has not ended (a partial
+  // day or hour), so a half period never reads as a drop
+  "series-partial": string;
   grid: string;
   axis: string;
   // elevation, the colour of an overlay's shadow
@@ -173,6 +186,11 @@ export const themes = {
     // 4.79 on selected
     "fg-3": p.neutral[450],
     "fg-disabled": p.neutral[500],
+    "disabled-fill": p.neutral[750],
+    "disabled-fg": p.neutral[500],
+    "disabled-line": p.neutral[650],
+    pressed: p.neutral[700],
+    "pressed-line": p.neutral[500],
     "on-accent": p.white,
     "on-critical": p.white,
     accent: p.terracotta[500],
@@ -198,6 +216,7 @@ export const themes = {
     "series-5": p.ochre[500],
     "series-prev": p.neutral[500],
     "series-focus": "rgb(57 135 229 / 0.25)",
+    "series-partial": p.neutral[850],
     grid: p.neutral[750],
     axis: p.neutral[600],
     "shadow-soft": "rgb(0 0 0 / 0.32)",
@@ -223,6 +242,11 @@ export const themes = {
     // 4.62 on selected
     "fg-3": p.paper[650],
     "fg-disabled": p.paper[400],
+    "disabled-fill": p.paper[150],
+    "disabled-fg": p.paper[400],
+    "disabled-line": p.paper[250],
+    pressed: p.paper[200],
+    "pressed-line": p.paper[400],
     "on-accent": p.white,
     "on-critical": p.white,
     accent: p.terracotta[500],
@@ -248,6 +272,7 @@ export const themes = {
     "series-5": p.seriesLight[4],
     "series-prev": p.paper[400],
     "series-focus": "rgb(42 111 214 / 0.22)",
+    "series-partial": p.paper[0],
     grid: p.paper[150],
     axis: p.paper[300],
     "shadow-soft": "rgb(26 25 23 / 0.1)",
@@ -267,7 +292,8 @@ export const font = {
 } as const;
 
 // the type scale: size / line height, weight, tracking. numbers are set in
-// mono at small, metric-sm and metric only.
+// mono at small and metric only. `heading` is the console's page title;
+// `page` stays for the website.
 export const type = {
   axis: { size: "11px", line: "14px", weight: 400, tracking: "0" },
   caption: { size: "12px", line: "16px", weight: 500, tracking: "0.01em" },
@@ -275,10 +301,30 @@ export const type = {
   body: { size: "14px", line: "20px", weight: 400, tracking: "0" },
   title: { size: "16px", line: "24px", weight: 600, tracking: "0" },
   section: { size: "20px", line: "28px", weight: 600, tracking: "-0.01em" },
+  heading: { size: "22px", line: "28px", weight: 600, tracking: "-0.015em" },
   page: { size: "28px", line: "36px", weight: 600, tracking: "-0.025em" },
   metric: { size: "28px", line: "36px", weight: 500, tracking: "-0.02em" },
   h1: { size: "32px", line: "40px", weight: 600, tracking: "-0.03em" },
   display: { size: "48px", line: "52px", weight: 600, tracking: "-0.035em" },
+} as const;
+
+// the spacing scale, 4 px base. the console's tailwind spacing is generated
+// from it (p-4 is 16 px) and check-usage refuses a padding, margin or gap
+// outside it. rhythm: page gutter 6 (4 on a phone), gap between page
+// sections 8, card padding 5 (4 on a phone), gap inside a card 3, form
+// field gap 4.
+export const space = {
+  0: "0px",
+  1: "4px",
+  2: "8px",
+  3: "12px",
+  4: "16px",
+  5: "20px",
+  6: "24px",
+  8: "32px",
+  10: "40px",
+  12: "48px",
+  16: "64px",
 } as const;
 
 export const radius = {
@@ -304,6 +350,7 @@ export const shadow = {
 //   arrival  something new arrived (first event, new alert)
 //   highlight the fading mark left by an arrival
 //   live     the breathing dot of anything listening
+//   number   a value counting to its new number
 // reduced motion keeps only opacity changes (see motion.ts).
 export const motion = {
   duration: {
@@ -315,6 +362,7 @@ export const motion = {
     highlight: 1200,
     live: 2000,
     spin: 800,
+    number: 400,
   },
   ease: {
     standard: [0.2, 0, 0, 1],
@@ -322,6 +370,20 @@ export const motion = {
   },
   // the 4 px a revealed or arriving element travels
   distance: 4,
+  // lists reveal their children one after another: the gap between two
+  // children and the wait before the first (ms)
+  stagger: { children: 30, delay: 20 },
+  // the spring of a layout move (the current nav item, a segmented marker)
+  spring: { stiffness: 520, damping: 42, mass: 0.8 },
+} as const;
+
+// stacking layers above the page. a toast sits over menus and the sticky
+// header; a native <dialog> is in the top layer above all of them.
+export const layer = {
+  raised: 10,
+  header: 30,
+  overlay: 50,
+  toast: 60,
 } as const;
 
 export const layout = {

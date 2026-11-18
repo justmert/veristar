@@ -283,7 +283,7 @@ function CustomRange({
       aria-label="Custom range"
       className="grid gap-3 rounded-lg border border-line bg-raised p-4 sm:grid-cols-[1fr_1fr_auto] sm:items-start"
     >
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         <label htmlFor={fromId} className="text-small font-medium text-fg">
           From (UTC)
         </label>
@@ -302,7 +302,7 @@ function CustomRange({
           </p>
         ) : null}
       </div>
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         <label htmlFor={toId} className="text-small font-medium text-fg">
           To (UTC)
         </label>
@@ -321,7 +321,7 @@ function CustomRange({
           </p>
         ) : null}
       </div>
-      <Button type="submit" className="max-lg:h-(--vs-control-touch) sm:mt-6.5">
+      <Button type="submit" className="max-lg:h-(--vs-control-touch) sm:mt-6">
         Apply range
       </Button>
       <p className="text-caption font-normal text-fg-3 sm:col-span-3">
@@ -353,7 +353,7 @@ function FilterSelect({
 }) {
   const id = useId();
   return (
-    <div className="flex h-(--vs-control-sm) items-center rounded-md border border-line-input bg-sunken pl-2.5 transition-colors duration-(--vs-duration-reveal) ease-standard focus-within:border-fg-3 hover:border-fg-3 max-lg:h-(--vs-control-touch)">
+    <div className="flex h-(--vs-control-sm) items-center rounded-md border border-line-input bg-sunken pl-2 transition-colors duration-(--vs-duration-reveal) ease-standard focus-within:border-fg-3 hover:border-fg-3 max-lg:h-(--vs-control-touch)">
       <label htmlFor={id} className="text-small whitespace-nowrap text-fg-3">
         {label}
       </label>
@@ -399,7 +399,7 @@ function Filters({
   const active = f.service !== null || f.route !== null || f.method !== null;
 
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         {range}
         <FilterSelect
@@ -436,12 +436,12 @@ function Filters({
         <form
           onSubmit={submitRoute}
           aria-label="Route filter"
-          className="flex min-w-0 flex-1 basis-64 items-center gap-1.5"
+          className="flex min-w-0 flex-1 basis-64 items-center gap-1"
         >
           <label htmlFor={routeId} className="sr-only">
             Route
           </label>
-          <div className="flex h-(--vs-control-sm) min-w-0 flex-1 items-center gap-2 rounded-md border border-line-input bg-sunken px-2.5 transition-colors duration-(--vs-duration-reveal) ease-standard focus-within:border-fg-3 hover:border-fg-3 max-lg:h-(--vs-control-touch)">
+          <div className="flex h-(--vs-control-sm) min-w-0 flex-1 items-center gap-2 rounded-md border border-line-input bg-sunken px-2 transition-colors duration-(--vs-duration-reveal) ease-standard focus-within:border-fg-3 hover:border-fg-3 max-lg:h-(--vs-control-touch)">
             <Search aria-hidden className="size-3.5 shrink-0 text-fg-3" />
             <input
               id={routeId}
@@ -482,7 +482,7 @@ function Filters({
           ).map(([k, label]) =>
             f[k] === null ? null : (
               <li key={k}>
-                <span className="inline-flex h-7 items-center gap-1 rounded-full border border-line-strong bg-raised pr-1 pl-2.5 text-caption font-normal text-fg-2">
+                <span className="inline-flex h-7 items-center gap-1 rounded-full border border-line-strong bg-raised pr-1 pl-2 text-caption font-normal text-fg-2">
                   {label}:{" "}
                   <span className="font-mono text-fg">{f[k] === "" ? "(empty)" : f[k]}</span>
                   <button
@@ -708,14 +708,14 @@ function ServicesSection({ services }: { services: ApiServiceItem[] }) {
           <StaggerItem
             as="li"
             key={s.service}
-            className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5 sm:px-5"
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 sm:px-5"
           >
             <span className="min-w-0 flex-1 truncate text-body font-medium text-fg">
               {serviceName(s.service)}
             </span>
             {s.source === "span" ? <TracesBadge id={noteId} /> : null}
             {s.lossy ? <ApproxBadge /> : null}
-            <span className="flex items-center gap-2.5">
+            <span className="flex items-center gap-2">
               <span
                 aria-hidden
                 className="hidden h-1.5 w-24 overflow-hidden rounded-bar bg-hover sm:block"
@@ -809,7 +809,7 @@ function OverviewTiles({
     return (
       <span
         data-tile={k}
-        className="flex flex-wrap items-baseline gap-x-1.5 text-caption font-normal"
+        className="flex flex-wrap items-baseline gap-x-1 text-caption font-normal"
       >
         <span className="text-fg-3">{k}</span>
         <span className="font-mono text-fg">{percentileText(cur[k])}</span>
@@ -822,7 +822,7 @@ function OverviewTiles({
     <section
       aria-labelledby="api-summary"
       className={cn(
-        "flex flex-col gap-2.5 transition-opacity duration-(--vs-duration-change) ease-standard",
+        "flex flex-col gap-2 transition-opacity duration-(--vs-duration-change) ease-standard",
         dim && "opacity-60",
       )}
     >
@@ -899,7 +899,7 @@ function OverviewTiles({
               return v === null ? null : Math.min(v, OPEN_BUCKET_CEILING);
             }, "p95 latency per bucket, with the previous period")}
             footer={
-              <span className="flex flex-col gap-0.5">
+              <span className="flex flex-col gap-1">
                 {words(p95Change) ?? <Note>Previous range: {percentileText(prev.p95)}</Note>}
                 {pct("p50")}
                 {pct("p99")}
@@ -1260,14 +1260,14 @@ function RouteRow({
       data-method={item.method}
       className="transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover"
     >
-      <th scope="row" className="max-w-[26rem] py-2.5 pr-3 pl-4 text-left font-normal sm:pl-5">
+      <th scope="row" className="max-w-[26rem] py-2 pr-3 pl-4 text-left font-normal sm:pl-5">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="w-12 shrink-0 font-mono text-axis text-fg-2">{item.method}</span>
           <span className="font-mono break-all text-fg">{item.route}</span>
           {failing ? <Pill tone="critical">Most 5xx</Pill> : null}
           {slow ? <Pill tone="warning">Slowest p95</Pill> : null}
         </span>
-        <span className="mt-1 flex flex-wrap items-center gap-2 pl-14 text-caption font-normal text-fg-3">
+        <span className="mt-1 flex flex-wrap items-center gap-2 pl-12 text-caption font-normal text-fg-3">
           {serviceName(item.service)}
           {item.source === "span" ? <TracesBadge /> : null}
           {item.lossy ? <ApproxBadge /> : null}
@@ -1279,7 +1279,7 @@ function RouteRow({
         </span>
       </th>
       <td className="px-3">
-        <span className="flex items-center gap-2.5">
+        <span className="flex items-center gap-2">
           <span className="w-16 shrink-0 text-right font-mono text-fg">
             {formatCount(item.requests)}
           </span>

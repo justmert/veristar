@@ -1,9 +1,13 @@
 // writes every css file derived from src/tokens.ts, or with --check verifies
 // that the committed copies still match (run by `pnpm check`):
 //
-//   src/tokens.css           the --vs-* custom properties, one block per theme
-//   src/theme.generated.css  the tailwind @theme that maps utilities to them
-//   assets/mark.svg and assets/favicon.svg  the mark the status page serves
+//   src/tokens.css            the --vs-* custom properties, one block per theme
+//   src/theme.generated.css   the tailwind @theme that maps utilities to them
+//   src/spacing.generated.css tailwind's spacing step from the spacing scale
+//                             (imported by the console only, see below)
+//   docs/docs.json            mintlify's accent and grounds
+//   the mark as svg           favicons, the status page mark, the docs logos
+//   public/theme.js           the theme boot script, copied into each app
 //
 // so a brand change is an edit of tokens.ts and one run of this script.
 
@@ -14,11 +18,13 @@ import {
   colorScheme,
   defaultTheme,
   font,
+  layer,
   layout,
   motion,
   type Roles,
   radius,
   shadow,
+  space,
   type ThemeName,
   themes,
   type,
@@ -68,6 +74,8 @@ function roleBlock(name: ThemeName) {
   for (const [k, v] of Object.entries(motion.duration)) out.push(`  --vs-duration-${k}: ${v}ms;`);
   for (const [k, v] of Object.entries(motion.ease)) out.push(`  --vs-ease-${k}: ${bezier(v)};`);
   out.push(`  --vs-motion-distance: ${motion.distance}px;`);
+  for (const [k, v] of Object.entries(space)) out.push(`  --vs-space-${k}: ${v};`);
+  for (const [k, v] of Object.entries(layer)) out.push(`  --vs-layer-${k}: ${v};`);
   for (const [k, v] of Object.entries(layout)) out.push(`  --vs-${k}: ${v};`);
   out.push("}", "");
   for (const name of Object.keys(themes) as ThemeName[]) {
@@ -132,6 +140,21 @@ function roleBlock(name: ThemeName) {
   }
   out.push("  --blur-scrim: 2px;", "}", "");
   want(join(src, "theme.generated.css"), out.join("\n"));
+}
+
+// spacing.generated.css: tailwind's spacing step becomes the scale's 4 px
+// base, so p-4 is 16 px and every padding, margin and gap lands on the
+// scale (check-usage refuses values outside it). the console imports it;
+// the website keeps tailwind's own rem step under its 14 px root until it
+// moves onto the scale on purpose, so it renders exactly as before.
+{
+  // the multiplier only holds when every step is its key times the base
+  const base = Number.parseFloat(space[1]);
+  for (const [k, v] of Object.entries(space)) {
+    if (`${Number(k) * base}px` !== v) problems.push(`space ${k} is ${v}, not ${k} x ${base}px`);
+  }
+  const out = [HEAD, "@theme inline {", "  --spacing: var(--vs-space-1);", "}", ""];
+  want(join(src, "spacing.generated.css"), out.join("\n"));
 }
 
 // the docs (mintlify) take the accent and both grounds; edited in place so

@@ -226,7 +226,7 @@ export function RulesPage() {
                       {cohortText({ ...r.cohort, award_date: null }) ?? "Every project"}
                     </td>
                     <td className={`${TD} pr-4`}>
-                      <span className="flex justify-end gap-1.5">
+                      <span className="flex justify-end gap-1">
                         <Button size="sm" variant="outline" onClick={() => open(r.id)}>
                           Matches
                         </Button>
@@ -511,7 +511,7 @@ function MatchList({ data }: { data: RuleMatches }) {
       {data.items.length === 0 ? null : (
         <ul className="flex flex-col divide-y divide-line" aria-label="Projects that meet the rule">
           {data.items.map((m) => (
-            <li key={m.tenant.id} data-tenant={m.tenant.id} className="flex flex-col gap-1.5 py-3">
+            <li key={m.tenant.id} data-tenant={m.tenant.id} className="flex flex-col gap-1 py-3">
               <span className="flex flex-wrap items-baseline gap-x-3">
                 <Link
                   to={`/operator/tenants/${m.tenant.id}`}

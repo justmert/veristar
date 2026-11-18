@@ -92,7 +92,7 @@ export function VerificationDetail({
   lastVerifyError: string | null;
 }) {
   return (
-    <div className="flex flex-col items-start gap-1.5 text-small">
+    <div className="flex flex-col items-start gap-1 text-small">
       <VerificationPill verification={verification} />
       {verifiedAt && verifyMethod ? (
         <p className="text-fg-2">
@@ -101,8 +101,8 @@ export function VerificationDetail({
       ) : null}
       {lastVerifyAt ? <p className="text-fg-2">Last checked {formatDate(lastVerifyAt)}.</p> : null}
       {lastVerifyError ? (
-        <p className="flex items-start gap-1.5 text-fg">
-          <CircleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0 text-warning" />
+        <p className="flex items-start gap-1 text-fg">
+          <CircleAlert aria-hidden className="mt-1 size-3.5 shrink-0 text-warning" />
           {verifyErrorText(lastVerifyError)}
         </p>
       ) : null}
@@ -145,8 +145,8 @@ function EvidenceRow({
   children: ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[1rem_minmax(0,8rem)_minmax(0,1fr)] items-start gap-x-2 py-1.5">
-      <span className="mt-0.5 flex">{MARK_ICON[mark]}</span>
+    <div className="grid grid-cols-[1rem_minmax(0,8rem)_minmax(0,1fr)] items-start gap-x-2 py-1">
+      <span className="mt-1 flex">{MARK_ICON[mark]}</span>
       <dt className="text-fg-2">{label}</dt>
       <dd className="min-w-0 break-words text-fg">{children}</dd>
     </div>
@@ -168,7 +168,7 @@ export function StellarTomlSummary({
 }) {
   const where = `https://${domain}/.well-known/stellar.toml`;
   const head = (
-    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
       <span className="text-body font-medium text-fg">stellar.toml</span>
       <span className="text-caption font-normal text-fg-3">
         {checkedAt
@@ -179,7 +179,7 @@ export function StellarTomlSummary({
   );
   if (!toml) {
     return (
-      <div className={cn("flex flex-col gap-1.5 text-small", className)}>
+      <div className={cn("flex flex-col gap-1 text-small", className)}>
         {head}
         <p className="text-fg-2">
           Not checked yet. It is fetched from <span className="break-all font-mono">{where}</span>{" "}
@@ -194,7 +194,7 @@ export function StellarTomlSummary({
   const accounts = toml.accounts_count ?? 0;
   const total = toml.currencies_total ?? 0;
   return (
-    <div className={cn("flex flex-col gap-1.5 text-small", className)}>
+    <div className={cn("flex flex-col gap-1 text-small", className)}>
       {head}
       <dl className="flex flex-col divide-y divide-line-subtle">
         <EvidenceRow mark={found ? "ok" : "warn"} label="File">

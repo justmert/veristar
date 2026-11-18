@@ -4,11 +4,18 @@ import { LoaderCircle } from "lucide-react";
 import { Slot } from "radix-ui";
 import type * as React from "react";
 
-// one accent button per screen (default); outline for the rest; ghost in
-// toolbars and rows; destructive is the solid red with dark text. the press
-// motion is a 1 px drop that confirms the click registered.
+// one accent button per page, for the page's main action (default);
+// outline for the rest; ghost in toolbars and rows; destructive is the solid
+// critical fill and always goes through the confirm dialog; navigation is a
+// link, never a button. the press motion is a 1 px drop that confirms the
+// click registered. a disabled button of any variant draws the disabled
+// roles, so it never reads as a dim accent or as an enabled outline. a
+// toggle passes aria-pressed and draws the pressed surface when on.
+const DISABLED =
+  "disabled:pointer-events-none disabled:border-disabled-line disabled:bg-disabled-fill disabled:text-disabled-fg disabled:decoration-disabled-line aria-disabled:pointer-events-none aria-disabled:border-disabled-line aria-disabled:bg-disabled-fill aria-disabled:text-disabled-fg";
+
 const buttonVariants = cva(
-  "group/button relative inline-flex shrink-0 select-none items-center justify-center gap-2 whitespace-nowrap rounded-md border border-transparent font-medium transition duration-(--vs-duration-press) ease-standard focus-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  `group/button relative inline-flex shrink-0 select-none items-center justify-center gap-2 whitespace-nowrap rounded-md border border-transparent font-medium transition duration-(--vs-duration-press) ease-standard focus-ring active:not-aria-[haspopup]:translate-y-px aria-pressed:border-pressed-line aria-pressed:bg-pressed aria-pressed:text-fg ${DISABLED} [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4`,
   {
     variants: {
       variant: {
@@ -18,13 +25,13 @@ const buttonVariants = cva(
         secondary: "bg-selected text-fg hover:bg-hover",
         ghost:
           "text-fg-2 hover:bg-hover hover:text-fg active:bg-selected aria-expanded:bg-selected aria-expanded:text-fg",
-        destructive: "bg-critical-solid text-on-critical hover:bg-critical",
-        link: "h-auto px-0 text-fg underline decoration-line-strong underline-offset-4 hover:decoration-fg",
+        destructive: "bg-critical-solid text-on-critical hover:bg-critical active:bg-critical",
+        link: "h-auto border-0 px-0 text-fg underline decoration-line-strong underline-offset-4 hover:decoration-fg disabled:bg-transparent aria-disabled:bg-transparent",
       },
       size: {
-        default: "h-(--vs-control) px-3.5 text-body",
+        default: "h-(--vs-control) px-3 text-body",
         sm: "h-(--vs-control-sm) px-3 text-small",
-        xs: "h-7 gap-1.5 rounded-sm px-2 text-caption [&_svg:not([class*='size-'])]:size-3.5",
+        xs: "h-7 gap-1 rounded-sm px-2 text-caption [&_svg:not([class*='size-'])]:size-3.5",
         lg: "h-(--vs-control-touch) px-4 text-body",
         icon: "size-(--vs-control)",
         "icon-sm": "size-(--vs-control-sm)",

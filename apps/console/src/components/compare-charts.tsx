@@ -224,7 +224,7 @@ export function CompareChart({
                   scope="col"
                   className="sticky top-0 border-b border-line bg-raised px-3 py-2 text-right text-caption font-medium text-fg-3"
                 >
-                  <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1">
                     <SeriesLine slot={i} />
                     {s.label}
                   </span>
@@ -237,14 +237,14 @@ export function CompareChart({
               <tr key={day} className="hover:bg-hover">
                 <th
                   scope="row"
-                  className="border-b border-line-subtle px-3 py-1.5 font-normal whitespace-nowrap text-fg-2"
+                  className="border-b border-line-subtle px-3 py-1 font-normal whitespace-nowrap text-fg-2"
                 >
                   {formatDay(day)}
                 </th>
                 {series.map((s, i) => (
                   <td
                     key={s.key}
-                    className="border-b border-line-subtle px-3 py-1.5 text-right font-mono whitespace-nowrap text-fg"
+                    className="border-b border-line-subtle px-3 py-1 text-right font-mono whitespace-nowrap text-fg"
                   >
                     {text(i, d)}
                   </td>
@@ -360,7 +360,7 @@ export function CompareChart({
                 if (!active || d < 0) return null;
                 return (
                   <div className="min-w-44 rounded-md border border-line-strong bg-overlay px-3 py-2 text-caption shadow-overlay">
-                    <p className="mb-1.5 text-fg-3">{formatDay(days[d] ?? "")} (UTC)</p>
+                    <p className="mb-1 text-fg-3">{formatDay(days[d] ?? "")} (UTC)</p>
                     <ul className="flex flex-col gap-1">
                       {series.map((s, i) => (
                         <li key={s.key} className="flex items-center gap-2">
@@ -415,7 +415,7 @@ export function MarkerLegend({ markers }: { markers: ChartMarker[] }) {
         <li
           key={`${m.slot}-${m.day}`}
           data-marker={m.day}
-          className="inline-flex items-center gap-1.5"
+          className="inline-flex items-center gap-1"
         >
           <svg aria-hidden width="8" height="12" className="shrink-0">
             <line
@@ -439,7 +439,7 @@ export function CompareLegend({ series }: { series: Series[] }) {
   return (
     <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-fg-2">
       {series.map((s, i) => (
-        <li key={s.key} className="inline-flex min-w-0 items-center gap-1.5">
+        <li key={s.key} className="inline-flex min-w-0 items-center gap-1">
           <SeriesLine slot={i} />
           <span className="max-w-40 truncate">{s.label}</span>
         </li>

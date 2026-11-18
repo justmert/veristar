@@ -139,7 +139,7 @@ export function GlobalWebPage() {
       <RangeControl resolved={resolved} onChange={(range) => set({ ...state, range })} />
 
       <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-raised">
-        <div className="flex flex-col gap-2.5 border-b border-line px-4 py-3">
+        <div className="flex flex-col gap-2 border-b border-line px-4 py-3">
           <FiltersPanel
             filters={state.filters}
             onChange={(filters) => set({ ...state, filters })}
@@ -273,7 +273,7 @@ export function GlobalWebPage() {
         ) : null}
 
         {list.data && first?.total !== 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-2">
             <p className="text-caption text-fg-3" aria-live="polite">
               {formatCount(first?.total ?? 0)} {first?.total === 1 ? "project" : "projects"} match
             </p>
@@ -342,7 +342,7 @@ function WebRow({
           </Link>
           {t.status !== "active" ? <StatusPill status={t.status} /> : null}
         </span>
-        <span className="mt-0.5 block text-caption text-fg-3">
+        <span className="mt-1 block text-caption text-fg-3">
           {p.sites} {p.sites === 1 ? "site" : "sites"}, {p.sites_verified} verified,{" "}
           {p.sites_with_stellar_toml} with stellar.toml
         </span>
@@ -401,7 +401,7 @@ function WebRow({
         {p.top.country.length === 0 ? (
           <Missing />
         ) : (
-          <ul className="flex flex-col gap-0.5">
+          <ul className="flex flex-col gap-1">
             {p.top.country.slice(0, 3).map((c) => (
               <li key={c.key} className="whitespace-nowrap text-fg-2">
                 {countryName(c.key)}{" "}

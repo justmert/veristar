@@ -1,12 +1,14 @@
 // fails when ui code uses a value that is not a brand token: a literal
 // colour, an arbitrary tailwind value, a colour utility that names no role,
-// a font size outside the type scale, or a literal duration. tokens.ts is
-// the only place such values may appear, so a theme change cannot miss one.
+// a font size outside the type scale, a literal duration or motion value,
+// or (in the console) a padding, margin or gap outside the spacing scale.
+// tokens.ts is the only place such values may appear, so a theme change
+// cannot miss one.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { motion, radius, shadow, themes, type } from "../src/tokens.ts";
+import { motion, radius, shadow, space, themes, type } from "../src/tokens.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, "..", "..", "..");
@@ -16,6 +18,25 @@ const skip = new Set([
   "packages/brand/src/tokens.css",
   "packages/brand/src/theme.generated.css",
 ]);
+
+// the console takes its spacing from the scale (spacing.generated.css). the
+// website keeps tailwind's own step, so the spacing rules apply to the
+// console only. the files listed below still use steps between two scale
+// values; each leaves the list when its page moves onto the scale.
+const spacingRoots = ["apps/console/src"];
+const spacingPending = new Set([
+  "apps/console/src/pages/onchain.tsx",
+  "apps/console/src/components/onchain.tsx",
+  "apps/console/src/pages/scf-view.tsx",
+  "apps/console/src/pages/public-report.tsx",
+]);
+const steps4 = new Set(Object.keys(space));
+const spacingUtility =
+  /(?<![\w-])(?:[a-z-]+:)*!?-?((?:p|px|py|pt|pr|pb|pl|ps|pe|m|mx|my|mt|mr|mb|ml|ms|me|gap|gap-x|gap-y|space-x|space-y|scroll-m[xytrblse]?|scroll-p[xytrblse]?))-(\[[^\]\s]+\]|\([^)\s]+\)|[0-9.]+)(?![\w.-])/g;
+// a motion value written as a number in code: the presets in motion.ts
+// build every one of them from tokens.ts
+const motionLiteral =
+  /\b(staggerChildren|delayChildren|stiffness|damping|mass|duration|delay|bounce)\s*:\s*-?\d/;
 
 const roles = new Set(Object.keys(themes.dark));
 const steps = new Set(Object.keys(type));
@@ -86,6 +107,16 @@ for (const root of roots) {
       )
         if (!rel.endsWith("motion.ts")) at("literal duration; use a motion token");
       if (isCss) return;
+      if (motionLiteral.test(code)) at("literal motion value; use a preset from motion.ts");
+      if (spacingRoots.some((r) => rel.startsWith(r))) {
+        for (const m of code.matchAll(spacingUtility)) {
+          const value = m[2] ?? "";
+          if (value.startsWith("[") || value.startsWith("("))
+            at(`${m[0].trim()} is an arbitrary spacing value; use a step of the spacing scale`);
+          else if (!steps4.has(value) && !spacingPending.has(rel))
+            at(`${m[0].trim()} is not a step of the spacing scale (${[...steps4].join(", ")})`);
+        }
+      }
       if (arbitrary.test(code)) at("arbitrary value for a brand property; use a token");
       if (/\b(duration|delay)-\d/.test(code))
         at("literal duration utility; use duration-(--vs-duration-*)");

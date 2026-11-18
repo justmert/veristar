@@ -40,7 +40,7 @@ export function Notice({
     <div
       role={role}
       className={cn(
-        "grid animate-rise-in grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3.5 gap-y-3 rounded-lg border bg-raised px-4 py-3.5 sm:grid-cols-[auto_minmax(0,1fr)_auto]",
+        "grid animate-rise-in grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-3 rounded-lg border bg-raised px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]",
         tone === "critical"
           ? "border-critical-line"
           : tone === "warning"
@@ -57,12 +57,12 @@ export function Notice({
       >
         {icon ?? ICON[tone]}
       </span>
-      <div className="flex min-w-0 flex-col gap-0.5 text-body">
+      <div className="flex min-w-0 flex-col gap-1 text-body">
         {title ? <span className="font-semibold text-fg">{title}</span> : null}
         {children ? <div className="text-fg-2">{children}</div> : null}
       </div>
       {actions ? (
-        <div className="col-span-2 flex flex-wrap items-center gap-2.5 sm:col-span-1 sm:justify-end">
+        <div className="col-span-2 flex flex-wrap items-center gap-2 sm:col-span-1 sm:justify-end">
           {actions}
         </div>
       ) : null}

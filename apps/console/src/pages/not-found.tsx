@@ -52,7 +52,7 @@ export function StopPage({
       {reference ? (
         <p className="font-mono text-caption font-normal text-fg-3">{reference}</p>
       ) : null}
-      {actions ? <div className="flex flex-wrap gap-2.5 pt-1">{actions}</div> : null}
+      {actions ? <div className="flex flex-wrap gap-2 pt-1">{actions}</div> : null}
     </section>
   );
 }

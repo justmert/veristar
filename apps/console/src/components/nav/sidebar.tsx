@@ -77,7 +77,7 @@ export function Sidebar({
   const theme = useTheme();
   return (
     <LayoutGroup id={group}>
-      <div className="flex h-full flex-col gap-3.5 px-2.5 py-3.5">
+      <div className="flex h-full flex-col gap-3 px-2 py-3">
         <Link
           to="/"
           onClick={onNavigate}
@@ -125,7 +125,7 @@ export function Sidebar({
           />
         ) : null}
 
-        <div className="mt-auto flex flex-col gap-px border-t border-line pt-2.5">
+        <div className="mt-auto flex flex-col gap-px border-t border-line pt-2">
           {docs ? (
             <FooterLink href={docs} icon={<BookOpen aria-hidden />}>
               Docs
@@ -143,7 +143,7 @@ export function Sidebar({
             <MenuTrigger asChild>
               <button
                 type="button"
-                className="mt-1 flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-selected"
+                className="mt-1 flex items-center gap-2 rounded-md px-2 py-1 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-selected"
               >
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-line-strong text-caption font-semibold text-fg uppercase">
                   {me.user.display_name.slice(0, 2)}
@@ -222,7 +222,7 @@ function ProjectSection({
         <MenuTrigger asChild>
           <button
             type="button"
-            className="grid grid-cols-[28px_minmax(0,1fr)_14px] items-center gap-2.5 rounded-md border border-line bg-raised p-2 text-left text-fg transition-colors duration-(--vs-duration-press) hover:border-line-strong hover:bg-hover focus-ring aria-expanded:border-line-strong"
+            className="grid grid-cols-[28px_minmax(0,1fr)_14px] items-center gap-2 rounded-md border border-line bg-raised p-2 text-left text-fg transition-colors duration-(--vs-duration-press) hover:border-line-strong hover:bg-hover focus-ring aria-expanded:border-line-strong"
           >
             <span className="flex size-7 items-center justify-center rounded-md bg-selected text-caption font-semibold uppercase">
               {name.slice(0, 1)}
@@ -230,7 +230,7 @@ function ProjectSection({
             <span className="flex min-w-0 flex-col">
               <span className="truncate text-body font-semibold">{name}</span>
               {st ? (
-                <span className="flex items-center gap-1.5 text-caption font-normal text-fg-2">
+                <span className="flex items-center gap-1 text-caption font-normal text-fg-2">
                   <StatusDot tone={statusTone(st)} />
                   {STATUS_WORD[st] ?? st}
                 </span>
@@ -306,7 +306,7 @@ function OperatorSection({
   const failed = live && alerts.error !== null;
   return (
     <nav aria-label="Operator" className="flex flex-col gap-px">
-      <span className="px-2.5 pt-2 pb-1.5 text-caption tracking-wide text-fg-2">OPERATOR</span>
+      <span className="px-2 pt-2 pb-1 text-caption tracking-wide text-fg-2">OPERATOR</span>
       {OPERATOR_NAV.map((n) => (
         <Item
           key={n.key}
@@ -357,7 +357,7 @@ function Item({
       onClick={onNavigate}
       aria-current={current ? "page" : undefined}
       className={cn(
-        "relative flex h-8 items-center gap-2.5 rounded-md px-2.5 text-body transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-(--vs-control-touch)",
+        "relative flex h-8 items-center gap-2 rounded-md px-2 text-body transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-(--vs-control-touch)",
         current ? "font-medium text-fg" : "text-fg-2 hover:bg-hover hover:text-fg",
       )}
     >
@@ -388,7 +388,7 @@ function FooterLink({
   children: ReactNode;
 }) {
   const cls =
-    "flex h-7.5 items-center gap-2.5 rounded-md px-2.5 text-small text-fg-2 transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring [&_svg]:size-3.75 max-lg:h-(--vs-control-touch)";
+    "flex h-7.5 items-center gap-2 rounded-md px-2 text-small text-fg-2 transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring [&_svg]:size-3.75 max-lg:h-(--vs-control-touch)";
   return to ? (
     <Link to={to} className={cls}>
       {icon}

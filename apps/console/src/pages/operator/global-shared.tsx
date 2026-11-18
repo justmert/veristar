@@ -171,7 +171,7 @@ export function SearchBox({
         e.preventDefault();
         onSubmit();
       }}
-      className={cn("flex min-w-0 items-center gap-1.5", className)}
+      className={cn("flex min-w-0 items-center gap-1", className)}
     >
       <label htmlFor={id} className="sr-only">
         Search
@@ -215,7 +215,7 @@ export function FilterChip({
       aria-pressed={on}
       onClick={onToggle}
       className={cn(
-        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-caption font-medium transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-9",
+        "inline-flex h-7 shrink-0 items-center gap-1 rounded-full border px-2 text-caption font-medium transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-9",
         on
           ? "border-accent-text bg-selected text-fg"
           : "border-line-strong text-fg-2 hover:bg-hover hover:text-fg",
@@ -242,7 +242,7 @@ export function InlineSelect({
 }) {
   const id = useId();
   return (
-    <span className="flex min-w-0 gap-1.5 max-sm:flex-col sm:items-center">
+    <span className="flex min-w-0 gap-1 max-sm:flex-col sm:items-center">
       <label htmlFor={id} className="text-caption whitespace-nowrap text-fg-3">
         {label}
       </label>
@@ -294,7 +294,7 @@ export function FiltersPanel({
   }
 
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <SearchBox
           value={search}
@@ -303,7 +303,7 @@ export function FiltersPanel({
           placeholder="Project name or slug"
           className="w-full sm:w-80"
         />
-        <fieldset className="flex flex-wrap items-center gap-1.5">
+        <fieldset className="flex flex-wrap items-center gap-1">
           <legend className="sr-only">Status</legend>
           {tenantStatus.options.map((s) => (
             <FilterChip key={s} on={filters.statuses.includes(s)} onToggle={() => toggle(s)}>
@@ -458,7 +458,7 @@ export function CohortLine({ cohort }: { cohort: Cohort }) {
   const text = cohortText(cohort);
   if (!text) return null;
   return (
-    <span data-cohort className="mt-0.5 block truncate text-caption text-fg-3">
+    <span data-cohort className="mt-1 block truncate text-caption text-fg-3">
       {text}
       {cohort.award_date ? `, awarded ${cohort.award_date}` : ""}
     </span>
@@ -519,7 +519,7 @@ function DayInput({
 }) {
   const id = useId();
   return (
-    <span className="flex min-w-0 gap-1.5 max-sm:flex-col sm:items-center">
+    <span className="flex min-w-0 gap-1 max-sm:flex-col sm:items-center">
       <label htmlFor={id} className="text-caption whitespace-nowrap text-fg-3">
         {label}
       </label>
@@ -563,7 +563,7 @@ export function TableScroll({
 }
 
 export const TH =
-  "sticky top-0 z-10 h-9 border-b border-line bg-raised px-3 text-left align-middle text-caption font-medium whitespace-nowrap text-fg-3";
+  "sticky top-0 z-(--vs-layer-raised) h-9 border-b border-line bg-raised px-3 text-left align-middle text-caption font-medium whitespace-nowrap text-fg-3";
 export const TD = "h-11 border-b border-line-subtle px-3 align-middle";
 export const ROW =
   "transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover data-[state=selected]:bg-selected";
@@ -643,7 +643,7 @@ export function MagnitudeCell({
   const w = value === null || max <= 0 ? 0 : Math.max(1, (value / max) * 100);
   return (
     <td className={cn(TD, "font-mono text-small text-fg tabular")}>
-      <span className="flex items-center justify-end gap-2.5">
+      <span className="flex items-center justify-end gap-2">
         <span className="h-1.5 w-20 overflow-hidden rounded-full bg-line-subtle max-md:hidden">
           <span
             className="block h-full rounded-full bg-series-1 transition-[width] duration-(--vs-duration-change) ease-standard"
@@ -780,14 +780,14 @@ export function CompareBar({
         )}
       </p>
       {sel.length > 0 ? (
-        <ul aria-label="Selected projects" className="flex flex-wrap gap-1.5">
+        <ul aria-label="Selected projects" className="flex flex-wrap gap-1">
           {sel.map((s, i) => (
             <li key={s.id} className="animate-reveal-in">
               <button
                 type="button"
                 onClick={() => selection.toggle(s.id, s.name)}
                 aria-label={`Remove ${s.name} from the comparison`}
-                className="inline-flex h-7 max-w-56 items-center gap-1.5 rounded-full border border-line-strong pr-1.5 pl-2 text-caption text-fg transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring"
+                className="inline-flex h-7 max-w-56 items-center gap-1 rounded-full border border-line-strong pr-1 pl-2 text-caption text-fg transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring"
               >
                 <SeriesSwatch slot={i} />
                 <span className="truncate">{s.name}</span>
@@ -846,7 +846,7 @@ export function Notes({ items, children }: { items: string[]; children?: ReactNo
   return (
     <aside aria-label="About these numbers" className="flex flex-col gap-2 text-caption">
       <h3 className="text-small font-medium text-fg-2">About these numbers</h3>
-      <ul className="flex max-w-prose flex-col gap-1.5 text-fg-3">
+      <ul className="flex max-w-prose flex-col gap-1 text-fg-3">
         {items.map((t) => (
           <li key={t}>{t}</li>
         ))}

@@ -178,7 +178,7 @@ export function ReportsPage() {
                     data-report={r.id}
                     className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3"
                   >
-                    <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="flex min-w-0 flex-col gap-1">
                       <span className="text-body font-medium text-fg">
                         {formatDayRange(r.from, r.to)}
                       </span>
@@ -188,7 +188,7 @@ export function ReportsPage() {
                       </span>
                     </span>
                     {r.revoked_at ? <Pill tone="warning">Link revoked</Pill> : null}
-                    <span className="ml-auto flex flex-wrap gap-1.5">
+                    <span className="ml-auto flex flex-wrap gap-1">
                       {r.revoked_at ? null : (
                         <>
                           <Button asChild size="sm" variant="outline">

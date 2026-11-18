@@ -103,7 +103,7 @@ export function LiveCheck({ alerts }: { alerts: UseQueryResult<OperatorAlerts> }
   if (alerts.isPending) return null;
   if (alerts.error)
     return (
-      <span className="flex items-center gap-1.5 text-caption text-fg-3">
+      <span className="flex items-center gap-1 text-caption text-fg-3">
         <StatusDot tone="critical" />
         {alerts.error instanceof ApiError && alerts.error.code === "alert_source_not_configured"
           ? "No alert source"
@@ -111,7 +111,7 @@ export function LiveCheck({ alerts }: { alerts: UseQueryResult<OperatorAlerts> }
       </span>
     );
   return (
-    <span className="flex items-center gap-1.5 text-caption text-fg-2">
+    <span className="flex items-center gap-1 text-caption text-fg-2">
       <StatusDot tone="success" live />
       <span>
         Last checked{" "}
@@ -312,7 +312,7 @@ export function AlertItem({ alert, now }: { alert: FiringAlert; now: number }) {
       aria-label={alert.name}
       data-alert={alert.name}
       className={cn(
-        "grid h-full grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-3 rounded-lg border border-line bg-raised px-4 py-3.5 transition-colors duration-(--vs-duration-press) ease-standard hover:border-line-strong sm:grid-cols-[2rem_minmax(0,1fr)_auto]",
+        "grid h-full grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-3 rounded-lg border border-line bg-raised px-4 py-3 transition-colors duration-(--vs-duration-press) ease-standard hover:border-line-strong sm:grid-cols-[2rem_minmax(0,1fr)_auto]",
         held && "opacity-70",
       )}
     >
@@ -325,7 +325,7 @@ export function AlertItem({ alert, now }: { alert: FiringAlert; now: number }) {
         <Icon aria-hidden className="size-4" />
       </span>
       <div className="flex min-w-0 flex-col gap-1">
-        <p className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <span className="text-body font-semibold text-fg">{alert.summary ?? alert.name}</span>
           <span className={cn("text-caption font-medium", TONE_TEXT[urgency.tone])}>
             {urgency.word}
@@ -343,15 +343,15 @@ export function AlertItem({ alert, now }: { alert: FiringAlert; now: number }) {
             Just received: Alertmanager has not processed it yet.
           </p>
         ) : null}
-        <dl className="flex flex-wrap gap-1.5 pt-0.5">
-          <div className="flex rounded-sm border border-line px-1.5 font-mono text-axis text-fg-2">
+        <dl className="flex flex-wrap gap-1 pt-1">
+          <div className="flex rounded-sm border border-line px-1 font-mono text-axis text-fg-2">
             <dt className="sr-only">Rule</dt>
             <dd className="break-all">{alert.name}</dd>
           </div>
           {where.map(([k, v]) => (
             <div
               key={k}
-              className="flex gap-1 rounded-sm border border-line px-1.5 font-mono text-axis"
+              className="flex gap-1 rounded-sm border border-line px-1 font-mono text-axis"
             >
               <dt className="text-fg-3">{k}</dt>
               <dd className="break-all text-fg-2">{v}</dd>

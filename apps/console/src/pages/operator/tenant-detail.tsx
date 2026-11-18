@@ -111,13 +111,13 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
         <div className="flex min-w-0 flex-col gap-2">
           <Link
             to="/operator/tenants"
-            className="inline-flex w-fit items-center gap-1.5 rounded-sm text-small text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring"
+            className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring"
           >
             <ArrowLeft aria-hidden className="size-3.5" />
             Projects
           </Link>
           <h2 className="min-w-0 break-words text-page text-fg">{t.name}</h2>
-          <p className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-small text-fg-2">
+          <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-small text-fg-2">
             <StatusPill status={t.status} />
             <span className="font-mono">{t.slug}</span>
             <span>
@@ -226,7 +226,7 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
             {detail.stellar_ids.length === 0 ? (
               <p className="mt-1 text-small text-fg-2">None given.</p>
             ) : (
-              <ul className="mt-1.5 flex flex-col gap-1.5" aria-label="Account and contract ids">
+              <ul className="mt-1 flex flex-col gap-1" aria-label="Account and contract ids">
                 {detail.stellar_ids.map((s) => (
                   <li key={s.id} className="flex flex-col text-small">
                     <code className="break-all font-mono text-caption text-fg">{s.id}</code>
@@ -241,7 +241,7 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
             )}
           </Box>
           <Box id="members-h" title="Members">
-            <ul className="flex flex-col gap-1.5 text-small">
+            <ul className="flex flex-col gap-1 text-small">
               {detail.members.map((m) => (
                 <li
                   key={m.github_id ?? m.stellar_address ?? m.passkey_address ?? m.display_name}
@@ -283,7 +283,7 @@ function Box({
       aria-labelledby={id}
       className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised px-4 py-4"
     >
-      <div className="flex flex-col gap-0.5">
+      <div className="flex flex-col gap-1">
         <h3 id={id} className="text-title text-fg">
           {title}
         </h3>
@@ -314,7 +314,7 @@ function IngestTiles({ detail }: { detail: OperatorTenantDetail }) {
       {tiles.map((x, i) => (
         <div
           key={x.k}
-          className={`flex flex-col gap-1 border-line px-4 py-3.5 ${i % 2 === 1 ? "border-l" : ""} ${i >= 2 ? "max-lg:border-t lg:border-l" : ""}`}
+          className={`flex flex-col gap-1 border-line px-4 py-3 ${i % 2 === 1 ? "border-l" : ""} ${i >= 2 ? "max-lg:border-t lg:border-l" : ""}`}
         >
           <dt className="text-caption text-fg-2">{x.k}</dt>
           <dd className="font-mono text-section text-fg tabular">{x.v}</dd>
@@ -413,12 +413,9 @@ function SiteEvidence({ site }: { site: OperatorSite }) {
           {site.status_reason}
         </p>
       ) : null}
-      <ul className="flex flex-wrap gap-1.5" aria-label="Allowed origins">
+      <ul className="flex flex-wrap gap-1" aria-label="Allowed origins">
         {site.origins.map((o) => (
-          <li
-            key={o}
-            className="rounded-sm border border-line px-1.5 font-mono text-axis text-fg-2"
-          >
+          <li key={o} className="rounded-sm border border-line px-1 font-mono text-axis text-fg-2">
             {o}
           </li>
         ))}
@@ -476,7 +473,7 @@ function SiteEvidence({ site }: { site: OperatorSite }) {
 function Counts({ title, counts }: { title: string; counts: Record<string, number> }) {
   const rows = Object.entries(counts).sort((x, y) => y[1] - x[1]);
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <h4 className="text-caption text-fg-3">{title}</h4>
       {rows.length === 0 ? (
         <p className="text-small text-fg-2">No events.</p>
@@ -534,11 +531,11 @@ function Removal({ removal }: { removal: NonNullable<OperatorTenantDetail["remov
         </p>
       </div>
       {steps.length > 0 ? (
-        <ul className="flex flex-col gap-1.5" aria-label="Removal steps">
+        <ul className="flex flex-col gap-1" aria-label="Removal steps">
           {steps.map(([name, s]) => (
             <li
               key={name}
-              className="grid grid-cols-[1rem_minmax(0,12rem)_minmax(0,1fr)] items-center gap-2.5 text-small"
+              className="grid grid-cols-[1rem_minmax(0,12rem)_minmax(0,1fr)] items-center gap-2 text-small"
             >
               <Check aria-hidden className="size-3.5 text-success" strokeWidth={2.6} />
               <span className="font-mono text-caption text-fg">{name}</span>
