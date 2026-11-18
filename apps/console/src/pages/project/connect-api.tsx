@@ -417,6 +417,8 @@ function TokensSection({
       header: "Name",
       primary: true,
       minWidth: "min-w-48",
+      // a long name truncates, so the dates and Revoke stay in view
+      className: "max-w-64",
       truncate: (t) => t.name,
       cell: (t) => (
         <span className="flex min-w-0 items-center gap-2">
@@ -456,6 +458,7 @@ function TokensSection({
     },
     {
       key: "action",
+      mobile: true,
       header: "Actions",
       align: "right",
       cell: (t) =>

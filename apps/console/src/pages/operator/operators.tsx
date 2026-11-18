@@ -228,6 +228,7 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
   if (admin)
     columns.push({
       key: "actions",
+      mobile: true,
       header: "Actions",
       align: "right",
       cell: (e) => <RowActions entry={e} onPick={(action) => setPending({ entry: e, action })} />,
