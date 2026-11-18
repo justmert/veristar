@@ -68,7 +68,7 @@ test.afterAll(async () => {
 
 test("the owner proposes a cohort and an operator confirms it", async () => {
   const page = owner.page;
-  await page.goto(`${APP}/projects/${tenant.id}/scf-view`);
+  await page.goto(`${APP}/projects/${tenant.id}/scf`);
   const panel = page.getByRole("region", { name: "SCF cohort" });
   await expect(panel).toContainText("No cohort is confirmed for your project yet.");
   await panel.getByRole("button", { name: "Propose a cohort" }).click();
@@ -79,7 +79,7 @@ test("the owner proposes a cohort and an operator confirms it", async () => {
   await expect(panel.locator("[data-proposal]")).toContainText(PROGRAM);
 
   const o = op.page;
-  await o.goto(`${APP}/operator/tenants/${tenant.id}`);
+  await o.goto(`${APP}/operator/projects/${tenant.id}`);
   const cohort = o.getByRole("region", { name: "SCF cohort" });
   await expect(cohort.locator("[data-proposal]")).toContainText("SCF #38");
   await cohort.getByRole("button", { name: "Confirm proposal" }).click();
@@ -98,7 +98,7 @@ test("the owner proposes a cohort and an operator confirms it", async () => {
   );
 
   // the global web view filters by the confirmed program and shows it
-  await o.goto(`${APP}/operator/web`);
+  await o.goto(`${APP}/operator/projects?view=web`);
   await o.getByLabel("Program").selectOption(PROGRAM);
   await expect(o).toHaveURL(
     new RegExp(`program=${encodeURIComponent(PROGRAM).replaceAll("%20", "(\\+|%20)")}`),
@@ -136,7 +136,7 @@ test("a signed report verifies in a browser without a session, until its link is
 }) => {
   const page = owner.page;
   const period = lastWeek();
-  await page.goto(`${APP}/projects/${tenant.id}/reports`);
+  await page.goto(`${APP}/projects/${tenant.id}/scf`);
   const gen = page.getByRole("region", { name: "Generate a report" });
   await gen.getByLabel("From").fill(period.from);
   await gen.getByLabel("To").fill(period.to);

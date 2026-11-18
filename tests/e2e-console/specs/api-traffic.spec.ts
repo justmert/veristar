@@ -264,10 +264,12 @@ test("the tenant sees its own endpoints with the numbers that were sent", async 
     .getByRole("navigation", { name: "Project" })
     .getByRole("link", { name: "API", exact: true })
     .click();
-  await page.waitForURL(`${APP}/projects/${tenant.id}/api/traffic`);
-  // the place's tabs mark the traffic page as current
+  await page.waitForURL(`${APP}/projects/${tenant.id}/api`);
+  // the sidebar marks the api page as current
   await expect(
-    page.getByRole("navigation", { name: "API" }).getByRole("link", { name: "Traffic" }),
+    page
+      .getByRole("navigation", { name: "Project" })
+      .getByRole("link", { name: "API", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   // exact: the project is named "API traffic <run>", and its name is the page's h1
   await expect(page.getByRole("heading", { name: "API traffic", exact: true })).toBeVisible();

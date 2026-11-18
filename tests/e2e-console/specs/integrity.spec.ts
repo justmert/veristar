@@ -144,7 +144,7 @@ test.beforeAll(async ({ browser }) => {
   await waitProvisioned(owner.ctx, tenant.id);
   const origin = `https://${site.domain}`;
   await waitRegistered(owner.ctx, site.id, origin);
-  const snip = await api<{ tag: string }>(owner.ctx, "GET", `/api/sites/${site.id}/snippet`);
+  const snip = await api<{ tag: string }>(owner.ctx, "GET", `/api/sites/${site.id}`);
   expect(snip.status).toBe(200);
   await pasteSnippet(site.domain, snip.body.tag);
   for (let i = 0; i < VISITORS; i++) await visit(browser, origin, i, PAGES);
@@ -222,7 +222,7 @@ test("the project reads its own grade on the overview, as operators see it", asy
   // or on "what scf sees". the issue the link opens for a lower grade is
   // checked in the console's unit tests
   await expect(panel.getByRole("link", { name: "Appeal this grade" })).toHaveCount(0);
-  await page.goto(`${APP}/projects/${tenant.id}/scf-view`);
+  await page.goto(`${APP}/projects/${tenant.id}/scf`);
   await expect(page.getByTestId("integrity-grade")).toHaveText("A");
   await expect(page.getByRole("link", { name: "Appeal this grade" })).toHaveCount(0);
 });
@@ -245,7 +245,7 @@ test("another project's member and a non-operator are refused", async () => {
 
 test("the operator sorts the global web table by grade and opens the reasons", async () => {
   const page = op.page;
-  await page.goto(`${APP}/operator/web?q=${run}`);
+  await page.goto(`${APP}/operator/projects?view=web&q=${run}`);
   const row = page.locator(`tbody tr[data-tenant="${tenant.id}"]`);
   await expect(row).toBeVisible();
   const cell = row.locator("[data-col=integrity]");
@@ -264,7 +264,7 @@ test("the operator sorts the global web table by grade and opens the reasons", a
   await dialog.getByRole("button", { name: "Close" }).first().click();
 
   // the same report on the project's detail page and in the comparison
-  await page.goto(`${APP}/operator/tenants/${tenant.id}`);
+  await page.goto(`${APP}/operator/projects/${tenant.id}`);
   const detail = page.getByRole("region", { name: "Integrity" });
   await expect(detail.locator("[data-grade]").first()).toHaveText("Grade A");
   await page.goto(`${APP}/operator/compare?tenants=${tenant.id}`);
@@ -276,7 +276,7 @@ test("the operator sorts the global web table by grade and opens the reasons", a
 test("the operator filters the global web table to a grade and below", async () => {
   const page = op.page;
   // an A project is not among the projects graded B or worse
-  await page.goto(`${APP}/operator/web?q=${run}&integrity_at_or_below=B`);
+  await page.goto(`${APP}/operator/projects?view=web&q=${run}&integrity_at_or_below=B`);
   await expect(page.getByLabel("Integrity", { exact: true })).toHaveValue("B");
   await expect(page.locator(`tbody tr[data-tenant="${tenant.id}"]`)).toHaveCount(0);
   // and is among every graded project

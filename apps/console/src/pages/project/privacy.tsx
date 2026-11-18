@@ -152,7 +152,7 @@ export function PrivacyPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Settings" />
+      <PageHeader title="Privacy" />
       {sites.isPending ? (
         <Loading label="Loading the privacy page" />
       ) : sites.error ? (

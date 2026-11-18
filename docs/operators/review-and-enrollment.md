@@ -32,7 +32,7 @@ terms ([terms of service](../compliance/terms.md)). A user can create at most 10
 
 ## The review queue
 
-The **Review queue** tab lists, oldest first:
+The **Review** page lists, oldest first:
 
 - projects with status `pending` (enrolled while the mode was `approval`, or resubmitted after
   a rejection);

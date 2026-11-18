@@ -95,7 +95,7 @@ export function MembersPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Settings" />
+      <PageHeader title="Members" />
       <MembersBody
         tenantId={tenant.id}
         tenantName={tenant.name}

@@ -111,8 +111,8 @@ test("sign in, enroll, add a site and copy the snippet", async ({ browserName })
 
   // adding a site leads to its setup; the snippet url is its install step:
   // the tag, the integrity shown, and the copy button
-  await page.waitForURL(`${APP}/projects/${tenant.id}/sites/${site.id}/snippet`);
-  await page.goto(`${APP}/projects/${tenant.id}/sites/${site.id}/snippet`);
+  await page.waitForURL(`${APP}/projects/${tenant.id}/sites/${site.id}`);
+  await page.goto(`${APP}/projects/${tenant.id}/sites/${site.id}`);
   await expect(page.getByRole("heading", { name: `Set up ${site.name}` })).toBeVisible();
   await expect(page.getByRole("region", { name: "Install the tracker" })).toBeVisible();
   // the pinned script, integrity and site id sit under a disclosure
@@ -132,7 +132,7 @@ test("sign in, enroll, add a site and copy the snippet", async ({ browserName })
   const api0 = await api<{ tag: string; integrity: string }>(
     context,
     "GET",
-    `/api/sites/${site.id}/snippet`,
+    `/api/sites/${site.id}`,
   );
   expect(api0.body.integrity).toBe(newest?.integrity);
   expect(api0.body.tag).toBe(
