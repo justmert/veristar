@@ -5,7 +5,7 @@ import { meQuery } from "@/api/queries";
 import { AppShell } from "@/pages/app-shell";
 import { AccountPage } from "@/pages/home/account";
 import { EnrollPage } from "@/pages/home/enroll";
-import { ProjectsPage } from "@/pages/home/projects";
+import { ProjectsPage, projectsLoader } from "@/pages/home/projects";
 import { OnchainPage } from "@/pages/onchain";
 import { AlertsPage } from "@/pages/operator/alerts";
 import { AuditPage } from "@/pages/operator/audit";
@@ -85,7 +85,7 @@ export const router = createBrowserRouter([
     hydrateFallbackElement: <ConsoleLoading />,
     errorElement: <RouteErrorPage />,
     children: [
-      { index: true, element: <ProjectsPage /> },
+      { index: true, loader: projectsLoader, element: <ProjectsPage /> },
       { path: "projects/new", element: <EnrollPage /> },
       { path: "account", element: <AccountPage /> },
       {

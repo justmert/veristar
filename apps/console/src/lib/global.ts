@@ -292,13 +292,3 @@ export function formatPct(seconds: number | null, over10s: boolean): string | nu
 
 export const formatDay = (d: string) => formatDate(d);
 export const formatDayRange = (from: string, to: string) => formatDateRange(from, to);
-
-// one fixed categorical slot per compared project, in the order the
-// comparison names them: the data palette series-1 to series-5 of the brand
-export const COMPARE_COLORS = [
-  "var(--vs-series-1)",
-  "var(--vs-series-2)",
-  "var(--vs-series-3)",
-  "var(--vs-series-4)",
-  "var(--vs-series-5)",
-];
