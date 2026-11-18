@@ -159,9 +159,24 @@ function refreshCohort(qc: QueryClient, tenantId: string, record: CohortRecord) 
   return qc.invalidateQueries({ queryKey: ["operator"] });
 }
 
+// the state of the cohort as one badge: a proposal that waits for an
+// operator, or confirmed values
+function CohortBadge({ record }: { record: CohortRecord }) {
+  if (record.proposal) return <Pill tone="info">Proposed</Pill>;
+  if (record.confirmed) return <Pill tone="success">Confirmed</Pill>;
+  return null;
+}
+
 // the operator's cohort panel of a project: the confirmed values, the
-// project's pending proposal with confirm and dismiss, and an edit form
-export function OperatorCohortPanel({ tenantId }: { tenantId: string }) {
+// project's pending proposal with confirm and dismiss, and an edit form.
+// readOnly shows the values only, for a project that is removed.
+export function OperatorCohortPanel({
+  tenantId,
+  readOnly = false,
+}: {
+  tenantId: string;
+  readOnly?: boolean;
+}) {
   const q = useQuery(operatorCohortQuery(tenantId));
   const qc = useQueryClient();
   const [editing, setEditing] = useState<CohortValues | null>(null);
@@ -194,16 +209,20 @@ export function OperatorCohortPanel({ tenantId }: { tenantId: string }) {
     <Panel
       title="SCF cohort"
       aria-label="SCF cohort"
-      description="The program, round, category and award date this project is compared in. Only confirmed values place it in a cohort."
       actions={
-        q.data && !editing ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEditing(valuesOf(q.data.confirmed))}
-          >
-            Edit
-          </Button>
+        q.data ? (
+          <>
+            <CohortBadge record={q.data} />
+            {editing || readOnly ? null : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditing(valuesOf(q.data.confirmed))}
+              >
+                Edit
+              </Button>
+            )}
+          </>
         ) : null
       }
     >
@@ -246,7 +265,7 @@ export function OperatorCohortPanel({ tenantId }: { tenantId: string }) {
           ) : (
             <p className="text-body text-fg-2">No cohort is confirmed for this project.</p>
           )}
-          {q.data.proposal ? (
+          {q.data.proposal && !readOnly ? (
             <div
               data-proposal
               className="flex flex-col gap-3 rounded-md border border-line-strong px-3 py-3"
@@ -276,6 +295,10 @@ export function OperatorCohortPanel({ tenantId }: { tenantId: string }) {
               </div>
             </div>
           ) : null}
+          <p className="text-caption text-fg-2">
+            The program, round, category and award date this project is compared in. Only confirmed
+            values place it in a cohort.
+          </p>
         </div>
       ) : null}
     </Panel>

@@ -1,7 +1,7 @@
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { auditPath, type TenantListQuery, tenantListPath } from "@/api/endpoints";
-import { tenantAction } from "@/api/schemas";
+import { type AuditEntry, tenantAction } from "@/api/schemas";
 import {
   actorKind,
   actorName,
@@ -157,8 +157,34 @@ describe("operator project page", () => {
     expect(host.querySelector("form[aria-label='Decision on Stellar DEX']")).not.toBeNull();
     expect(byRole(host, "button", "Actions")).toBeTruthy();
     // the last entries of the audit log read as sentences
-    expect(host.textContent).toContain("sa-operator suspended a project");
+    // the page names the project it knows
+    expect(host.textContent).toContain("sa-operator suspended the project Stellar DEX");
     expect(host.querySelector("a[href*='/operator/audit?tenant_id=']")).not.toBeNull();
+  });
+
+  it("lists many sites as short rows with their checks in words", async () => {
+    const site = f.operatorDetailBody.sites[0];
+    const sites = Array.from({ length: 30 }, (_, i) => ({
+      ...site,
+      id: `0193a6f6-5555-7e66-bf77-${String(i).padStart(12, "0")}`,
+      name: `Site ${i}`,
+      domain: `s${i}.example.org`,
+      verification: i === 0 ? "verified" : "unverified",
+      stellar_toml: null,
+    }));
+    routeFetch(detailRoutes({ ...f.operatorDetailBody, sites }));
+    const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
+    await waitFor(() => expect(host.querySelectorAll("article[data-site]")).toHaveLength(10));
+    const second = host.querySelector(
+      "[data-site='0193a6f6-5555-7e66-bf77-000000000001']",
+    ) as HTMLElement;
+    expect(second.textContent).toContain("Domain not verified");
+    expect(second.querySelector("[data-fact=missing]")).not.toBeNull();
+    const evidence = host.querySelector("[data-evidence=domain]") as HTMLElement;
+    expect(evidence.dataset.signal).toBe("partial");
+    expect(evidence.textContent).toContain("1 of 30 sites verified");
+    await click(byRole(host, "button", "Show all 30 sites"));
+    expect(host.querySelectorAll("article[data-site]")).toHaveLength(30);
   });
 
   it("removes through the menu with a reason and the typed slug", async () => {
@@ -201,11 +227,59 @@ describe("operator project page", () => {
   });
 
   it("shows the removal steps in words and no decision for a removed project", async () => {
-    routeFetch(detailRoutes(f.removedDetailBody));
+    const removal = {
+      ...f.removedDetailBody,
+      removal: {
+        ...f.removedDetailBody.removal,
+        steps: {
+          registry: { done_at: "2026-11-12T11:00:05Z" },
+          agg: { done_at: "2026-11-12T11:00:06Z" },
+          chain: { done_at: "2026-11-12T11:00:07Z" },
+          reports: { done_at: "2026-11-12T11:00:08Z" },
+        },
+      },
+    };
+    const calls = routeFetch(
+      detailRoutes(removal, [
+        {
+          path: "/api/operator/audit",
+          answer: {
+            status: 200,
+            body: {
+              items: [{ ...f.auditEntryBody, actor: `user:${f.OPERATOR_ID}` }],
+              next_cursor: null,
+            },
+          },
+        },
+      ]),
+    );
     const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
     await waitFor(() => expect(host.textContent).toContain("The service is deleting the data."));
-    expect(host.textContent).toContain("Project record closed");
+    const steps = [...host.querySelectorAll("[data-step]")].map(
+      (li) => li.children[1]?.textContent,
+    );
+    expect(steps).toEqual([
+      "Project record closed",
+      "Daily totals deleted",
+      "On-chain data deleted",
+      "Reports revoked",
+    ]);
+    // the requester is named by login, never by the user id
+    await waitFor(() =>
+      expect(host.querySelector("[data-requested]")?.textContent).toContain(
+        `by ${f.auditEntryBody.actor_login}`,
+      ),
+    );
+    expect(host.querySelector("[aria-labelledby=removal-h]")?.textContent).not.toContain(
+      f.OPERATOR_ID,
+    );
+    expect(calls.some((c) => c.url.includes(`actor=user%3A${f.OPERATOR_ID}`))).toBe(true);
+    // the data is deleted, so no figures and no action are offered
     expect(host.querySelector("form[aria-label^='Decision on']")).toBeNull();
+    expect(host.querySelector("[data-stat]")).toBeNull();
+    expect(host.textContent).not.toContain("Open in Compare");
+    await waitFor(() => expect(host.textContent).toContain("No cohort is confirmed"));
+    expect([...host.querySelectorAll("button")].some((b) => b.textContent === "Edit")).toBe(false);
   });
 
   it("keeps the header when the project does not load", async () => {
@@ -360,9 +434,57 @@ describe("audit log", () => {
       { key: "origins", from: "https://a.example", to: "https://a.example, https://b.example" },
       { key: "cohort", from: "–", to: "program Build Award, round 38" },
       { key: "campaign params", from: "off", to: "on" },
-      { key: "names", from: "–", to: "–" },
     ]);
     expect(JSON.stringify(auditChanges(e))).not.toContain("[object Object]");
+  });
+
+  it("says states with the badge words and leaves out empty changes", () => {
+    const e = {
+      ...f.auditEntryBody,
+      action: "tenant.reject",
+      detail: { status: { old: "pending", new: "rejected" }, network: { old: null, new: null } },
+    };
+    expect(auditChanges(e)).toEqual([{ key: "status", from: "In review", to: "Not approved" }]);
+    const site = {
+      ...f.auditEntryBody,
+      action: "site.verify",
+      target: `site:${f.SITE_ID}`,
+      detail: { result: "dns_no_record", verification: { old: "unchecked", new: "unverified" } },
+    };
+    expect(auditChanges(site)).toEqual([
+      { key: "verification", from: "Not checked", to: "Not verified" },
+    ]);
+    // a check that did not pass is a check, not a verification
+    const said = (x: AuditEntry) => {
+      const t = auditSentence(x, { [`site:${f.SITE_ID}`]: "example.org" });
+      return `${t.verb} ${t.object}`;
+    };
+    expect(said(site)).toBe("checked the domain of the site example.org");
+    expect(said({ ...site, detail: { result: "ok" } })).toBe(
+      "verified the domain of the site example.org",
+    );
+  });
+
+  it("names the object from the detail or from the page", () => {
+    const site = { ...f.auditEntryBody, action: "site.create", target: `site:${f.SITE_ID}` };
+    expect(auditSentence({ ...site, detail: {} }).object).toBe("a site");
+    expect(
+      auditSentence({ ...site, detail: {} }, { [`site:${f.SITE_ID}`]: "example.org" }),
+    ).toMatchObject({ verb: "added the site", object: "example.org" });
+    const id = auditSentence({
+      ...f.auditEntryBody,
+      action: "onchain.add",
+      target: "chain_id:c1",
+      detail: { strkey: "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H" },
+    });
+    expect(id.object).toBe("GBRP…OX2H");
+    const report = auditSentence({
+      ...f.auditEntryBody,
+      action: "report.create",
+      target: "report:r1",
+      detail: { from: "2026-10-20", to: "2026-11-18" },
+    });
+    expect(`${report.verb} ${report.object}`).toBe("signed a report for Oct 20 to Nov 18, 2026");
   });
 
   it("reads an entry as a sentence and tells the system from people", () => {
@@ -507,6 +629,12 @@ describe("review workspace", () => {
     const radios = [...host.querySelectorAll<HTMLElement>("[role=radio]")];
     const reject = radios.find((r) => r.textContent?.includes("Reject")) as HTMLElement;
     const approve = radios.find((r) => r.textContent?.includes("Approve")) as HTMLElement;
+    // nothing is chosen on open, so the send waits for a choice
+    expect(approve.getAttribute("aria-checked")).toBe("false");
+    expect(reject.getAttribute("aria-checked")).toBe("false");
+    expect((byRole(host, "button", "Choose Approve or Reject") as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     // one tab stop; the arrow keys move the choice and the focus
     expect(approve.tabIndex).toBe(0);
     expect(reject.tabIndex).toBe(-1);

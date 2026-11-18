@@ -72,6 +72,18 @@ describe("project list views", () => {
     const shown = shownColumns("web", ["pageviews"], "bounces");
     expect(shown).toEqual(["name", "pageviews", "bounces"]);
     expect(shownColumns("web", null, "pageviews")).toContain("integrity");
+    // the status sits in its own column right after the name in every view
+    for (const view of ["status", "web", "api"] as const)
+      expect(shownColumns(view, null, "name").slice(0, 2)).toEqual(["name", "status"]);
+    expect(shownColumns("status", null, "name")).toEqual([
+      "name",
+      "status",
+      "sites",
+      "sites_verified",
+      "sites_with_stellar_toml",
+      "created_at",
+      "status_changed_at",
+    ]);
     expect(shownColumns("web", ["not-a-column"], "pageviews")).toEqual(["name", "pageviews"]);
     const defaults = shownColumns("web", null, "pageviews");
     expect(phoneColumns("web", defaults, "pageviews")).toEqual([

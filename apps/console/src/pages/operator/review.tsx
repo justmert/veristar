@@ -1,7 +1,14 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { fade } from "@veristar/brand/motion";
-import { ArrowLeft, ArrowRight, Check, CircleCheck, Minus } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CircleAlert,
+  CircleCheck,
+  CircleDashed,
+  CircleX,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -18,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { countOf, formatCount } from "@/lib/format";
 import { ReviewSkeleton } from "@/pages/operator/page-frame";
 import { useNow } from "./alerts";
-import { ageText, enrolledLine, Waiting } from "./decision";
+import { ageText, DecisionSection, enrolledLine, Waiting } from "./decision";
 import { ProjectNumbers } from "./numbers";
 
 // contract 5.3 review=true: pending projects and active projects with a site
@@ -163,16 +170,39 @@ export function ReviewQueuePage() {
   );
 }
 
-function Signal({ ok, children }: { ok: boolean; children: string }) {
+// one status per fact, as in the evidence list: an icon, a colour and the
+// state in words
+const FACT = {
+  ok: { Icon: CircleCheck, tone: "text-success" },
+  partial: { Icon: CircleAlert, tone: "text-warning" },
+  missing: { Icon: CircleX, tone: "text-critical" },
+  absent: { Icon: CircleDashed, tone: "text-fg-3" },
+} as const;
+
+function Fact({
+  part,
+  all,
+  words,
+}: {
+  part: number;
+  all: number;
+  // the words for all, some and none of the sites
+  words: [string, string, string];
+}) {
+  const state = all === 0 ? "absent" : part === 0 ? "missing" : part < all ? "partial" : "ok";
+  const { Icon, tone } = FACT[state];
+  const text =
+    state === "absent"
+      ? "No site yet"
+      : state === "ok"
+        ? words[0]
+        : state === "partial"
+          ? `${words[1]} ${formatCount(part)} of ${formatCount(all)}`
+          : words[2];
   return (
-    <span className="inline-flex items-center gap-1">
-      {ok ? (
-        <Check aria-hidden className="size-3 text-success" strokeWidth={2.8} />
-      ) : (
-        <Minus aria-hidden className="size-3 text-fg-3" strokeWidth={2.8} />
-      )}
-      {children}
-      <span className="sr-only">{ok ? ", yes" : ", no"}</span>
+    <span className="inline-flex items-center gap-1" data-fact={state}>
+      <Icon aria-hidden className={cn("size-3", tone)} strokeWidth={2.6} />
+      {text}
     </span>
   );
 }
@@ -210,8 +240,22 @@ function QueueItem({
         {pending ? "New project" : `${countOf(t.sites_in_review, "site")} in review`}
       </span>
       <span className="flex flex-wrap gap-x-3 gap-y-1 text-caption text-fg-2">
-        <Signal ok={t.sites_verified > 0}>Domain verified</Signal>
-        <Signal ok={t.sites_with_stellar_toml > 0}>stellar.toml</Signal>
+        {t.site_count === 0 ? (
+          <Fact part={0} all={0} words={["", "", ""]} />
+        ) : (
+          <>
+            <Fact
+              part={t.sites_verified}
+              all={t.site_count}
+              words={["Domain verified", "Domain verified on", "Domain not verified"]}
+            />
+            <Fact
+              part={t.sites_with_stellar_toml}
+              all={t.site_count}
+              words={["stellar.toml found", "stellar.toml on", "No stellar.toml"]}
+            />
+          </>
+        )}
       </span>
     </button>
   );
@@ -311,15 +355,7 @@ function SelectedProject({
             ) : null}
 
             {detail.data.allowed_actions.some((a) => a === "approve" || a === "reject") ? (
-              // on a phone the decision stays at the bottom of the screen
-              // while the evidence scrolls above it
-              <section
-                aria-labelledby="decide-h"
-                className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-4 max-lg:sticky max-lg:bottom-0 max-lg:z-(--vs-layer-raised) max-lg:-mx-4 max-lg:max-h-[70dvh] max-lg:overflow-y-auto max-lg:rounded-b-none max-lg:bg-overlay max-lg:shadow-overlay sm:p-5"
-              >
-                <h2 id="decide-h" className="text-title text-fg">
-                  Decision
-                </h2>
+              <DecisionSection>
                 <DecisionPanel
                   subject={{
                     kind: "project",
@@ -329,7 +365,7 @@ function SelectedProject({
                   }}
                   onDecided={onDecided}
                 />
-              </section>
+              </DecisionSection>
             ) : (
               <p className="text-small text-fg-2">
                 The project is active. Only its sites in review wait for a decision.

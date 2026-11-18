@@ -249,14 +249,17 @@ function dayLabel(day: string, today: string): string {
 
 // the log in utc days, newest first; a run of the same system event folds
 // into one line. `limit` shows only the newest entries (the project page).
+// `names` names the targets the page knows ("site:<id>" to its domain).
 export function AuditEntries({
   entries,
   onClear,
   limit,
+  names,
 }: {
   entries: AuditEntry[];
   onClear?: () => void;
   limit?: number;
+  names?: Readonly<Record<string, string>>;
 }) {
   if (entries.length === 0)
     return (
@@ -296,7 +299,7 @@ export function AuditEntries({
           <ol className="flex flex-col">
             {foldRuns(g.items).map((item) => (
               <li key={item.kind === "one" ? item.entry.id : `run-${item.key}`}>
-                <ItemRow item={item} />
+                <ItemRow item={item} names={names} />
               </li>
             ))}
           </ol>
@@ -306,11 +309,16 @@ export function AuditEntries({
   );
 }
 
-function ItemRow({ item }: { item: AuditItem }) {
-  if (item.kind === "one") return <AuditRow e={item.entry} />;
+type Names = Readonly<Record<string, string>> | undefined;
+
+function ItemRow({ item, names }: { item: AuditItem; names: Names }) {
+  if (item.kind === "one") return <AuditRow e={item.entry} names={names} />;
   const first = item.entries[0] as AuditEntry;
   const last = item.entries.at(-1) as AuditEntry;
-  const s = auditSentence(first);
+  const s = auditSentence(first, names);
+  // a run inside one minute shows that minute once
+  const from = formatTimeUtc(last.at);
+  const to = formatTimeUtc(first.at);
   return (
     <details className="group border-b border-line-subtle" data-run={item.entries.length}>
       <summary className="grid cursor-pointer list-none grid-cols-[1.75rem_minmax(0,1fr)_auto] items-start gap-x-3 px-4 py-3 [&::-webkit-details-marker]:hidden transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring">
@@ -319,9 +327,7 @@ function ItemRow({ item }: { item: AuditItem }) {
           <span className="font-medium text-fg">{s.actor}</span>{" "}
           {s.verb.replace(/ (on|of|for|from|to)$/, "")},{" "}
           <span className="font-medium text-fg">{countOf(item.entries.length, "time")}</span>
-          <span className="block text-caption">
-            {formatTimeUtc(last.at)} to {formatTimeUtc(first.at)}
-          </span>
+          <span className="block text-caption">{from === to ? to : `${from} to ${to}`}</span>
         </span>
         <ChevronDown
           aria-hidden
@@ -331,7 +337,7 @@ function ItemRow({ item }: { item: AuditItem }) {
       <ol className="border-t border-line-subtle bg-sunken">
         {item.entries.map((e) => (
           <li key={e.id}>
-            <AuditRow e={e} nested />
+            <AuditRow e={e} names={names} nested />
           </li>
         ))}
       </ol>
@@ -356,8 +362,8 @@ function ActorMark({ e }: { e: AuditEntry }) {
   );
 }
 
-function AuditRow({ e, nested }: { e: AuditEntry; nested?: boolean }) {
-  const s = auditSentence(e);
+function AuditRow({ e, names, nested }: { e: AuditEntry; names: Names; nested?: boolean }) {
+  const s = auditSentence(e, names);
   const changes = auditChanges(e);
   const reason = auditReason(e);
   return (

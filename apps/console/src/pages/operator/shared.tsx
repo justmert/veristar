@@ -110,8 +110,10 @@ export function handedOver(state: unknown): Selection {
 }
 
 // the series colour a compared project has, in its slot
-export const SERIES_TONES = ["series-1", "series-2", "series-3", "series-4", "series-5"] as const;
-const SWATCH = ["bg-series-1", "bg-series-2", "bg-series-3", "bg-series-4", "bg-series-5"];
+// blue and violet sit far apart in the order, so up to four compared
+// projects never get the two hues that are hardest to tell apart
+export const SERIES_TONES = ["series-1", "series-2", "series-4", "series-5", "series-3"] as const;
+const SWATCH = ["bg-series-1", "bg-series-2", "bg-series-4", "bg-series-5", "bg-series-3"];
 
 export function SeriesSwatch({ slot, className }: { slot: number; className?: string }) {
   if (slot < 0) return null;

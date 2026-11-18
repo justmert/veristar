@@ -32,6 +32,7 @@ import {
   formatLatency,
   formatPercent,
   formatTick,
+  niceTicks,
   OPEN_BUCKET,
   utcDay,
 } from "@/lib/format";
@@ -127,7 +128,12 @@ export function ComparePage() {
         }
       />
 
-      <section aria-label="Compared projects" className="flex flex-col gap-3">
+      {/* the chips are the one legend of every chart below, so they stay in
+          view while the charts scroll */}
+      <section
+        aria-label="Compared projects"
+        className="flex flex-col gap-3 bg-ground lg:sticky lg:top-0 lg:z-(--vs-layer-raised) lg:-my-2 lg:py-2"
+      >
         <div className="flex flex-wrap items-center gap-2">
           {refs ? (
             <ul className="flex min-w-0 flex-wrap gap-2">
@@ -159,7 +165,10 @@ export function ComparePage() {
             </Link>
           ) : null}
         </div>
-        <ListRange resolved={resolved} requested={range} onRange={setRange} />
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <ListRange resolved={resolved} requested={range} onRange={setRange} />
+          {resolved && resolved.to >= utcDay() ? <PartialKey /> : null}
+        </div>
       </section>
 
       <Section id="compare-web" title="Web">
@@ -289,6 +298,54 @@ function ChartsLoading() {
 
 // ---- charts
 
+// the one partial key of the page: the hatching that marks the running day
+// in every chart
+function PartialKey() {
+  return (
+    <span data-legend="partial" className="flex items-center gap-1 text-caption text-fg-2">
+      <svg aria-hidden width="10" height="10" className="rounded-bar">
+        <defs>
+          <pattern
+            id="compare-partial"
+            width="4"
+            height="4"
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(45)"
+          >
+            <rect width="4" height="4" className="fill-series-prev" />
+            <rect width="1.5" height="4" fill="var(--vs-series-partial)" />
+          </pattern>
+        </defs>
+        <rect width="10" height="10" fill="url(#compare-partial)" />
+      </svg>
+      Partial: today is still running
+    </span>
+  );
+}
+
+// the axis of a chart uses the same ticks as the chart: from 0 to the
+// largest value of every series
+function ticksOf(values: (number | null)[][]): number[] {
+  return niceTicks(Math.max(0, ...values.flat().map((v) => v ?? 0)));
+}
+
+// a rate axis keeps the decimals its steps need: 0.25%, 0.5%, 0.75%, not
+// 0.3%, 0.5%, 0.8%
+export function percentAxis(values: (number | null)[][]): (n: number) => string {
+  const ticks = ticksOf(values).map((t) => t * 100);
+  const places =
+    [0, 1, 2, 3].find((d) => ticks.every((t) => Math.abs(Number(t.toFixed(d)) - t) < 1e-9)) ?? 4;
+  return (n) => (n === 0 ? "0%" : `${(n * 100).toFixed(places)}%`);
+}
+
+// a latency axis in one unit: milliseconds while the largest tick is under
+// a second, else seconds
+export function latencyAxis(values: (number | null)[][]): (n: number) => string {
+  const top = ticksOf(values).at(-1) ?? 0;
+  if (top < 1) return (n) => `${Math.round(n * 1000)} ms`;
+  return (n) => `${Number(n.toFixed(2))} s`;
+}
+
 function bucketsOf(days: string[]): TimeBucket[] {
   const today = utcDay();
   return days.map((d) => ({
@@ -360,6 +417,7 @@ function CompareChart({
       markers={markers}
       ceiling={ceiling}
       state={st === "data" ? "data" : "empty"}
+      legend={false}
       emptyTitle={st === "no-complete" ? "No complete day yet" : "No data in this range"}
       emptyText={
         st === "no-complete"
@@ -411,7 +469,7 @@ function WebSection({ data }: { data: WebCompare }) {
           projects={projects}
           values={col("bounce_rate")}
           format={formatPercent}
-          axisFormat={formatPercent}
+          axisFormat={percentAxis(col("bounce_rate"))}
           markers={markers}
           higherIsBetter={false}
         />
@@ -523,6 +581,9 @@ function WebSection({ data }: { data: WebCompare }) {
 // read as ">10 s"
 const OVER = 10.000001;
 
+// the 10 s line, drawn only when a value is above it
+const CEILING = { value: 10, label: ">10 s above" };
+
 function pct(n: ApiNumbers, k: "p50" | "p95" | "p99"): number | null {
   if (n[`${k}_over_10s`]) return OVER;
   return n[`${k}_seconds`];
@@ -544,6 +605,7 @@ function ApiSection({ data }: { data: ApiCompare }) {
   const markers = markersOf(data.projects);
   const col = (f: (s: ApiCompareProject["series"][number]) => number | null) =>
     data.projects.map((p) => p.series.map(f));
+  const p95 = col((s) => pct(s, "p95"));
   return (
     <>
       <div className="grid gap-4 lg:grid-cols-2">
@@ -562,11 +624,11 @@ function ApiSection({ data }: { data: ApiCompare }) {
           description="The duration that 95% of requests stay under. A gap is a day without requests."
           buckets={buckets}
           projects={projects}
-          values={col((s) => pct(s, "p95"))}
+          values={p95}
           format={formatLatency}
-          axisFormat={formatLatency}
+          axisFormat={latencyAxis(p95)}
           markers={markers}
-          ceiling={{ value: 10, label: ">10 s above" }}
+          ceiling={p95.flat().some((v) => v !== null && v > 10) ? CEILING : undefined}
           higherIsBetter={false}
         />
         <CompareChart
@@ -576,7 +638,7 @@ function ApiSection({ data }: { data: ApiCompare }) {
           projects={projects}
           values={col((s) => s.rate_4xx)}
           format={formatPercent}
-          axisFormat={formatPercent}
+          axisFormat={percentAxis(col((s) => s.rate_4xx))}
           markers={markers}
           higherIsBetter={false}
         />
@@ -587,7 +649,7 @@ function ApiSection({ data }: { data: ApiCompare }) {
           projects={projects}
           values={col((s) => s.rate_5xx)}
           format={formatPercent}
-          axisFormat={formatPercent}
+          axisFormat={percentAxis(col((s) => s.rate_5xx))}
           markers={markers}
           higherIsBetter={false}
         />

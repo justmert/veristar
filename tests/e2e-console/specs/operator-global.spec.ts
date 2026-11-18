@@ -445,6 +445,8 @@ test("an api key is created, read with from a client without a session, and revo
   const page = op.page;
   await page.goto(`${APP}/operator/keys`);
   await expect(page.getByRole("heading", { level: 1, name: "Access keys" })).toBeVisible();
+  // the header button opens the form, as on the other operator pages
+  await page.getByRole("button", { name: "Create key" }).click();
   const form = page.getByRole("form", { name: "Create a key" });
   const name = `e2e ${run}`;
   // a machine api key is the first type

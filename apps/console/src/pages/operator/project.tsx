@@ -1,10 +1,13 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import {
   ArrowRight,
   Check,
+  CircleCheck,
+  CircleDashed,
   CirclePause,
   CirclePlay,
+  CircleX,
   LoaderCircle,
   MoreHorizontal,
   Trash2,
@@ -12,7 +15,7 @@ import {
 import { type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { api } from "@/api/endpoints";
-import { operatorTenantQuery } from "@/api/queries";
+import { auditQuery, operatorTenantQuery } from "@/api/queries";
 import type { OperatorSite, OperatorTenantDetail, TenantAction } from "@/api/schemas";
 import { OperatorCohortPanel } from "@/components/cohort";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -32,7 +35,7 @@ import { formatCount, formatDate, formatDateTimeUtc } from "@/lib/format";
 import { outcomeLabel } from "@/lib/outcomes";
 import { NotFoundPage } from "@/pages/public/not-found";
 import { AuditEntries } from "./audit";
-import { refreshOperator } from "./decision";
+import { DecisionSection, refreshOperator } from "./decision";
 import { ProjectNumbers } from "./numbers";
 import { TenantOnchainSection } from "./onchain-parts";
 
@@ -82,15 +85,26 @@ export const ACTIONS: Record<"suspend" | "resume" | "remove", ActionSpec> = {
 
 const MENU_ORDER = ["resume", "suspend", "remove"] as const;
 
-// the removal steps of contract 5.13 in words
+// the removal steps of contract 5.13 in words; the daily totals step says
+// what the setting did with them
 const STEP_TEXT: Record<string, string> = {
   registry: "Project record closed",
   otlp_tokens: "API tokens revoked",
   umami: "Web analytics deleted",
   web_ingest: "Web traffic stopped",
   api: "API data deleted",
-  agg: "Daily totals handled",
+  chain: "On-chain data deleted",
+  reports: "Reports revoked",
 };
+
+function stepText(name: string, keepAggregates: boolean): string {
+  if (name === "agg") return keepAggregates ? "Daily totals kept" : "Daily totals deleted";
+  const known = STEP_TEXT[name];
+  if (known) return known;
+  // a step this console does not know yet, in sentence case
+  const words = name.replace(/_/g, " ");
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)} done`;
+}
 
 // a removal deletes data in steps; the page checks again until it is done
 const REMOVAL_POLL_MS = 10_000;
@@ -127,10 +141,13 @@ export function OperatorProjectPage() {
   return <TenantDetail detail={detail.data} />;
 }
 
-// the operator's page of one project: the status, the one decision, the
-// numbers, the sites, the evidence once and the record around it
+// the operator's page of one project: the status, then the same order as
+// the review queue at every width (numbers, evidence, the decision), then
+// the sites and the record around it. a removed project shows its record
+// only: its data is deleted and no action applies.
 export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
   const t = detail.tenant;
+  const removed = t.status === "removed";
   const decides = detail.allowed_actions.some((a) => a === "approve" || a === "reject");
   return (
     <div className="flex min-w-0 flex-col gap-8">
@@ -156,65 +173,60 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
         </p>
       ) : null}
 
-      {decides ? (
-        <section
-          aria-labelledby="decision-h"
-          className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5"
-        >
-          <h2 id="decision-h" className="text-title text-fg">
-            Decision
-          </h2>
-          <DecisionPanel
-            subject={{ kind: "project", id: t.id, name: t.name, allowed: detail.allowed_actions }}
-          />
-        </section>
-      ) : null}
-
-      {detail.removal ? <Removal removal={detail.removal} /> : null}
+      {detail.removal ? <Removal tenantId={t.id} removal={detail.removal} /> : null}
 
       <div className="grid min-w-0 items-start gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="flex min-w-0 flex-col gap-8">
-          <ProjectNumbers tenantId={t.id} />
+          {removed ? null : <ProjectNumbers tenantId={t.id} />}
 
-          <section aria-labelledby="sites-h" className="flex flex-col gap-3">
-            <h2 id="sites-h" className="text-title text-fg">
-              Sites
+          <section aria-labelledby="evidence-h" className="flex min-w-0 flex-col gap-2">
+            <h2 id="evidence-h" className="text-title text-fg">
+              Evidence
             </h2>
-            {detail.sites.length === 0 ? (
-              <p className="text-small text-fg-2">The project has no site yet.</p>
-            ) : (
-              <ul className="flex flex-col gap-3">
-                {detail.sites.map((s) => (
-                  <li key={s.id}>
-                    <SiteCard site={s} />
-                  </li>
-                ))}
-              </ul>
-            )}
+            <EvidenceList items={evidenceOf(detail)} />
           </section>
 
-          <Fold id="integrity" title="Integrity report">
-            <IntegrityReportView
-              scope="operator"
-              tenantId={t.id}
-              range={{ from: "", to: "" }}
-              siteNames={Object.fromEntries(detail.sites.map((s) => [s.id, s.domain]))}
-            />
-          </Fold>
+          {decides ? (
+            <DecisionSection>
+              <DecisionPanel
+                subject={{
+                  kind: "project",
+                  id: t.id,
+                  name: t.name,
+                  allowed: detail.allowed_actions,
+                }}
+              />
+            </DecisionSection>
+          ) : null}
 
-          <Fold id="onchain" title="On-chain IDs">
-            <TenantOnchainSection tenantId={t.id} />
-          </Fold>
+          <Sites sites={detail.sites} decides={!removed} />
 
-          <Fold id="events" title="Tracker requests by outcome">
-            <p className="mb-3 text-small text-fg-2">
-              What the gateway did with each tracker request. The counts roll up every hour.
-            </p>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Counts title="Last 24 full hours, UTC" counts={detail.ingest.last_24h} />
-              <Counts title="Last 30 full days, UTC" counts={detail.ingest.last_30d} />
+          {removed ? null : (
+            <div className="flex min-w-0 flex-col gap-3">
+              <Fold id="integrity" title="Integrity report">
+                <IntegrityReportView
+                  scope="operator"
+                  tenantId={t.id}
+                  range={{ from: "", to: "" }}
+                  siteNames={Object.fromEntries(detail.sites.map((s) => [s.id, s.domain]))}
+                />
+              </Fold>
+
+              <Fold id="onchain" title="On-chain IDs">
+                <TenantOnchainSection tenantId={t.id} />
+              </Fold>
+
+              <Fold id="events" title="Tracker requests by outcome">
+                <p className="mb-3 text-small text-fg-2">
+                  What the gateway did with each tracker request. The counts roll up every hour.
+                </p>
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <Counts title="Last 24 full hours, UTC" counts={detail.ingest.last_24h} />
+                  <Counts title="Last 30 full days, UTC" counts={detail.ingest.last_30d} />
+                </div>
+              </Fold>
             </div>
-          </Fold>
+          )}
 
           <section aria-labelledby="audit-h" className="flex flex-col gap-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -229,15 +241,19 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
                 <ArrowRight aria-hidden className="size-3.5" />
               </Link>
             </div>
-            <AuditEntries entries={detail.recent_audit} limit={5} />
+            <AuditEntries
+              entries={detail.recent_audit}
+              limit={5}
+              names={{
+                [`tenant:${t.id}`]: t.name,
+                ...Object.fromEntries(detail.sites.map((s) => [`site:${s.id}`, s.domain])),
+              }}
+            />
           </section>
         </div>
 
         <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-4">
-          <Box id="evidence-h" title="Evidence">
-            <EvidenceList items={evidenceOf(detail)} stacked />
-          </Box>
-          <OperatorCohortPanel tenantId={t.id} />
+          <OperatorCohortPanel tenantId={t.id} readOnly={removed} />
           <Answers detail={detail} />
           <Box id="members-h" title="Members">
             <ul className="flex flex-col gap-2 text-small">
@@ -452,29 +468,113 @@ function MoreActions({ detail }: { detail: OperatorTenantDetail }) {
   );
 }
 
-// one status per site: "In review" while an operator must decide, else the
-// site's own status. the domain check and stellar.toml detail open on request.
-function SiteCard({ site }: { site: OperatorSite }) {
+// the sites as dense rows, so many sites do not push the record down: the
+// first rows, then the rest on request
+const SITES_SHOWN = 10;
+
+function Sites({ sites, decides }: { sites: OperatorSite[]; decides: boolean }) {
+  const [all, setAll] = useState(false);
+  // sites that wait for a decision come first
+  const ordered = [...sites].sort((a, b) => Number(b.in_review) - Number(a.in_review));
+  const shown = all ? ordered : ordered.slice(0, SITES_SHOWN);
+  return (
+    <section aria-labelledby="sites-h" className="flex min-w-0 flex-col gap-3">
+      <h2 id="sites-h" className="text-title text-fg">
+        Sites{" "}
+        {sites.length > 0 ? (
+          <span className="font-normal text-fg-2">({formatCount(sites.length)})</span>
+        ) : null}
+      </h2>
+      {sites.length === 0 ? (
+        <p className="text-small text-fg-2">The project has no site.</p>
+      ) : (
+        <ul className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-raised">
+          {shown.map((s) => (
+            <li key={s.id} className="border-b border-line-subtle last:border-0">
+              <SiteRow site={s} decides={decides} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {sites.length > SITES_SHOWN ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="self-start max-lg:h-(--vs-control-touch)"
+          aria-expanded={all}
+          onClick={() => setAll((v) => !v)}
+        >
+          {all ? `Show the first ${SITES_SHOWN}` : `Show all ${formatCount(sites.length)} sites`}
+        </Button>
+      ) : null}
+    </section>
+  );
+}
+
+// one fact of a site with its status in words: the icon and the colour
+// only repeat what the text says
+function SiteFact({ state, children }: { state: "ok" | "missing" | "absent"; children: string }) {
+  const Icon = state === "ok" ? CircleCheck : state === "missing" ? CircleX : CircleDashed;
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap" data-fact={state}>
+      <Icon
+        aria-hidden
+        className={cn(
+          "size-3.5",
+          state === "ok" ? "text-success" : state === "missing" ? "text-critical" : "text-fg-3",
+        )}
+        strokeWidth={2.4}
+      />
+      {children}
+    </span>
+  );
+}
+
+// one row per site: name, domain, status, the domain check and the
+// stellar.toml in words. the full checks and origins open on request.
+function SiteRow({ site, decides }: { site: OperatorSite; decides: boolean }) {
+  const toml = site.stellar_toml?.status;
   return (
     <article
       aria-labelledby={`op-site-${site.id}`}
       data-site={site.id}
-      className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5"
+      className="flex min-w-0 flex-col gap-2 px-4 py-3 sm:px-5"
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <h3 id={`op-site-${site.id}`} className="min-w-0 truncate text-body font-medium text-fg">
-          {site.name}
-        </h3>
-        {site.in_review ? (
-          <span className="inline-flex items-center gap-1 text-caption font-medium text-warning">
-            In review
+      <div className="grid min-w-0 gap-x-4 gap-y-1 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+        <div className="flex min-w-0 flex-col">
+          <h3 id={`op-site-${site.id}`} className="truncate text-body font-medium text-fg">
+            {site.name}
+          </h3>
+          <span className="truncate font-mono text-caption text-fg-2" title={site.domain}>
+            {site.domain}
           </span>
-        ) : (
-          <StatusBadge kind="site" status={site.status} operator />
-        )}
-        <span className="min-w-0 font-mono text-small break-all text-fg-2 sm:ml-auto">
-          {site.domain}
-        </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-small text-fg-2">
+          {/* a site that waits for an operator reads as in review */}
+          <StatusBadge kind="site" status={site.in_review ? "pending" : site.status} operator />
+          <SiteFact
+            state={
+              site.verification === "verified"
+                ? "ok"
+                : site.verification === "unchecked"
+                  ? "absent"
+                  : "missing"
+            }
+          >
+            {site.verification === "verified"
+              ? "Domain verified"
+              : site.verification === "unchecked"
+                ? "Domain not checked yet"
+                : "Domain not verified"}
+          </SiteFact>
+          <SiteFact state={toml === "found" ? "ok" : toml === undefined ? "absent" : "missing"}>
+            {toml === "found"
+              ? "stellar.toml found"
+              : toml === undefined
+                ? "stellar.toml not checked yet"
+                : "No stellar.toml"}
+          </SiteFact>
+        </div>
       </div>
       {site.domain_previously_removed ? (
         <p className="text-small text-warning">
@@ -489,7 +589,7 @@ function SiteCard({ site }: { site: OperatorSite }) {
       ) : null}
       <Disclosure
         variant="inline"
-        summary="Domain check, stellar.toml and allowed origins"
+        summary="Checks and allowed origins"
         className="text-small"
         bodyClassName="flex flex-col gap-4 pt-3"
       >
@@ -518,7 +618,7 @@ function SiteCard({ site }: { site: OperatorSite }) {
           ))}
         </ul>
       </Disclosure>
-      {site.in_review ? (
+      {site.in_review && decides ? (
         <div className="border-t border-line-subtle pt-3">
           <DecisionPanel subject={{ kind: "site", id: site.id, name: site.domain }} />
         </div>
@@ -550,13 +650,35 @@ function Counts({ title, counts }: { title: string; counts: Record<string, numbe
   );
 }
 
-function Removal({ removal }: { removal: NonNullable<OperatorTenantDetail["removal"]> }) {
-  const by =
-    removal.requested_by === null
-      ? null
-      : typeof removal.requested_by === "string"
-        ? removal.requested_by
-        : removal.requested_by.display_name;
+// the login of the person who asked for the removal. the record holds
+// their user id; their audit entries on the project carry the login.
+function useRequester(tenantId: string, by: string | { display_name: string } | null) {
+  const userId = typeof by === "string" ? by : null;
+  const audit = useInfiniteQuery({
+    ...auditQuery({
+      tenant_id: tenantId,
+      actor: `user:${userId ?? ""}`,
+      action: "",
+      target: "",
+      from: "",
+      to: "",
+    }),
+    enabled: userId !== null,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+  if (by === null) return null;
+  if (typeof by !== "string") return by.display_name;
+  return audit.data?.pages[0]?.items.find((e) => e.actor_login)?.actor_login ?? null;
+}
+
+function Removal({
+  tenantId,
+  removal,
+}: {
+  tenantId: string;
+  removal: NonNullable<OperatorTenantDetail["removal"]>;
+}) {
+  const by = useRequester(tenantId, removal.requested_by);
   const steps = Object.entries(removal.steps).sort((x, y) =>
     x[1].done_at.localeCompare(y[1].done_at),
   );
@@ -579,7 +701,7 @@ function Removal({ removal }: { removal: NonNullable<OperatorTenantDetail["remov
           ? `Completed ${formatDateTimeUtc(removal.completed_at ?? "")}.`
           : "The service is deleting the data. This page checks again every 10 seconds."}
       </p>
-      <p className="text-small text-fg-2">
+      <p className="text-small text-fg-2" data-requested="">
         Requested {formatDateTimeUtc(removal.requested_at)}
         {by ? ` by ${by}` : ""}. The daily totals are {removal.keep_aggregates ? "kept" : "deleted"}
         .
@@ -593,7 +715,7 @@ function Removal({ removal }: { removal: NonNullable<OperatorTenantDetail["remov
               data-step={name}
             >
               <Check aria-hidden className="size-3.5 text-success" strokeWidth={2.6} />
-              <span className="text-fg">{STEP_TEXT[name] ?? name}</span>
+              <span className="text-fg">{stepText(name, removal.keep_aggregates)}</span>
               <span className="text-fg-2">{formatDateTimeUtc(s.done_at)}</span>
             </li>
           ))}

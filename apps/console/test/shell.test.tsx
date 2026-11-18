@@ -170,6 +170,8 @@ describe("console shell", () => {
       a.textContent?.startsWith("Review"),
     );
     await waitFor(() => expect(review?.textContent).toBe("Review11 project waits for review"));
+    // operators do not work inside one project, so there is no switcher here
+    expect(host.querySelector("aside")?.textContent).not.toContain("Choose a project");
   });
 
   it("reads no operator data outside the operator area", async () => {

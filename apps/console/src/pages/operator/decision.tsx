@@ -2,9 +2,12 @@
 // times, the enrollment line and the refresh after a decision. the evidence
 // list and the decision panel are shared components.
 
-import { Clock } from "lucide-react";
+import { cn } from "@veristar/brand/cn";
+import { ChevronUp, Clock } from "lucide-react";
+import { type ReactNode, useId, useState } from "react";
 import { keys } from "@/api/queries";
 import type { OperatorTenantDetail } from "@/api/schemas";
+import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
 import { queryClient } from "@/query-client";
 
@@ -37,4 +40,45 @@ export function Waiting({ since, now }: { since: string; now: number }) {
 
 export function enrolledLine(t: OperatorTenantDetail["tenant"]): string {
   return `Enrolled ${formatDate(t.created_at)}${t.created_by ? ` by ${t.created_by.display_name}` : ""}.`;
+}
+
+// the box around a decision. on a wide screen it sits in the page after the
+// evidence. on a phone it is a slim bar at the bottom of the screen that
+// opens to the full panel, so the evidence above it stays readable.
+export function DecisionSection({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <section
+      aria-labelledby={`${id}-h`}
+      data-decision-open={open ? "" : undefined}
+      className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-4 max-lg:sticky max-lg:bottom-0 max-lg:z-(--vs-layer-raised) max-lg:-mx-4 max-lg:max-h-[80dvh] max-lg:overflow-y-auto max-lg:rounded-b-none max-lg:bg-overlay max-lg:py-3 max-lg:shadow-overlay sm:p-5"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h2 id={`${id}-h`} className="text-title text-fg">
+          Decision
+        </h2>
+        <Button
+          type="button"
+          variant="outline"
+          aria-expanded={open}
+          aria-controls={`${id}-body`}
+          onClick={() => setOpen((o) => !o)}
+          className="h-(--vs-control-touch) lg:hidden"
+        >
+          {open ? "Close" : "Decide"}
+          <ChevronUp
+            aria-hidden
+            className={cn(
+              "transition-transform duration-(--vs-duration-change) ease-standard",
+              open && "rotate-180",
+            )}
+          />
+        </Button>
+      </div>
+      <div id={`${id}-body`} className={cn(!open && "max-lg:hidden")}>
+        {children}
+      </div>
+    </section>
+  );
 }

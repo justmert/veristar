@@ -116,7 +116,11 @@ export function Sidebar({
             <span className="text-title">Veristar</span>
           </Link>
 
-          <ProjectSwitcher me={me} id={navProject} onNavigate={onNavigate} />
+          {/* operators do not work inside one project, so the operator area
+              has no switcher; the command palette opens any project */}
+          {area.kind === "operator" ? null : (
+            <ProjectSwitcher me={me} id={navProject} onNavigate={onNavigate} />
+          )}
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3">
           {navProject ? (

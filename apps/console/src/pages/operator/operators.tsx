@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CirclePause, KeyRound, MoreHorizontal, UserMinus } from "lucide-react";
+import { CirclePause, KeyRound, MoreHorizontal, Plus, UserMinus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { ApiError } from "@/api/client";
 import {
@@ -60,12 +60,22 @@ export function OperatorsPage() {
         )
       : false;
   const error = me.error ?? roster.error;
+  const [adding, setAdding] = useState(false);
   return (
     <div className="flex min-w-0 flex-col gap-8">
       <PageHeader
         title="Operators"
         description="The people with access to the operator area. Operator admins add, suspend and remove operators."
+        primary={
+          admin && !adding ? (
+            <Button onClick={() => setAdding(true)} className="max-lg:h-(--vs-control-touch)">
+              <Plus aria-hidden />
+              Add operator
+            </Button>
+          ) : null
+        }
       />
+      {admin && adding ? <AddOperator onClose={() => setAdding(false)} /> : null}
       {me.isPending || roster.isPending ? (
         <LoadingState label="Loading the operators">
           <Skeleton.Table rows={4} columns={4} />
@@ -82,7 +92,6 @@ export function OperatorsPage() {
       ) : me.data && roster.data ? (
         <>
           <RosterSection items={roster.data.items} admin={admin} me={me.data.user} />
-          {admin ? <AddOperator /> : null}
         </>
       ) : null}
     </div>
@@ -343,7 +352,9 @@ export function validateAddOperator(form: {
   return out;
 }
 
-export function AddOperator() {
+// the form opens from the header button, above the roster, as the create
+// forms of the other operator pages do
+export function AddOperator({ onClose }: { onClose?: () => void }) {
   const [kind, setKind] = useState<"github" | "stellar">("github");
   const [value, setValue] = useState("");
   const [role, setRole] = useState<RosterRole>("operator");
@@ -361,6 +372,7 @@ export function AddOperator() {
       setValue("");
       setReason("");
       refresh();
+      onClose?.();
     },
   });
   // a 422 names its fields (2.5); each is shown at its field
@@ -377,7 +389,10 @@ export function AddOperator() {
     m.mutate();
   }
   return (
-    <section aria-labelledby="add-operator-h" className="flex max-w-prose flex-col gap-4">
+    <section
+      aria-labelledby="add-operator-h"
+      className="flex max-w-prose animate-rise-in flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5"
+    >
       <div className="flex flex-col gap-1">
         <h2 id="add-operator-h" className="text-title text-fg">
           Add an operator
@@ -429,10 +444,20 @@ export function AddOperator() {
           onChange={(e) => setReason(e.target.value)}
           error={reasonError}
         />
-        <div>
+        <div className="flex flex-wrap gap-2">
           <Button type="submit" pending={m.isPending} className="max-lg:h-(--vs-control-touch)">
             {m.isPending ? "Adding" : "Add operator"}
           </Button>
+          {onClose ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onClose}
+              className="max-lg:h-(--vs-control-touch)"
+            >
+              Cancel
+            </Button>
+          ) : null}
         </div>
         <FormMessage error={m.error} />
       </form>

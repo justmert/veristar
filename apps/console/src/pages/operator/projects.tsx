@@ -62,12 +62,6 @@ import { handedOver, ListRange, type Selection, SeriesSwatch } from "./shared";
 
 const SEARCH_DELAY_MS = 250;
 
-const PLACEHOLDER: Record<ProjectsView, string> = {
-  status: "Search name, slug, website or site domain",
-  web: "Search name or slug",
-  api: "Search name or slug",
-};
-
 const isEmpty = (f: ProjectFilters) => JSON.stringify(f) === JSON.stringify(EMPTY_FILTERS);
 
 // every enrolled project in one list with three views: its status, its web
@@ -327,7 +321,7 @@ export function OperatorProjectsPage() {
           search={search}
           onSearch={setSearch}
           searchLabel="Search projects"
-          placeholder={PLACEHOLDER[view]}
+          placeholder="Search projects"
           filters={
             view === "status"
               ? statusFilters(statusQ, setStatusQ)
