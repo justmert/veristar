@@ -112,8 +112,8 @@ devices and custom events. Choose a site to see it alone, or **All sites** for t
 
 The **Right now** strip counts the visitors of the last 5 minutes and draws the page views of the
 last 30 minutes; your first page view appears there within seconds. The totals and the daily chart
-come from the hourly aggregates, the same numbers SCF operators see, so they follow within the
-hour; the hours of today are read live.
+come from the daily aggregates, the same numbers SCF operators see, which are read every hour, so
+they follow within the hour. Pages, custom events and the hours of a single day are read live.
 
 Each site keeps a second band, **Quarantined**. Events from one network address that shows many
 different visitors within an hour (offices, campuses, carrier networks and VPN exits, but also

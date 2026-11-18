@@ -9,10 +9,9 @@ every script of your site on your own origin. Tested by the page
 which runs in the browser test matrix.
 
 Only the file moves. **Events still go from the visitor's browser directly to the gateway**,
-`https://in.analytics.example` in these examples. There is no supported way to send them through
-your own server.
+`https://in.analytics.example` in these examples.
 
-## Why there is no first-party event proxy
+## Why events go straight to the gateway
 
 A proxy on your domain that forwards events to the gateway would turn every visitor's event into a
 request from your server's single address. The gateway counts unique visitors from the address and
