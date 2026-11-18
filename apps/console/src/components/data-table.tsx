@@ -64,6 +64,8 @@ export type TableFooter =
       page: number;
       pageSize: number;
       total: number;
+      // the server holds rows past `total`, which counts the loaded ones
+      more?: boolean;
       onPage: (page: number) => void;
     };
 
@@ -853,7 +855,7 @@ function Footer({ footer }: { footer: TableFooter }) {
       </div>
     );
   }
-  const { page, pageSize, total, onPage } = footer;
+  const { page, pageSize, total, more = false, onPage } = footer;
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const first = total === 0 ? 0 : page * pageSize + 1;
   const last = Math.min(total, (page + 1) * pageSize);
@@ -864,6 +866,7 @@ function Footer({ footer }: { footer: TableFooter }) {
     >
       <span className="text-small text-fg-2 tabular">
         {formatCount(first)} to {formatCount(last)} of {formatCount(total)}
+        {more ? "+" : ""}
       </span>
       <span className="flex items-center gap-1">
         <Button
@@ -880,7 +883,7 @@ function Footer({ footer }: { footer: TableFooter }) {
           variant="ghost"
           size="icon-sm"
           aria-label="Next page"
-          disabled={page >= pages - 1}
+          disabled={page >= pages - 1 && !more}
           onClick={() => onPage(page + 1)}
           className="max-lg:size-(--vs-control-touch)"
         >

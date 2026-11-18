@@ -21,10 +21,11 @@ import {
 } from "@/lib/global";
 import { API_COLUMNS, WEB_COLUMNS } from "@/lib/operator-projects";
 import { ComparePage, latencyAxis, percentAxis } from "@/pages/operator/compare";
+import { blankColumns } from "@/pages/operator/project-columns";
 import { OperatorProjectsPage } from "@/pages/operator/projects";
 import * as c from "./fixtures/contract";
 import * as f from "./fixtures/global";
-import { byLabel, byRole, type Call, click, renderRoutes, stubFetch, waitFor } from "./helpers";
+import { byLabel, type Call, click, renderRoutes, stubFetch, waitFor } from "./helpers";
 
 const EM_DASH = String.fromCharCode(0x2014);
 
@@ -247,7 +248,7 @@ describe("project list, web view", () => {
       verified.dispatchEvent(new Event("change", { bubbles: true }));
     });
     await waitFor(() =>
-      expect(list().at(-1)?.url).toBe(
+      expect(list().map((x) => x.url)).toContain(
         "/api/operator/web/projects?verified=true&sort=pageviews&order=desc&limit=50",
       ),
     );
@@ -259,17 +260,27 @@ describe("project list, web view", () => {
     if (!header) throw new Error("no visitors header");
     await click(header as HTMLElement);
     await waitFor(() =>
-      expect(list().at(-1)?.url).toBe(
+      expect(list().map((x) => x.url)).toContain(
         "/api/operator/web/projects?verified=true&sort=visitors&order=desc&limit=50",
       ),
     );
     expect(header.closest("th")?.getAttribute("aria-sort")).toBe("descending");
 
-    // the sorted page has landed once its pager is back
-    await waitFor(() => expect(byRole(host, "button", "Load more")).toBeTruthy());
-    await click(byRole(host, "button", "Load more"));
+    // a page of 25 the first rows do not fill loads the next rows by itself
     await waitFor(() => expect(host.textContent).toContain("Anchor Hub"));
-    expect(list().at(-1)?.url).toContain("cursor=cG9zOjI");
+    expect(host.querySelector("nav[aria-label=Pages]")?.textContent).toContain("1 to 3 of 3");
+    expect(list().some((x) => x.url.includes("cursor=cG9zOjI"))).toBe(true);
+  });
+
+  it("leaves out by default a column with no value on any row of the page", async () => {
+    const rows = [f.webProjectA, f.webProjectB] as unknown as Parameters<typeof blankColumns>[0];
+    const blank = blankColumns(rows);
+    // project A has a visitors change, nobody has an on-chain change
+    expect(blank.has("visitors_growth")).toBe(false);
+    expect(blank.has("onchain_operations_growth")).toBe(true);
+    // a cohort of 4 shows no percentile
+    expect(blank.has("visitors_percentile")).toBe(true);
+    expect(blankColumns([]).size).toBe(0);
   });
 
   it("reaches every web sort key of 8.3 as a sortable column", async () => {

@@ -543,6 +543,24 @@ export function statusColumns(slot: (id: string) => number): Column<OperatorTena
   ];
 }
 
+// the columns that show the missing glyph on every one of these rows: a
+// change without a previous range, a percentile without a cohort, on-chain
+// without a verified id. none for no rows, so a loading table keeps its shape
+export function blankColumns(rows: Row[]): Set<string> {
+  const out = new Set<string>();
+  if (rows.length === 0) return out;
+  for (const g of GROWTH) {
+    const empty = rows.every((r) =>
+      g.percentile
+        ? r.cohort_size < MIN_COHORT || r.kpis[g.kpi].percentile === null
+        : r.kpis[g.kpi].change === null,
+    );
+    if (empty) out.add(g.id);
+  }
+  if (rows.every((r) => !r.onchain || r.onchain.ids_verified === 0)) out.add("onchain");
+  return out;
+}
+
 // picks the shown columns, in the view's order, and marks the phone ones
 export function pick<R>(all: Column<R>[], shown: string[], phone: string[]): Column<R>[] {
   return all
