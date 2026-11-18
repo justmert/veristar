@@ -95,6 +95,7 @@ export function RouteErrorPage() {
             <CopyButton
               text={errorDetails(error)}
               label="Copy details"
+              visibleLabel="Copy details"
               variant="ghost"
               size="default"
             />
