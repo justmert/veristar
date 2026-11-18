@@ -129,7 +129,15 @@ type TrackerWindow = Window &
     };
   };
 
+// a nul character is the one character the gateway refuses in free text
+// (postgresql text cannot hold it), and a script can put one into
+// document.title. it is dropped so the event is not refused as malformed
+const dropNul = (text: string): string => text.split("\u0000").join("");
+
 const DELAY_MS = 300;
+// the longest a tracked same-tab link is held for its event when no proof is
+// ready yet. a slow or unreachable gateway must not freeze the site's links
+const LINK_WAIT_MS = 1000;
 const EVENT_ATTRIBUTE = "data-umami-event";
 const EVENT_DATA_ATTRIBUTE = /^data-umami-event-([\w-]+)$/;
 
@@ -172,19 +180,25 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
   let currentUrl = normalize(location.href);
   let currentRef = document.referrer ? normalize(document.referrer) : "";
   let initialized = false;
+  // true once start() hooked the history api, which then keeps currentUrl
+  // up to date. before that, and in manual mode, the url is read when needed
+  let hooked = false;
 
   // screen and language stay empty: the gateway and umami take browser, os
   // and device class from the request headers, so nothing more is read from
   // the device. the fields remain so before-send hooks keep their shape.
-  const getPayload = (): Payload => ({
-    website,
-    hostname,
-    screen: "",
-    language: "",
-    title: sendTitle ? document.title : "",
-    url: currentUrl,
-    referrer: stripOrigin(currentRef),
-  });
+  const getPayload = (): Payload => {
+    if (!hooked) currentUrl = normalize(location.href);
+    return {
+      website,
+      hostname,
+      screen: "",
+      language: "",
+      title: sendTitle ? document.title : "",
+      url: currentUrl,
+      referrer: stripOrigin(currentRef),
+    };
+  };
 
   const hasDoNotTrack = () => {
     const dnt = win.doNotTrack || navigator.doNotTrack || navigator.msDoNotTrack;
@@ -268,13 +282,13 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
       h: clip(payload.hostname || u.hostname, LIMITS.hostname),
       // applied again because before-send and track(props) can supply any url
       u: clip(`${u.pathname}${u.search}${routeFragment(u.hash, excludeHash)}`, LIMITS.url),
-      r: clip(payload.referrer || "", LIMITS.referrer),
+      r: clip(dropNul(payload.referrer || ""), LIMITS.referrer),
       ts: Date.now(),
       p,
     };
     // sent only when set: by data-send-title, or by a before-send hook or
     // track(props) call of the site's own
-    if (payload.title) event.ti = clip(payload.title, LIMITS.title);
+    if (payload.title) event.ti = clip(dropNul(payload.title), LIMITS.title);
     if (payload.screen) event.s = clip(payload.screen, LIMITS.screen);
     if (payload.language) event.l = clip(payload.language, LIMITS.language);
     if (framed) event.fr = true;
@@ -459,13 +473,23 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
   // replaceState with the current url after it handled a popstate; moving the
   // referrer there made the pageview of a back or forward navigation name the
   // page itself as its referrer.
+  //
+  // a navigation within the delay of the previous one, such as a route that
+  // redirects at once, joins it: one pageview of where the visitor lands,
+  // with the referrer of the first, and none when that is the counted page.
+  let navigating = false;
   const onNavigate = (url: string | URL | null | undefined) => {
     if (!url) return;
     const next = normalize(url);
     if (next === currentUrl) return;
-    currentRef = currentUrl;
+    if (!navigating) currentRef = currentUrl;
     currentUrl = next;
-    setTimeout(pageview, DELAY_MS);
+    if (navigating) return;
+    navigating = true;
+    setTimeout(() => {
+      navigating = false;
+      if (currentUrl !== currentRef) pageview();
+    }, DELAY_MS);
   };
 
   const hookHistory = () => {
@@ -479,6 +503,10 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
     };
     hook("pushState");
     hook("replaceState");
+    // the page may have moved on since the tracker loaded (consent given
+    // after spa navigation); from here the hooks follow it
+    currentUrl = normalize(location.href);
+    hooked = true;
     // umami has no popstate listener, so back and forward in an spa were not
     // counted. popstate also fires for fragment navigation; only "#/" route
     // fragments are kept by normalize, so a jump to an anchor is no pageview.
@@ -496,33 +524,64 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
       return track(eventName, eventData);
     };
 
+    // whether the browser itself would load href in this page or its top or
+    // parent window, which ends this page. a link into another window, a
+    // download or a modified click leaves the page running
+    const leavesPage = (el: HTMLAnchorElement, e: MouseEvent): boolean => {
+      const linkTarget = el.target.toLowerCase();
+      return (
+        !el.hasAttribute("download") &&
+        ["", "_self", "_top", "_parent"].includes(linkTarget) &&
+        !(e.ctrlKey || e.shiftKey || e.metaKey || e.altKey || e.button === 1)
+      );
+    };
+
+    // a proof already solved goes out with the event in this same turn, as a
+    // keepalive request that outlives the page, so the click needs no hold
+    const proofReady = (): boolean => usable(slot) && slot.ready !== undefined;
+
+    // the link click being dispatched, until the window sees it bubble up
+    let clicked: { e: MouseEvent; el: HTMLAnchorElement; sent: Promise<void> } | undefined;
+
     document.addEventListener(
       "click",
       (e: MouseEvent) => {
+        clicked = undefined;
         const target = e.target as Element | null;
         if (!target || typeof target.closest !== "function") return;
         const el = target.closest(`[${EVENT_ATTRIBUTE}]`);
         if (!el?.getAttribute(EVENT_ATTRIBUTE)) return;
-
+        const sent = trackElement(el).catch(() => undefined);
         if (el.tagName === "A" && (el as HTMLAnchorElement).href) {
-          const { href, target: linkTarget } = el as HTMLAnchorElement;
-          const external =
-            linkTarget === "_blank" || e.ctrlKey || e.shiftKey || e.metaKey || e.button === 1;
-          // same-tab links wait for the event so the navigation does not cancel it
-          if (!external) e.preventDefault();
-          void trackElement(el)
-            .catch(() => undefined)
-            .finally(() => {
-              if (!external) {
-                (linkTarget === "_top" && top ? top.location : location).href = href;
-              }
-            });
-          return;
+          const a = el as HTMLAnchorElement;
+          if (leavesPage(a, e) && !proofReady()) clicked = { e, el: a, sent };
         }
-        void trackElement(el).catch(() => undefined);
       },
       true,
     );
+
+    // runs after the page's own click handlers. a client-side router that
+    // handles the link has prevented the default by now and keeps the page,
+    // so the event goes out without help. otherwise the browser would end the
+    // page before the proof is solved: the navigation waits for the event, at
+    // most LINK_WAIT_MS, and is then made by the tracker
+    win.addEventListener("click", (e: MouseEvent) => {
+      const c = clicked;
+      clicked = undefined;
+      if (!c || c.e !== e || e.defaultPrevented) return;
+      e.preventDefault();
+      const { href } = c.el;
+      const linkTarget = c.el.target.toLowerCase();
+      let done = false;
+      const go = () => {
+        if (done) return;
+        done = true;
+        const frame = linkTarget === "_top" ? top : linkTarget === "_parent" ? win.parent : null;
+        (frame ?? win).location.href = href;
+      };
+      void c.sent.then(go);
+      setTimeout(go, LINK_WAIT_MS);
+    });
   };
 
   const start = (startOptions?: StartOptions) => {

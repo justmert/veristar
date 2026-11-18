@@ -88,6 +88,11 @@ here, before they take effect, as the processing terms require
   `pnpm --filter ./apps/console dev` signs in. CONTRIBUTING.md lists every step from a
   fresh clone, including `CONTROLPLANE_URL`, which the console dev server requires. Point
   the dev GitHub OAuth App's callback at `http://localhost:5173/api/auth/github/callback`.
+- Tracker 1.3.2 is the release the console recommends: it counts a redirecting
+  route once, counts the current page when consent is given after
+  single-page navigation, keeps tracked links of client-side routers
+  client-side and never holds a link for more than a second. Pin it in your
+  snippet to get these fixes ([Tracker releases](#tracker-releases)).
 - Terms of use `2026-11-18-draft.6`: SCF also receives, per verified
   contract, UTC day, function and kind of caller, the counts of successful
   and failed calls and of the distinct accounts that made them; the accounts
@@ -1067,6 +1072,28 @@ and pinned by its SRI hash, listed in
 [packages/tracker/releases/manifest.json](packages/tracker/releases/manifest.json).
 How to check a file against its release:
 [docs/security/verify-tracker.md](docs/security/verify-tracker.md).
+
+### Tracker 1.3.2 - 2026-11-18
+
+- A route that redirects at once (a navigation followed by another within
+  300 ms) counts as one pageview of the page the visitor lands on, with the
+  referrer of the first. 1.3.1 and earlier counted the landing page twice and
+  the intermediate route never.
+- `umami.start()` counts the page the visitor is on when consent is given,
+  also after single-page navigation before consent, and keeps the visit's
+  original referrer. In manual mode (`start({ automatic: false })`) every
+  `umami.track()` call names the current page. 1.3.1 and earlier reported the
+  page the tracker loaded on.
+- A tracked link (`<a data-umami-event>`) that a client-side router handles
+  stays a client-side navigation; 1.3.1 and earlier turned it into a full page
+  load. A plain same-tab link is held for its event only while no proof is
+  ready, and for at most one second, so a slow gateway never freezes links.
+  Download links and links into another window are left to the browser.
+- Nul characters in the page title or referrer are dropped instead of making
+  the gateway refuse the event.
+- Wire format version 1 is unchanged; the gateway needs no update beyond
+  serving the new file.
+- 10,202 bytes, 4,626 gzip (1.3.1: 9,694 and 4,385, +5.5% gzip).
 
 ### Tracker 1.3.1 - 2026-11-17
 

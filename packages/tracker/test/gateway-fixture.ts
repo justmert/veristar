@@ -30,6 +30,10 @@ export type Gateway = {
   // events one proof may carry, as PROOF_REPLAY_LIMIT on one gateway node.
   // past it the fixture answers 403 rejected_replay like the gateway
   replayLimit: number;
+  // while true, challenge requests get no answer until releaseChallenges(),
+  // like a gateway that is slow or unreachable
+  holdChallenges: boolean;
+  releaseChallenges: () => void;
   // extra routes, for example the sdk.js file or an html page
   files: Map<string, { type: string; body: string | Buffer }>;
   close: () => Promise<void>;
@@ -44,7 +48,17 @@ export function tagFor(w: string, iat: number, salt: string, bits: number): stri
 export async function startGateway(bits = 8): Promise<Gateway> {
   const requests: Recorded[] = [];
   const files = new Map<string, { type: string; body: string | Buffer }>();
-  const gw: Partial<Gateway> = { requests, files, bits, replayLimit: Number.POSITIVE_INFINITY };
+  const gw: Partial<Gateway> = {
+    requests,
+    files,
+    bits,
+    replayLimit: Number.POSITIVE_INFINITY,
+    holdChallenges: false,
+  };
+  const held: (() => void)[] = [];
+  gw.releaseChallenges = () => {
+    for (const answer of held.splice(0)) answer();
+  };
   const uses = new Map<string, number>();
   const server: Server = createServer((req, res) => {
     const chunks: Buffer[] = [];
@@ -60,13 +74,17 @@ export async function startGateway(bits = 8): Promise<Gateway> {
       requests.push(recorded);
       const cors = { "access-control-allow-origin": "*" };
       if (req.method === "GET" && url.pathname === "/v1/c") {
-        const w = url.searchParams.get("w") ?? "";
-        const iat = Math.floor(Date.now() / 1000);
-        const salt = randomBytes(16).toString("hex");
-        const b = gw.bits as number;
-        const challenge: Challenge = { w, iat, salt, bits: b, tag: tagFor(w, iat, salt, b) };
-        res.writeHead(200, { ...cors, "content-type": "application/json" });
-        res.end(JSON.stringify(challenge));
+        const answer = () => {
+          const w = url.searchParams.get("w") ?? "";
+          const iat = Math.floor(Date.now() / 1000);
+          const salt = randomBytes(16).toString("hex");
+          const b = gw.bits as number;
+          const challenge: Challenge = { w, iat, salt, bits: b, tag: tagFor(w, iat, salt, b) };
+          res.writeHead(200, { ...cors, "content-type": "application/json" });
+          res.end(JSON.stringify(challenge));
+        };
+        if (gw.holdChallenges) held.push(answer);
+        else answer();
         return;
       }
       if (req.method === "POST" && url.pathname === "/v1/e") {

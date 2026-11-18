@@ -22,7 +22,10 @@ Add `data-auto-track="false"` to the tag from the console:
 With it, `sdk.js` loads and installs `window.umami`, but sends nothing, fetches no challenge and
 reads no browser storage. When the visitor agrees, your code calls `umami.start()`. That sends the
 pageview of the current page and from then on counts route changes and `data-umami-event` clicks,
-exactly as the tracker does without the attribute. Calling `start()` again does nothing.
+exactly as the tracker does without the attribute. Calling `start()` again does nothing. From
+tracker 1.3.2, the current page is the one the visitor is on when they agree, also after
+single-page navigation while the banner was open, and the pageview keeps the visit's original
+referrer; 1.3.1 and earlier count the page the tracker loaded on.
 
 The tracker does not remember the choice; your site does, as it does for any other consent. On
 the next page load, call `umami.start()` again as soon as you know the visitor agreed earlier.
