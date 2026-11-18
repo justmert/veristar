@@ -137,15 +137,15 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
       <PageHeader
         title={t.name}
         meta={<StatusBadge kind="project" status={t.status} operator />}
-        description={
-          <>
-            <span className="font-mono text-fg-2">{t.slug}</span>. Enrolled{" "}
-            {formatDate(t.created_at)}
-            {t.created_by ? ` by ${t.created_by.display_name}` : ""}
-            {t.approved_by ? `, approved by ${t.approved_by.display_name}` : ""}. Status since{" "}
-            {formatDateTimeUtc(t.status_changed_at)}.
-          </>
-        }
+        details={[
+          { label: "Slug", value: <span className="font-mono">{t.slug}</span> },
+          {
+            label: "Enrolled",
+            value: `${formatDate(t.created_at)}${t.created_by ? ` by ${t.created_by.display_name}` : ""}`,
+          },
+          ...(t.approved_by ? [{ label: "Approved by", value: t.approved_by.display_name }] : []),
+          { label: "Status since", value: formatDateTimeUtc(t.status_changed_at) },
+        ]}
         secondary={<MoreActions detail={detail} />}
       />
 
