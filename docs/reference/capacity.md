@@ -144,7 +144,7 @@ one PostgreSQL 18.6 container, and one Umami 3.5.0 process per replayer node cap
 1, 2 or 3 replayers in the test process (128 workers and 900 in flight each, as the core role
 sets) start on a queued backlog of page views of visitors with 6 events each; each run checks
 that Umami holds every event exactly once. Every container and replayer ran on the same host,
-which another project loaded at the same time; the load average on 10 cores is given per run.
+which other work loaded at the same time; the load average on 10 cores is given per run.
 
 | Backlog | Replayer nodes | Rate | Delivered per node | Umami CPU per process (cores) | Mean send | Host load (1 min) |
 |---|---|---|---|---|---|---|
@@ -167,7 +167,7 @@ Reading:
   to three nodes in two of the three series; the
   exception is the second 12,000 series, where three nodes drained 531/s against two nodes'
   586/s while the mean send rose to 608 ms. In the runs with two and three nodes no Umami process
-  reached its cap and PostgreSQL used at most 0.27 cores, so on this host the limit was the time
+  reached its cap, and in those that recorded it PostgreSQL used at most 0.27 cores, so on this host the limit was the time
   of each send under the shared CPU, not either service. On production nodes each replayer and
   its Umami processes have their own node's CPUs.
 - The rates fall as the host load rises (417/s for one node at a load of 10, 238/s at 21 to 28),
