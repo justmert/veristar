@@ -5,6 +5,10 @@ packages:
   # the otel example apps are standalone projects a tenant can copy, each with
   # its own lockfile, so they stay out of the workspace
   - "!examples/otel-*"
+  # so are the docusaurus and vitepress examples: their dependency trees would
+  # otherwise change how peers of the console's packages resolve
+  - "!examples/docusaurus"
+  - "!examples/vitepress"
   - tests/*
 
 # pinned versions, referenced as "catalog:" so the workspace cannot drift to two versions

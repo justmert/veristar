@@ -155,6 +155,14 @@
       "reviewed": "2026-11-17",
       "decision": "no patched version exists (vulnerable <= 6.6.1). the only path is @creit.tech/stellar-wallets-kit > @hot-wallet/sdk > @near-wallet-selector/core > near-api-js > @near-js/crypto > secp256k1 > elliptic, installed for the console, the console e2e suite, the tracker's wallets kit adapter tests and the wallets kit example. the console imports only the kit's module api and its own list of wallet modules, never the hot or near connectors; apps/console/scripts/bundle-packages.mjs lists neither elliptic, secp256k1 nor any near package in the bundle. no shipped artifact runs the code.",
       "revisit": "a wallets kit release without the near connector, or an elliptic release with a fix"
+    },
+    {
+      "id": "GHSA-fc5q-39xc-vjpf",
+      "package": "picomatch 2.3.2, 4.0.7",
+      "severity": "high",
+      "reviewed": "2026-11-18",
+      "decision": "no patched version exists: the advisory covers every release through 4.0.7, which is the latest on npm, so neither an upgrade nor an override removes it. in pnpm-lock.yaml picomatch comes only from build and test tooling: vite, vitest, tinyglobby, fdir, unplugin and unplugin-utils, vue-router's build plugin, astro and @astrojs/internal-helpers, and anymatch through chokidar. in examples/docusaurus/package-lock.json and examples/vitepress/package-lock.json it comes from the docusaurus build (micromatch, anymatch) and vite. the console bundle (apps/console/scripts/bundle-packages.mjs), sdk.js, the tracker's npm package and the images built from this repository contain no picomatch. the denial of service needs an attacker to supply the glob pattern; these tools only match patterns from the repository's own configuration.",
+      "revisit": "a picomatch release with a fix"
     }
   ]
 }

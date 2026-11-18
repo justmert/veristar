@@ -1,0 +1,17 @@
+# one asset, native xlm, for sep-24 deposits and withdrawals
+items:
+  - id: stellar:native
+    distribution_account: GCFPEQDHU256ERITSHJS2CRAL2VTCEOWKTQX42AVSJR6IZF3XMYTHFCQ
+    significant_decimals: 7
+    sep24:
+      enabled: true
+      deposit:
+        enabled: true
+        min_amount: 0
+        max_amount: 10
+        methods: [SEPA]
+      withdraw:
+        enabled: true
+        min_amount: 0
+        max_amount: 10
+        methods: [bank_account]

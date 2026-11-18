@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"regexp"
+	"strconv"
 
 	"github.com/google/uuid"
 )
@@ -57,8 +59,56 @@ var (
 	countryRe = regexp.MustCompile(`^[A-Z]{2}$`)
 )
 
-// Subject is the WEB_EVENTS subject of the event.
-func (e *WebEvent) Subject() string { return "web.events." + e.SiteID }
+// Partitions is the fixed number of WEB_EVENTS partitions. every visitor's
+// events go to one partition, and each partition has one consumer and one
+// owner at a time, so the replayers of several nodes share the stream without
+// two of them handling one visitor. 32 splits the three core nodes 11, 11
+// and 10 (the most loaded node takes 34 % instead of an even 33 %), divides
+// evenly over 1, 2, 4 and 8 nodes, and keeps the cost per partition small:
+// each one is a replicated consumer and a lock renewed every 5 s. the count
+// is part of every subject, so changing it is a migration of its own.
+const Partitions = 32
+
+// Partition returns the partition of a visitor, 0 to Partitions-1. it is
+// fnv-1a over a domain prefix, the site id and the visitor token, stable
+// across processes, releases and restarts. the low bits of fnv-1a depend
+// only on the low bits of the input bytes, so the sum goes through the
+// murmur3 finalizer before the modulo. the prefix keeps it independent of
+// the replayer's umami process hash over the same two values, so the
+// partitions a node owns still spread its sends over every umami process.
+func Partition(siteID, vt string) int {
+	f := fnv.New64a()
+	_, _ = f.Write([]byte("partition\x00"))
+	_, _ = f.Write([]byte(siteID))
+	_, _ = f.Write([]byte{0})
+	_, _ = f.Write([]byte(vt))
+	h := f.Sum64()
+	h ^= h >> 33
+	h *= 0xff51afd7ed558ccd
+	h ^= h >> 33
+	h *= 0xc4ceb9fe1a85ec53
+	h ^= h >> 33
+	return int(h % Partitions)
+}
+
+// PartitionToken is the subject token of a partition: two digits, so the
+// subjects sort in partition order.
+func PartitionToken(p int) string {
+	if p < 10 {
+		return "0" + strconv.Itoa(p)
+	}
+	return strconv.Itoa(p)
+}
+
+// Subject is the WEB_EVENTS subject of the event:
+// web.events.<site id>.<partition>.
+func (e *WebEvent) Subject() string {
+	return "web.events." + e.SiteID + "." + PartitionToken(Partition(e.SiteID, e.VT))
+}
+
+// LegacySubject is the subject releases before the partitions published to,
+// web.events.<site id>. the replayer still drains it during an upgrade.
+func (e *WebEvent) LegacySubject() string { return "web.events." + e.SiteID }
 
 func canonicalUUID(s string) (uuid.UUID, bool) {
 	u, err := uuid.Parse(s)

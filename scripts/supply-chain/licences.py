@@ -12,7 +12,8 @@
         --console-bundle console-bundle.txt [--report report.json]
 
 every package trivy lists (go.mod, pnpm-lock.yaml, the example lockfiles,
-uv.lock, Cargo.lock, requirements.txt, the generated collector module) lands
+uv.lock, Cargo.lock, the java example's pom.xml, requirements.txt, the
+generated collector module) lands
 in exactly one of two sections, using docs/security/licence-policy.json:
 
 - shipped: go modules linked into a binary of a platform image (`go list
@@ -33,7 +34,7 @@ in exactly one of two sections, using docs/security/licence-policy.json:
   also fails, so the allowlist cannot go stale silently.
 
 a package without a licence on disk is looked up in its registry (npm, pypi,
-crates.io, deps.dev for go modules); a lookup that fails stops the scan. a package that cannot be
+crates.io, deps.dev for go modules and maven artifacts); a lookup that fails stops the scan. a package that cannot be
 placed in either section fails the scan.
 """
 
@@ -66,6 +67,10 @@ ALIASES = {
     "Apache License, Version 2.0": "Apache-2.0", "BSD": None, "MIT License": "MIT",
     "BSD License": None, "GPL-3.0": "GPL-3.0-only", "LGPL-3.0": "LGPL-3.0-only",
     "3-Clause BSD License": "BSD-3-Clause", "GPL-2.0": "GPL-2.0-only", "LGPL-2.1": "LGPL-2.1-only", "Python Software Foundation License": "Python-2.0",
+    # the deprecated spdx id of GPL-2.0-only WITH Classpath-exception-2.0, which
+    # trivy reports for a pom's "GPL2 w/ CPE" (jakarta ee apis). the exception
+    # only adds permissions, so it is read as its base licence
+    "GPL-2.0-with-classpath-exception": "GPL-2.0-only",
 }
 CLASSIFIERS = {
     "License :: OSI Approved :: MIT License": "MIT",
@@ -113,6 +118,11 @@ def registry_licence(kind, name, version):
         # one). deps.dev holds the spdx ids it read from the module zip
         mod = urllib.parse.quote(name, safe="")
         lics = fetch(f"https://api.deps.dev/v3/systems/go/packages/{mod}/versions/{version}").get("licenses") or []
+        return " AND ".join(lics) if lics else None
+    if kind == "pom":
+        # trivy names maven artifacts group:artifact, as deps.dev does
+        art = urllib.parse.quote(name, safe="")
+        lics = fetch(f"https://api.deps.dev/v3/systems/maven/packages/{art}/versions/{version}").get("licenses") or []
         return " AND ".join(lics) if lics else None
     return None
 

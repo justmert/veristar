@@ -30,8 +30,12 @@ type Settings struct {
 	// evenly over the umami processes. each visitor's events are still sent
 	// one at a time, in stream order.
 	Workers int
-	// MaxInFlight bounds the messages held between fetch and ack. it stays
-	// below the consumer's server-side max ack pending (1000 by default).
+	// MaxInFlight bounds the messages held between fetch and ack on this
+	// instance. it is shared evenly over the partitions the instance owns,
+	// with at least 128 per partition, so one blocked visitor never stops a
+	// partition; an instance that owns more than MaxInFlight/128 partitions
+	// can hold more than MaxInFlight in all. it stays below the server-side
+	// max ack pending of a consumer (1000 by default).
 	MaxInFlight int
 }
 

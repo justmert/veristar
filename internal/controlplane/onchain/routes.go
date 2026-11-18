@@ -111,6 +111,7 @@ func NewRoutes(s *tenants.Scope, h *chain.Horizon, r *chain.RPC, consoleOrigin s
 func (h *Routes) Routes(r chi.Router) {
 	p := "/tenants/{tenant_id}/onchain"
 	r.Method(http.MethodGet, p, httpx.HandlerFunc(h.view))
+	r.Method(http.MethodGet, p+"/ids/{chain_id}/functions", httpx.HandlerFunc(h.functions))
 	r.Method(http.MethodPost, p+"/ids", httpx.HandlerFunc(h.add))
 	r.Method(http.MethodDelete, p+"/ids/{chain_id}", httpx.HandlerFunc(h.remove))
 	r.Method(http.MethodPost, p+"/ids/{chain_id}/challenge", httpx.HandlerFunc(h.challenge))
@@ -187,6 +188,43 @@ func (h *Routes) view(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	httpx.WriteJSON(w, http.StatusOK, v)
+	return nil
+}
+
+// functions serves GET .../onchain/ids/{chain_id}/functions: one declared
+// id's calls per function, caller and day (contract 15.8). an id of
+// another tenant is 404.
+func (h *Routes) functions(w http.ResponseWriter, r *http.Request) error {
+	a, err := h.scope.Tenant(r, "tenant_id")
+	if err != nil {
+		return err
+	}
+	id, err := httpx.ParseID(chi.URLParam(r, "chain_id"))
+	if err != nil {
+		return err
+	}
+	now := h.now()
+	rg, err := ParseRange(r.URL.Query(), now, DefaultRangeDays, MaxRangeDays)
+	if err != nil {
+		return err
+	}
+	ctx := r.Context()
+	var out ContractFunctions
+	err = h.scope.InTenant(ctx, a, func(tx pgx.Tx) error {
+		v, ok, lerr := LoadFunctions(ctx, tx, a.TenantID, id, rg, utcDay(now))
+		if lerr != nil {
+			return lerr
+		}
+		if !ok {
+			return httpx.NotFound()
+		}
+		out = v
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
 	return nil
 }
 

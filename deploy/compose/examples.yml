@@ -91,6 +91,15 @@ services:
     ports: ["127.0.0.1:47204:8080"]
     depends_on: [tenant-backend, platform-standin]
 
+  otel-java-spring:
+    build: ../../examples/otel-java-spring
+    image: sa-otelapps/otel-java-spring:dev
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: otel-java-spring
+    ports: ["127.0.0.1:47205:8080"]
+    depends_on: [tenant-backend, platform-standin]
+
   # a tenant's own collector that fans out to both backends
   # (examples/otel-collector-fanout); tests/otelapps posts to it directly
   tenant-collector:

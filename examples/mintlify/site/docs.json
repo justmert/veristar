@@ -1,0 +1,9 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Mintlify example",
+  "colors": { "primary": "#0D9373" },
+  "navigation": {
+    "pages": ["index", "pricing", "docs/getting-started"]
+  }
+}

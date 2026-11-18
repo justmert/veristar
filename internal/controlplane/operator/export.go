@@ -46,6 +46,7 @@ func (e *Exports) Routes(r chi.Router) {
 	r.Method(http.MethodGet, "/api/projects.csv", httpx.HandlerFunc(e.apiProjects))
 	r.Method(http.MethodGet, "/web/compare.csv", httpx.HandlerFunc(e.webCompare))
 	r.Method(http.MethodGet, "/api/compare.csv", httpx.HandlerFunc(e.apiCompare))
+	r.Method(http.MethodGet, "/tenants/{tenant_id}/onchain/ids/{chain_id}/functions.csv", httpx.HandlerFunc(e.contractFunctions))
 }
 
 // listRequest reads rows and returns the request the list parser sees:
@@ -494,6 +495,57 @@ func (e *Exports) apiCompare(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if err := cw.Close(); err != nil {
+		panic(http.ErrAbortHandler)
+	}
+	return nil
+}
+
+// contractFunctions serves GET /tenants/{tenant_id}/onchain/ids/{chain_id}/functions.csv:
+// a declared contract's calls per function, caller and day, as the
+// tenant detail shows them.
+func (e *Exports) contractFunctions(w http.ResponseWriter, r *http.Request) error {
+	id, err := httpx.ParseID(chi.URLParam(r, "tenant_id"))
+	if err != nil {
+		return err
+	}
+	chainID, err := httpx.ParseID(chi.URLParam(r, "chain_id"))
+	if err != nil {
+		return err
+	}
+	now := e.g.now()
+	rg, err := onchain.ParseRange(r.URL.Query(), now, onchain.DefaultRangeDays, onchain.MaxRangeDays)
+	if err != nil {
+		return err
+	}
+	ctx := r.Context()
+	var c onchain.ContractFunctions
+	err = e.g.db.WithOperator(ctx, func(tx pgx.Tx) error {
+		if err := snapshot(ctx, tx); err != nil {
+			return err
+		}
+		if _, err := compareTenants(ctx, tx, []uuid.UUID{id}); err != nil {
+			return err
+		}
+		v, ok, lerr := onchain.LoadFunctions(ctx, tx, id, chainID, rg, utcDay(now))
+		if lerr != nil {
+			return lerr
+		}
+		if !ok {
+			return httpx.NotFound()
+		}
+		c = v
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	q := r.URL.Query()
+	q.Set("chain_id", chainID.String())
+	if err := e.auditExport(ctx, "contract_functions", q, exports.FunctionRows(c), []uuid.UUID{id}); err != nil {
+		return err
+	}
+	name := exports.FileName("veristar-functions", c.Strkey[:8], rg.From.Format(time.DateOnly), rg.To.Format(time.DateOnly))
+	if err := exports.WriteFunctions(w, name, c); err != nil {
 		panic(http.ErrAbortHandler)
 	}
 	return nil

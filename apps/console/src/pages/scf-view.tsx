@@ -12,6 +12,7 @@ import { type AppealContext, AppealLink } from "@/components/integrity";
 import { projectTabs } from "@/components/nav/nav-items";
 import { NavTabs } from "@/components/nav/nav-tabs";
 import { DayStrip } from "@/components/onchain";
+import { FunctionsTable, functionsDaysText } from "@/components/onchain-functions";
 import { Fact, PageHeader, Panel } from "@/components/panel";
 import { Pill, statusText } from "@/components/status";
 import { Button } from "@/components/ui/button";
@@ -355,6 +356,24 @@ function SCFRows({ v }: { v: SCFView }) {
                 missing: null,
               }))}
             />
+          </div>
+        </Panel>
+      ) : null}
+      {v.contract_functions.length ? (
+        <Panel
+          title="Contract calls"
+          description="Calls into each verified contract per function over the range, as the operator detail shows them."
+        >
+          <div className="flex flex-col gap-4">
+            {v.contract_functions.map((c) => (
+              <div key={c.strkey} className="flex flex-col gap-1.5" data-contract={c.strkey}>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <code className="min-w-0 break-all text-small text-fg">{c.strkey}</code>
+                  <span className="text-caption text-fg-3">{functionsDaysText(c.functions)}</span>
+                </div>
+                <FunctionsTable summary={c.functions} label={`Calls per function of ${c.strkey}`} />
+              </div>
+            ))}
           </div>
         </Panel>
       ) : null}

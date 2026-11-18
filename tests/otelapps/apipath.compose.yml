@@ -15,19 +15,24 @@ networks:
 
 # each runtime reads its trust store from its own variable: go and rust
 # (rustls native roots) SSL_CERT_FILE, node NODE_EXTRA_CA_CERTS, python's
-# requests REQUESTS_CA_BUNDLE. the go, python and rust sdks read
-# OTEL_RESOURCE_ATTRIBUTES; the node example disables resource detection.
+# requests REQUESTS_CA_BUNDLE. the java image's entrypoint adds every
+# /certificates/*.crt to the jvm trust store when USE_SYSTEM_CA_CERTS is set.
+# the go, python, rust and java sdks read OTEL_RESOURCE_ATTRIBUTES; the node
+# example disables resource detection.
 x-edge-app: &edge-app
   environment:
     SSL_CERT_FILE: /edge-ca/root.crt
     NODE_EXTRA_CA_CERTS: /edge-ca/root.crt
     REQUESTS_CA_BUNDLE: /edge-ca/root.crt
+    USE_SYSTEM_CA_CERTS: "1"
     OTEL_RESOURCE_ATTRIBUTES: ${APIPATH_FORGED:?set APIPATH_FORGED}
   volumes:
     - ${APIPATH_CA_DIR:?set APIPATH_CA_DIR}:/edge-ca:ro
+    - ${APIPATH_CA_DIR:?set APIPATH_CA_DIR}/root.crt:/certificates/edge-ca.crt:ro
 
 services:
   otel-node-express: *edge-app
   otel-go-nethttp: *edge-app
   otel-python-fastapi: *edge-app
   otel-rust-actix: *edge-app
+  otel-java-spring: *edge-app

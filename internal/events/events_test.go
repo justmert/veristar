@@ -1,8 +1,11 @@
 package events_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -250,8 +253,42 @@ func TestWebEventRoundTrip(t *testing.T) {
 	got, err := events.DecodeWebEvent(b)
 	require.NoError(t, err)
 	require.Equal(t, e, got)
-	require.Equal(t, "web.events."+siteID, got.Subject())
+	require.Equal(t, "web.events."+siteID+"."+events.PartitionToken(events.Partition(siteID, e.VT)), got.Subject())
+	require.Equal(t, "web.events."+siteID, got.LegacySubject())
 	require.NotContains(t, string(b), "ip")
+}
+
+// the partition is part of every queued event's subject, so it must not
+// change between releases: an event queued by one release is consumed by
+// the partition owner of the next.
+func TestPartitionIsStable(t *testing.T) {
+	for _, c := range []struct {
+		site, vt string
+		want     int
+	}{
+		{"0b6a1f3e-9c2d-4e8f-a1b2-c3d4e5f60718", strings.Repeat("ab", 32), 8},
+		{"0b6a1f3e-9c2d-4e8f-a1b2-c3d4e5f60718", strings.Repeat("0f", 32), 25},
+		{"0b6a1f3e-9c2d-4e8f-a1b2-c3d4e5f60718", strings.Repeat("cd", 32), 0},
+		{"7d1e2f30-4a5b-4c6d-8e9f-0a1b2c3d4e5f", strings.Repeat("ab", 32), 21},
+	} {
+		require.Equal(t, c.want, events.Partition(c.site, c.vt), "%s %s", c.site, c.vt)
+	}
+	require.Equal(t, "00", events.PartitionToken(0))
+	require.Equal(t, "07", events.PartitionToken(7))
+	require.Equal(t, "31", events.PartitionToken(events.Partitions-1))
+}
+
+// visitor tokens are uniform hmacs, so partitions fill evenly: with 64,000
+// visitors every partition is within 10 % of its 2,000.
+func TestPartitionSpreadsVisitors(t *testing.T) {
+	counts := make([]int, events.Partitions)
+	for i := range 64000 {
+		h := sha256.Sum256([]byte(strconv.Itoa(i)))
+		counts[events.Partition(siteID, hex.EncodeToString(h[:]))]++
+	}
+	for p, n := range counts {
+		require.InDelta(t, 2000, n, 200, "partition %d holds %d", p, n)
+	}
 }
 
 func TestWebEventRejects(t *testing.T) {

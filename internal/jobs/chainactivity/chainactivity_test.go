@@ -42,6 +42,8 @@ type ledgers struct {
 	horizonDown atomic.Bool
 	// envelopes of getTransaction by hash
 	envelopes map[string]string
+	// whole getTransaction answers by hash, with diagnostic events
+	records map[string]chain.TxRecord
 }
 
 func (l *ledgers) closeOf(seq int64) time.Time {
@@ -97,6 +99,9 @@ func (l *ledgers) rpc(w http.ResponseWriter, r *http.Request) {
 			if env, ok := l.envelopes[h]; ok {
 				res = map[string]any{"status": "SUCCESS", "txHash": h, "envelopeXdr": env}
 			}
+			if rec, ok := l.records[h]; ok {
+				res = map[string]any{"status": rec.Status, "txHash": h, "envelopeXdr": rec.EnvelopeXDR, "diagnosticEventsXdr": rec.Diagnostics}
+			}
 			out = append(out, map[string]any{"jsonrpc": "2.0", "id": q.ID, "result": res})
 		}
 		_ = json.NewEncoder(w).Encode(out)
@@ -120,9 +125,19 @@ func (l *ledgers) rpc(w http.ResponseWriter, r *http.Request) {
 		if v, ok := req.Params["startLedger"].(float64); ok {
 			start = int64(v)
 		}
+		// the events of the contracts the filter names
+		want := map[string]bool{}
+		if fs, ok := req.Params["filters"].([]any); ok {
+			for _, f := range fs {
+				ids, _ := f.(map[string]any)["contractIds"].([]any)
+				for _, id := range ids {
+					want[id.(string)] = true
+				}
+			}
+		}
 		page := []map[string]any{}
 		for _, e := range l.events {
-			if e["ledger"].(int64) >= start {
+			if e["ledger"].(int64) >= start && want[e["contractId"].(string)] {
 				page = append(page, e)
 			}
 		}

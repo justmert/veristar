@@ -36,7 +36,7 @@ v0.3.0 rollout").
      the tag runs the same build and gate, signs with the release key from the production SOPS
      file and attaches `release-images.json`
      ([../security/supply-chain.md](../security/supply-chain.md) section 2.1). Releases `v0.2.0`
-     to `v0.2.2` are key-mode workstation releases.
+     to `v0.2.2` and `v0.4.0` are key-mode workstation releases.
 
    Download `release-images.json` of the release. `infra/ansible/vars/signing.yml` sets the mode
    the deploy verifies, `keyless`. For a key-mode release, add
@@ -83,6 +83,64 @@ v0.3.0 rollout").
 4. **Verify** with [verification.md](verification.md), then watch the alerts for an hour.
 
 5. **Production:** the same command with `production-deploy`.
+
+## Upgrading to partitioned web events
+
+Web events are queued on `web.events.<site id>.<partition>`, one of 32 partitions chosen by a
+hash of the visitor token, and the replayer on every core node consumes a share of the
+partitions ([../architecture.md](../architecture.md), "Web event partitions"). Releases before
+it queue every event of a site on `web.events.<site id>` and consume it through one consumer,
+`replayer`. The rolling deploy of step 3 carries an environment from one layout to the other
+without losing an event or storing one twice:
+
+1. `deploy.yml` first installs the NATS permissions of the new release on every NATS server
+   (the play "Install the nats permissions of the new release"). They add the partition
+   consumers to the replayer's permissions and keep everything the running release uses, so
+   the gateways and replayers of the earlier release go on working.
+2. `bootstrap.yml` runs `platformctl nats apply`. It adds the partitioned subject next to the
+   legacy one on `WEB_EVENTS`, gives the legacy consumer the filter `web.events.*` so it no
+   longer overlaps the partitions, and creates the 32 partition consumers. Events already
+   queued stay on the legacy consumer. Expected log lines: `consumer WEB_EVENTS/replayer:
+   update [filter_subject]` and 32 creates of `WEB_EVENTS/replayer-p00` to `replayer-p31`.
+3. The core tier updates node by node. A new replayer takes the partitions assigned to its node
+   and, like a replayer of the earlier release, contends for the `replayer` lock, so exactly one
+   process drains the legacy consumer at a time. Gateways of the earlier release still queue on
+   the legacy subject during this step.
+4. The edge tier updates node by node. Each new gateway queues on the partitions. While events
+   wait on both kinds of subject, the replayer delivers an event only when no event of the
+   other kind with a lower stream sequence is left, so a visitor's events keep their order
+   across the two.
+5. After the deploy, once every gateway runs the new release, retire the legacy subject. On a
+   core node:
+
+   ```sh
+   docker run --rm --network veristar-core_default --env-file /etc/veristar/env/platformctl.env \
+     -v /etc/veristar/tls/ca:/etc/sa-tls:ro -e NATS_TLS_CA=/etc/sa-tls/ca.crt -e NATS_REPLICAS=3 \
+     -e NATS_URL=<the tls:// urls of the three nats servers, comma separated> \
+     <platformctl image of the release> nats retire-legacy-web --wait 10m
+   ```
+
+   It waits until the legacy consumer has delivered its last event, removes the subject
+   `web.events.*` from `WEB_EVENTS`, checks that no event slipped in before the removal, and
+   deletes the consumer `replayer`. Expected log line: `legacy web subject retired`. If events
+   are still queued after `--wait`, it stops with `the legacy web subject still holds events`
+   and changes nothing; run it again later. A later `nats apply` does not bring the legacy
+   subject or consumer back.
+
+Watch `replayer_partitions_owned` during the upgrade: the sum over the core nodes is 32 once
+every partition has an owner, and `ReplayerPartitionsUnowned` fires when it stays below that
+for 5 minutes.
+
+**Rollback.** Before step 5, the earlier release's `nats apply` (run by its bootstrap) takes the
+partitioned subject off `WEB_EVENTS` and the filter off the legacy consumer, and its gateways
+and replayer use the legacy subject again. Events that were queued on the partitions reach the
+earlier replayer through the unfiltered consumer, which moves them to `WEB_DLQ` with the reason
+`subject does not match the event's site id`. After deploying the partitioned release again,
+put them back with
+`platformctl dlq replay --queue web --reason "subject does not match"`, which sends each event to
+its partition ([../runbooks/queue-backlog-and-dlq.md](../runbooks/queue-backlog-and-dlq.md)).
+After step 5, a gateway of a release before the partitions cannot queue at all, because no
+stream holds `web.events.<site id>` any more.
 
 ## Database migrations
 

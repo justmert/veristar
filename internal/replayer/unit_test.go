@@ -186,7 +186,7 @@ func TestGateWakesOnlyTheTargetThatAnswered(t *testing.T) {
 	woke := make(chan int, 3)
 	for _, target := range []int{0, 1, noTarget} {
 		go func() {
-			if g.wait(ctx, time.Hour, target) {
+			if g.wait(ctx, nil, time.Hour, target) {
 				woke <- target
 			}
 		}()

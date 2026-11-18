@@ -255,6 +255,10 @@ services:
   replayer:
     <<: *defaults
     image: {{ platform_images.replayer }}
+    # on sigterm the replayer delivers what its partitions hold (up to 10 s)
+    # before it gives them back, so the next owner starts without waiting
+    # out the ack wait of 30 s
+    stop_grace_period: 30s
     depends_on:
       umami:
         condition: service_healthy

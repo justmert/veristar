@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 import { GATEWAY_ORIGIN, PORTS, SITES, TRACKER_VERSION } from "./sites.ts";
 
@@ -17,11 +18,18 @@ function siteServer(site: (typeof SITES)[number]) {
     PORT: String(site.port),
     HOST: "127.0.0.1",
   };
+  // a standalone npm example installs from its own lockfile first
+  const command = site.npmDir
+    ? "npm ci --no-audit --no-fund && npm run build && npm start"
+    : `pnpm --filter ${site.pkg} build && pnpm --filter ${site.pkg} start`;
   return {
-    command: `pnpm --filter ${site.pkg} build && pnpm --filter ${site.pkg} start`,
-    url: `http://127.0.0.1:${site.port}/`,
+    command,
+    ...(site.npmDir ? { cwd: join(import.meta.dirname, "..", "..", site.npmDir) } : {}),
+    url: `http://${site.listenHost ?? "127.0.0.1"}:${site.port}/`,
     env,
-    timeout: 180_000,
+    // an npm install with a full build, or mint dev fetching its renderer
+    // on the first run, takes longer than a workspace build
+    timeout: site.npmDir || site.key === "mintlify" ? 420_000 : 180_000,
     reuseExistingServer: false,
     stdout: "pipe" as const,
     stderr: "pipe" as const,
