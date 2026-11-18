@@ -118,7 +118,7 @@ function Hero() {
     <section className="hero">
       <div className="wrap">
         <h1 className="display">
-          <span className="ln">Usage you</span>
+          <span className="ln">Usage you</span>{" "}
           <span className="ln">
             can <em>prove.</em>
           </span>
@@ -351,8 +351,7 @@ function Trust() {
         </div>
         <div className="course-foot">
           <p className="small measure-text">
-            Held-back and rejected traffic never disappears. Both are shown next to the real
-            numbers.
+            Held-back and rejected traffic is counted. Both are shown next to the real numbers.
           </p>
           <TLink href={hrefs.docs("security/bot-and-inflation")}>Bot and inflation defences</TLink>
         </div>
@@ -397,8 +396,8 @@ function Trust() {
             </div>
             <h3 className="h3">Each project gets an integrity grade, with the reasons.</h3>
             <p className="small">
-              The project sees the same grade as SCF and can appeal it. The grade goes into every
-              signed report. A reviewer opens the link and checks the signature without an account.
+              You see the same grade as SCF and can appeal it. The grade goes into every signed
+              report. A reviewer opens the link and checks the signature without an account.
             </p>
             <TLink href={hrefs.docs("onboarding/signed-reports")}>How signed reports work</TLink>
           </div>
@@ -541,7 +540,7 @@ function Privacy() {
             </div>
           </div>
         </div>
-        <ul className="legend" aria-label="Key">
+        <ul className="legend">
           <li>
             <span className="sw-k" />
             Kept
@@ -841,7 +840,7 @@ function Targets() {
             <div className="site">
               <span className="site-k">Production</span>
               <b>Azure Denmark East</b>
-              <ul className="zone-list" aria-label="Three availability zones">
+              <ul className="zone-list">
                 <li>Zone 1</li>
                 <li>Zone 2</li>
                 <li>Zone 3</li>
@@ -849,7 +848,7 @@ function Targets() {
               <span className="small">Each zone runs ingestion and the core services.</span>
             </div>
             <div className="drills">
-              <span className="site-k">Drilled on production, 13 Nov 2026</span>
+              <span className="site-k">Drilled on production, 13 and 14 Nov 2026</span>
               <ul className="drill-list">
                 {drills.map((d) => (
                   <li key={d}>
@@ -883,7 +882,7 @@ function Handover() {
           <span>Current operator</span>
           <span>Community operator</span>
         </div>
-        <ol className="lanes" aria-label="What moves to the community operator">
+        <ol className="lanes">
           {handover.map((h) => (
             <li key={h.k} className="lane">
               <span className="item">
@@ -897,14 +896,14 @@ function Handover() {
           <div className="reveal">
             <b>Month 0</b>
             <span className="small">
-              The 12-month service window starts with the final tranche.
+              The 12-month service window starts when SCF approves the final development tranche.
             </span>
           </div>
           <div className="reveal">
             <b>Month 6 to 12</b>
             <span className="small">
-              SCF chooses the time. The new operator works beside the current one for at least four
-              weeks.
+              SCF chooses the time. The new operator works beside the current one for a shadow
+              period that SCF sets, four weeks proposed.
             </span>
           </div>
           <div className="reveal">
@@ -931,22 +930,32 @@ function Comparison() {
           em="Google Analytics?"
           lead="General tools measure one site for its owner. Veristar measures every Stellar project in the same way, for its team and for SCF."
         />
-        <div className="versus-wrap reveal">
+        <div
+          className="versus-wrap reveal"
+          role="region"
+          aria-label="Comparison table"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: the table scrolls sideways on a phone, so the keyboard must reach it
+          tabIndex={0}
+        >
           <div
             className="versus"
             role="table"
             aria-label="Veristar compared with Google Analytics, Plausible and self-hosted Umami"
           >
-            <span className="v-head v-q" role="columnheader" />
-            {versusCols.map((c) => (
-              <span key={c} className="v-head" role="columnheader">
-                {c}
+            <div className="v-row v-head-row" role="row">
+              <span className="v-head v-q" role="columnheader">
+                <span className="vh">Question</span>
               </span>
-            ))}
-            <span className="v-head v-us" role="columnheader">
-              <Mark />
-              Veristar
-            </span>
+              {versusCols.map((c) => (
+                <span key={c} className="v-head" role="columnheader">
+                  {c}
+                </span>
+              ))}
+              <span className="v-head v-us" role="columnheader">
+                <Mark />
+                Veristar
+              </span>
+            </div>
             {versus.map((r, ri) => (
               <div key={r.q} className="v-row" role="row">
                 <span className="v-q" role="rowheader">
@@ -1018,6 +1027,7 @@ function Faq() {
               <h3 className="qa-h">
                 <button
                   type="button"
+                  id={`faq-q-${i}`}
                   className="qa-q"
                   aria-expanded={open === i}
                   aria-controls={`faq-${i}`}
@@ -1027,7 +1037,7 @@ function Faq() {
                   <span className="plus" aria-hidden="true" />
                 </button>
               </h3>
-              <div className="qa-wrap" id={`faq-${i}`} role="region">
+              <div className="qa-wrap" id={`faq-${i}`} role="region" aria-labelledby={`faq-q-${i}`}>
                 <div className="qa-in">
                   <div className="qa-a">
                     <p>{f.a}</p>
@@ -1115,9 +1125,12 @@ export function Landing() {
     return startMotion(root.current, { arm: () => setArmed(true), fire: () => setArmed(false) });
   }, []);
   return (
-    <div className="vs" ref={root}>
+    <div className="vs" id="top" ref={root}>
+      <a className="skip" href="#content">
+        Skip to content
+      </a>
       <Nav />
-      <main id="top">
+      <main id="content">
         <Hero />
         <Problem />
         <HowItWorks />

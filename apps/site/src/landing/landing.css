@@ -1591,6 +1591,9 @@
 }
 .lane {
   position: relative;
+  /* the items slide by a share of the lane width, as a transform, so the
+     slide moves no layout */
+  container-type: inline-size;
   height: calc(var(--touch) + var(--space-4));
   border-bottom: var(--border) solid var(--color-line);
 }
@@ -1634,10 +1637,10 @@
 }
 @keyframes cross {
   from {
-    right: 62%;
+    translate: -62cqw 0;
   }
   to {
-    right: 0;
+    translate: 0 0;
   }
 }
 @supports (animation-timeline: view()) {
@@ -2112,13 +2115,13 @@
     background-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out);
 }
-.v-row:hover > span:not(.v-us) {
+.v-row:not(.v-head-row):hover > span:not(.v-us) {
   background: var(--color-ground-2);
 }
-.v-row:hover > .v-q {
+.v-row:not(.v-head-row):hover > .v-q {
   color: var(--color-accent-text);
 }
-.v-row:hover > .v-us {
+.v-row:not(.v-head-row):hover > .v-us {
   background: var(--color-accent-hover);
 }
 .switch {
@@ -2988,10 +2991,10 @@
   }
   @keyframes cross {
     from {
-      right: 40%;
+      translate: -40cqw 0;
     }
     to {
-      right: 0;
+      translate: 0 0;
     }
   }
   .score {
@@ -3033,4 +3036,21 @@ span.after-8 {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+/* the skip link: hidden until the keyboard reaches it, then shown above the nav */
+.vs .skip {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 30;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--color-ink);
+  color: var(--color-ground);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+  transform: translateY(calc(-100% - var(--space-4)));
+}
+.vs .skip:focus-visible {
+  transform: none;
 }
