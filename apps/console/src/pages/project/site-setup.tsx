@@ -293,8 +293,11 @@ export function Step({
   // null until the state is known; then whether the body is folded
   const [folded, setFolded] = useState<boolean | null>(settled ? done : null);
   if (folded === null && settled) setFolded(done);
-  // a step that is no longer done always shows what is left to do
-  const open = !(done && folded === true);
+  // a step that is no longer done always shows what is left to do. while
+  // its state is not known the body waits, so it never shows and then folds
+  // away under the person's hand
+  const known = folded !== null;
+  const open = known && !(done && folded === true);
   const titleId = useId();
   const bodyId = useId();
   return (
@@ -318,7 +321,7 @@ export function Step({
             <span className="sr-only">, {STATE_WORD[step.state]}</span>
           </h2>
           {step.optional ? <span className="text-caption text-fg-2">Optional</span> : null}
-          {done ? (
+          {done && known ? (
             <Button
               variant="ghost"
               size="xs"
@@ -341,6 +344,13 @@ export function Step({
         {description && open ? (
           <p className="max-w-prose text-small text-fg-2">{description}</p>
         ) : null}
+        {known ? null : (
+          <div role="status" aria-busy="true" className="flex flex-col gap-3">
+            <span className="sr-only">Loading the step</span>
+            <Skeleton className="h-8 w-2/3" />
+            <Skeleton className="h-32 w-full" />
+          </div>
+        )}
         <AnimatePresence initial={false}>
           {open ? (
             <motion.div key="body" id={bodyId} {...fade} className="flex min-w-0 flex-col gap-3">
