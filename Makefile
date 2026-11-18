@@ -171,8 +171,11 @@ gateway-up: dev-env
 		echo "gateway not ready on 127.0.0.1:9090/readyz" >&2; exit 1
 
 # gateway verification: real gateway image, nats, caddy and browsers
-# (tests/gateway, build tag gatewayit). needs docker, pnpm with the
-# playwright browsers, and DBIP_MMDB pointing at a fetched file (geo-fetch).
+# (tests/gateway, build tag gatewayit). needs docker, pnpm, and DBIP_MMDB
+# pointing at a fetched file (geo-fetch). the browser matrix runs its
+# browsers in the official playwright image (tests/fixtures/browserbox), so
+# host network changes cannot abort chromium navigations;
+# SA_E2E_BROWSERS=host runs them on the host for local debugging.
 gateway-it:
 	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags gatewayit -race -count=1 -timeout 60m -v ./tests/gateway/
 
@@ -217,9 +220,11 @@ isolation:
 # browsers on the example sites through the edge caddy, gateway, nats,
 # replayer and umami, all in containers the test owns (images from the
 # dev.yml digests), so umami, postgresql and replayers can be stopped and
-# killed without touching the dev stack. needs docker, node 26 with pnpm and
-# the playwright browsers, and the e2e fixture ports free. takes about an
-# hour: the second visit of the visit check waits out a 31 minute gap.
+# killed without touching the dev stack. needs docker, node 26 with pnpm, and
+# the e2e fixture ports free. the browsers run in the official playwright
+# image (tests/fixtures/browserbox), so host network changes cannot abort
+# chromium navigations; SA_E2E_BROWSERS=host runs them on the host. takes
+# about an hour: the second visit of the visit check waits out a 31 minute gap.
 .PHONY: webpath
 webpath:
 	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags webpath -count=1 -timeout 120m -v ./tests/webpath/
@@ -231,8 +236,9 @@ webpath:
 # real telemetry of the go example app. the control plane is built with the
 # oauthfixture tag; postgresql, nats, umami, the replayer, the gateway and
 # collector images, the metricswriter, a stock collector as the tenant's own
-# backend and the edge and app caddies run in containers the test owns. needs
-# docker, node 26 with pnpm and the playwright browsers. screenshots and, on
+# backend and the edge and app caddies run in containers the test owns, and
+# so do the browsers (tests/fixtures/browserbox; SA_E2E_BROWSERS=host runs
+# them on the host). needs docker and node 26 with pnpm. screenshots and, on
 # failure, container logs land in .scratch/console-e2e.
 # CONSOLE_E2E_ARGS passes extra playwright arguments (for example --grep).
 .PHONY: console-e2e
