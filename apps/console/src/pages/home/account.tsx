@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CircleCheck, CircleX, KeyRound, Wallet } from "lucide-react";
+import { KeyRound, Wallet } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
@@ -9,13 +9,17 @@ import { meQuery } from "@/api/queries";
 import type { Me } from "@/api/schemas";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { FormMessage } from "@/components/error-panel";
-import { TextField } from "@/components/form-field";
 import { GitHubMark } from "@/components/github-mark";
 import { Notice } from "@/components/notice";
-import { PageHeader, Panel } from "@/components/panel";
+import { OperatorPasskeys } from "@/components/operator-passkeys";
+import { PageHeader } from "@/components/page-header";
 import { PasskeyDialog } from "@/components/passkey-dialog";
+import { ErrorState } from "@/components/states";
 import { steppedUp } from "@/components/step-up";
+import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
 import { WalletPicker } from "@/components/wallet-picker";
 import { connectWallet, shortAddress, signTransaction } from "@/lib/stellar-wallet";
 import { queryClient } from "@/query-client";
@@ -27,13 +31,6 @@ function needsStepUp(err: unknown): boolean {
   return err instanceof ApiError && err.code === "step_up_required";
 }
 
-// the typed confirmation of an account deletion: the github login, or the
-// whole address of a wallet or passkey account without one, exactly, so a stray click
-// or a paste of something else cannot delete an account
-export function confirmsLogin(typed: string, login: string): boolean {
-  return typed.trim() === login;
-}
-
 // what the deletion dialog asks to type
 export function confirmationText(me: Me): string {
   return me.user.github_login ?? me.user.stellar_address ?? me.user.passkey_address ?? me.user.id;
@@ -41,17 +38,20 @@ export function confirmationText(me: Me): string {
 
 // failure codes of the github link flow (contract 4.1.8), sent back as
 // /account?link_error=<code>
-const LINK_ERRORS: Record<string, string> = {
+export const LINK_ERRORS: Record<string, string> = {
   identity_in_use:
     "That GitHub account signs in to another console account. Delete that account, or unlink GitHub there, first.",
   identity_already_linked: "This account already has a GitHub sign-in. Unlink it first.",
   state_mismatch:
     "The link expired, or you signed in to another account meanwhile. Start again from this page.",
-  access_denied: "GitHub linking was cancelled. Nothing changed.",
-  rate_limited: "Too many requests right now. Wait a few seconds and start again.",
+  access_denied: "You cancelled the link on GitHub. Nothing changed.",
+  rate_limited: "Too many requests. Wait a few seconds, then start again.",
   step_up_required:
     "This is an operator account. Confirm with your passkey on this page, then link GitHub again.",
 };
+
+export const LINK_ERROR_OTHER =
+  "GitHub was not linked. Try again. If it fails again, tell the operators.";
 
 // the projects that block a deletion (contract 4.1.6), empty for any other
 // outcome
@@ -59,18 +59,48 @@ export function blockingProjects(err: unknown): { id: string; name: string }[] {
   return err instanceof ApiError && err.code === "sole_owner" ? err.tenants : [];
 }
 
+type Method = "github" | "stellar" | "passkey";
+
+const METHOD_NAME: Record<Method, string> = {
+  github: "GitHub",
+  stellar: "Your Stellar wallet",
+  passkey: "Your passkey",
+};
+
+const HEADER = {
+  title: "Account",
+  description: "How you sign in to the console. Operators also manage their passkeys here.",
+};
+
 // the signed-in person's own account: the sign-in methods linked to it
-// (contract 4.1.8), and the deletion of the account (contract 4.1.6)
+// (contract 4.1.8), an operator's passkeys (5.15), and the deletion of the
+// account (4.1.6)
 export function AccountPage() {
   const me = useQuery(meQuery);
-  if (!me.data) return null;
+  if (me.isPending)
+    return (
+      <div className="flex flex-col gap-8">
+        <PageHeader {...HEADER} />
+        <div role="status" aria-busy="true" className="flex max-w-content flex-col gap-3">
+          <span className="sr-only">Loading your account</span>
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-(--vs-row) w-full" />
+          ))}
+        </div>
+      </div>
+    );
+  if (me.error)
+    return (
+      <div className="flex flex-col gap-8">
+        <PageHeader {...HEADER} />
+        <ErrorState error={me.error} onRetry={() => me.refetch()} />
+      </div>
+    );
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Account"
-        description="Your console account holds the sign-in methods below, your project memberships and your sessions."
-      />
+    <div className="flex max-w-content flex-col gap-8">
+      <PageHeader {...HEADER} />
       <SignInMethods me={me.data} />
+      {me.data.user.is_operator ? <OperatorPasskeys userName={me.data.user.display_name} /> : null}
       <DeleteAccount me={me.data} />
     </div>
   );
@@ -88,8 +118,8 @@ function MethodRow({
   action: ReactNode;
 }) {
   return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 first:pt-0 last:pb-0">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-selected text-fg-2 [&_svg]:size-4">
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line-subtle px-4 py-3 last:border-b-0">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-line-strong text-fg-2 [&_svg]:size-4">
         {icon}
       </span>
       <div className="flex min-w-0 flex-1 flex-col">
@@ -113,7 +143,7 @@ function OperatorStepUp() {
     return (
       <Notice
         tone="warning"
-        title="Register a passkey for the operator area first."
+        title="Add a passkey for the operator area first"
         actions={
           <Button asChild variant="outline" size="sm">
             <Link to="/operator">Open the operator area</Link>
@@ -121,20 +151,20 @@ function OperatorStepUp() {
         }
       >
         This is an operator account. Its sign-in methods change only after you confirm with a
-        passkey of the operator area.
+        passkey.
       </Notice>
     );
   return (
     <Notice
       tone="info"
-      title="Confirm with your passkey to change sign-in methods."
+      title="Confirm with your passkey to change sign-in methods"
       actions={
         <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
           Use your passkey
         </Button>
       }
     >
-      This is an operator account, so linking and unlinking need a recent passkey confirmation.
+      This is an operator account. Links and unlinks need a recent passkey confirmation.
       <PasskeyDialog
         open={open}
         onOpenChange={setOpen}
@@ -152,27 +182,58 @@ function OperatorStepUp() {
   );
 }
 
+function UnlinkButton({
+  method,
+  alone,
+  onClick,
+}: {
+  method: Method;
+  alone: boolean;
+  onClick: () => void;
+}) {
+  const button = (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={alone}
+      aria-describedby={alone ? "unlink-note" : undefined}
+      data-method={method}
+      onClick={onClick}
+      className="max-lg:h-(--vs-control-touch)"
+    >
+      Unlink
+    </Button>
+  );
+  if (!alone) return button;
+  return (
+    <Tooltip content="Link another method first.">
+      <span className="inline-flex">{button}</span>
+    </Tooltip>
+  );
+}
+
 function SignInMethods({ me }: { me: Me }) {
   const [params, setParams] = useSearchParams();
   const linkError = params.get("link_error");
   const linked = params.get("linked");
   const [picker, setPicker] = useState(false);
   const [passkey, setPasskey] = useState(false);
-  const [unlinking, setUnlinking] = useState<"github" | "stellar" | "passkey" | null>(null);
+  const [unlinking, setUnlinking] = useState<Method | null>(null);
   // the provider's client, so the refreshed account shows wherever it is read
   const qc = useQueryClient();
   const { github_login, github_id, stellar_address, passkey_address } = me.user;
   // a method can go while another one remains
-  const both =
-    [github_login, stellar_address, passkey_address].filter((m) => m !== null).length > 1;
+  const alone =
+    [github_login, stellar_address, passkey_address].filter((m) => m !== null).length <= 1;
 
   // the change that waits for a passkey confirmation, if any
   const [stepUp, setStepUp] = useState<"unlink" | "link" | null>(null);
 
   const unlink = useMutation({
     mutationFn: api.unlinkIdentity,
-    onSuccess: async () => {
+    onSuccess: async (_, method) => {
       setUnlinking(null);
+      toast.success(`${METHOD_NAME[method]} is unlinked.`);
       await qc.invalidateQueries({ queryKey: meQuery.queryKey });
     },
     onError: (err) => {
@@ -185,161 +246,149 @@ function SignInMethods({ me }: { me: Me }) {
   }
 
   return (
-    <Panel
-      title="Linked sign-in methods"
-      description="Each method signs in to this same account. Link a second one to keep access if you lose the first; an account always keeps at least one."
-    >
-      <div className="flex flex-col gap-4">
-        {both ? null : (
-          <p id="unlink-note" className="text-small text-fg-2">
-            Unlink is off while this is your only sign-in method. Link another method first.
-          </p>
-        )}
-        {linkError ? (
-          <p
-            role="alert"
-            className="flex items-start gap-2 rounded-md border border-critical-line bg-critical-soft px-2 py-2 text-small text-fg"
-          >
-            <CircleX aria-hidden className="mt-1 size-3.5 shrink-0 text-critical" />
-            {LINK_ERRORS[linkError] ??
-              "The service could not finish linking GitHub. Try again; if it keeps failing, report it to the operators."}
-          </p>
-        ) : null}
-        {linked === "github" ? (
-          <p
-            role="status"
-            className="flex items-start gap-2 rounded-md border border-line bg-raised px-2 py-2 text-small text-fg"
-          >
-            <CircleCheck aria-hidden className="mt-1 size-3.5 shrink-0 text-success" />
-            GitHub is linked. You can sign in with it from now on.
-          </p>
-        ) : null}
-        {me.user.is_operator ? <OperatorStepUp /> : null}
-        <ul className="flex flex-col divide-y divide-line" aria-label="Sign-in methods">
-          <MethodRow
-            icon={<GitHubMark className="size-4" />}
-            name="GitHub"
-            detail={
-              github_login !== null ? (
-                <>
-                  {github_login} <span className="font-mono tabular-nums">· id {github_id}</span>
-                </>
-              ) : (
-                "Not linked"
-              )
-            }
-            action={
-              github_login !== null ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!both}
-                  aria-describedby={both ? undefined : "unlink-note"}
-                  onClick={() => {
-                    unlink.reset();
-                    setUnlinking("github");
-                  }}
-                >
-                  Unlink
-                </Button>
-              ) : (
-                <Button asChild variant="outline" size="sm">
-                  <a href={linkGitHubUrl()} onClick={clearNotice}>
-                    Link GitHub
-                  </a>
-                </Button>
-              )
-            }
-          />
-          <MethodRow
-            icon={<Wallet aria-hidden />}
-            name="Stellar wallet"
-            detail={
-              stellar_address !== null ? (
-                <span className="font-mono" title={stellar_address}>
-                  {shortAddress(stellar_address)}
-                </span>
-              ) : (
-                "Not linked"
-              )
-            }
-            action={
-              stellar_address !== null ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!both}
-                  aria-describedby={both ? undefined : "unlink-note"}
-                  onClick={() => {
-                    unlink.reset();
-                    setUnlinking("stellar");
-                  }}
-                >
-                  Unlink
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    clearNotice();
-                    setPicker(true);
-                  }}
-                >
-                  Link a wallet
-                </Button>
-              )
-            }
-          />
-          <MethodRow
-            icon={<KeyRound aria-hidden />}
-            name="Passkey"
-            detail={
-              passkey_address !== null ? (
-                <span className="font-mono" title={passkey_address}>
-                  {shortAddress(passkey_address)}
-                </span>
-              ) : (
-                "Not linked"
-              )
-            }
-            action={
-              passkey_address !== null ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!both}
-                  aria-describedby={both ? undefined : "unlink-note"}
-                  onClick={() => {
-                    unlink.reset();
-                    setUnlinking("passkey");
-                  }}
-                >
-                  Unlink
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    clearNotice();
-                    setPasskey(true);
-                  }}
-                >
-                  Add a passkey
-                </Button>
-              )
-            }
-          />
-        </ul>
+    <section aria-labelledby="methods-h" className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 id="methods-h" className="text-title text-fg">
+          Sign-in methods
+        </h2>
+        <p className="max-w-prose text-small text-fg-2">
+          Each method signs in to this account. Link a second method, so you keep access if you lose
+          one.
+        </p>
       </div>
+      {linkError ? (
+        <Notice tone="critical" role="alert" title="GitHub was not linked">
+          {LINK_ERRORS[linkError] ?? LINK_ERROR_OTHER}
+        </Notice>
+      ) : null}
+      {linked === "github" ? (
+        <Notice tone="success" title="GitHub is linked.">
+          You can sign in with it now.
+        </Notice>
+      ) : null}
+      {me.user.is_operator ? <OperatorStepUp /> : null}
+      <ul
+        className="flex flex-col rounded-lg border border-line bg-raised"
+        aria-label="Sign-in methods"
+      >
+        <MethodRow
+          icon={<GitHubMark className="size-4" />}
+          name="GitHub"
+          detail={
+            github_login !== null ? (
+              <>
+                {github_login} <span className="font-mono tabular">· id {github_id}</span>
+              </>
+            ) : (
+              "Not linked"
+            )
+          }
+          action={
+            github_login !== null ? (
+              <UnlinkButton
+                method="github"
+                alone={alone}
+                onClick={() => {
+                  unlink.reset();
+                  setUnlinking("github");
+                }}
+              />
+            ) : (
+              <Button asChild variant="outline" size="sm" className="max-lg:h-(--vs-control-touch)">
+                <a href={linkGitHubUrl()} onClick={clearNotice}>
+                  Link GitHub
+                </a>
+              </Button>
+            )
+          }
+        />
+        <MethodRow
+          icon={<Wallet aria-hidden />}
+          name="Stellar wallet"
+          detail={
+            stellar_address !== null ? (
+              <span className="font-mono" title={stellar_address}>
+                {shortAddress(stellar_address)}
+              </span>
+            ) : (
+              "Not linked"
+            )
+          }
+          action={
+            stellar_address !== null ? (
+              <UnlinkButton
+                method="stellar"
+                alone={alone}
+                onClick={() => {
+                  unlink.reset();
+                  setUnlinking("stellar");
+                }}
+              />
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="max-lg:h-(--vs-control-touch)"
+                onClick={() => {
+                  clearNotice();
+                  setPicker(true);
+                }}
+              >
+                Link a wallet
+              </Button>
+            )
+          }
+        />
+        <MethodRow
+          icon={<KeyRound aria-hidden />}
+          name="Passkey"
+          detail={
+            passkey_address !== null ? (
+              <span className="font-mono" title={passkey_address}>
+                {shortAddress(passkey_address)}
+              </span>
+            ) : (
+              "Not linked"
+            )
+          }
+          action={
+            passkey_address !== null ? (
+              <UnlinkButton
+                method="passkey"
+                alone={alone}
+                onClick={() => {
+                  unlink.reset();
+                  setUnlinking("passkey");
+                }}
+              />
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="max-lg:h-(--vs-control-touch)"
+                onClick={() => {
+                  clearNotice();
+                  setPasskey(true);
+                }}
+              >
+                Add a passkey
+              </Button>
+            )
+          }
+        />
+      </ul>
+      {alone ? (
+        <p id="unlink-note" className="text-small text-fg-2">
+          Unlink is off while this is your only sign-in method. Link another method first.
+        </p>
+      ) : null}
 
       <PasskeyDialog
         open={passkey}
         onOpenChange={setPasskey}
         mode="link"
         title="Add a passkey"
-        description="Create a passkey for this account. It signs you in with Face ID, Touch ID, Windows Hello or a security key, and its key controls a soropass smart account on Stellar."
+        description="A passkey signs you in with Face ID, Touch ID, Windows Hello or a security key."
         userName={me.user.display_name}
         challenge={api.linkPasskeyChallenge}
         verify={async (answer) => {
@@ -353,6 +402,7 @@ function SignInMethods({ me }: { me: Me }) {
           }
           await qc.invalidateQueries({ queryKey: meQuery.queryKey });
           setPasskey(false);
+          toast.success("Your passkey is linked.");
         }}
       />
 
@@ -363,7 +413,7 @@ function SignInMethods({ me }: { me: Me }) {
         }}
         mode="confirm"
         title="Confirm it is you"
-        description="Your account holds operator access, so changing its sign-in methods needs a confirmation with your operator passkey."
+        description="This account has operator access. A change to its sign-in methods needs your operator passkey."
         userName=""
         challenge={() => operatorsApi.stepUpChallenge()}
         verify={async (answer) => {
@@ -379,7 +429,7 @@ function SignInMethods({ me }: { me: Me }) {
         open={picker}
         onOpenChange={setPicker}
         title="Link a Stellar wallet"
-        description="Your wallet signs a sign-in challenge for this console on the public network. It moves no funds and sends nothing to the network."
+        description="Your wallet signs a sign-in challenge for this console. It moves no funds and sends nothing to the network."
         purpose="transaction"
         onPick={async (wallet) => {
           const address = await connectWallet(wallet.id);
@@ -391,6 +441,7 @@ function SignInMethods({ me }: { me: Me }) {
           await api.linkWallet(signed);
           await qc.invalidateQueries({ queryKey: meQuery.queryKey });
           setPicker(false);
+          toast.success("Your wallet is linked.");
         }}
       />
 
@@ -408,10 +459,10 @@ function SignInMethods({ me }: { me: Me }) {
         }
         description={
           unlinking === "github"
-            ? "You can no longer sign in to this account with GitHub. Signing in with GitHub afterwards creates a new, empty account."
+            ? "You can no longer sign in to this account with GitHub. A later GitHub sign-in makes a new, empty account."
             : unlinking === "passkey"
-              ? "You can no longer sign in to this account with this passkey. To sign in with a passkey again, add a new one; the old passkey stays on your device until you delete it there."
-              : "You can no longer sign in to this account with this wallet. Signing in with it afterwards creates a new, empty account."
+              ? "You can no longer sign in to this account with this passkey. The passkey stays on your device until you delete it there."
+              : "You can no longer sign in to this account with this wallet. A later sign-in with it makes a new, empty account."
         }
         cancelLabel="Keep it"
         confirmLabel="Unlink"
@@ -422,7 +473,7 @@ function SignInMethods({ me }: { me: Me }) {
           if (unlinking) unlink.mutate(unlinking);
         }}
       />
-    </Panel>
+    </section>
   );
 }
 
@@ -430,7 +481,6 @@ function DeleteAccount({ me }: { me: Me }) {
   const navigate = useNavigate();
   const login = confirmationText(me);
   const [open, setOpen] = useState(false);
-  const [typed, setTyped] = useState("");
   const del = useMutation({
     mutationFn: api.deleteAccount,
     onSuccess: () => {
@@ -445,44 +495,47 @@ function DeleteAccount({ me }: { me: Me }) {
   const blocked = blockingProjects(del.error);
 
   return (
-    <Panel
-      title="Delete account"
-      description="Deletes your account and signs you out everywhere. This cannot be undone."
-      className="border-critical-line"
-    >
-      <div className="flex flex-col gap-4">
-        <ul className="flex list-disc flex-col gap-1 pl-5 text-body text-fg-2">
-          <li>
-            You leave every project you are a member of, and lose access to its web dashboards.
-          </li>
-          <li>Your sessions, AI access keys and AI client connections end.</li>
-          <li>
-            Open invites addressed to your GitHub account, your Stellar address or your passkey
-            account address are deleted.
-          </li>
-          <li>
-            Your GitHub id and login, your Stellar address and your passkey (its address, credential
-            id and public key) are removed from the account. The audit log keeps its entries, which
-            name you by an account id; see the privacy notice for what they hold.
-          </li>
-          <li>Signing in again later, with any method, creates a new, empty account.</li>
-        </ul>
+    <section aria-labelledby="danger-h" className="flex flex-col gap-4">
+      <h2 id="danger-h" className="text-title text-fg">
+        Danger zone
+      </h2>
+      <div className="flex flex-col gap-4 rounded-lg border border-critical-line bg-raised p-5 max-sm:p-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 max-w-prose flex-col gap-2">
+            <span className="text-body font-medium text-fg">Delete account</span>
+            <ul className="flex list-disc flex-col gap-1 pl-5 text-small text-fg-2">
+              <li>You leave all your projects and lose access to their dashboards.</li>
+              <li>Your sessions, AI access keys and AI connections end.</li>
+              <li>Open invites to your GitHub account, wallet or passkey are deleted.</li>
+              <li>
+                Your GitHub id, Stellar address and passkey are removed. The audit log keeps its
+                entries, which name only your account id.
+              </li>
+              <li>A later sign-in with any method makes a new, empty account.</li>
+            </ul>
+          </div>
+          <Button
+            variant="destructive"
+            className="max-lg:h-(--vs-control-touch)"
+            onClick={() => {
+              del.reset();
+              setOpen(true);
+            }}
+          >
+            Delete account
+          </Button>
+        </div>
 
         {blocked.length > 0 ? (
-          <div
-            role="alert"
-            className="flex animate-fade-in flex-col gap-2 rounded-md border border-critical-line bg-critical-soft px-3 py-2 text-small text-fg"
-          >
-            <p className="flex items-start gap-2">
-              <CircleX aria-hidden className="mt-1 size-3.5 shrink-0 text-critical" />
-              You are the only owner of{" "}
-              {blocked.length === 1 ? "this project" : `these ${blocked.length} projects`}. Make
-              another member an owner, or ask the operators to remove the project, then delete your
-              account.
+          <Notice tone="critical" role="alert" title="You are the only owner">
+            <p>
+              Make another member an owner of{" "}
+              {blocked.length === 1 ? "this project" : `these ${blocked.length} projects`}, or ask
+              the operators to remove it. Then delete your account.
             </p>
-            <ul className="flex flex-col gap-1 pl-5">
+            <ul className="mt-2 flex flex-col gap-1 pl-5">
               {blocked.map((t) => (
-                <li key={t.id}>
+                <li key={t.id} className="list-disc">
                   <Link
                     to={`/projects/${t.id}/members`}
                     className="rounded-sm text-fg underline decoration-line-strong underline-offset-2 transition-colors duration-(--vs-duration-press) hover:decoration-fg focus-ring"
@@ -492,50 +545,25 @@ function DeleteAccount({ me }: { me: Me }) {
                 </li>
               ))}
             </ul>
-          </div>
+          </Notice>
         ) : null}
         {!open && blocked.length === 0 ? <FormMessage error={del.error} /> : null}
-
-        <div>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              setTyped("");
-              del.reset();
-              setOpen(true);
-            }}
-          >
-            Delete account
-          </Button>
-        </div>
       </div>
 
       <ConfirmDialog
         open={open}
-        onOpenChange={(o) => {
-          setOpen(o);
-          if (!o) setTyped("");
-        }}
+        onOpenChange={setOpen}
         title="Delete your account?"
-        description={`Your account ${me.user.display_name} is deleted and you are signed out everywhere. This cannot be undone.`}
+        description={`The account ${me.user.display_name} is deleted and you are signed out everywhere. You cannot undo this.`}
         cancelLabel="Keep my account"
         confirmLabel="Delete account"
         pendingLabel="Deleting"
         pending={del.isPending}
         // a sole_owner refusal is shown on the page with its project links
         error={blocked.length > 0 ? null : del.error}
-        confirmDisabled={!confirmsLogin(typed, login)}
+        typed={{ value: login, label: `Type ${login} to confirm` }}
         onConfirm={() => del.mutate()}
-      >
-        <TextField
-          label={`Type ${login} to confirm`}
-          value={typed}
-          onChange={(e) => setTyped(e.target.value)}
-          autoComplete="off"
-          autoCapitalize="off"
-          spellCheck={false}
-        />
-      </ConfirmDialog>
-    </Panel>
+      />
+    </section>
   );
 }

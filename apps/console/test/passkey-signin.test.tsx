@@ -292,7 +292,7 @@ describe("passkey identities (contract 4.1.8, 4.2.5)", () => {
       { status: 200, body: linked },
     ]);
     const host = await renderRoutes([{ path: "/account", element: <AccountPage /> }], "/account");
-    await waitFor(() => expect(host.textContent).toContain("Linked sign-in methods"));
+    await waitFor(() => expect(host.textContent).toContain("Sign-in methods"));
     await click(byRole(host, "button", "Add a passkey"));
     await waitFor(() => expect(calls[1]?.url).toBe("/api/me/identities/passkey/challenge"));
     // linking offers creation only: a passkey the console knows belongs to
