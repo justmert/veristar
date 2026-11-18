@@ -216,6 +216,15 @@ isolation:
 	$(GO) test -race -count=1 -v ./internal/db/
 	$(GO) test -race -count=1 -run 'TestCaddyfilesNameNoUmami|TestAssembledConfigsReachNoUmami' ./deploy/caddy/
 
+# the browser matrix of tests/e2e (build tag e2ematrix): chromium, firefox,
+# webkit and firefox with gpc on every example site against the fixture
+# gateway. the browsers run in the official playwright image
+# (tests/fixtures/browserbox); SA_E2E_BROWSERS=host runs them on the host.
+# needs docker and node 26 with pnpm, and the fixture ports free.
+.PHONY: e2e-matrix
+e2e-matrix:
+	$(GO) test -tags e2ematrix -count=1 -timeout 60m -v ./tests/e2e/
+
 # end-to-end web path (tests/webpath, build tag webpath): real
 # browsers on the example sites through the edge caddy, gateway, nats,
 # replayer and umami, all in containers the test owns (images from the

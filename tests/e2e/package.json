@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "check": "tsc -p tsconfig.json",
-    "test": "playwright test",
+    "matrix": "playwright test",
     "fixture": "node fixture/main.ts",
     "redirect": "playwright test -c redirect/playwright.config.ts"
   },

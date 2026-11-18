@@ -114,7 +114,7 @@ func startBrowsersWith(t testing.TB, upstream string, runs []siteRun) *Browsers 
 	for _, p := range ports {
 		if c, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", p), 200*time.Millisecond); err == nil {
 			_ = c.Close()
-			t.Fatalf("port %d is in use; another e2e run (make gateway-it or pnpm test in tests/e2e) must finish first", p)
+			t.Fatalf("port %d is in use; another e2e run (make gateway-it or make e2e-matrix) must finish first", p)
 		}
 	}
 	dir := t.TempDir()

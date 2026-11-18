@@ -136,6 +136,13 @@ func (s *Stack) metrics(t testing.TB, websiteID, typ string, r umami.Range) map[
 	return out
 }
 
+// runStart is when the test binary started. every live read covers the utc
+// days from this day on: a run takes over an hour and may cross midnight, and
+// a range of the current day alone would then miss the events sent before
+// it. umami clamps each read to the website's reset time, so the wider range
+// never picks up an earlier scenario's events.
+var runStart = time.Now().UTC()
+
 // runRange is the range every live scenario reads: the utc days of the run
 // so far, up to an hour ahead (runWindow in days_test.go).
 func runRange() umami.Range {
