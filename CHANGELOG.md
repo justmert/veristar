@@ -110,6 +110,14 @@ here, before they take effect, as the processing terms require
   which Umami refused the same way, and refuses a site origin whose last
   label is a number but not an IPv4 address.
 
+- The disaster recovery runbook stops every Umami process before the import
+  (`umami` and `umami-2` and up). Stopping process 1 alone left a connection
+  to the `umami` database open, so `scripts/migrate.sh` could not drop it. The
+  import now follows the tunnelled sequence of the handover guide and compares
+  with `verify-migration` before the reconcile writes to the new cluster. The
+  security patch and incident runbooks stop every Umami process too, and
+  `tests/docs` refuses a runbook command that stops `umami` without `umami-2`.
+
 ### Upgrade notes
 
 - Web events move from one subject per site to 32 partitions. The rolling
