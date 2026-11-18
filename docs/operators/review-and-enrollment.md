@@ -40,8 +40,8 @@ The **Review queue** tab lists, oldest first:
   a subdomain of, or is a parent of the domain of a site of a removed project, even in `open`
   mode. This stops a removed project from coming back under a new name with the same domain.
 
-Open a project to see what it entered at enrollment, its members (GitHub logins, to contact
-them), its sites with their allowed origins, and its gateway outcomes for the last 24 full
+Open a project to see what it entered at enrollment, its members (GitHub login, Stellar address
+or passkey account address, and role, to contact them), its sites with their allowed origins, and its gateway outcomes for the last 24 full
 hours and the last 30 full days.
 
 ### Evidence shown for each site
