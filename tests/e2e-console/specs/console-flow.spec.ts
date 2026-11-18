@@ -34,6 +34,24 @@ test.describe.configure({ mode: "serial" });
 // to the utc day the counts are checked for
 test.use({ timezoneId: "UTC" });
 
+// the utc days of the run: a run takes long and may cross midnight, so every
+// read covers the days from the one the run began on, not today alone. the
+// site is new in this run, so the wider range holds no other events.
+const RUN_DAY = utcDay(new Date());
+
+function utcDay(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+// every utc day from the first day of the run through today
+function runDays(): string[] {
+  const days: string[] = [];
+  const end = utcDay(new Date());
+  for (let d = new Date(`${RUN_DAY}T00:00:00Z`); utcDay(d) <= end; d.setUTCDate(d.getUTCDate() + 1))
+    days.push(utcDay(d));
+  return days;
+}
+
 let tenant: Tenant;
 let site: Site;
 let tag = "";
@@ -262,16 +280,19 @@ test("the console's web dashboard shows the site's seven metrics for a selected 
   );
   await shot(page, "05-overview");
 
-  // the hours of today come from the engine as soon as the replayer
+  // the hours of the run's days come from the engine as soon as the replayer
   // delivered: 3 views by 2 visitors
   await waitWebReady(context, tenant.id, site.id);
-  const today = new Date().toISOString().slice(0, 10);
   type Hourly = { points: { pageviews: number; visitors: number }[] };
   await expect
     .poll(
       async () => {
-        const r = await webGet<Hourly>(context, tenant.id, `hourly?site=${site.id}&day=${today}`);
-        return r.body.points.reduce((a, p) => a + p.pageviews, 0);
+        let views = 0;
+        for (const day of runDays()) {
+          const r = await webGet<Hourly>(context, tenant.id, `hourly?site=${site.id}&day=${day}`);
+          views += r.body.points.reduce((a, p) => a + p.pageviews, 0);
+        }
+        return views;
       },
       { timeout: 120_000, intervals: [1000, 2000, 5000] },
     )
@@ -289,9 +310,15 @@ test("the console's web dashboard shows the site's seven metrics for a selected 
     bounce_rate: number | null;
   };
   type Summary = { current: { totals: Totals }; read_at: string | null; source: string };
+  const first = RUN_DAY;
   const summary = async () =>
-    (await webGet<Summary>(context, tenant.id, `summary?site=${site.id}&from=${today}&to=${today}`))
-      .body;
+    (
+      await webGet<Summary>(
+        context,
+        tenant.id,
+        `summary?site=${site.id}&from=${first}&to=${utcDay(new Date())}`,
+      )
+    ).body;
   let s = await summary();
   for (let attempt = 0; attempt < 6 && s.current.totals.pageviews !== 3; attempt++) {
     await restartJobs();
@@ -314,7 +341,7 @@ test("the console's web dashboard shows the site's seven metrics for a selected 
       await webGet<Breakdown>(
         context,
         tenant.id,
-        `breakdown?site=${site.id}&from=${today}&to=${today}&dimension=${d}`,
+        `breakdown?site=${site.id}&from=${first}&to=${utcDay(new Date())}&dimension=${d}`,
       )
     ).body;
   expect((await dim("referrer")).items.map((i) => i.key)).toContain(REFERRER_HOST);
@@ -329,11 +356,22 @@ test("the console's web dashboard shows the site's seven metrics for a selected 
 
   // the same numbers in the dashboard, reached from the overview's site row
   await openDashboard(page, tenant.id, site);
-  await page
-    .getByRole("radiogroup", { name: "Range" })
-    .getByRole("radio", { name: "Today" })
-    .click();
-  await expect(page).toHaveURL(/range=today/);
+  // the days of the run: today, or the custom range from the day the run
+  // began when it crossed midnight
+  const oneDay = first === utcDay(new Date());
+  if (oneDay) {
+    await page
+      .getByRole("radiogroup", { name: "Range" })
+      .getByRole("radio", { name: "Today" })
+      .click();
+    await expect(page).toHaveURL(/range=today/);
+  } else {
+    const last = utcDay(new Date());
+    await page.goto(
+      `${APP}/projects/${tenant.id}/web?range=custom&from=${first}&to=${last}&site=${site.id}`,
+    );
+    await expect(page).toHaveURL(new RegExp(`from=${first}&to=${last}`));
+  }
   const totals = page.getByRole("region", { name: "Totals" });
   for (const [label, value] of [
     ["Page views", "3"],
@@ -345,7 +383,7 @@ test("the console's web dashboard shows the site's seven metrics for a selected 
     await expect(totals.getByText(value, { exact: true }).first()).toBeVisible();
   }
   await expect(totals.getByText("Visit duration", { exact: true })).toBeVisible();
-  await expect(page.getByText("Page views per hour")).toBeVisible();
+  await expect(page.getByText(oneDay ? "Page views per hour" : "Page views per day")).toBeVisible();
   await expect(page.getByLabel("Right now")).toBeVisible();
   await shot(page, "06-dashboard-top");
 
@@ -386,6 +424,7 @@ test("the console's web dashboard shows the site's seven metrics for a selected 
   await page.getByLabel("To (UTC day)").fill("2026-01-01");
   await page.getByRole("button", { name: "Apply range" }).click();
   await expect(page.getByText("End on or after the start.")).toBeVisible();
+  const today = utcDay(new Date());
   await page.getByLabel("To (UTC day)").fill(today);
   await page.getByLabel("From (UTC day)").fill(today);
   await page.getByRole("button", { name: "Apply range" }).click();
