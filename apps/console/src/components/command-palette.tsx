@@ -7,6 +7,7 @@ import { stepUpQuery } from "@/api/operators";
 import { operatorTenantsQuery } from "@/api/queries";
 import type { Me } from "@/api/schemas";
 import { areaOf, HOME_NAV, OPERATOR_NAV, projectNav } from "@/components/nav/nav-items";
+import { useOperatorAdmin } from "@/components/nav/operator-role";
 import { Kbd } from "@/components/panel";
 import { Button } from "@/components/ui/button";
 
@@ -42,6 +43,8 @@ export function CommandPalette({
   const operator = me.user.is_operator;
   const stepUp = useQuery({ ...stepUpQuery, enabled: open && operator });
   const live = open && operator && stepUp.data?.stepped_up === true;
+  // alerts are for operator admins only
+  const admin = useOperatorAdmin(open) === true;
   const term = q.trim();
   const opList = useInfiniteQuery({
     ...operatorTenantsQuery({
@@ -86,7 +89,8 @@ export function CommandPalette({
     if (operator)
       for (const g of OPERATOR_NAV)
         for (const i of g.items)
-          out.push({ key: `o-${i.key}`, group: "Operator pages", label: i.label, to: i.to });
+          if (i.key !== "alerts" || admin)
+            out.push({ key: `o-${i.key}`, group: "Operator pages", label: i.label, to: i.to });
     for (const t of me.tenants)
       out.push({
         key: `t-${t.id}`,
@@ -112,7 +116,7 @@ export function CommandPalette({
         e.label.toLowerCase().includes(lower) ||
         (e.detail ?? "").toLowerCase().includes(lower),
     );
-  }, [pathname, me.tenants, operator, live, opList.data, term]);
+  }, [pathname, me.tenants, operator, admin, live, opList.data, term]);
 
   const at = Math.min(active, Math.max(0, entries.length - 1));
 
