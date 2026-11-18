@@ -12,7 +12,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 // last characters are ever shown.
 export function SecretPanel({
   value,
-  title,
+  noun,
+  name,
   description,
   onDone,
   doneLabel = "Done",
@@ -20,7 +21,10 @@ export function SecretPanel({
   children,
 }: {
   value: string;
-  title: ReactNode;
+  // what the secret is ("key", "token"): the heading reads "Copy your new
+  // key", with the name the person gave it as the line under it
+  noun: string;
+  name: string;
   description?: ReactNode;
   onDone?: () => void;
   doneLabel?: string;
@@ -42,7 +46,8 @@ export function SecretPanel({
           <KeyRound aria-hidden className="size-4" />
         </span>
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="text-body font-semibold text-fg">{title}</span>
+          <span className="text-body font-semibold text-fg">Copy your new {noun}</span>
+          <span className="text-small font-medium break-words text-fg">{name}</span>
           {description ? <span className="text-small text-fg-2">{description}</span> : null}
         </div>
       </div>

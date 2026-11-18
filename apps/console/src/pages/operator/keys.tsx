@@ -255,10 +255,7 @@ export function AccessKeysPage() {
         <CreateKeyForm
           tenants={tenants.data?.map((t) => ({ id: t.id, name: t.name })) ?? []}
           tenantsError={tenants.error}
-          onCreated={(c) => {
-            toast.success(`${c.key.name} is created. Copy it now.`);
-            setCreated(c);
-          }}
+          onCreated={setCreated}
         />
       )}
 
@@ -494,7 +491,8 @@ function CreatedKey({
     return (
       <SecretPanel
         value={k.key}
-        title={`Copy the key now: ${k.name}`}
+        noun="key"
+        name={k.name}
         description={`The service keeps only a hash, so it shows the key once. It reads ${
           k.tenant_id ? `the project ${tenantName ?? "you chose"}` : "every project"
         }. It expires ${formatDateTimeUtc(k.expires_at)}.`}
@@ -510,7 +508,8 @@ function CreatedKey({
   return (
     <SecretPanel
       value={k.key}
-      title={`Copy the key now: ${k.name}`}
+      noun="key"
+      name={k.name}
       description={`The service keeps only a hash, so it shows the key once. It expires ${
         k.expires_at ? formatDateTimeUtc(k.expires_at) : "never"
       }.`}
