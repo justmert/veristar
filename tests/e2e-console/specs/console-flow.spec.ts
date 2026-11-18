@@ -410,13 +410,18 @@ test("the console's web dashboard shows the site's seven metrics for a selected 
   await shot(page, "07-dashboard-panels");
 
   // a longer range is drawn per day from the aggregates, against the
-  // previous period
+  // previous period; when only the run's one day has data, the chart narrows
+  // to that day's hours instead of drawing six empty days
   await page
     .getByRole("radiogroup", { name: "Range" })
     .getByRole("radio", { name: "7 days" })
     .click();
   await expect(page).toHaveURL(/range=7/);
-  await expect(page.getByText("Page views per day")).toBeVisible();
+  await expect(
+    oneDay
+      ? page.getByRole("heading", { level: 2, name: /^Page views per hour, / })
+      : page.getByText("Page views per day"),
+  ).toBeVisible();
   // a custom range is checked before it is asked for
   await page
     .getByRole("radiogroup", { name: "Range" })
