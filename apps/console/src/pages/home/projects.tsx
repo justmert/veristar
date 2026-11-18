@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { ChevronRight, CircleAlert, FolderPlus, Plus } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { Link, redirect } from "react-router";
 import type { ApiFilters } from "@/api/endpoints";
 import { apiOverviewQuery, meQuery, sitesQuery } from "@/api/queries";
@@ -57,6 +57,20 @@ function EnrollButton() {
 export function ProjectsPage() {
   const me = useQuery(meQuery);
   const [q, setQ] = useState("");
+  // the cards whose numbers did not load, with how to load them again
+  const [failed, setFailed] = useState<Record<string, () => void>>({});
+  const onFailed = useCallback((id: string, retry: (() => void) | null) => {
+    setFailed((f) => {
+      if (retry === null) {
+        if (!(id in f)) return f;
+        const { [id]: _, ...rest } = f;
+        return rest;
+      }
+      if (f[id]) return f;
+      return { ...f, [id]: retry };
+    });
+  }, []);
+  const retries = Object.values(failed);
   const tenants = me.data?.tenants ?? [];
   const header = (
     <PageHeader
@@ -91,6 +105,29 @@ export function ProjectsPage() {
     <section className="flex flex-col gap-8">
       {header}
       <RemovedNotices removed={me.data.removed_tenants} />
+      {retries.length > 0 ? (
+        <Notice
+          tone="critical"
+          role="alert"
+          title="Numbers did not load"
+          actions={
+            <Button
+              variant="outline"
+              size="sm"
+              className="max-sm:h-(--vs-control-touch)"
+              onClick={() => {
+                for (const r of retries) r();
+              }}
+            >
+              Try again
+            </Button>
+          }
+        >
+          {retries.length === 1
+            ? "The numbers of one project did not load. Try again."
+            : `The numbers of ${formatCount(retries.length)} projects did not load. Try again.`}
+        </Notice>
+      ) : null}
 
       {tenants.length === 0 ? (
         <EmptyState
@@ -127,7 +164,7 @@ export function ProjectsPage() {
             <Stagger as="ul" className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
               {shown.map((t) => (
                 <StaggerItem as="li" key={t.id} className="flex min-w-0">
-                  <ProjectCard tenant={t} />
+                  <ProjectCard tenant={t} onFailed={onFailed} />
                 </StaggerItem>
               ))}
             </Stagger>
@@ -164,7 +201,13 @@ const NO_FILTERS: ApiFilters = { service: null, route: null, method: null };
 // one project as a card: who it is, what waits for it, and its last 30
 // days, read from the sources its own pages read (page views from the web
 // dashboard, requests from the api metrics), so the numbers agree
-function ProjectCard({ tenant: t }: { tenant: MeTenant }) {
+function ProjectCard({
+  tenant: t,
+  onFailed,
+}: {
+  tenant: MeTenant;
+  onFailed: (id: string, retry: (() => void) | null) => void;
+}) {
   const next = nextStep(t);
   const sites = useQuery(sitesQuery(t.id));
   const live = (sites.data ?? []).filter((s) => s.status !== "removed");
@@ -179,6 +222,22 @@ function ProjectCard({ tenant: t }: { tenant: MeTenant }) {
   const verified = live.filter((s) => s.verification === "verified").length;
   const views = web.data?.current.totals.pageviews ?? null;
   const requests = api.data?.current.summary.requests ?? null;
+  const anyError = sites.isError || web.isError || api.isError;
+  const { refetch: refetchSites } = sites;
+  const { refetch: refetchWeb } = web;
+  const { refetch: refetchApi } = api;
+  useEffect(() => {
+    onFailed(
+      t.id,
+      anyError
+        ? () => {
+            refetchSites();
+            if (hasSites) refetchWeb();
+            refetchApi();
+          }
+        : null,
+    );
+  }, [t.id, anyError, hasSites, onFailed, refetchSites, refetchWeb, refetchApi]);
 
   return (
     <Link
@@ -227,15 +286,21 @@ function ProjectCard({ tenant: t }: { tenant: MeTenant }) {
       <dl className="mt-auto grid grid-cols-3 border-t border-line-subtle">
         <Metric label="Sites" pending={sites.isPending}>
           {sites.isError ? (
-            <Missing reason="Did not load" />
+            <NotLoaded />
           ) : (
             <span className="flex flex-col">
               {formatCount(live.length)}
-              {hasSites ? (
-                <span className="font-sans text-caption font-normal text-fg-2">
-                  {formatCount(verified)} verified
-                </span>
-              ) : null}
+              {/* the line is kept on a card without sites, so every card
+                  in a row has the same height */}
+              <span
+                aria-hidden={!hasSites}
+                className={cn(
+                  "font-sans text-caption font-normal text-fg-2",
+                  !hasSites && "invisible",
+                )}
+              >
+                {formatCount(verified)} verified
+              </span>
             </span>
           )}
         </Metric>
@@ -244,7 +309,7 @@ function ProjectCard({ tenant: t }: { tenant: MeTenant }) {
           pending={sites.isPending || (hasSites && web.isPending)}
         >
           {sites.isError || web.isError ? (
-            <Missing reason="Did not load" />
+            <NotLoaded />
           ) : !hasSites ? (
             <Missing reason="No site yet" />
           ) : views === null ? (
@@ -254,14 +319,26 @@ function ProjectCard({ tenant: t }: { tenant: MeTenant }) {
           )}
         </Metric>
         <Metric label="API requests, 30 days" pending={api.isPending}>
-          {api.isError || requests === null ? (
-            <Missing reason="Did not load" />
+          {api.isError ? (
+            <NotLoaded />
+          ) : requests === null ? (
+            <Missing reason="No data in this range" />
           ) : (
             formatCount(requests)
           )}
         </Metric>
       </dl>
     </Link>
+  );
+}
+
+// a number that failed to load is an error, never the missing-value dash
+function NotLoaded() {
+  return (
+    <span className="inline-flex text-critical" title="Did not load">
+      <CircleAlert aria-hidden className="size-4" />
+      <span className="sr-only">Did not load</span>
+    </span>
   );
 }
 
