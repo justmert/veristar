@@ -265,6 +265,22 @@
   }
 }
 
+/* the same along a line: code that runs past its box fades out at the right
+   edge while more of the line lies beyond it */
+@utility scroll-fade-x {
+  animation: vs-scroll-fade-x linear both;
+  animation-timeline: scroll(self inline);
+}
+@keyframes vs-scroll-fade-x {
+  0%,
+  98% {
+    mask-image: linear-gradient(to right, var(--vs-fg) calc(100% - var(--vs-space-8)), transparent);
+  }
+  100% {
+    mask-image: none;
+  }
+}
+
 @utility hatch {
   background-image: repeating-linear-gradient(
     135deg,

@@ -174,7 +174,13 @@ export function ErrorState({
               Try again
             </Button>
           ) : null}
-          <CopyButton text={errorDetails(error)} label="Copy details" size="sm" variant="ghost" />
+          <CopyButton
+            text={errorDetails(error)}
+            label="Copy details"
+            visibleLabel="Copy details"
+            size="sm"
+            variant="ghost"
+          />
         </>
       }
     >
