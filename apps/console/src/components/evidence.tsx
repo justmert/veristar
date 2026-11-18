@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import type { StellarToml, Verification, VerifyMethod } from "@/api/schemas";
 import { Pill, type Tone } from "@/components/status";
 import { formatDate, formatDateTimeUtc } from "@/lib/format";
+import { Breakable } from "@/pages/project/breakable";
 
 // domain verification (contract 5.8) and the stellar.toml signal (5.12),
 // shown the same way to members on their sites and to operators in review.
@@ -220,7 +221,10 @@ export function StellarTomlSummary({
       <div className={cn("flex flex-col gap-1 text-small", className)}>
         {head}
         <p className="text-fg-2">
-          Not checked yet. It is fetched from <span className="break-all font-mono">{where}</span>{" "}
+          Not checked yet. It is fetched from{" "}
+          <span className="font-mono">
+            <Breakable text={where} />
+          </span>{" "}
           shortly after the site is added and once a day.
         </p>
       </div>
@@ -238,7 +242,11 @@ export function StellarTomlSummary({
         <EvidenceRow mark={found ? "ok" : "missing"} label="File" advice={tomlAdvice(toml.status)}>
           {TOML_STATUS[toml.status]}
           {toml.http_status !== null && !found ? ` (HTTP ${toml.http_status})` : ""}
-          {found ? null : <span className="block break-all font-mono text-fg-3">{where}</span>}
+          {found ? null : (
+            <span className="block font-mono text-fg-3">
+              <Breakable text={where} />
+            </span>
+          )}
         </EvidenceRow>
         {found ? (
           <>
