@@ -1,7 +1,7 @@
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import { MonitorSmartphone, Plus } from "lucide-react";
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { ApiError } from "@/api/client";
 import { api, type SiteInput, type SitePatch } from "@/api/endpoints";
 import { ingestDayQuery, ingestMonthQuery, keys, sitesQuery } from "@/api/queries";
@@ -201,12 +201,7 @@ export function AddSiteDialog({
 }) {
   const navigate = useNavigate();
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Add a site"
-      description="Add one site for each website. Its setup page comes next."
-    >
+    <Dialog open={open} onOpenChange={onOpenChange} title="Add a site">
       {open ? (
         <div className="pb-4">
           <AddSiteForm
@@ -436,25 +431,6 @@ export function SitesTable({
   const current = Math.min(page, pages - 1);
   const slice = shown.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
 
-  const nextColumn: Column<Row> = {
-    key: "next",
-    header: "Next",
-    // the next step is the card's action on a phone, never behind Details
-    action: true,
-    minWidth: "min-w-36",
-    cell: (r) => {
-      if (r.event === null) return null;
-      const a = nextAction(r.site, setupStatus(r.site, r.event));
-      return (
-        <Link
-          to={a.to}
-          className="relative z-(--vs-layer-raised) rounded-sm whitespace-nowrap text-fg underline decoration-line-strong underline-offset-4 transition-colors duration-(--vs-duration-press) ease-standard hover:decoration-fg focus-ring"
-        >
-          {a.label}
-        </Link>
-      );
-    },
-  };
   const columns: Column<Row>[] = [
     {
       key: "site",
@@ -509,12 +485,13 @@ export function SitesTable({
         if (r.monthFailed) return <Missing reason="Did not load" />;
         if (!t) return <Bone className="ml-auto h-3 w-10" />;
         const all = Object.values(t).reduce((a, b) => a + b, 0);
-        if (all === 0) return <Missing reason="No events in 30 days" />;
+        // a site with no event has no share: the cell stays empty, like the
+        // other cells of the table that hold nothing
+        if (all === 0) return null;
         return formatShareOf((t.quarantined ?? 0) + (t.bot ?? 0) + sumRejected(t), all);
       },
     },
   ];
-  if (nextStep) columns.push(nextColumn);
 
   return (
     <div className="flex flex-col gap-4">
@@ -544,6 +521,10 @@ export function SitesTable({
         rowLabel={(r) => r.site.name}
         rowHref={(r) => siteSetupPath(r.site)}
         rowProps={(r) => ({ "data-site": r.site.id })}
+        // the one inline action: the site's next setup step
+        rowNext={(r) =>
+          nextStep && r.event !== null ? nextAction(r.site, setupStatus(r.site, r.event)) : null
+        }
         sort={sort}
         onSort={(key) =>
           setSort((s) =>
@@ -590,7 +571,6 @@ export function SitesPage() {
   const rejected = tenant.status === "rejected";
   const suspended = tenant.status === "suspended";
   const sites = useQuery(sitesQuery(tenant.id));
-  const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
   const live = useMemo(
     () => (sites.data ?? []).filter((s) => s.status !== "removed"),
@@ -603,17 +583,16 @@ export function SitesPage() {
       ? { at: new Date(Math.min(...read)), cadence: "Event counts refresh every few minutes." }
       : null;
 
-  const add =
-    canChange && live.length > 0 ? (
-      <Button
-        variant={rejected ? "outline" : "default"}
-        onClick={() => setAdding(true)}
-        className="max-lg:h-(--vs-control-touch)"
-      >
-        <Plus aria-hidden />
-        Add site
-      </Button>
-    ) : null;
+  const add = canChange ? (
+    <Button
+      variant={rejected ? "outline" : "default"}
+      onClick={() => setAdding(true)}
+      className="max-lg:h-(--vs-control-touch)"
+    >
+      <Plus aria-hidden />
+      Add site
+    </Button>
+  ) : null;
 
   return (
     <div className="flex flex-col gap-8">
@@ -628,32 +607,10 @@ export function SitesPage() {
         />
       ) : live.length === 0 ? (
         canChange ? (
-          <section
-            aria-labelledby="first-site"
-            className="flex max-w-dialog flex-col gap-4 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
-          >
-            <div className="flex items-start gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-line-strong text-fg-2">
-                <MonitorSmartphone aria-hidden className="size-5" strokeWidth={1.75} />
-              </span>
-              <div className="flex flex-col gap-1">
-                <h2 id="first-site" className="text-title text-fg">
-                  Add your first site
-                </h2>
-                <p className="text-small text-fg-2">
-                  Name the website to measure. Its setup page shows the tag to install.
-                  {rejected ? " The site waits until operators approve the project." : ""}
-                </p>
-              </div>
-            </div>
-            <AddSiteForm
-              tenantId={tenant.id}
-              cancellable={false}
-              onDone={(site) => {
-                if (site) navigate(siteSetupPath(site));
-              }}
-            />
-          </section>
+          <EmptyState
+            icon={<MonitorSmartphone aria-hidden strokeWidth={1.75} />}
+            title="No site yet"
+          />
         ) : (
           <EmptyState
             icon={<MonitorSmartphone aria-hidden strokeWidth={1.75} />}

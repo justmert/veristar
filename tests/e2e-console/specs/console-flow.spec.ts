@@ -112,6 +112,8 @@ test("sign in, enroll, add a site and copy the snippet", async ({ browserName })
   tenant = (await api<Tenant>(context, "GET", `/api/tenants/${tenantId}`)).body;
   expect(tenant).toMatchObject({ name, status: "active", role: "owner" });
 
+  // a new project's sites page: the header's Add site opens the form
+  await page.getByRole("button", { name: "Add site" }).click();
   const form = page.getByRole("form", { name: "Add a site" });
   await form.getByLabel("Name").fill("Shop");
   await form.getByLabel("Domain").fill(TENANT_HOST);
