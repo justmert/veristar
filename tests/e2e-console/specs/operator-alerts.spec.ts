@@ -133,7 +133,7 @@ test("an operator sees firing alerts by severity, the badge and the critical ban
   );
   // the watchdog is the pipeline's heartbeat, never a listed alert
   await expect(page.locator('[data-alert="Watchdog"]')).toHaveCount(0);
-  await expect(page.getByText("The alert checks do not run")).toHaveCount(0);
+  await expect(page.getByText("The alert checks do not run", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/^Last checked \d\d:\d\d:\d\d UTC$/)).toBeVisible();
 
   const nav = page.getByRole("navigation", { name: "Operator" });
@@ -175,7 +175,7 @@ test("a missing watchdog shows the alerting pipeline as down, never all clear", 
   await send([], [WATCHDOG]);
   const page = op.page;
   await page.goto(alertsUrl);
-  await expect(page.getByText("The alert checks do not run")).toBeVisible();
+  await expect(page.getByText("The alert checks do not run", { exact: true })).toBeVisible();
   await expect(page.getByText("All clear", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/An alert can fire without showing here/).first()).toBeVisible();
   await page.screenshot({ path: join(shots, "pipeline-down.png"), fullPage: true });

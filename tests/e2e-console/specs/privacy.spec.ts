@@ -166,7 +166,9 @@ test("two visitors reach umami through the gateway", async ({ browser }) => {
 
 test("the privacy page erases one session by its id and leaves the other", async () => {
   const page = await privacyPage();
-  await expect(page.getByText("No erasure was requested yet.")).toBeVisible();
+  await expect(
+    page.getByRole("table", { name: "Request history" }).getByText("No erasure was requested yet."),
+  ).toBeVisible();
   await page.screenshot({ path: join(shots, "01-privacy.png"), fullPage: true });
 
   const form = page.getByRole("form", { name: "Request erasure" });
