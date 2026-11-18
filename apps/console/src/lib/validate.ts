@@ -19,7 +19,8 @@ export type FieldCode =
   | "invalid_role"
   | "duplicate"
   | "unknown_tracker_version"
-  | "invalid_value";
+  | "invalid_value"
+  | "unknown_scf_award";
 
 // text fields refuse control characters other than newline and tab
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point
@@ -193,6 +194,8 @@ export function fieldMessage(code: string): string {
       return "This tracker version does not exist.";
     case "invalid_value":
       return "Not one of the allowed values.";
+    case "unknown_scf_award":
+      return "This SCF award is not in the directory now. Search again and pick the award.";
     default:
       return `Rejected by the server (${code}).`;
   }
