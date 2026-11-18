@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ThemeChoice, useTheme } from "@veristar/brand/theme";
-import { KeyRound, Wallet } from "lucide-react";
+import { KeyRound, Trash2, Wallet } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
@@ -96,7 +96,11 @@ export function AccountPage() {
     return (
       <div className="flex flex-col gap-8">
         <PageHeader {...HEADER} />
-        <ErrorState error={me.error} onRetry={() => me.refetch()} />
+        <ErrorState
+          title="Your account did not load"
+          error={me.error}
+          onRetry={() => me.refetch()}
+        />
       </div>
     );
   return (
@@ -281,7 +285,7 @@ function SignInMethods({ me }: { me: Me }) {
           detail={
             github_login !== null ? (
               <>
-                {github_login} <span className="font-mono tabular">· id {github_id}</span>
+                {github_login} <span className="font-mono">· id {github_id}</span>
               </>
             ) : (
               "Not linked"
@@ -519,13 +523,14 @@ function DeleteAccount({ me }: { me: Me }) {
             </ul>
           </div>
           <Button
-            variant="destructive"
+            variant="destructive-outline"
             className="max-lg:h-(--vs-control-touch)"
             onClick={() => {
               del.reset();
               setOpen(true);
             }}
           >
+            <Trash2 aria-hidden />
             Delete account
           </Button>
         </div>

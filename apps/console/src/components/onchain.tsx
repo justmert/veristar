@@ -131,9 +131,7 @@ export function WeeklyActiveList({ weeks, label }: { weeks: OnchainWeek[]; label
                 </span>
               </>
             ) : (
-              <span className="font-mono text-title text-fg tabular">
-                {formatCount(w.active_accounts)}
-              </span>
+              <span className="text-title text-fg tabular">{formatCount(w.active_accounts)}</span>
             )}
           </li>
         );
@@ -160,7 +158,7 @@ export function LinkStatus({ view }: { view: OnchainView }) {
 export function IdTotals({ id }: { id: ChainId }) {
   return (
     <span className="text-small text-fg-2">
-      <span className="font-mono text-fg tabular">{formatCount(id.totals.operations)}</span>{" "}
+      <span className="text-fg tabular">{formatCount(id.totals.operations)}</span>{" "}
       {id.totals.operations === 1 ? "operation" : "operations"},{" "}
       {countOf(id.totals.transactions, "transaction")}, peak{" "}
       {countOf(id.totals.peak_counterparties, "counterparty", "counterparties")} a day
@@ -176,7 +174,7 @@ export function MissingDays({ id }: { id: ChainId }) {
     <ul className="flex flex-col gap-1 text-caption text-fg-2">
       {reasons.map((r) => (
         <li key={r.code} data-missing-reason={r.code}>
-          {countOf(r.days, "day")} without data: {missingText(r.code)}
+          {countOf(r.days, "day")} without data. {missingText(r.code)}
         </li>
       ))}
     </ul>

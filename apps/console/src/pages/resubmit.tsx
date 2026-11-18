@@ -123,7 +123,7 @@ export function ResubmitForm({ tenant }: { tenant: Tenant }) {
           </Button>
         }
       >
-        {tenant.status_reason ? `Reason given: ${tenant.status_reason}` : "No reason was given."}
+        {tenant.status_reason ? `Reason given: “${tenant.status_reason}”` : "No reason was given."}
       </Notice>
     );
 

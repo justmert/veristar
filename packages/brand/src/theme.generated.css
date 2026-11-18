@@ -51,6 +51,7 @@
   --color-critical-soft: var(--vs-critical-soft);
   --color-critical-line: var(--vs-critical-line);
   --color-critical-solid: var(--vs-critical-solid);
+  --color-critical-solid-hover: var(--vs-critical-solid-hover);
   --color-info: var(--vs-info);
   --color-series-1: var(--vs-series-1);
   --color-series-2: var(--vs-series-2);

@@ -117,7 +117,11 @@ export function WebPage() {
   if (sites.error)
     return (
       <Page header={header}>
-        <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
+        <ErrorState
+          title="The sites did not load"
+          error={sites.error}
+          onRetry={() => sites.refetch()}
+        />
       </Page>
     );
   if (listed.length === 0)
@@ -128,7 +132,7 @@ export function WebPage() {
           title="No sites yet"
           action={
             <Button asChild variant="outline">
-              <Link to={`/projects/${tenant.id}/sites`}>Add a site</Link>
+              <Link to={`/projects/${tenant.id}/sites`}>Add site</Link>
             </Button>
           }
         >
@@ -219,7 +223,11 @@ export function WebPage() {
       {summary.isPending ? (
         <WebSkeleton />
       ) : summary.error ? (
-        <ErrorState error={summary.error} onRetry={() => summary.refetch()} />
+        <ErrorState
+          title="The web numbers did not load"
+          error={summary.error}
+          onRetry={() => summary.refetch()}
+        />
       ) : (
         <Dashboard
           tenantId={tenant.id}
@@ -290,7 +298,7 @@ function Realtime({ tenantId, site }: { tenantId: string; site: string | null })
           <span className="text-small text-fg-2">Visitors right now did not load.</span>
         ) : (
           <span className="text-body text-fg-2">
-            <span className="font-mono text-title text-fg tabular" data-testid="web-active">
+            <span className="text-title text-fg tabular" data-testid="web-active">
               {formatCount(rt.data.visitors)}
             </span>{" "}
             {rt.data.visitors === 1 ? "visitor" : "visitors"} in the last 5 minutes
@@ -649,7 +657,7 @@ function NotCounted({
           {quarantined === null ? (
             <Missing reason="The totals did not load" />
           ) : (
-            <span className="font-mono text-fg tabular">{formatCount(quarantined)}</span>
+            <span className="text-fg tabular">{formatCount(quarantined)}</span>
           )}{" "}
           quarantined page views
           {share !== null && share > 0 ? `, ${formatPercent(share)} of all page views` : ""}
@@ -671,6 +679,7 @@ function NotCounted({
       ) : failed ? (
         <ErrorState
           compact
+          title="The outcome counts did not load"
           error={failed.error}
           onRetry={() => {
             for (const a of answers) if (a.error) a.refetch();
@@ -696,7 +705,7 @@ function NotCounted({
                     </Tooltip>
                     <span className="sr-only">. {o.definition}</span>
                   </dt>
-                  <dd className="font-mono text-small text-fg tabular">
+                  <dd className="text-small text-fg tabular">
                     {pending ? <Bone className="h-3 w-12" /> : formatCount(value(o.key))}
                   </dd>
                 </div>

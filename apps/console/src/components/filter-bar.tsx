@@ -111,7 +111,7 @@ export function FilterBar({
             <SlidersHorizontal aria-hidden />
             Filters
             {count > 0 ? (
-              <span className="rounded-full bg-selected px-2 font-mono text-caption text-fg tabular">
+              <span className="rounded-full bg-selected px-2 text-caption text-fg tabular">
                 {count}
                 <span className="sr-only"> active</span>
               </span>

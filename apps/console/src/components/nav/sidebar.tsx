@@ -8,6 +8,7 @@ import {
   BookOpen,
   Check,
   ChevronsUpDown,
+  CircleAlert,
   Ellipsis,
   FolderOpen,
   LogOut,
@@ -25,8 +26,9 @@ import { Link, useLocation, useNavigate } from "react-router";
 import type { TenantListQuery } from "@/api/endpoints";
 import { stepUpQuery } from "@/api/operators";
 import { operatorAlertsQuery, operatorTenantsQuery, tenantQuery } from "@/api/queries";
-import type { Me } from "@/api/schemas";
-import { StatusDot, statusEntry } from "@/components/status";
+import type { FiringAlert, Me } from "@/api/schemas";
+import { Avatar } from "@/components/avatar";
+import { CountBadge, StatusDot, statusEntry } from "@/components/status";
 import {
   Menu,
   MenuContent,
@@ -81,47 +83,51 @@ export function Sidebar({
   const projectId = area.kind === "project" ? area.id : null;
   return (
     <LayoutGroup id={group}>
-      <div className="flex h-full flex-col gap-4 overflow-y-auto px-3 py-4">
-        <Link
-          to="/"
-          onClick={onNavigate}
-          aria-label="Veristar, your projects"
-          className="flex items-center gap-2 self-start rounded-md px-2 py-1 text-fg focus-ring"
-        >
-          <Mark className="size-5" />
-          <span className="text-title">Veristar</span>
-        </Link>
+      {/* the brand and the switcher stay at the top and the account at the
+          bottom; only the page list between them scrolls */}
+      <div className="flex h-full flex-col gap-4 py-4">
+        <div className="flex shrink-0 flex-col gap-4 px-3">
+          <Link
+            to="/"
+            onClick={onNavigate}
+            aria-label="Veristar, your projects"
+            className="flex items-center gap-2 self-start rounded-md px-2 py-1 text-fg focus-ring"
+          >
+            <Mark className="size-5" />
+            <span className="text-title">Veristar</span>
+          </Link>
 
-        <ProjectSwitcher me={me} id={projectId} onNavigate={onNavigate} />
+          <ProjectSwitcher me={me} id={projectId} onNavigate={onNavigate} />
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3">
+          {projectId ? (
+            <Groups
+              label="Project"
+              groups={projectNav(projectId)}
+              rest={area.rest}
+              onNavigate={onNavigate}
+            />
+          ) : (
+            <nav aria-label="Console" className="flex flex-col gap-px">
+              {HOME_NAV.filter((i) => i.key === "projects").map((i) => (
+                <Item
+                  key={i.key}
+                  item={i}
+                  current={area.kind === "home" && i.match(area.rest)}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </nav>
+          )}
 
-        {projectId ? (
-          <Groups
-            label="Project"
-            groups={projectNav(projectId)}
-            rest={area.rest}
-            onNavigate={onNavigate}
-          />
-        ) : (
-          <nav aria-label="Console" className="flex flex-col gap-px">
-            {HOME_NAV.filter((i) => i.key === "projects").map((i) => (
-              <Item
-                key={i.key}
-                item={i}
-                current={area.kind === "home" && i.match(area.rest)}
-                onNavigate={onNavigate}
-              />
-            ))}
-          </nav>
-        )}
-
-        {me.user.is_operator ? (
-          <OperatorGroups
-            rest={area.kind === "operator" ? area.rest : null}
-            onNavigate={onNavigate}
-          />
-        ) : null}
-
-        <div className="mt-auto flex flex-col gap-px border-t border-line pt-3">
+          {me.user.is_operator ? (
+            <OperatorGroups
+              rest={area.kind === "operator" ? area.rest : null}
+              onNavigate={onNavigate}
+            />
+          ) : null}
+        </div>
+        <div className="mx-3 flex shrink-0 flex-col gap-px border-t border-line pt-3">
           {docs ? (
             <FooterLink href={docs} icon={<BookOpen aria-hidden />}>
               Docs
@@ -135,15 +141,14 @@ export function Sidebar({
           <FooterLink to="/terms" icon={<ScrollText aria-hidden />}>
             Terms
           </FooterLink>
-          <FooterLink
-            to="/account"
-            icon={<UserRound aria-hidden />}
-            current={area.kind === "home" && area.rest === "account"}
+          {/* one way to Account: the account menu, which also holds the
+              theme and sign out. it is marked current on the account page */}
+          <AccountMenu
+            me={me}
+            onSignOut={onSignOut}
             onNavigate={onNavigate}
-          >
-            Account
-          </FooterLink>
-          <AccountMenu me={me} onSignOut={onSignOut} onNavigate={onNavigate} />
+            current={area.kind === "home" && area.rest === "account"}
+          />
         </div>
       </div>
     </LayoutGroup>
@@ -154,10 +159,12 @@ function AccountMenu({
   me,
   onSignOut,
   onNavigate,
+  current,
 }: {
   me: Me;
   onSignOut: () => void;
   onNavigate?: () => void;
+  current?: boolean;
 }) {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -166,14 +173,13 @@ function AccountMenu({
       <MenuTrigger asChild>
         <button
           type="button"
-          className="mt-1 flex items-center gap-2 rounded-md px-2 py-2 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-selected max-lg:min-h-(--vs-control-touch)"
+          aria-current={current ? "page" : undefined}
+          className="mt-1 flex items-center gap-2 rounded-md px-2 py-2 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-selected aria-[current=page]:bg-selected max-lg:min-h-(--vs-control-touch)"
         >
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-line-strong text-caption font-semibold text-fg">
-            {me.user.display_name.slice(0, 2)}
-          </span>
+          <Avatar name={me.user.display_name} />
           <span className="min-w-0 flex-1 truncate text-small">{me.user.display_name}</span>
           <Ellipsis aria-hidden className="size-4 text-fg-3" />
-          <span className="sr-only">, account menu</span>
+          <span className="sr-only">, Account menu</span>
         </button>
       </MenuTrigger>
       <MenuContent side="top" align="start" className="w-(--radix-dropdown-menu-trigger-width)">
@@ -254,7 +260,9 @@ function ProjectSwitcher({
             {id ? name.slice(0, 1) : <FolderOpen aria-hidden className="size-4" />}
           </span>
           <span className="flex min-w-0 flex-col">
-            <span className="truncate text-body font-semibold">{name}</span>
+            <span className="truncate text-body font-semibold" title={name}>
+              {name}
+            </span>
             {word ? (
               <span className="flex items-center gap-1 text-caption font-normal text-fg-2">
                 <StatusDot tone={word.tone} />
@@ -266,7 +274,8 @@ function ProjectSwitcher({
           <span className="sr-only">, switch project</span>
         </button>
       </MenuTrigger>
-      <MenuContent className="w-(--radix-dropdown-menu-trigger-width) min-w-60">
+      {/* as wide as the switcher, so it never covers the sidebar's edge */}
+      <MenuContent className="w-(--radix-dropdown-menu-trigger-width)">
         {me.tenants.length >= SWITCHER_SEARCH_FROM ? (
           <div className="flex items-center gap-2 border-b border-line px-2 pb-1">
             <Search aria-hidden className="size-4 shrink-0 text-fg-3" />
@@ -281,11 +290,13 @@ function ProjectSwitcher({
             />
           </div>
         ) : null}
-        <MenuLabel>Your projects</MenuLabel>
+        <MenuLabel>My projects</MenuLabel>
         {shown.map((t) => (
           <MenuItem key={t.id} onSelect={() => go(`/projects/${t.id}`)}>
             <StatusDot tone={statusEntry({ kind: "project", status: t.status }).tone} />
-            <span className="min-w-0 flex-1 truncate">{t.name}</span>
+            <span className="min-w-0 flex-1 truncate" title={t.name}>
+              {t.name}
+            </span>
             {t.id === id ? <Check aria-hidden /> : null}
           </MenuItem>
         ))}
@@ -297,7 +308,7 @@ function ProjectSwitcher({
         <MenuSeparator />
         <MenuItem onSelect={() => go("/")}>
           <FolderOpen aria-hidden />
-          All projects
+          My projects
         </MenuItem>
         <MenuItem onSelect={() => go("/projects/new")}>
           <Plus aria-hidden />
@@ -351,8 +362,6 @@ function OperatorGroups({ rest, onNavigate }: { rest: string | null; onNavigate?
   const alerts = useQuery({ ...operatorAlertsQuery, enabled: live });
   const queue = useInfiniteQuery({ ...operatorTenantsQuery(REVIEW_QUEUE), enabled: live });
   const current = live && !alerts.error ? alerts.data : undefined;
-  const critical = current ? criticalCount(current.alerts) : 0;
-  const count = current?.alerts.length ?? 0;
   const failed = live && alerts.error !== null;
   const first = queue.data?.pages[0];
   const waiting = first ? first.items.length : 0;
@@ -366,52 +375,49 @@ function OperatorGroups({ rest, onNavigate }: { rest: string | null; onNavigate?
       badges={{
         review:
           waiting > 0 ? (
-            <Badge tone="neutral">
+            <CountBadge
+              tone="neutral"
+              label={`${waiting === 1 && !more ? "1 project waits" : `${formatCount(waiting)}${more ? " or more" : ""} projects wait`} for review`}
+            >
               {formatCount(waiting)}
               {more ? "+" : ""}
-              <span className="sr-only">
-                {waiting === 1 && !more ? " project waits" : " projects wait"} for review
-              </span>
-            </Badge>
+            </CountBadge>
           ) : null,
-        alerts:
-          failed || count > 0 ? (
-            <Badge tone={failed || critical > 0 ? "critical" : "warning"}>
-              {failed ? "!" : formatCount(count)}
-              <span className="sr-only">
-                {failed
-                  ? ", alert source unreachable"
-                  : count === 1
-                    ? " alert firing"
-                    : " alerts firing"}
-              </span>
-            </Badge>
-          ) : null,
+        alerts: failed ? (
+          <CountBadge tone="critical" label="The alert source did not answer">
+            <CircleAlert />
+          </CountBadge>
+        ) : current ? (
+          <AlertsBadge alerts={current.alerts} />
+        ) : null,
       }}
     />
   );
 }
 
-function Badge({
-  tone,
-  children,
-}: {
-  tone: "neutral" | "warning" | "critical";
-  children: ReactNode;
-}) {
+// the alerts count: the critical (paging) alerts while any fires, the same
+// number the alert line says; else every firing alert, in warning
+export function AlertsBadge({ alerts, className }: { alerts: FiringAlert[]; className?: string }) {
+  const critical = criticalCount(alerts);
+  if (critical > 0)
+    return (
+      <CountBadge
+        tone="critical"
+        className={className}
+        label={critical === 1 ? "1 critical alert firing" : `${critical} critical alerts firing`}
+      >
+        {formatCount(critical)}
+      </CountBadge>
+    );
+  if (alerts.length === 0) return null;
   return (
-    <span
-      className={cn(
-        "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 font-mono text-axis tabular",
-        tone === "critical"
-          ? "bg-critical-solid text-on-critical"
-          : tone === "warning"
-            ? "border border-warning-line text-warning"
-            : "bg-selected text-fg",
-      )}
+    <CountBadge
+      tone="warning"
+      className={className}
+      label={alerts.length === 1 ? "1 alert firing" : `${alerts.length} alerts firing`}
     >
-      {children}
-    </span>
+      {formatCount(alerts.length)}
+    </CountBadge>
   );
 }
 

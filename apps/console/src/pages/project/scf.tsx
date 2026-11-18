@@ -5,7 +5,7 @@
 // the rules met, the figures, and the reports.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, FileSignature, MoreHorizontal } from "lucide-react";
+import { Ban, Download, ExternalLink, FileSignature, MoreHorizontal } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import type { Kpi, KpiKey } from "@/api/cohorts";
 import { exportPaths, type SCFView, scfViewQuery } from "@/api/onchain";
@@ -261,8 +261,8 @@ function CohortPlace({ v }: { v: SCFView }) {
       />
       {hidden ? (
         <p className="text-caption text-fg-2" data-testid="percentile-hidden">
-          Percentiles show from a cohort of 5 projects. Yours has{" "}
-          {countOf(c.cohort_size, "project")}, so one project more or less moves them too far.
+          Percentiles show once a cohort has 5 projects. This cohort has{" "}
+          {countOf(c.cohort_size, "project")}. One project more or less moves them too far.
         </p>
       ) : null}
     </div>
@@ -392,7 +392,7 @@ function Figure({
           label
         )}
       </dt>
-      <dd className="min-w-0 font-mono text-body text-fg tabular">{children}</dd>
+      <dd className="min-w-0 text-body text-fg tabular">{children}</dd>
     </div>
   );
 }
@@ -680,7 +680,7 @@ export function SignedReports() {
           className="flex min-w-0 flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5"
         >
           <h3 className="text-title text-fg">Generate a report</h3>
-          <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+          <form onSubmit={submit} noValidate className="max-w-prose flex flex-col gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <DateField
                 label="From"
@@ -797,7 +797,11 @@ export function SignedReports() {
             revoke.reset();
           }
         }}
-        title="Revoke this link?"
+        title={
+          revoking
+            ? `Revoke the link to the report for ${formatDateRange(revoking.from, revoking.to)}?`
+            : "Revoke the report link?"
+        }
         description="People who open the link see that the report is not available. A downloaded JSON file keeps its valid signature. You cannot restore the link."
         confirmLabel="Revoke link"
         pendingLabel="Revoking"
@@ -878,6 +882,7 @@ function ReportRow({
                 </MenuItem>
                 <MenuSeparator />
                 <MenuItem tone="critical" onSelect={onRevoke}>
+                  <Ban aria-hidden />
                   Revoke link
                 </MenuItem>
               </MenuContent>

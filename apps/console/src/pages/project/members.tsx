@@ -1,12 +1,12 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { cn } from "@veristar/brand/cn";
-import { UserPlus } from "lucide-react";
+import { Ban, LogOut, UserMinus, UserPlus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useNavigate } from "react-router";
 import { ApiError } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys, membersQuery } from "@/api/queries";
 import type { AddMemberResult, Invite, Member, Members, Role } from "@/api/schemas";
+import { Avatar } from "@/components/avatar";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { type Column, DataTable } from "@/components/data-table";
 import { FormMessage } from "@/components/error-panel";
@@ -91,6 +91,12 @@ export function matchMembers(list: Member[], q: string): Member[] {
 // a person in a list: the github profile link of a github account, or the
 // short address of a wallet or passkey account without one, with the whole
 // address on hover
+// a member as the table names them: the github login with its @, else the
+// display name; a dialog title names them the same way
+function shownName(m: Member): string {
+  return m.github_login !== null ? `@${m.github_login}` : m.display_name;
+}
+
 function PersonName({
   githubLogin,
   address,
@@ -119,17 +125,7 @@ function PersonName({
 }
 
 function Initial({ login, dashed }: { login: string; dashed?: boolean }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-full text-caption font-semibold",
-        dashed ? "border border-dashed border-line-strong text-fg-2" : "bg-selected text-fg",
-      )}
-    >
-      {login.slice(0, 1).toUpperCase()}
-    </span>
-  );
+  return <Avatar name={login} dashed={dashed} />;
 }
 
 export function MembersPage() {
@@ -154,7 +150,11 @@ export function MembersPage() {
       {list.isPending ? (
         <MembersSkeleton />
       ) : list.error ? (
-        <ErrorState error={list.error} onRetry={() => list.refetch()} />
+        <ErrorState
+          title="The members did not load"
+          error={list.error}
+          onRetry={() => list.refetch()}
+        />
       ) : (
         <MembersBody
           tenantId={tenant.id}
@@ -294,7 +294,7 @@ function MembersBody({
         if (!(canManage || self) || lastOwner(m)) return null;
         return (
           <Button
-            variant="ghost"
+            variant="destructive-outline"
             size="sm"
             className="max-lg:h-(--vs-control-touch)"
             onClick={() => {
@@ -302,6 +302,7 @@ function MembersBody({
               setPending({ kind: "remove", member: m, self });
             }}
           >
+            {self ? <LogOut aria-hidden /> : <UserMinus aria-hidden />}
             {self ? "Leave" : "Remove"}
           </Button>
         );
@@ -386,7 +387,7 @@ function MembersBody({
             ? `Make ${p.member.display_name} ${p.role === "owner" ? "an owner" : "a member"}?`
             : p?.self
               ? `Leave ${tenantName}?`
-              : `Remove ${p?.member.display_name ?? ""}?`
+              : `Remove ${p ? shownName(p.member) : ""}?`
         }
         description={
           p?.kind === "role"
@@ -547,7 +548,7 @@ function InviteRow({
       </div>
       {canManage ? (
         <Button
-          variant="ghost"
+          variant="destructive-outline"
           size="sm"
           className="max-lg:h-(--vs-control-touch)"
           onClick={() => {
@@ -555,6 +556,7 @@ function InviteRow({
             setOpen(true);
           }}
         >
+          <Ban aria-hidden />
           Revoke
         </Button>
       ) : null}

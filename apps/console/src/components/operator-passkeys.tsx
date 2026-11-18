@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { KeyRound } from "lucide-react";
+import { KeyRound, Trash2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { ApiError } from "@/api/client";
 import { operatorKeys, operatorsApi, type Passkey, passkeysQuery } from "@/api/operators";
@@ -95,6 +95,7 @@ export function OperatorPasskeys({ userName }: { userName: string }) {
         ) : list.error ? (
           <div className="p-4">
             <ErrorState
+              title="Your passkeys did not load"
               error={list.error}
               onRetry={() => list.refetch()}
               compact
@@ -132,13 +133,14 @@ export function OperatorPasskeys({ userName }: { userName: string }) {
                 </span>
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="destructive-outline"
                   className="max-lg:h-(--vs-control-touch)"
                   onClick={() => {
                     del.reset();
                     setDeleting(p);
                   }}
                 >
+                  <Trash2 aria-hidden />
                   Delete
                 </Button>
               </li>
@@ -197,7 +199,7 @@ export function OperatorPasskeys({ userName }: { userName: string }) {
             del.reset();
           }
         }}
-        title={`Delete ${deleting?.name ?? "the passkey"}?`}
+        title={deleting ? `Delete the passkey “${deleting.name}”?` : "Delete the passkey?"}
         description="This passkey no longer opens the operator area. Delete it from your device too."
         confirmLabel="Delete passkey"
         pendingLabel="Deleting"

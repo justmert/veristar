@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Download, ListChecks, MoreHorizontal, Plus } from "lucide-react";
+import { Download, ListChecks, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
@@ -306,7 +306,7 @@ export function RulesPage() {
             remove.reset();
           }
         }}
-        title={`Delete ${deleting?.name ?? "the rule"}?`}
+        title={deleting ? `Delete the rule “${deleting.name}”?` : "Delete the rule?"}
         description="The rule goes away for every operator, the machine API and the AI tools. The audit log keeps its definition."
         confirmLabel="Delete rule"
         pendingLabel="Deleting"
@@ -344,6 +344,7 @@ function RowMenu({
         <MenuContent align="end">
           <MenuItem onSelect={onEdit}>Edit rule</MenuItem>
           <MenuItem tone="critical" onSelect={onDelete}>
+            <Trash2 aria-hidden />
             Delete rule
           </MenuItem>
         </MenuContent>
@@ -446,7 +447,12 @@ function RuleEditor({
       <h2 id="rule-editor-h" className="text-title text-fg">
         {title}
       </h2>
-      <form onSubmit={submit} noValidate aria-label={title} className="flex flex-col gap-4">
+      <form
+        onSubmit={submit}
+        noValidate
+        aria-label={title}
+        className="max-w-prose flex flex-col gap-4"
+      >
         <TextField
           label="Name"
           value={form.name}

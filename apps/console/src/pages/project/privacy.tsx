@@ -156,7 +156,11 @@ export function PrivacyPage() {
       {sites.isPending ? (
         <PrivacySkeleton />
       ) : sites.error ? (
-        <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
+        <ErrorState
+          title="The sites did not load"
+          error={sites.error}
+          onRetry={() => sites.refetch()}
+        />
       ) : (
         <PrivacyBody tenantId={tenant.id} isOwner={isOwner} all={sites.data} />
       )}
@@ -304,7 +308,7 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
         autoComplete="off"
         onSubmit={submit}
         aria-label="Request erasure"
-        className="flex min-w-0 flex-col gap-6 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
+        className="max-w-prose flex min-w-0 flex-col gap-6 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
       >
         <div className="max-w-sm">
           <SelectField
@@ -409,7 +413,11 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
         </motion.div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" variant="destructive" className="max-lg:h-(--vs-control-touch)">
+          <Button
+            type="submit"
+            variant="destructive-outline"
+            className="max-lg:h-(--vs-control-touch)"
+          >
             <Eraser aria-hidden />
             {values.kind === "site_reset" ? "Reset site data" : "Request erasure"}
           </Button>
@@ -465,7 +473,15 @@ function LastRequest({
     if (status && status !== "running")
       void queryClient.invalidateQueries({ queryKey: keys.erasure(tenantId) });
   }, [status, tenantId]);
-  if (q.error) return <ErrorState error={q.error} onRetry={() => q.refetch()} compact />;
+  if (q.error)
+    return (
+      <ErrorState
+        title="The erasure request did not load"
+        error={q.error}
+        onRetry={() => q.refetch()}
+        compact
+      />
+    );
   if (!q.data)
     return (
       <div role="status" aria-busy="true">
@@ -627,7 +643,7 @@ function History({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
         error={list.error}
         onRetry={() => list.refetch()}
         loadingRows={3}
-        empty={{ title: "No erasure was requested yet." }}
+        empty={{ title: "No erasure requested yet" }}
         footer={{
           kind: "more",
           hasMore: list.hasNextPage,
@@ -731,7 +747,12 @@ export function SessionFinder({
           <Bone className="h-8 w-full" />
         </div>
       ) : q.error ? (
-        <ErrorState error={q.error} onRetry={() => q.refetch()} compact />
+        <ErrorState
+          title="The sessions did not load"
+          error={q.error}
+          onRetry={() => q.refetch()}
+          compact
+        />
       ) : q.data.items.length === 0 ? (
         <p className="text-small text-fg-2">No sessions on this day.</p>
       ) : (

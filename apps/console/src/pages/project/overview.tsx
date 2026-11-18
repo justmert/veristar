@@ -27,15 +27,10 @@ import {
   relativeChange,
   toStatChange,
 } from "@/lib/api-metrics";
-import { countOf, formatCount, formatPercent } from "@/lib/format";
+import { countOf, formatCount, formatPercent, utcDay } from "@/lib/format";
 import { type DayRange, lastDays } from "@/lib/global";
 import { verifiedActivity } from "@/lib/onchain";
-import {
-  apiRangeOfDays,
-  type OverviewPreset,
-  overviewDays,
-  readOverviewPreset,
-} from "@/lib/overview";
+import { apiRangeOfDays, type OverviewPreset, readOverviewRange } from "@/lib/overview";
 import {
   combineFirstEvent,
   firstEvent,
@@ -49,6 +44,7 @@ import {
   metricValue,
   periodLabel,
   sparkOf,
+  WEB_MAX_DAYS,
   WEB_PRESETS,
   type WebMetric,
   webPath,
@@ -90,8 +86,7 @@ export function OverviewPage() {
   const canChange = termsCurrent && !stopped;
   const sites = useQuery(sitesQuery(tenant.id));
   const [params, setParams] = useSearchParams();
-  const preset = readOverviewPreset(params.get("range"));
-  const days = overviewDays(preset, new Date());
+  const { preset, days } = readOverviewRange(params, new Date());
   const live = sites.data?.filter((s) => s.status !== "removed") ?? [];
   const summary = useQuery({
     ...webSummaryQuery(tenant.id, { ...days, site: null, band: "primary" }),
@@ -100,7 +95,14 @@ export function OverviewPage() {
 
   let body: ReactNode;
   if (sites.isPending) body = <OverviewSkeleton />;
-  else if (sites.error) body = <ErrorState error={sites.error} onRetry={() => sites.refetch()} />;
+  else if (sites.error)
+    body = (
+      <ErrorState
+        title="The sites did not load"
+        error={sites.error}
+        onRetry={() => sites.refetch()}
+      />
+    );
   else if (live.length === 0)
     // a project without a site can still declare on-chain ids: the
     // summaries stay, only the web numbers wait for a site
@@ -125,10 +127,22 @@ export function OverviewPage() {
           presets={WEB_PRESETS}
           onPreset={(p) => {
             const next = new URLSearchParams(params);
+            next.delete("from");
+            next.delete("to");
             if (p === "30") next.delete("range");
             else next.set("range", p);
             setParams(next, { replace: true });
           }}
+          custom={preset === "custom" ? days : null}
+          onCustom={(r) => {
+            const next = new URLSearchParams(params);
+            next.set("range", "custom");
+            next.set("from", r.from);
+            next.set("to", r.to);
+            setParams(next, { replace: true });
+          }}
+          maxDay={utcDay()}
+          maxDays={WEB_MAX_DAYS}
           range={days}
         />
         <Numbers
@@ -299,7 +313,7 @@ function Numbers({
       </div>
 
       {summaryState === "error" ? (
-        <ErrorState error={summaryError} onRetry={onRetry} />
+        <ErrorState title="The numbers did not load" error={summaryError} onRetry={onRetry} />
       ) : summary ? (
         <WebTrendChart
           tenantId={tenantId}
@@ -409,7 +423,7 @@ function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[];
     <section aria-label="Project" className="grid gap-3 md:grid-cols-3">
       <SummaryCard title="Sites" to={`/projects/${tenantId}/sites`} link="Sites">
         <span className="flex flex-wrap items-baseline gap-x-2">
-          <span className="font-mono text-title text-fg tabular">{formatCount(sites.length)}</span>
+          <span className="text-title text-fg tabular">{formatCount(sites.length)}</span>
           <span className="text-small text-fg-2">
             {sites.length === 0
               ? "No site added"
@@ -446,7 +460,7 @@ function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[];
           <span className="text-small text-fg-2">No accounts or contracts declared</span>
         ) : (
           <span className="flex flex-wrap items-baseline gap-x-2">
-            <span className="font-mono text-title text-fg tabular">
+            <span className="text-title text-fg tabular">
               {formatCount(activity?.operations ?? 0)}
             </span>
             <span className="text-small text-fg-2">

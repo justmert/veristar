@@ -288,9 +288,12 @@ export function TimeChart({
             <ul aria-label="Legend" className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {series.length > 1
                 ? series.map((s) => (
-                    <li key={s.key} className="flex items-center gap-1 text-caption text-fg-2">
-                      <span aria-hidden className={cn("size-2 rounded-bar", SWATCH[s.tone])} />
-                      {s.label}
+                    // the swatch sits on the first line of a long name
+                    <li key={s.key} className="flex items-start gap-1 text-caption text-fg-2">
+                      <span aria-hidden className="flex h-4 shrink-0 items-center">
+                        <span className={cn("size-2 rounded-bar", SWATCH[s.tone])} />
+                      </span>
+                      <span className="min-w-0">{s.label}</span>
                     </li>
                   ))
                 : null}
@@ -442,13 +445,13 @@ export function TimeChart({
                       {series.map((s) => (
                         <td
                           key={s.key}
-                          className="border-b border-line-subtle px-2 text-right font-mono text-fg"
+                          className="border-b border-line-subtle px-2 text-right text-fg tabular"
                         >
                           {show(s.values[i])}
                         </td>
                       ))}
                       {hasPrev ? (
-                        <td className="border-b border-line-subtle px-2 text-right font-mono text-fg-2">
+                        <td className="border-b border-line-subtle px-2 text-right text-fg-2 tabular">
                           {show(previous?.[i])}
                         </td>
                       ) : null}
@@ -534,7 +537,7 @@ export function TimeChart({
                           y={y(t)}
                           dy="0.32em"
                           textAnchor="end"
-                          className="fill-fg-3 font-mono text-axis"
+                          className="fill-fg-3 text-axis tabular"
                         >
                           {axisFormat(t)}
                         </text>
@@ -703,7 +706,7 @@ export function TimeChart({
                 ) : null}
               </div>
               {n > 0 ? (
-                <div className="mt-2 flex justify-between pl-12 font-mono text-axis text-fg-3">
+                <div className="mt-2 flex justify-between pl-12 text-axis text-fg-3 tabular">
                   <span>{buckets[0]?.tick}</span>
                   {n > 2 ? <span className="max-sm:hidden">{buckets[mid]?.tick}</span> : null}
                   <span>{buckets[n - 1]?.tick} UTC</span>
@@ -745,16 +748,18 @@ function Readout({
         {bucket.partial ? ", so far" : ""}
       </span>
       {rows.map((r) => (
-        <span key={r.key} className="flex items-center gap-2">
-          <span aria-hidden className={cn("size-2 rounded-bar", SWATCH[r.tone])} />
-          <span className="flex-1 text-fg-2">{r.label}</span>
-          <span className="font-mono text-fg tabular">{r.value}</span>
+        <span key={r.key} className="flex items-start gap-2">
+          <span aria-hidden className="flex h-5 shrink-0 items-center">
+            <span className={cn("size-2 rounded-bar", SWATCH[r.tone])} />
+          </span>
+          <span className="min-w-0 flex-1 text-fg-2">{r.label}</span>
+          <span className="text-fg tabular">{r.value}</span>
         </span>
       ))}
       {previous !== null ? (
         <span className="flex items-center gap-2 border-t border-line pt-1">
           <span className="flex-1 text-fg-3">{previousLabel}</span>
-          <span className="font-mono text-fg-2 tabular">{previous}</span>
+          <span className="text-fg-2 tabular">{previous}</span>
         </span>
       ) : null}
       {delta ? (
@@ -762,7 +767,7 @@ function Readout({
           <span className="flex-1 text-fg-3">Change</span>
           <span
             className={cn(
-              "font-mono tabular",
+              "tabular",
               delta.good === null ? "text-fg-2" : delta.good ? "text-success" : "text-critical",
             )}
           >

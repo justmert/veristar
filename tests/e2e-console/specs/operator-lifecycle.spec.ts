@@ -229,7 +229,7 @@ test("suspend needs a reason, which the tenant owner then sees", async () => {
   expect(t.body.status_reason).toBe("Unusual traffic, contact us");
   await owner.page.goto(`${APP}/projects/${tenant.id}`);
   await expect(owner.page.getByText("This project is suspended")).toBeVisible();
-  await expect(owner.page.getByText("Reason given: Unusual traffic, contact us")).toBeVisible();
+  await expect(owner.page.getByText("Reason given: “Unusual traffic, contact us”")).toBeVisible();
 });
 
 test("resume returns the project to active", async () => {
@@ -262,7 +262,7 @@ test("remove takes the project away from its members and keeps the audit trail",
   );
   await owner.page.goto(`${APP}/projects/${tenant.id}`);
   await expect(owner.page.getByText("This project was removed by an operator")).toBeVisible();
-  await expect(owner.page.getByText("Reason given: Not a Stellar project")).toBeVisible();
+  await expect(owner.page.getByText("Reason given: “Not a Stellar project”")).toBeVisible();
   await owner.page.goto(`${APP}/`);
   await expect(owner.page.getByRole("list", { name: "Removed projects" })).toContainText(
     tenant.name,

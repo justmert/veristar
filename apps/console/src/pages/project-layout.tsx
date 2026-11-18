@@ -6,11 +6,11 @@ import { keys, meQuery, tenantQuery } from "@/api/queries";
 import type { Me, Tenant } from "@/api/schemas";
 import { FormMessage } from "@/components/error-panel";
 import { Notice as ToneNotice } from "@/components/notice";
-import { ErrorState } from "@/components/states";
+import { ErrorState, MessagePage } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { isNotFound } from "@/lib/errors";
 import { ProjectPagePending } from "@/pages/project/page-frame";
-import { NotFoundPage, ProjectsButton, StopPage } from "@/pages/public/not-found";
+import { NotFoundPage, ProjectsButton } from "@/pages/public/not-found";
 import { ResubmitForm } from "@/pages/resubmit";
 import { queryClient } from "@/query-client";
 
@@ -95,7 +95,7 @@ export function Notice({
 
 export function RemovedNotice({ name, reason }: { name: string; reason: string | null }) {
   return (
-    <StopPage
+    <MessagePage
       icon={<CircleX aria-hidden />}
       tone="critical"
       title="This project was removed by an operator"
@@ -105,13 +105,13 @@ export function RemovedNotice({ name, reason }: { name: string; reason: string |
         <span className="font-medium text-fg">{name}</span>: its sites no longer accept traffic and
         its dashboards were deleted.
       </p>
-      {reason ? <p>Reason given: {reason}</p> : null}
-    </StopPage>
+      {reason ? <p>Reason given: “{reason}”</p> : null}
+    </MessagePage>
   );
 }
 
 export function StatusNotice({ tenant, isOwner }: { tenant: Tenant; isOwner: boolean }) {
-  const reason = tenant.status_reason ? ` Reason given: ${tenant.status_reason}` : "";
+  const reason = tenant.status_reason ? ` Reason given: “${tenant.status_reason}”` : "";
   switch (tenant.status) {
     case "pending":
       return (
@@ -121,7 +121,7 @@ export function StatusNotice({ tenant, isOwner }: { tenant: Tenant; isOwner: boo
           title="Waiting for review"
           actions={
             <Button asChild variant="outline" size="sm" className="max-sm:h-(--vs-control-touch)">
-              <Link to={`/projects/${tenant.id}/sites`}>Add a site</Link>
+              <Link to={`/projects/${tenant.id}/sites`}>Add site</Link>
             </Button>
           }
         >

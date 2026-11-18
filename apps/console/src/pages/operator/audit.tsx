@@ -6,6 +6,8 @@ import { Link, useSearchParams } from "react-router";
 import type { AuditQuery } from "@/api/endpoints";
 import { auditQuery } from "@/api/queries";
 import type { AuditEntry } from "@/api/schemas";
+import { Avatar } from "@/components/avatar";
+import { Disclosure } from "@/components/disclosure";
 import { type Filter, FilterBar } from "@/components/filter-bar";
 import { SelectField, TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
@@ -21,7 +23,6 @@ import {
   auditSentence,
   dayToUtc,
   foldRuns,
-  initials,
   utcToDay,
 } from "@/lib/audit";
 import { countOf, formatDate, formatDateTimeUtc, formatTimeUtc } from "@/lib/format";
@@ -312,7 +313,7 @@ function ItemRow({ item }: { item: AuditItem }) {
   const s = auditSentence(first);
   return (
     <details className="group border-b border-line-subtle" data-run={item.entries.length}>
-      <summary className="grid cursor-pointer grid-cols-[1.75rem_minmax(0,1fr)_auto] items-start gap-x-3 px-4 py-3 transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring">
+      <summary className="grid cursor-pointer list-none grid-cols-[1.75rem_minmax(0,1fr)_auto] items-start gap-x-3 px-4 py-3 [&::-webkit-details-marker]:hidden transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring">
         <ActorMark e={first} />
         <span className="min-w-0 text-body text-fg-2">
           <span className="font-medium text-fg">{s.actor}</span>{" "}
@@ -338,19 +339,11 @@ function ItemRow({ item }: { item: AuditItem }) {
   );
 }
 
-// a person is a round mark with initials; the system and an ai assistant
+// a person is the round avatar; the system and an ai assistant
 // are square marks with an icon, so they never look like a person
 function ActorMark({ e }: { e: AuditEntry }) {
   const s = auditSentence(e);
-  if (s.kind === "person")
-    return (
-      <span
-        aria-hidden
-        className="flex size-7 items-center justify-center rounded-full border border-line-strong bg-selected text-axis font-semibold text-fg"
-      >
-        {e.actor_login ? initials(e.actor_login) : "?"}
-      </span>
-    );
+  if (s.kind === "person") return <Avatar name={e.actor_login ?? "?"} />;
   const Icon = s.kind === "system" ? Cog : Bot;
   return (
     <span
@@ -423,11 +416,13 @@ function AuditRow({ e, nested }: { e: AuditEntry; nested?: boolean }) {
             ) : null}
           </div>
         ) : null}
-        <details className="text-caption">
-          <summary className="w-fit cursor-pointer rounded-sm text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring">
-            Details
-          </summary>
-          <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+        <Disclosure
+          variant="inline"
+          summary="Details"
+          className="text-caption"
+          bodyClassName="pt-1"
+        >
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
             <dt className="text-fg-2">Action</dt>
             <dd className="font-mono break-all text-fg">{e.action}</dd>
             <dt className="text-fg-2">Actor</dt>
@@ -442,12 +437,12 @@ function AuditRow({ e, nested }: { e: AuditEntry; nested?: boolean }) {
           <pre className="mt-2 overflow-x-auto rounded-md border border-line bg-sunken p-2 font-mono text-caption text-fg-2">
             {JSON.stringify(e.detail ?? {}, null, 2)}
           </pre>
-        </details>
+        </Disclosure>
       </div>
       <time
         dateTime={e.at}
         title={formatDateTimeUtc(e.at)}
-        className="col-start-2 font-mono text-caption text-fg-2 tabular sm:col-start-3 sm:row-start-1"
+        className="col-start-2 text-caption text-fg-2 tabular sm:col-start-3 sm:row-start-1"
       >
         {formatTimeUtc(e.at)}
       </time>

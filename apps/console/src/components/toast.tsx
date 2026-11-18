@@ -16,7 +16,9 @@ type Item = { id: number; kind: Kind; message: string; action?: ToastAction };
 
 // how long a toast stays, in milliseconds; an error stays longer
 const STAY: Record<Kind, number> = { success: 5000, error: 9000 };
-const MAX = 3;
+// one toast at a time: a new one replaces the last, so two never stack or
+// contradict each other
+const MAX = 1;
 
 let items: Item[] = [];
 let next = 1;
@@ -80,7 +82,9 @@ export function Toaster() {
       ref={ref}
       popover="manual"
       aria-label="Notifications"
-      className="pointer-events-none fixed inset-auto right-0 bottom-0 z-(--vs-layer-toast) m-0 flex w-full max-w-dialog-sm flex-col items-stretch gap-2 overflow-visible border-0 bg-transparent p-4 text-fg max-sm:max-w-none"
+      // bottom right on a wide screen; on a phone it sits under the top bar,
+      // clear of the form buttons and the home indicator at the bottom
+      className="pointer-events-none fixed inset-auto right-0 bottom-0 z-(--vs-layer-toast) m-0 flex w-full max-w-dialog-sm flex-col items-stretch gap-2 overflow-visible border-0 bg-transparent p-4 text-fg max-sm:top-(--vs-header) max-sm:bottom-auto max-sm:max-w-none"
     >
       <ol aria-live="polite" className="flex flex-col gap-2">
         {list.map((t) => (

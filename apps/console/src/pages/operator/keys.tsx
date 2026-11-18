@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, MoreHorizontal } from "lucide-react";
+import { Ban, KeyRound, MoreHorizontal } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { globalApi } from "@/api/endpoints";
 import {
@@ -18,6 +18,7 @@ import { ChoiceCard } from "@/components/choice-card";
 import { CodeBlock, CopyField } from "@/components/code-block";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { type Column, DataTable } from "@/components/data-table";
+import { Disclosure } from "@/components/disclosure";
 import { FormMessage } from "@/components/error-panel";
 import { SelectField, TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
@@ -179,19 +180,18 @@ export function AccessKeysPage() {
     },
     {
       key: "until",
-      header: "Ends",
+      header: "Expires",
+      // the cell holds only the value; the status column says active,
+      // expired or revoked
       cell: (r) =>
         r.revoked ? (
-          <span className="whitespace-nowrap">
-            Revoked {formatDate(r.revoked)}
-            {r.revokedReason ? `, ${r.revokedReason}` : ""}
-          </span>
+          <Missing
+            reason={`Revoked ${formatDate(r.revoked)}${r.revokedReason ? `, ${r.revokedReason}` : ""}`}
+          />
         ) : r.expires ? (
-          <span className="whitespace-nowrap">
-            {r.status === "expired" ? "Expired" : "Expires"} {formatDate(r.expires)}
-          </span>
+          <span className="whitespace-nowrap">{formatDateTimeUtc(r.expires)}</span>
         ) : (
-          <span className="whitespace-nowrap">While the client renews it</span>
+          <span className="whitespace-nowrap">Renewed by the client</span>
         ),
     },
     {
@@ -224,6 +224,7 @@ export function AccessKeysPage() {
                     setRevoking(r);
                   }}
                 >
+                  <Ban aria-hidden />
                   Revoke
                 </MenuItem>
               ) : null}
@@ -254,10 +255,7 @@ export function AccessKeysPage() {
         <CreateKeyForm
           tenants={tenants.data?.map((t) => ({ id: t.id, name: t.name })) ?? []}
           tenantsError={tenants.error}
-          onCreated={(c) => {
-            toast.success(`${c.key.name} is created. Copy it now.`);
-            setCreated(c);
-          }}
+          onCreated={setCreated}
         />
       )}
 
@@ -267,7 +265,7 @@ export function AccessKeysPage() {
         </h2>
         {machines.isPending || assistants.isPending ? (
           <LoadingState label="Loading the keys">
-            <Skeleton.Table rows={3} columns={5} />
+            <Skeleton.Table rows={3} columns={6} />
           </LoadingState>
         ) : error ? (
           <ErrorState
@@ -305,7 +303,7 @@ export function AccessKeysPage() {
             revoke.reset();
           }
         }}
-        title={`Revoke ${revoking?.name ?? "the key"}?`}
+        title={revoking ? `Revoke the key “${revoking.name}”?` : "Revoke the key?"}
         description="The next request with it is refused. You cannot restore it. Create a new key instead."
         confirmLabel="Revoke"
         pendingLabel="Revoking"
@@ -359,7 +357,7 @@ function CreateKeyForm({
 
   const machine = form.type === "machine";
   return (
-    <section aria-labelledby="create-key-h" className="flex max-w-3xl flex-col gap-4">
+    <section aria-labelledby="create-key-h" className="flex max-w-prose flex-col gap-4">
       <h2 id="create-key-h" className="text-title text-fg">
         Create a key
       </h2>
@@ -493,7 +491,8 @@ function CreatedKey({
     return (
       <SecretPanel
         value={k.key}
-        title={`Copy the key now: ${k.name}`}
+        noun="key"
+        name={k.name}
         description={`The service keeps only a hash, so it shows the key once. It reads ${
           k.tenant_id ? `the project ${tenantName ?? "you chose"}` : "every project"
         }. It expires ${formatDateTimeUtc(k.expires_at)}.`}
@@ -509,7 +508,8 @@ function CreatedKey({
   return (
     <SecretPanel
       value={k.key}
-      title={`Copy the key now: ${k.name}`}
+      noun="key"
+      name={k.name}
       description={`The service keeps only a hash, so it shows the key once. It expires ${
         k.expires_at ? formatDateTimeUtc(k.expires_at) : "never"
       }.`}
@@ -537,7 +537,7 @@ function ConnectSteps() {
   const origin = window.location.origin;
   const s = clientSnippets(origin, null);
   return (
-    <section aria-labelledby="connect-h" className="flex max-w-3xl flex-col gap-4">
+    <section aria-labelledby="connect-h" className="flex max-w-prose flex-col gap-4">
       <div className="flex flex-col gap-1">
         <h2 id="connect-h" className="text-title text-fg">
           Connect an AI assistant
@@ -589,14 +589,11 @@ function ConnectSteps() {
 
 function ClientSteps({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <details className="group rounded-lg border border-line bg-raised">
-      <summary className="cursor-pointer rounded-lg px-4 py-3 text-body font-medium text-fg transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring max-lg:min-h-(--vs-control-touch)">
-        {title}
-      </summary>
-      <ol className="flex list-decimal flex-col gap-3 border-t border-line py-4 pr-4 pl-10 text-small text-fg">
+    <Disclosure summary={title} bodyClassName="p-0">
+      <ol className="flex list-decimal flex-col gap-3 py-4 pr-4 pl-10 text-small text-fg">
         {children}
       </ol>
-    </details>
+    </Disclosure>
   );
 }
 
@@ -634,11 +631,11 @@ function Usage({ row, onClose }: { row: KeyRow; onClose: () => void }) {
         <>
           <p className="text-small text-fg-2">
             {formatDateRange(u.data.from, u.data.to)}, UTC:{" "}
-            <span className="font-mono text-fg tabular" data-usage="requests">
+            <span className="text-fg tabular" data-usage="requests">
               {formatCount(u.data.totals.requests)}
             </span>{" "}
             requests,{" "}
-            <span className="font-mono text-fg tabular" data-usage="rejected">
+            <span className="text-fg tabular" data-usage="rejected">
               {formatCount(u.data.totals.rejected)}
             </span>{" "}
             refused. A request is refused when the key is revoked or expired, over the rate limit,

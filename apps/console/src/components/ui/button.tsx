@@ -5,9 +5,11 @@ import { Slot } from "radix-ui";
 import type * as React from "react";
 
 // one accent button per page, for the page's main action (default);
-// outline for the rest; ghost in toolbars and rows; destructive is the solid
-// critical fill and always goes through the confirm dialog; navigation is a
-// link, never a button. the press motion is a 1 px drop that confirms the
+// outline for the rest; ghost in toolbars and rows. a destructive action in
+// a page, row or form is `destructive-outline`: crimson text and edge with
+// an icon, so it never looks like the terracotta primary. the solid
+// `destructive` fill is only the confirm button of a destructive dialog.
+// navigation is a link, never a button. the press motion is a 1 px drop that confirms the
 // click registered. a disabled button of any variant draws the disabled
 // roles, so it never reads as a dim accent or as an enabled outline. a
 // toggle passes aria-pressed and draws the pressed surface when on.
@@ -25,7 +27,10 @@ const buttonVariants = cva(
         secondary: "bg-selected text-fg hover:bg-hover",
         ghost:
           "text-fg-2 hover:bg-hover hover:text-fg active:bg-selected aria-expanded:bg-selected aria-expanded:text-fg",
-        destructive: "bg-critical-solid text-on-critical hover:bg-critical active:bg-critical",
+        destructive:
+          "bg-critical-solid text-on-critical hover:bg-critical-solid-hover active:bg-critical-solid-hover",
+        "destructive-outline":
+          "border-critical-line bg-transparent text-critical hover:bg-critical-soft active:bg-critical-soft aria-expanded:bg-critical-soft",
         link: "h-auto border-0 px-0 text-fg underline decoration-line-strong underline-offset-4 hover:decoration-fg disabled:bg-transparent aria-disabled:bg-transparent",
       },
       size: {

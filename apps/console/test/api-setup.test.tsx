@@ -42,7 +42,7 @@ describe("api analytics setup page (contract section 6)", () => {
       { status: 200, body: page([revoked]) },
     ]);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("No active tokens."));
+    await waitFor(() => expect(host.textContent).toContain("No active tokens"));
     const label = [...host.querySelectorAll("label")].find(
       (l) => l.textContent?.trim() === "Show revoked tokens",
     );
@@ -63,7 +63,7 @@ describe("api analytics setup page (contract section 6)", () => {
       { status: 201, body: f.otlpTokenCreatedBody },
     ]);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("No active tokens."));
+    await waitFor(() => expect(host.textContent).toContain("No active tokens"));
     await type(byLabel(host, "Token name"), "  Production API ");
     await type(byLabel(host, "Environment"), "production");
     await click(byRole(host, "button", "Create token"));
@@ -97,7 +97,7 @@ describe("api analytics setup page (contract section 6)", () => {
       { status: 201, body: { ...f.otlpTokenCreatedBody, environment: "" } },
     ]);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("No active tokens."));
+    await waitFor(() => expect(host.textContent).toContain("No active tokens"));
     await type(byLabel(host, "Token name"), "Staging");
     await click(byRole(host, "button", "Create token"));
     await waitFor(() => expect(calls).toHaveLength(2));
@@ -110,7 +110,7 @@ describe("api analytics setup page (contract section 6)", () => {
       { status: 422, body: f.errorBody("validation_failed", { name: "too_many" }) },
     ]);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("No active tokens."));
+    await waitFor(() => expect(host.textContent).toContain("No active tokens"));
     await type(byLabel(host, "Environment"), "Production EU");
     await click(byRole(host, "button", "Create token"));
     expect(calls).toHaveLength(1);
@@ -130,7 +130,7 @@ describe("api analytics setup page (contract section 6)", () => {
     await click(byRole(host, "button", "Revoke"));
     const dialog = host.querySelector("dialog");
     expect(dialog?.hasAttribute("open")).toBe(true);
-    expect(dialog?.textContent).toContain("Revoke Production API?");
+    expect(dialog?.textContent).toContain("Revoke the token “Production API”?");
     expect(dialog?.textContent).toContain("refuses this token within seconds");
     expect(calls).toHaveLength(1);
     await click(byRole(host, "button", "Revoke token"));

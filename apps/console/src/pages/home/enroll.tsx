@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ApiError } from "@/api/client";
@@ -13,6 +13,7 @@ import {
   isEmptyCohort,
   validateCohort,
 } from "@/components/cohort";
+import { Disclosure } from "@/components/disclosure";
 import { FormMessage } from "@/components/error-panel";
 import { TextAreaField, TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
@@ -192,7 +193,11 @@ export function EnrollPage() {
       <section className="flex flex-col gap-6">
         <BackLink />
         <PageHeader {...HEADER} />
-        <ErrorState error={me.error} onRetry={() => me.refetch()} />
+        <ErrorState
+          title="Your account did not load"
+          error={me.error}
+          onRetry={() => me.refetch()}
+        />
       </section>
     );
   return <EnrollForm termsVersion={me.data.terms.current_version} />;
@@ -226,21 +231,21 @@ function Optional({
   children: ReactNode;
 }) {
   return (
-    <details
+    <Disclosure
       open={open}
-      onToggle={(e) => onToggle(e.currentTarget.open)}
-      className="group rounded-lg border border-line"
+      onToggle={onToggle}
+      className="bg-transparent"
+      summaryClassName="min-h-(--vs-control-touch) font-normal"
+      bodyClassName="flex flex-col gap-4"
+      summary={
+        <>
+          <span className="font-medium">{title}</span>
+          <span className="text-small text-fg-2">{hint}</span>
+        </>
+      }
     >
-      <summary className="flex min-h-(--vs-control-touch) cursor-pointer list-none items-center gap-2 rounded-lg px-4 py-2 text-body text-fg transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring [&::-webkit-details-marker]:hidden">
-        <ChevronRight
-          aria-hidden
-          className="size-4 shrink-0 text-fg-2 transition-transform duration-(--vs-duration-press) ease-standard group-open:rotate-90"
-        />
-        <span className="font-medium">{title}</span>
-        <span className="text-small text-fg-2">{hint}</span>
-      </summary>
-      <div className="flex flex-col gap-4 border-t border-line p-4">{children}</div>
-    </details>
+      {children}
+    </Disclosure>
   );
 }
 
@@ -362,7 +367,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 hint={
                   <span className="flex justify-between gap-4">
                     <span>For example: a lending protocol on Soroban, or a Stellar wallet.</span>
-                    <span className="shrink-0 font-mono tabular text-fg-2">
+                    <span className="shrink-0 tabular text-fg-2">
                       {values.stellarUsage.length} / 2000
                     </span>
                   </span>
@@ -519,7 +524,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 key={step.title}
                 className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2 border-t border-line py-3"
               >
-                <span className="font-mono text-small text-fg-2 tabular">{i + 1}</span>
+                <span className="text-small text-fg-2 tabular">{i + 1}</span>
                 <span className="flex flex-col gap-1">
                   <span className="text-body font-medium text-fg">{step.title}</span>
                   <span className="text-small text-fg-2">{step.text}</span>

@@ -16,6 +16,7 @@ import { EmptyState, ErrorState, LoadingState, Skeleton } from "@/components/sta
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { countOf, formatCount } from "@/lib/format";
+import { ReviewSkeleton } from "@/pages/operator/page-frame";
 import { useNow } from "./alerts";
 import { ageText, enrolledLine, Waiting } from "./decision";
 import { ProjectNumbers } from "./numbers";
@@ -78,7 +79,7 @@ export function ReviewQueuePage() {
         title="Review"
         meta={
           count ? (
-            <span className="font-mono text-body text-fg-2 tabular" data-count="">
+            <span className="text-body text-fg-2 tabular" data-count="">
               {count}
             </span>
           ) : null
@@ -89,15 +90,7 @@ export function ReviewQueuePage() {
       />
 
       {list.isPending ? (
-        <LoadingState label="Loading the review queue">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
-            <Skeleton.Table rows={4} columns={1} />
-            <div className="flex flex-col gap-4 max-lg:hidden">
-              <Skeleton.StatRow count={3} />
-              <Skeleton.Table rows={5} columns={2} />
-            </div>
-          </div>
-        </LoadingState>
+        <ReviewSkeleton />
       ) : list.error ? (
         <ErrorState
           title="The review queue did not load"

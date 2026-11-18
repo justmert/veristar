@@ -316,12 +316,12 @@ test("the operator filters to verified projects, sorts by visitors and compares 
   // the sidebar opens Projects, its view control picks the web view
   await page
     .getByRole("navigation", { name: "Operator" })
-    .getByRole("link", { name: "Projects" })
+    .getByRole("link", { name: "All projects" })
     .click();
   await page.waitForURL(`${APP}/operator/projects`);
   await page.getByRole("radiogroup", { name: "View" }).getByRole("radio", { name: "Web" }).click();
   await page.waitForURL(`${APP}/operator/projects?view=web`);
-  await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "All projects" })).toBeVisible();
   // the definitions are on the column headers
   await expect(
     page.getByRole("columnheader", { name: "Visitors", exact: true }).getByRole("button"),

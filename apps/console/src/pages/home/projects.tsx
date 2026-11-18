@@ -60,7 +60,7 @@ export function ProjectsPage() {
   const tenants = me.data?.tenants ?? [];
   const header = (
     <PageHeader
-      title="Projects"
+      title="My projects"
       description="A project is one team, with its sites, keys and members."
       primary={me.data && tenants.length > 0 ? <EnrollButton /> : null}
     />
@@ -82,7 +82,11 @@ export function ProjectsPage() {
     return (
       <section className="flex flex-col gap-8">
         {header}
-        <ErrorState error={me.error} onRetry={() => me.refetch()} />
+        <ErrorState
+          title="Your projects did not load"
+          error={me.error}
+          onRetry={() => me.refetch()}
+        />
       </section>
     );
 
@@ -277,7 +281,7 @@ function Metric({
   return (
     <div className="flex min-w-0 flex-col gap-1 border-r border-line-subtle px-5 py-3 last:border-r-0 max-sm:px-3">
       <dt className="truncate text-caption text-fg-2">{label}</dt>
-      <dd className="min-h-6 font-mono text-body font-medium text-fg tabular">
+      <dd className="min-h-6 text-body font-medium text-fg tabular">
         {pending ? <Skeleton className="h-5 w-12" /> : children}
       </dd>
     </div>

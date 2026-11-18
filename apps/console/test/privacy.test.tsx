@@ -192,7 +192,7 @@ describe("privacy page", () => {
       ],
     });
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("No erasure was requested yet."));
+    await waitFor(() => expect(host.textContent).toContain("No erasure requested yet"));
     const ip = byLabel(host, "Visitor's IP address");
     const ua = byLabel(host, "Visitor's user agent");
     // the browser must not offer these values to anyone later
@@ -247,7 +247,7 @@ describe("privacy page", () => {
       ],
     });
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("No erasure was requested yet."));
+    await waitFor(() => expect(host.textContent).toContain("No erasure requested yet"));
     await type(byLabel(host, "Visitor's IP address"), "203.0.113.300");
     await click(byRole(host, "button", "Request erasure"));
     expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
@@ -278,7 +278,7 @@ describe("privacy page", () => {
       [`GET ${oneUrl}`]: [{ status: 200, body: sessionBody }],
     });
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("No erasure was requested yet."));
+    await waitFor(() => expect(host.textContent).toContain("No erasure requested yet"));
     await click(byLabel(host, "One session") as unknown as HTMLElement);
     await type(byLabel(host, "Session id"), ` ${f.SESSION_ID.toUpperCase()} `);
     await click(byRole(host, "button", "Request erasure"));
@@ -304,7 +304,7 @@ describe("privacy page", () => {
       [`GET ${oneUrl}`]: [{ status: 200, body: resetBody }],
     });
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("No erasure was requested yet."));
+    await waitFor(() => expect(host.textContent).toContain("No erasure requested yet"));
     await click(byLabel(host, "Whole site") as unknown as HTMLElement);
     await click(byRole(host, "button", "Reset site data"));
     const dialog = openDialog();
@@ -343,7 +343,7 @@ describe("privacy page", () => {
       [`POST ${postUrl}`]: [{ status: 503, body: f.errorBody("unavailable") }],
     });
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("No erasure was requested yet."));
+    await waitFor(() => expect(host.textContent).toContain("No erasure requested yet"));
     await type(byLabel(host, "Visitor's IP address"), IP);
     await type(byLabel(host, "Visitor's user agent"), UA);
     await click(byRole(host, "button", "Request erasure"));

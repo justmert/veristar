@@ -274,7 +274,7 @@ test("the tenant sees its own endpoints with the numbers that were sent", async 
   // exact: the project is named "API traffic <run>"
   await expect(page.getByRole("heading", { name: "API", exact: true })).toBeVisible();
 
-  await pickRange(page, "1h");
+  await pickRange(page, "1 hour");
   await page.waitForURL(/range=1h/);
   await expect(requestsValue(page, sentFor(PAYMENTS) + sentFor(LEDGER))).toBeVisible();
 
@@ -415,14 +415,14 @@ test("ranges switch between minute, hour and day data", async () => {
   // hourly rows come from the rollup, which runs every 5 minutes
   test.setTimeout(600_000);
   await waitExact(ctx, tenant.id, [PAYMENTS, LEDGER], "24h", 420_000);
-  await pickRange(page, "24h");
+  await pickRange(page, "24 hours");
   await page.waitForURL(/range=24h/);
   await expect(page.getByText(", per hour", { exact: false })).toBeVisible();
   await expect(requestsValue(page, sentFor(PAYMENTS) + sentFor(LEDGER))).toBeVisible();
 
   // daily rows of the same rollup
   await waitExact(ctx, tenant.id, [PAYMENTS, LEDGER], "90d", 420_000);
-  await pickRange(page, "90d");
+  await pickRange(page, "90 days");
   await page.waitForURL(/range=90d/);
   await expect(page.getByText(", per day", { exact: false })).toBeVisible();
   await expect(requestsValue(page, sentFor(PAYMENTS) + sentFor(LEDGER))).toBeVisible();
@@ -443,7 +443,7 @@ test("ranges switch between minute, hour and day data", async () => {
 
 test("the page works at phone width", async () => {
   await page.setViewportSize({ width: 375, height: 800 });
-  await pickRange(page, "1h");
+  await pickRange(page, "1 hour");
   await page.waitForURL(/range=1h/);
   await expect(page.getByRole("list", { name: "Services" })).toBeVisible();
   // nothing but the routes table scrolls sideways; on failure the message

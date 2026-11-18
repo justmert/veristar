@@ -16,10 +16,18 @@ import {
 } from "@/api/reports";
 import { percentileHiddenReason } from "@/components/cohort";
 import { CoverageNote } from "@/components/coverage";
+import { Disclosure } from "@/components/disclosure";
 import { gradeMeaning } from "@/components/integrity";
 import { FunctionsTable, functionsDaysText } from "@/components/onchain-functions";
 import { PublicFrame } from "@/components/public-frame";
-import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  MessagePage,
+  Missing,
+  Skeleton,
+} from "@/components/states";
 import { Pill } from "@/components/status";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -57,14 +65,12 @@ export function PublicReportPage() {
     // a revoked link, a removed project and an unknown id answer the same
     // 404, so the page cannot tell them apart and names all three
     body = (
-      <EmptyState
-        icon={<FileX aria-hidden strokeWidth={1.75} />}
-        title="This report link is not available"
-        className="w-full"
-      >
-        The project revoked the link, the project was removed, or the address is not complete. Ask
-        the project for a new link.
-      </EmptyState>
+      <MessagePage icon={<FileX aria-hidden />} title="This report link is not available">
+        <p>
+          The project revoked the link, the project was removed, or the address is not complete. Ask
+          the project for a new link.
+        </p>
+      </MessagePage>
     );
   else if (q.error || !q.data)
     body = (
@@ -195,28 +201,28 @@ function Signature({ verdict, r }: { verdict: Verdict | null; r: PublicReport })
         {download}
       </div>
       {verdict?.ok ? (
-        <details className="group text-small text-fg-2">
-          <summary className="w-fit cursor-pointer rounded-sm text-fg-2 transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring max-lg:py-2">
-            Signature details
-          </summary>
-          <div className="mt-2 flex flex-col gap-2">
-            <p>
-              The signature follows SEP-53, the Stellar standard for signed messages. It covers the
-              canonical form of the report. It was made by {keyText}:
-            </p>
-            <code className="font-mono text-caption break-all text-fg">{verdict.signer}</code>
-            <p>
-              Veristar publishes its report keys in its{" "}
-              <a
-                href={r.keys.stellar_toml}
-                className="rounded-sm text-fg underline decoration-line-strong underline-offset-2 hover:decoration-fg focus-ring"
-              >
-                stellar.toml file
-              </a>
-              . Check the downloaded JSON file again with any SEP-53 tool.
-            </p>
-          </div>
-        </details>
+        <Disclosure
+          variant="inline"
+          summary="Signature details"
+          className="text-small text-fg-2"
+          bodyClassName="flex flex-col gap-2"
+        >
+          <p>
+            The signature follows SEP-53, the Stellar standard for signed messages. It covers the
+            canonical form of the report. It was made by {keyText}:
+          </p>
+          <code className="font-mono text-caption break-all text-fg">{verdict.signer}</code>
+          <p>
+            Veristar publishes its report keys in its{" "}
+            <a
+              href={r.keys.stellar_toml}
+              className="rounded-sm text-fg underline decoration-line-strong underline-offset-2 hover:decoration-fg focus-ring"
+            >
+              stellar.toml file
+            </a>
+            . Check the downloaded JSON file again with any SEP-53 tool.
+          </p>
+        </Disclosure>
       ) : null}
     </section>
   );
@@ -242,7 +248,7 @@ function Hero({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-1 rounded-lg border border-line bg-raised p-4 print:border-line-strong">
       <dt className="text-caption text-fg-2">{label}</dt>
-      <dd className="min-w-0 font-mono text-metric text-fg tabular">{children}</dd>
+      <dd className="min-w-0 text-metric text-fg tabular">{children}</dd>
     </div>
   );
 }
@@ -261,7 +267,7 @@ function Figure({
       <dt className="text-caption text-fg-2" title={title}>
         {label}
       </dt>
-      <dd className="min-w-0 font-mono text-body text-fg tabular">{children}</dd>
+      <dd className="min-w-0 text-body text-fg tabular">{children}</dd>
     </div>
   );
 }
@@ -487,7 +493,7 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
                     <th scope="row" className="py-2 pr-3 font-normal text-fg-2">
                       {label}
                     </th>
-                    <td className="py-2 pr-3 text-right font-mono text-fg tabular">
+                    <td className="py-2 pr-3 text-right text-fg tabular">
                       {change === null ? (
                         <Missing reason="No value in the previous period" />
                       ) : k === "error_rate" ? (
@@ -496,7 +502,7 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
                         formatChange(change)
                       )}
                     </td>
-                    <td className="py-2 text-right font-mono text-fg tabular">
+                    <td className="py-2 text-right text-fg tabular">
                       {hidden ? (
                         <Missing reason={hidden} />
                       ) : pct === null ? (

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Columns2, Download, Plus, X } from "lucide-react";
+import { Columns2, Download, Plus, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import type { Cohort } from "@/api/cohorts";
@@ -16,6 +16,7 @@ import type {
 import { BreakdownList, type TimeBucket, TimeChart } from "@/components/charts";
 import { type Column, DataTable } from "@/components/data-table";
 import { DbIpAttribution } from "@/components/dbip-attribution";
+import { Disclosure } from "@/components/disclosure";
 import { CompareIntegrity } from "@/components/integrity";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
@@ -109,6 +110,7 @@ export function ComparePage() {
     <div className="flex min-w-0 flex-col gap-8">
       <PageHeader
         title="Compare"
+        description="Up to 5 projects side by side, from their daily totals."
         freshness={
           web.dataUpdatedAt > 0
             ? {
@@ -190,18 +192,19 @@ export function ComparePage() {
 
       {web.data ? <CompareOnchainSection projects={web.data.projects} /> : null}
 
-      <details className="max-w-prose text-small text-fg-2">
-        <summary className="w-fit cursor-pointer rounded-sm font-medium transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring">
-          About these numbers
-        </summary>
-        <ul className="mt-2 flex list-disc flex-col gap-1 pl-5">
+      <Disclosure
+        variant="inline"
+        summary="About these numbers"
+        className="max-w-prose text-small text-fg-2"
+      >
+        <ul className="flex list-disc flex-col gap-1 pl-5">
           <li>Every number comes from daily totals of UTC days.</li>
           <li>A hatched day is still running. Its value grows until the day ends.</li>
           <li>A gap in a web chart is a day that the web analytics have not read yet.</li>
           <li>Visitors are unique per UTC day and site.</li>
           <li>Latency percentiles come from summed duration buckets, not from averages.</li>
         </ul>
-      </details>
+      </Disclosure>
     </div>
   );
 }
@@ -466,7 +469,7 @@ function WebSection({ data }: { data: WebCompare }) {
         mobile={["pageviews", "visitors", "bounce_rate"]}
       />
       <CompareIntegrity projects={data.projects} />
-      <Disclosure title="Referrers, countries, devices, browsers and systems">
+      <Disclosure summary="Referrers, countries, devices, browsers and systems">
         <div className="flex flex-col gap-6">
           {DIMENSIONS.map((d) => (
             <section key={d.dim} aria-label={d.label} className="flex flex-col gap-3">
@@ -611,7 +614,7 @@ function ApiSection({ data }: { data: ApiCompare }) {
         ]}
         mobile={["requests", "rate_5xx", "p95"]}
       />
-      <Disclosure title="Services of each project">
+      <Disclosure summary="Services of each project">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {data.projects.map((p, i) => (
             <ServicesCard key={p.tenant.id} project={p} slot={i} />
@@ -647,7 +650,7 @@ function ServicesCard({ project, slot }: { project: ApiCompareProject; slot: num
                 <span className="min-w-0 truncate font-mono text-caption text-fg">
                   {s.service === "" ? "Service without a name" : s.service}
                 </span>
-                <span className="shrink-0 font-mono text-small text-fg tabular">
+                <span className="shrink-0 text-small text-fg tabular">
                   {formatCount(s.requests)}
                 </span>
               </div>
@@ -726,20 +729,5 @@ function TotalsTable<R extends TotalsRow>({
       rowHref={(p) => `/operator/projects/${p.tenant.id}`}
       rowProps={(p) => ({ "data-tenant": p.tenant.id })}
     />
-  );
-}
-
-function Disclosure({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <details className="group rounded-lg border border-line bg-raised">
-      <summary className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-4 py-3 text-body font-medium text-fg transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring max-lg:min-h-(--vs-control-touch)">
-        {title}
-        <ChevronDown
-          aria-hidden
-          className="size-4 text-fg-2 transition-transform duration-(--vs-duration-change) ease-standard group-open:rotate-180"
-        />
-      </summary>
-      <div className="border-t border-line p-4">{children}</div>
-    </details>
   );
 }

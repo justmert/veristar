@@ -28,7 +28,7 @@ describe("tenant status banner (contract 5.10)", () => {
       />,
     );
     expect(host.textContent).toContain("This project is suspended");
-    expect(host.textContent).toContain("Reason given: Spam traffic");
+    expect(host.textContent).toContain("Reason given: “Spam traffic”");
   });
 
   it("lets an owner of a rejected project edit and resubmit", async () => {
@@ -38,7 +38,7 @@ describe("tenant status banner (contract 5.10)", () => {
       { status: 200, body: f.meBody },
     ]);
     const host = await render(<StatusNotice tenant={rejected} isOwner />);
-    expect(host.textContent).toContain("Reason given: Tell us more");
+    expect(host.textContent).toContain("Reason given: “Tell us more”");
     await click(byRole(host, "button", "Edit and resubmit"));
     await type(byLabel(host, "How does the project use Stellar?"), "Soroban AMM with 2,000 users");
     await click(byRole(host, "button", "Submit for review"));
@@ -77,7 +77,7 @@ describe("tenant status banner (contract 5.10)", () => {
   it("shows a removed project with its reason", async () => {
     const host = await render(<RemovedNotice name="Old Project" reason="Not a Stellar project" />);
     expect(host.textContent).toContain("removed by an operator");
-    expect(host.textContent).toContain("Reason given: Not a Stellar project");
+    expect(host.textContent).toContain("Reason given: “Not a Stellar project”");
   });
 
   it("lists removed projects from /api/me until dismissed", async () => {

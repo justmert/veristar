@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, KeyRound } from "lucide-react";
+import { Ban, ExternalLink, KeyRound } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { ApiError } from "@/api/client";
 import {
@@ -171,6 +171,7 @@ export function CredentialSection({
     return (
       <div className="p-4">
         <ErrorState
+          title="The connections did not load"
           error={list.error}
           onRetry={() => list.refetch()}
           compact
@@ -296,7 +297,6 @@ export function McpKeyCreateForm({
     mutationFn: create,
     onSuccess: (k) => {
       setForm({ name: "", days: String(MCP_KEY_DEFAULT_DAYS) });
-      toast.success(`${k.name} is created. Copy the key now.`);
       onCreated(k);
     },
     onError: (err) => setErrors(serverErrors(err)),
@@ -312,7 +312,7 @@ export function McpKeyCreateForm({
       aria-label={label}
       onSubmit={submit}
       noValidate
-      className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
+      className="max-w-prose flex flex-col gap-3 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
     >
       <h3 className="text-body font-medium text-fg">{label}</h3>
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_11rem_auto] sm:items-start">
@@ -365,10 +365,11 @@ export function CreatedKeyPanel({
     <section aria-label="New access key">
       <SecretPanel
         value={created.key}
-        title={`Copy the key ${created.name} now`}
+        noun="key"
+        name={created.name}
         description={`It is shown only once. It expires ${
           created.expires_at ? formatDateTimeUtc(created.expires_at) : "never"
-        }. The commands above now hold it.`}
+        }. The Claude Code and Cursor commands above now hold it.`}
         onDone={onDone}
         copyLabel="Copy key"
       />
@@ -473,7 +474,7 @@ function CredentialRow({
       </div>
       {c.status === "active" && canRevoke ? (
         <Button
-          variant="ghost"
+          variant="destructive-outline"
           size="sm"
           className="max-lg:h-(--vs-control-touch)"
           onClick={() => {
@@ -481,13 +482,14 @@ function CredentialRow({
             setConfirm(true);
           }}
         >
+          <Ban aria-hidden />
           Revoke
         </Button>
       ) : null}
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}
-        title={`Revoke ${c.name}?`}
+        title={`Revoke the key “${c.name}”?`}
         description="The next request of this client is refused. You cannot restore it. Make a new one instead."
         confirmLabel="Revoke"
         pendingLabel="Revoking"

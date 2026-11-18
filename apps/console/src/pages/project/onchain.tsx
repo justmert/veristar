@@ -5,7 +5,7 @@
 // with its reason, never zero.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Blocks, Check, Download, MoreHorizontal, Plus, X } from "lucide-react";
+import { Blocks, Check, Download, MoreHorizontal, Plus, Trash2, X } from "lucide-react";
 import { type FormEvent, Fragment, type ReactNode, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
@@ -293,7 +293,7 @@ function Ids({
           title="No accounts or contracts"
         >
           {canChange
-            ? "Add an account (G…) or a contract (C…). Ids from your enrollment show here."
+            ? "Add an account (G…) or a contract (C…). IDs from your enrollment show here."
             : "An owner or member adds them after the terms are accepted."}
         </EmptyState>
       ) : (
@@ -356,7 +356,7 @@ function AddForm({ tenantId }: { tenantId: string }) {
       onSubmit={submit}
       noValidate
       aria-label="Add an account or contract"
-      className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5"
+      className="max-w-prose flex flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <div className="min-w-0 flex-1">
@@ -456,6 +456,7 @@ function IdItem({
                     setConfirm(true);
                   }}
                 >
+                  <Trash2 aria-hidden />
                   Remove {kind}
                 </MenuItem>
               </MenuContent>

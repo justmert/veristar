@@ -1,5 +1,5 @@
 import { cn } from "@veristar/brand/cn";
-import { CircleAlert, RotateCcw } from "lucide-react";
+import { CircleAlert, Inbox, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Skeleton as Bone } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { errorDetails, errorMessage } from "@/lib/errors";
 import { MISSING } from "@/lib/format";
+import { siblingUrl } from "@/lib/hosts";
 
 // the states every page and section shares: empty, error and loading. each
 // says what happened, then what to do. the page header is never part of a
@@ -42,16 +43,7 @@ function StateFrame({
         className,
       )}
     >
-      {icon ? (
-        <span
-          className={cn(
-            "flex size-10 items-center justify-center rounded-lg border border-line-strong [&_svg]:size-5",
-            tone === "critical" ? "text-critical" : "text-fg-2",
-          )}
-        >
-          {icon}
-        </span>
-      ) : null}
+      {icon ? <IconTile tone={tone}>{icon}</IconTile> : null}
       <span className="flex max-w-prose flex-col gap-1">
         <span className="text-title text-fg">{title}</span>
         {children ? <span className="text-small text-fg-2">{children}</span> : null}
@@ -63,8 +55,10 @@ function StateFrame({
   );
 }
 
-// nothing to show yet: the title says what is missing, the text why or what
-// comes next, the action is the one way forward
+// nothing to show yet, one anatomy everywhere: an icon tile, a title that
+// says what is missing (no full stop), the text that says why or what comes
+// next (sentences), and the one way forward. a dashed edge marks a section
+// that is empty; a whole page that has nothing uses MessagePage
 export function EmptyState({
   icon,
   title,
@@ -84,7 +78,7 @@ export function EmptyState({
     <StateFrame
       tone="neutral"
       role="status"
-      icon={icon}
+      icon={icon ?? <Inbox aria-hidden strokeWidth={1.75} />}
       title={title}
       actions={action}
       compact={compact}
@@ -95,17 +89,71 @@ export function EmptyState({
   );
 }
 
-// a request failed: one sentence of what happened (no request id, path or
-// code in it), Try again, and Copy details with what the logs need
+// a whole page that stands in for the one asked for (not found, removed,
+// revoked, operators only, a crash, a link that no longer works): one solid
+// card in one place, the same icon tile as every state, the page title,
+// what happened and why, and the way on. a section that is only empty uses
+// EmptyState instead
+export function MessagePage({
+  icon,
+  tone = "neutral",
+  title,
+  children,
+  actions,
+  className,
+}: {
+  icon: ReactNode;
+  tone?: "neutral" | "critical";
+  title: string;
+  children?: ReactNode;
+  actions?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      data-message-page=""
+      className={cn(
+        "mx-auto flex w-full max-w-prose animate-rise-in flex-col gap-4 rounded-lg border border-line bg-raised px-6 py-10 sm:px-10",
+        className,
+      )}
+    >
+      <IconTile tone={tone}>{icon}</IconTile>
+      <h1 className="text-heading text-fg">{title}</h1>
+      {children ? (
+        <div className="flex max-w-prose flex-col gap-1 text-body text-fg-2">{children}</div>
+      ) : null}
+      {actions ? <div className="flex flex-wrap gap-2 pt-1">{actions}</div> : null}
+    </section>
+  );
+}
+
+// the square that holds the icon of every state and message page
+function IconTile({ tone, children }: { tone: "neutral" | "critical"; children: ReactNode }) {
+  return (
+    <span
+      className={cn(
+        "flex size-10 shrink-0 items-center justify-center rounded-lg border border-line-strong bg-raised [&_svg]:size-5",
+        tone === "critical" ? "text-critical" : "text-fg-2",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+// a request failed: the title names what failed ("The sites did not load"),
+// one sentence of what happened (no request id, path or code in it), Try
+// again, Copy details with what the logs need, and where to look if it
+// keeps failing
 export function ErrorState({
   error,
-  title = "This did not load",
+  title,
   onRetry,
   compact,
   className,
 }: {
   error: unknown;
-  title?: string;
+  title: string;
   onRetry?: () => void;
   compact?: boolean;
   className?: string;
@@ -126,12 +174,40 @@ export function ErrorState({
               Try again
             </Button>
           ) : null}
-          <CopyButton text={errorDetails(error)} label="Copy details" size="sm" variant="ghost" />
+          <CopyButton
+            text={errorDetails(error)}
+            label="Copy details"
+            visibleLabel="Copy details"
+            size="sm"
+            variant="ghost"
+          />
         </>
       }
     >
       {errorMessage(error)}
+      <StatusHint />
     </StateFrame>
+  );
+}
+
+// the way on when a retry fails too: the service status page, where it
+// exists
+function StatusHint() {
+  const status = siblingUrl(window.location.hostname, "status");
+  if (!status) return null;
+  return (
+    <span className="mt-1 block">
+      If this continues, see{" "}
+      <a
+        href={status}
+        target="_blank"
+        rel="noopener"
+        className="rounded-sm text-fg underline decoration-line-strong underline-offset-4 hover:decoration-fg focus-ring"
+      >
+        Service status
+      </a>
+      .
+    </span>
   );
 }
 
