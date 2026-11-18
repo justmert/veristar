@@ -121,8 +121,8 @@ section 6 passed.
 
 ## 4. Import
 
-On the new environment, stop `umami`, `controlplane`, `jobs`, `replayer` and `metricswriter` on
-every core node, then:
+On the new environment, stop every Umami process (`umami`, `umami-2` and up), `controlplane`,
+`jobs`, `replayer` and `metricswriter` on every core node, then:
 
 ```sh
 make migrate-import MIGRATE_ENV=<env file of the new leader> MIGRATE_DIR=<directory>
@@ -164,7 +164,8 @@ port 5000 exists only inside each core node's compose network. The leader's `pg_
 private network, which is where the forwarded connection comes from. The SSH session encrypts
 the traffic, but the leader's `pg_hba` admits TLS only (`hostssl`), so the
 connection still uses `verify-full` with the new environment's CA bundle; its certificate names
-`127.0.0.1`, which is the tunnel's end. `scripts/migrate.sh` runs its
+`127.0.0.1`, which is the tunnel's end. NATS speaks TLS too, and every node certificate of the
+internal CA names `127.0.0.1`, so the client verifies the forwarded NATS port the same way. `scripts/migrate.sh` runs its
 client container on the host network by default, so `127.0.0.1` is the tunnel.
 
 The env file for the import, with every value taken from the new environment (the passwords
@@ -182,7 +183,8 @@ PLATFORM_DB_ADMIN_PASSWORD=<postgres superuser password>
 UMAMI_DB_NAME=umami
 PLATFORM_DB_JOBS_PASSWORD=<jobs role password>
 PLATFORM_DB_CP_SYSTEM_PASSWORD=<cp_system role password>
-NATS_URL=nats://127.0.0.1:14222
+NATS_URL=tls://127.0.0.1:14222
+NATS_TLS_CA=<path to the new environment's ca bundle>
 NATS_REPLICAS=3
 NATS_USER=jobs
 NATS_PASSWORD=<jobs nats password>

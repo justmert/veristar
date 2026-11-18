@@ -8,9 +8,12 @@ The tracker also comes as an npm package that you bundle into your app instead o
 tag. It is the same tracker: `init()` installs `window.umami` exactly as `sdk.js` does, so
 `umami.track()` and `data-umami-event` work unchanged.
 
-The console's setup page for a site gives you the script tag. You build the npm package from this
-repository with [`packages/tracker/scripts/pack.mjs`](https://github.com/justmert/veristar/blob/main/packages/tracker/scripts/pack.mjs),
-under a scoped package name of your choice.
+You build the npm package from this repository with
+[`packages/tracker/scripts/pack.mjs`](https://github.com/justmert/veristar/blob/main/packages/tracker/scripts/pack.mjs),
+under a scoped package name of your choice, and publish it to a registry you control. When the
+service you use publishes the releases under a scoped name (the control plane setting
+`TRACKER_NPM_PACKAGE`), the site's setup page in the console has an **npm** tab with the exact
+`npm install --save-exact` command, the import and the `init()` call for your site.
 
 ## Script tag or package
 
@@ -31,21 +34,21 @@ From a checkout of the repository, with the pnpm version from `package.json` ins
 ```sh
 pnpm install --frozen-lockfile
 cd packages/tracker
-NPM_PACKAGE=@your-scope/veristar-tracker node scripts/pack.mjs 1.3.1
+NPM_PACKAGE=@your-scope/veristar-tracker node scripts/pack.mjs 1.3.2
 ```
 
 `NPM_PACKAGE` is the scoped name the package gets, and the argument is the tracker version. The
-script compiles the package code from the checkout's source, so pass the version in
-`packages/tracker/package.json` (1.3.1 on `main`); without an argument it uses that version. The
-version must be listed in
+script compiles the package code from the checkout's source, so it packs only the version in
+`packages/tracker/package.json` (1.3.2 on `main`); without an argument it uses that version. To
+pack an earlier release, check out the commit that released it. The version must be listed in
 [`releases/manifest.json`](https://github.com/justmert/veristar/blob/main/packages/tracker/releases/manifest.json).
 The script prints, as JSON, the path of the tarball, for example
-`npm/your-scope-veristar-tracker-1.3.1.tgz`. Install that file in your app with your package
+`npm/your-scope-veristar-tracker-1.3.2.tgz`. Install that file in your app with your package
 manager, or publish it to a registry you control.
 
-`pack.mjs` refuses a version that is not in the release manifest, copies the release files
-unchanged and checks that no built file still needs `__SDK_VERSION__`. Two runs on the same source
-produce the same tarball.
+`pack.mjs` refuses a version that is not in the release manifest or is not the source's own, copies
+the release files unchanged and checks that no built file still needs `__SDK_VERSION__`. Two runs
+on the same source produce the same tarball.
 
 ## Initialize the tracker
 
