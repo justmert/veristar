@@ -112,17 +112,17 @@ const aPIMetricRoutes = `-- name: APIMetricRoutes :many
 with g as (
   select service, method, route,
          min(source)::text as source,
-         coalesce(sum(count) filter (where traffic_class = 'app'), 0)::bigint as requests,
-         coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 400 and 499), 0)::bigint as errors_4xx,
-         coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0)::bigint as errors_5xx,
-         coalesce(sum(count) filter (where traffic_class <> 'app'), 0)::bigint as infrastructure_requests,
+         least(coalesce(sum(count) filter (where traffic_class = 'app'), 0), 9223372036854775807)::bigint as requests,
+         least(coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 400 and 499), 0), 9223372036854775807)::bigint as errors_4xx,
+         least(coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0), 9223372036854775807)::bigint as errors_5xx,
+         least(coalesce(sum(count) filter (where traffic_class <> 'app'), 0), 9223372036854775807)::bigint as infrastructure_requests,
          coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false)::boolean as lossy,
          case when sum(count) filter (where traffic_class = 'app') > 0
-           then api.histogram_quantile(0.5, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p50,
+           then api.histogram_quantile(0.5, api.sum_buckets_read(counts) filter (where traffic_class = 'app')) end as p50,
          case when sum(count) filter (where traffic_class = 'app') > 0
-           then api.histogram_quantile(0.95, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p95,
+           then api.histogram_quantile(0.95, api.sum_buckets_read(counts) filter (where traffic_class = 'app')) end as p95,
          case when sum(count) filter (where traffic_class = 'app') > 0
-           then api.histogram_quantile(0.99, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p99
+           then api.histogram_quantile(0.99, api.sum_buckets_read(counts) filter (where traffic_class = 'app')) end as p99
   from (
   select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_minute
@@ -301,8 +301,8 @@ func (q *Queries) APIMetricRoutes(ctx context.Context, arg APIMetricRoutesParams
 
 const aPIMetricServiceTotals = `-- name: APIMetricServiceTotals :many
 select service,
-       coalesce(sum(count) filter (where traffic_class = 'app'), 0)::bigint as requests,
-       coalesce(sum(count) filter (where traffic_class <> 'app'), 0)::bigint as infrastructure_requests,
+       least(coalesce(sum(count) filter (where traffic_class = 'app'), 0), 9223372036854775807)::bigint as requests,
+       least(coalesce(sum(count) filter (where traffic_class <> 'app'), 0), 9223372036854775807)::bigint as infrastructure_requests,
        coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false)::boolean as lossy
 from (
   select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
@@ -525,8 +525,8 @@ func (q *Queries) APIMetricSources(ctx context.Context, arg APIMetricSourcesPara
 
 const aPIMetricStatusCodes = `-- name: APIMetricStatusCodes :many
 select status_code,
-       coalesce(sum(count) filter (where traffic_class = 'app'), 0)::bigint as requests,
-       coalesce(sum(count) filter (where traffic_class <> 'app'), 0)::bigint as infrastructure_requests
+       least(coalesce(sum(count) filter (where traffic_class = 'app'), 0), 9223372036854775807)::bigint as requests,
+       least(coalesce(sum(count) filter (where traffic_class <> 'app'), 0), 9223372036854775807)::bigint as infrastructure_requests
 from (
   select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_minute
@@ -644,17 +644,17 @@ func (q *Queries) APIMetricStatusCodes(ctx context.Context, arg APIMetricStatusC
 }
 
 const aPIMetricSummary = `-- name: APIMetricSummary :one
-select coalesce(sum(count) filter (where traffic_class = 'app'), 0)::bigint as requests,
-       coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 400 and 499), 0)::bigint as errors_4xx,
-       coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0)::bigint as errors_5xx,
-       coalesce(sum(count) filter (where traffic_class <> 'app'), 0)::bigint as infrastructure_requests,
+select least(coalesce(sum(count) filter (where traffic_class = 'app'), 0), 9223372036854775807)::bigint as requests,
+       least(coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 400 and 499), 0), 9223372036854775807)::bigint as errors_4xx,
+       least(coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0), 9223372036854775807)::bigint as errors_5xx,
+       least(coalesce(sum(count) filter (where traffic_class <> 'app'), 0), 9223372036854775807)::bigint as infrastructure_requests,
        coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false)::boolean as lossy,
        case when sum(count) filter (where traffic_class = 'app') > 0
-         then api.histogram_quantile(0.5, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p50,
+         then api.histogram_quantile(0.5, api.sum_buckets_read(counts) filter (where traffic_class = 'app')) end as p50,
        case when sum(count) filter (where traffic_class = 'app') > 0
-         then api.histogram_quantile(0.95, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p95,
+         then api.histogram_quantile(0.95, api.sum_buckets_read(counts) filter (where traffic_class = 'app')) end as p95,
        case when sum(count) filter (where traffic_class = 'app') > 0
-         then api.histogram_quantile(0.99, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p99
+         then api.histogram_quantile(0.99, api.sum_buckets_read(counts) filter (where traffic_class = 'app')) end as p99
 from (
   select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_minute
@@ -770,17 +770,17 @@ func (q *Queries) APIMetricSummary(ctx context.Context, arg APIMetricSummaryPara
 
 const aPIMetricTimeseries = `-- name: APIMetricTimeseries :many
 select bucket_start,
-       coalesce(sum(count) filter (where traffic_class = 'app'), 0)::bigint as requests,
-       coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 400 and 499), 0)::bigint as errors_4xx,
-       coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0)::bigint as errors_5xx,
-       coalesce(sum(count) filter (where traffic_class <> 'app'), 0)::bigint as infrastructure_requests,
+       least(coalesce(sum(count) filter (where traffic_class = 'app'), 0), 9223372036854775807)::bigint as requests,
+       least(coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 400 and 499), 0), 9223372036854775807)::bigint as errors_4xx,
+       least(coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0), 9223372036854775807)::bigint as errors_5xx,
+       least(coalesce(sum(count) filter (where traffic_class <> 'app'), 0), 9223372036854775807)::bigint as infrastructure_requests,
        coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false)::boolean as lossy,
        case when sum(count) filter (where traffic_class = 'app') > 0
-         then api.histogram_quantile(0.5, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p50,
+         then api.histogram_quantile(0.5, api.sum_buckets_read(counts) filter (where traffic_class = 'app')) end as p50,
        case when sum(count) filter (where traffic_class = 'app') > 0
-         then api.histogram_quantile(0.95, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p95,
+         then api.histogram_quantile(0.95, api.sum_buckets_read(counts) filter (where traffic_class = 'app')) end as p95,
        case when sum(count) filter (where traffic_class = 'app') > 0
-         then api.histogram_quantile(0.99, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p99
+         then api.histogram_quantile(0.99, api.sum_buckets_read(counts) filter (where traffic_class = 'app')) end as p99
 from (
   select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_minute
