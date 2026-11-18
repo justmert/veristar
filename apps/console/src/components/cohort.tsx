@@ -315,11 +315,23 @@ export function OwnCohortPanel({
     if (Object.keys(found).length === 0) propose.mutate(values);
   }
 
+  // one status word in the header: proposed while an operator has not
+  // decided, confirmed once one did
+  const badge = record.proposal ? (
+    <Pill tone="info">Proposed</Pill>
+  ) : record.confirmed ? (
+    <Pill tone="success">Confirmed</Pill>
+  ) : null;
+  const hasAny = record.confirmed !== null || record.proposal !== null;
   return (
     <Panel
-      title="SCF cohort"
+      title={
+        <span className="inline-flex flex-wrap items-center gap-2">
+          SCF cohort
+          {badge}
+        </span>
+      }
       aria-label="SCF cohort"
-      description="The program, round, category and award date operators compare your project in. You propose them; an operator confirms them."
       actions={
         isOwner && !values ? (
           <Button
@@ -327,7 +339,7 @@ export function OwnCohortPanel({
             size="sm"
             onClick={() => setValues(valuesOf(record.proposal ?? record.confirmed))}
           >
-            Propose a cohort
+            {hasAny ? "Edit" : "Propose a cohort"}
           </Button>
         ) : null
       }
@@ -335,15 +347,14 @@ export function OwnCohortPanel({
       <div className="flex flex-col gap-4">
         {record.confirmed ? (
           <CohortFacts c={record.confirmed} />
-        ) : (
+        ) : record.proposal ? null : (
           <p className="text-body text-fg-2">No cohort is confirmed for your project yet.</p>
         )}
         {record.proposal && !values ? (
-          <div
-            data-proposal
-            className="flex flex-col gap-2 rounded-md border border-line-strong px-3 py-3"
-          >
-            <Pill tone="info">Your proposal, waiting for an operator</Pill>
+          <div data-proposal className="flex flex-col gap-2">
+            {record.confirmed ? (
+              <span className="text-caption text-fg-2">Your proposal, waiting for an operator</span>
+            ) : null}
             <CohortFacts c={record.proposal} />
           </div>
         ) : null}
@@ -366,6 +377,10 @@ export function OwnCohortPanel({
             </div>
           </form>
         ) : null}
+        <p className="text-caption text-fg-2">
+          Operators compare your project in this program, round, category and award date. You
+          propose them, and an operator confirms them.
+        </p>
       </div>
     </Panel>
   );
