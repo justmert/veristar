@@ -4629,7 +4629,8 @@ award amount, tranche, website host, and the Stellar account and contract
 ids the row declares. No column holds a person: the parser drops every other
 column of the file before anything is stored. `cp.scf_award_imports` records
 each run (file SHA-256 and size, counts, actor). Neither table has a tenant:
-`cp_system` writes, `cp_operator` reads, `cp_tenant` has no right, and a
+`cp_system` writes and reads, `cp_operator` and `cp_tenant` have no right
+(migration 00051 removed the operator read right nothing used), and a
 tenant removal (5.5) leaves them. The directory has no read route of its
 own; the award search (4.2.7) and the matching below use it.
 
