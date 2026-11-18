@@ -67,6 +67,10 @@ ALIASES = {
     "Apache License, Version 2.0": "Apache-2.0", "BSD": None, "MIT License": "MIT",
     "BSD License": None, "GPL-3.0": "GPL-3.0-only", "LGPL-3.0": "LGPL-3.0-only",
     "3-Clause BSD License": "BSD-3-Clause", "GPL-2.0": "GPL-2.0-only", "LGPL-2.1": "LGPL-2.1-only", "Python Software Foundation License": "Python-2.0",
+    # the deprecated spdx id of GPL-2.0-only WITH Classpath-exception-2.0, which
+    # trivy reports for a pom's "GPL2 w/ CPE" (jakarta ee apis). the exception
+    # only adds permissions, so it is read as its base licence
+    "GPL-2.0-with-classpath-exception": "GPL-2.0-only",
 }
 CLASSIFIERS = {
     "License :: OSI Approved :: MIT License": "MIT",
