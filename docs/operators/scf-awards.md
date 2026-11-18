@@ -62,8 +62,8 @@ ssh <core node> sudo docker run --rm -i --network veristar-core_default \
 Run it with `scf import -dry-run -` first: the dry run reads and checks the file and prints the
 counts without touching the database.
 
-The import reads tab and comma separated exports, with or without a header row. With a header row, the
-import finds the columns by name (`Project`, `Round`, `Category`, `Award Type`, `Award Amount`,
+The import reads tab and comma separated exports, with or without a header row. With a header
+row, it finds the columns by name (`Project`, `Round`, `Category`, `Award Type`, `Award Amount`,
 and optionally `Award Date`, `Website`, `Tranche %` and `Status`). Without one, it reads the
 column layout of SCF's export. Fields quoted over several lines are read as one field.
 
