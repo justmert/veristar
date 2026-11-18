@@ -59,18 +59,18 @@ theme in `tokens.ts` maps the same roles onto a warm paper ground (#F6F5F2) with
 
 **Surfaces**, deepest to highest: `sunken` #121211 (inputs, code), `ground` #151514 (page),
 `raised` #1C1C1A (cards, tables), `overlay` #22221F (menus, tooltips, dialogs), with `hover`
-#252522, `selected` #2A2A27, `muted` #232320 (skeletons) and a 60% `scrim` behind dialogs.
+#252522, `selected` #2A2A27, `muted` #33322E (skeletons, at least 1.3:1 on a card) and a 60% `scrim` behind dialogs.
 Raised surfaces have a border and no shadow; overlays add `shadow-overlay`, dialogs `shadow-dialog`. A shadow's colour is the theme's `shadow-soft` or `shadow-strong` role.
 
 **Lines.** `line` #2E2D29 by default, `line-strong` #3D3C37 for controls and the chart
 baseline, `line-subtle` #252522 for row rules and the chart grid.
 
-**Text.** `fg` #EEEDE8, `fg-2` #A6A49C, `fg-3` #97958C, `fg-disabled` #6E6C65. Every text pair
+**Text.** `fg` #EEEDE8, `fg-2` #A6A49C, `fg-3` #97958C, `fg-disabled` #737169. Every text pair
 with the surfaces up to `selected` passes WCAG 2.2 AA (the ratios are noted beside the roles in
 `tokens.ts`).
 
 **Disabled.** A control that cannot be used has a flat `disabled-fill` #252522, `disabled-fg`
-#6E6C65 text and a `disabled-line` #2E2D29 edge, in every variant. A disabled primary is never a
+#737169 text (3.1:1 on the fill) and a `disabled-line` #2E2D29 edge, in every variant. A disabled primary is never a
 dim accent and a disabled outline never looks enabled.
 
 **Pressed.** A toggle that is on (a chart option, a table view) has the `pressed` #2A2A27 surface
@@ -82,9 +82,13 @@ and a `pressed-line` #6E6C65 edge.
 markers, the focus ring and the star in the mark.
 
 **Status**, always with an icon and a word: `success` #3FB27F (verified, received, active),
-`warning` #E0A54A (pending, quarantined, 4xx), `critical` #F97066 (failed, rejected, 5xx,
-paging alert), `info` = `fg-2` (neutral, suspended). Each has a `-soft` fill and a `-line`
-border. Destructive buttons use `critical-solid` #C93A36 with white `on-critical`.
+`warning` #E0A54A (needs action, 4xx; #A35A00 on light), `critical` #F26A90 (refused, failing,
+not approved, 5xx, paging alert; #940543 on light), `info` = `fg-2` (neutral: waiting, removed).
+Each has a `-soft` fill and a `-line` border. Critical is a cool crimson, kept apart from the
+terracotta accent (OKLab distance x100 of the fills: 11.0 normal, 12.3 protan, 9.1 deutan). A
+destructive action in a page, row or menu is crimson text with an icon; only the confirm button
+of a destructive dialog is filled, with `critical-solid` #A81650 (`critical-solid-hover`
+#940543) under white `on-critical`.
 
 **Data series**, in this fixed order: #3987E5 blue, #D55181 magenta, #9085E9 violet, #199E70
 aqua, #C98500 ochre. Validated on the raised surface: worst adjacent CVD ΔE 8.4, normal vision
