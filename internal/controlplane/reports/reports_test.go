@@ -11,8 +11,8 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"strconv"
-	"sync"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
