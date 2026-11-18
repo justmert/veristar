@@ -162,7 +162,7 @@ function ReviewQueue() {
             </span>
           ) : null}
         </h2>
-        <p className="flex items-center gap-1.5 text-caption text-fg-3">
+        <p className="flex items-center gap-1 text-caption text-fg-3">
           Projects waiting for approval, and active projects with a site whose domain belonged to a
           removed project. Oldest first.
           <span className="max-lg:hidden">
@@ -267,7 +267,7 @@ function QueueItem({
       aria-current={current ? "true" : undefined}
       onClick={onPick}
       className={cn(
-        "flex w-full flex-col gap-1 px-3.5 py-3 text-left transition-colors duration-(--vs-duration-press) ease-standard focus-ring",
+        "flex w-full flex-col gap-1 px-3 py-3 text-left transition-colors duration-(--vs-duration-press) ease-standard focus-ring",
         current ? "bg-selected" : "hover:bg-hover",
       )}
     >
@@ -284,7 +284,7 @@ function QueueItem({
           ? "New project"
           : `${t.sites_in_review} ${t.sites_in_review === 1 ? "site" : "sites"} in review`}
       </span>
-      <span className="flex flex-wrap gap-x-2.5 gap-y-1 text-caption text-fg-2">
+      <span className="flex flex-wrap gap-x-2 gap-y-1 text-caption text-fg-2">
         <Chip ok={t.sites_verified > 0}>Domain</Chip>
         <Chip ok={t.sites_with_stellar_toml > 0}>toml</Chip>
         <span className="text-fg-3">
@@ -323,7 +323,7 @@ function SelectedProject({
           </motion.div>
         ) : (
           <motion.div key="data" {...fade} className="flex flex-col">
-            <header className="flex flex-col gap-1.5 border-b border-line-subtle px-5 pt-4 pb-3.5">
+            <header className="flex flex-col gap-1 border-b border-line-subtle px-5 pt-4 pb-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 {detail.data.tenant.status === "pending" ? (
                   <Waiting since={detail.data.tenant.status_changed_at} now={now} />
@@ -343,11 +343,11 @@ function SelectedProject({
                 <span className="break-all">{detail.data.tenant.enrollment_answers.website}</span>
               </p>
             </header>
-            <div className="flex flex-col gap-1 border-b border-line-subtle px-5 py-3.5">
+            <div className="flex flex-col gap-1 border-b border-line-subtle px-5 py-3">
               <span className="pb-1 text-caption text-fg-3">EVIDENCE</span>
               <EvidenceList items={evidenceOf(detail.data)} />
             </div>
-            <div className="flex flex-col gap-1.5 border-b border-line-subtle px-5 py-3.5">
+            <div className="flex flex-col gap-1 border-b border-line-subtle px-5 py-3">
               <span className="text-caption text-fg-3">HOW IT USES STELLAR</span>
               <p className="whitespace-pre-wrap break-words text-body text-fg">
                 {detail.data.tenant.enrollment_answers.stellar_usage}
@@ -359,7 +359,7 @@ function SelectedProject({
               ) : null}
             </div>
             {detail.data.sites.some((s) => s.in_review) ? (
-              <div className="flex flex-col gap-2 border-b border-line-subtle px-5 py-3.5">
+              <div className="flex flex-col gap-2 border-b border-line-subtle px-5 py-3">
                 <span className="text-caption text-fg-3">SITES IN REVIEW</span>
                 <ul className="flex flex-col gap-2">
                   {detail.data.sites
@@ -401,8 +401,8 @@ function SiteReview({ site }: { site: OperatorSite }) {
     },
   });
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line px-3 py-2.5">
-      <div className="flex min-w-0 flex-col gap-0.5">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line px-3 py-2">
+      <div className="flex min-w-0 flex-col gap-1">
         <span className="flex items-center gap-2 font-mono text-small text-fg">
           <StatusDot tone="warning" />
           <span className="break-all">{site.domain}</span>

@@ -36,7 +36,7 @@ export function NavTabs({
                   to={i.to}
                   aria-current={on ? "page" : undefined}
                   className={cn(
-                    "relative inline-flex h-10 items-center gap-1.5 px-3 text-body font-medium whitespace-nowrap transition-colors duration-(--vs-duration-reveal) ease-standard focus-ring",
+                    "relative inline-flex h-10 items-center gap-1 px-3 text-body font-medium whitespace-nowrap transition-colors duration-(--vs-duration-reveal) ease-standard focus-ring",
                     on ? "text-fg" : "text-fg-2 hover:text-fg",
                   )}
                 >

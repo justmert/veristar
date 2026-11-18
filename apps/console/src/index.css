@@ -1,4 +1,6 @@
 @import "tailwindcss";
 @import "@veristar/brand/index.css";
+/* the console's spacing steps come from the brand's spacing scale */
+@import "@veristar/brand/spacing.css";
 /* the mark and the motion presets carry classes too */
 @source "../../../packages/brand/src";

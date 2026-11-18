@@ -70,23 +70,23 @@ export function SignInPage() {
         {message ? (
           <p
             role="alert"
-            className="flex animate-fade-in items-start gap-2.5 rounded-lg border border-critical-line bg-raised px-3.5 py-3 text-body text-fg"
+            className="flex animate-fade-in items-start gap-2 rounded-lg border border-critical-line bg-raised px-3 py-3 text-body text-fg"
           >
-            <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-critical" />
+            <CircleAlert aria-hidden className="mt-1 size-4 shrink-0 text-critical" />
             {message}
           </p>
         ) : null}
         {deleted ? (
           <p
             role="status"
-            className="flex animate-fade-in items-start gap-2.5 rounded-lg border border-line bg-raised px-3.5 py-3 text-body text-fg"
+            className="flex animate-fade-in items-start gap-2 rounded-lg border border-line bg-raised px-3 py-3 text-body text-fg"
           >
-            <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0 text-success" />
+            <CircleCheck aria-hidden className="mt-1 size-4 shrink-0 text-success" />
             Your account was deleted. Signing in again creates a new, empty account.
           </p>
         ) : null}
 
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-2">
           <Button asChild size="lg" className="w-full">
             <a href={signInUrl(returnTo)}>
               <GitHubMark />
@@ -148,20 +148,20 @@ export function SignInPage() {
 
         <ul className="flex flex-col gap-2 text-small text-fg-2">
           <li className="flex gap-2">
-            <Shield aria-hidden className="mt-0.5 size-3.5 shrink-0 text-fg-3" />
+            <Shield aria-hidden className="mt-1 size-3.5 shrink-0 text-fg-3" />
             GitHub shares your public username and id. No email, no repository access.
           </li>
           <li className="flex gap-2">
-            <Wallet aria-hidden className="mt-0.5 size-3.5 shrink-0 text-fg-3" />A wallet shares
-            your public Stellar address. The signature moves no funds.
+            <Wallet aria-hidden className="mt-1 size-3.5 shrink-0 text-fg-3" />A wallet shares your
+            public Stellar address. The signature moves no funds.
           </li>
           <li className="flex gap-2">
-            <KeyRound aria-hidden className="mt-0.5 size-3.5 shrink-0 text-fg-3" />A passkey shares
+            <KeyRound aria-hidden className="mt-1 size-3.5 shrink-0 text-fg-3" />A passkey shares
             its public key and its smart account address. Your fingerprint or face never leaves the
             device.
           </li>
           <li className="flex gap-2">
-            <FileText aria-hidden className="mt-0.5 size-3.5 shrink-0 text-fg-3" />
+            <FileText aria-hidden className="mt-1 size-3.5 shrink-0 text-fg-3" />
             <span>
               Enrolling a project means accepting the{" "}
               <Link

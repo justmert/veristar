@@ -134,9 +134,9 @@ export function ResubmitForm({ tenant }: { tenant: Tenant }) {
   // owner sees what the reviewers will read anew
   const changed = (k: Key, hint?: string) =>
     values[k].trim() !== initial[k].trim() ? (
-      <span className="flex flex-col gap-0.5">
+      <span className="flex flex-col gap-1">
         {hint ? <span>{hint}</span> : null}
-        <span className="flex animate-fade-in items-center gap-1.5 text-warning">
+        <span className="flex animate-fade-in items-center gap-1 text-warning">
           <PencilLine aria-hidden className="size-3" />
           Changed from the answers on file
         </span>
@@ -160,18 +160,18 @@ export function ResubmitForm({ tenant }: { tenant: Tenant }) {
       aria-label="Resubmit the enrollment"
       className="flex animate-rise-in flex-col overflow-hidden rounded-xl border border-line bg-raised"
     >
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-3.5 border-b border-line px-4 py-4 sm:px-5">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 border-b border-line px-4 py-4 sm:px-5">
         <span className="flex size-8 items-center justify-center rounded-md border border-line-strong text-critical">
           <CircleX aria-hidden className="size-4" />
         </span>
-        <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex min-w-0 flex-col gap-1">
           <h2 className="text-title text-fg">Enrollment was not approved</h2>
           {tenant.status_reason ? (
             <>
               <span className="text-body text-fg-2">
                 Reason given, {formatDate(tenant.status_changed_at)}:
               </span>
-              <blockquote className="rounded-md bg-sunken px-3 py-2.5 text-body text-fg">
+              <blockquote className="rounded-md bg-sunken px-3 py-2 text-body text-fg">
                 {tenant.status_reason}
               </blockquote>
             </>
@@ -259,7 +259,7 @@ export function ResubmitForm({ tenant }: { tenant: Tenant }) {
           }
         />
       </div>
-      <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-3.5 sm:px-5">
+      <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-3 sm:px-5">
         <Button
           type="submit"
           pending={send.isPending}

@@ -1,0 +1,5 @@
+/* generated from packages/brand/src/tokens.ts by scripts/generate.ts; do not edit */
+
+@theme inline {
+  --spacing: var(--vs-space-1);
+}

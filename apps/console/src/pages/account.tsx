@@ -198,9 +198,9 @@ function SignInMethods({ me }: { me: Me }) {
         {linkError ? (
           <p
             role="alert"
-            className="flex items-start gap-2 rounded-md border border-critical-line bg-critical-soft px-2.5 py-2 text-small text-fg"
+            className="flex items-start gap-2 rounded-md border border-critical-line bg-critical-soft px-2 py-2 text-small text-fg"
           >
-            <CircleX aria-hidden className="mt-0.5 size-3.5 shrink-0 text-critical" />
+            <CircleX aria-hidden className="mt-1 size-3.5 shrink-0 text-critical" />
             {LINK_ERRORS[linkError] ??
               "The service could not finish linking GitHub. Try again; if it keeps failing, report it to the operators."}
           </p>
@@ -208,9 +208,9 @@ function SignInMethods({ me }: { me: Me }) {
         {linked === "github" ? (
           <p
             role="status"
-            className="flex items-start gap-2 rounded-md border border-line bg-raised px-2.5 py-2 text-small text-fg"
+            className="flex items-start gap-2 rounded-md border border-line bg-raised px-2 py-2 text-small text-fg"
           >
-            <CircleCheck aria-hidden className="mt-0.5 size-3.5 shrink-0 text-success" />
+            <CircleCheck aria-hidden className="mt-1 size-3.5 shrink-0 text-success" />
             GitHub is linked. You can sign in with it from now on.
           </p>
         ) : null}
@@ -471,16 +471,16 @@ function DeleteAccount({ me }: { me: Me }) {
         {blocked.length > 0 ? (
           <div
             role="alert"
-            className="flex animate-fade-in flex-col gap-2 rounded-md border border-critical-line bg-critical-soft px-3 py-2.5 text-small text-fg"
+            className="flex animate-fade-in flex-col gap-2 rounded-md border border-critical-line bg-critical-soft px-3 py-2 text-small text-fg"
           >
             <p className="flex items-start gap-2">
-              <CircleX aria-hidden className="mt-0.5 size-3.5 shrink-0 text-critical" />
+              <CircleX aria-hidden className="mt-1 size-3.5 shrink-0 text-critical" />
               You are the only owner of{" "}
               {blocked.length === 1 ? "this project" : `these ${blocked.length} projects`}. Make
               another member an owner, or ask the operators to remove the project, then delete your
               account.
             </p>
-            <ul className="flex flex-col gap-1 pl-5.5">
+            <ul className="flex flex-col gap-1 pl-5">
               {blocked.map((t) => (
                 <li key={t.id}>
                   <Link

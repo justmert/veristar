@@ -138,11 +138,11 @@ function MembersBody({
           </Panel>
         ) : null}
         <div className="grid gap-3 text-small text-fg-2 sm:grid-cols-2 xl:grid-cols-1">
-          <p className="rounded-lg border border-line px-3.5 py-3">
+          <p className="rounded-lg border border-line px-3 py-3">
             <span className="font-medium text-fg">Owners</span> also add and remove people, delete
             sites, accept new terms and request erasure.
           </p>
-          <p className="rounded-lg border border-line px-3.5 py-3">
+          <p className="rounded-lg border border-line px-3 py-3">
             <span className="font-medium text-fg">Members</span> manage sites and open the web
             dashboards.
           </p>
@@ -158,16 +158,16 @@ function MembersBody({
               <table className="w-full min-w-[36rem] border-separate border-spacing-0 text-body">
                 <thead>
                   <tr className="text-left text-caption text-fg-3">
-                    <th scope="col" className="border-b border-line px-4 py-2.5 font-medium">
+                    <th scope="col" className="border-b border-line px-4 py-2 font-medium">
                       Member
                     </th>
-                    <th scope="col" className="border-b border-line px-4 py-2.5 font-medium">
+                    <th scope="col" className="border-b border-line px-4 py-2 font-medium">
                       Role
                     </th>
-                    <th scope="col" className="border-b border-line px-4 py-2.5 font-medium">
+                    <th scope="col" className="border-b border-line px-4 py-2 font-medium">
                       Added
                     </th>
-                    <th scope="col" className="border-b border-line px-4 py-2.5">
+                    <th scope="col" className="border-b border-line px-4 py-2">
                       <span className="sr-only">Actions</span>
                     </th>
                   </tr>
@@ -278,7 +278,7 @@ export function AddMemberForm({ tenantId }: { tenantId: string }) {
         </SelectField>
         <Button
           type="submit"
-          className="@lg:mt-6.5 max-lg:h-(--vs-control-touch)"
+          className="@lg:mt-6 max-lg:h-(--vs-control-touch)"
           pending={add.isPending}
         >
           {add.isPending ? null : <UserPlus aria-hidden />}
@@ -347,7 +347,7 @@ function MemberRow({
       className="transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover"
     >
       <td className={cell}>
-        <span className="flex min-w-0 items-center gap-2.5">
+        <span className="flex min-w-0 items-center gap-2">
           <Initial login={member.display_name} />
           <span className="min-w-0 truncate font-medium text-fg">
             <PersonName
@@ -473,7 +473,7 @@ function InviteRow({
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover">
       <Initial login={invite.display_name} dashed />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className="truncate text-body font-medium text-fg">
           <PersonName
             githubLogin={invite.github_login}

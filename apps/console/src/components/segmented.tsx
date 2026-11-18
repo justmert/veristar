@@ -47,7 +47,7 @@ export function Segmented<T extends string>({
         <div
           role="radiogroup"
           aria-label={label}
-          className="inline-flex rounded-md border border-line bg-sunken p-0.5"
+          className="inline-flex rounded-md border border-line bg-sunken p-1"
         >
           {options.map((o, i) => {
             const on = o.value === value;
@@ -62,7 +62,7 @@ export function Segmented<T extends string>({
                 onClick={() => onChange(o.value)}
                 onKeyDown={(e) => key(e, i)}
                 className={cn(
-                  "relative inline-flex items-center rounded-sm px-2.5 font-medium whitespace-nowrap transition-colors duration-(--vs-duration-reveal) ease-standard focus-ring",
+                  "relative inline-flex items-center rounded-sm px-2 font-medium whitespace-nowrap transition-colors duration-(--vs-duration-reveal) ease-standard focus-ring",
                   size === "sm" ? "h-7 text-small" : "h-8 text-body",
                   on ? "text-fg" : "text-fg-2 hover:text-fg",
                 )}

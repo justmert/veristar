@@ -162,7 +162,7 @@ function Step({
   return (
     <li
       className={cn(
-        "grid grid-cols-[1.75rem_minmax(0,1fr)] gap-3.5 p-4 sm:p-5",
+        "grid grid-cols-[1.75rem_minmax(0,1fr)] gap-3 p-4 sm:p-5",
         !last && "border-b border-line",
       )}
     >
@@ -232,7 +232,7 @@ function FirstData({
       <motion.div key={state} {...fade} className="flex flex-col gap-2">
         {state === "received" && lastUsed ? (
           <>
-            <p role="status" className="flex items-center gap-2.5 text-body text-fg">
+            <p role="status" className="flex items-center gap-2 text-body text-fg">
               <StatusDot tone="success" />
               Data arrived. {lastUsed.name} was last used{" "}
               {formatDateTimeUtc(lastUsed.last_seen_at ?? "")}.
@@ -246,7 +246,7 @@ function FirstData({
           </>
         ) : state === "waiting" ? (
           <>
-            <p role="status" className="flex items-center gap-2.5 text-body text-fg">
+            <p role="status" className="flex items-center gap-2 text-body text-fg">
               <StatusDot tone="info" live />
               Waiting for the first data sent with a token. This page checks every 30 seconds.
             </p>
@@ -513,11 +513,11 @@ function TokenRow({ tenantId, token }: { tenantId: string; token: OtlpToken }) {
 
 function Kept({ yes, children }: { yes: boolean; children: ReactNode }) {
   return (
-    <li className="flex gap-2.5 border-t border-line py-2.5 text-small text-fg-2">
+    <li className="flex gap-2 border-t border-line py-2 text-small text-fg-2">
       {yes ? (
-        <Check aria-hidden className="mt-0.5 size-3.5 shrink-0 text-success" strokeWidth={2.6} />
+        <Check aria-hidden className="mt-1 size-3.5 shrink-0 text-success" strokeWidth={2.6} />
       ) : (
-        <X aria-hidden className="mt-0.5 size-3.5 shrink-0 text-fg-3" strokeWidth={2.6} />
+        <X aria-hidden className="mt-1 size-3.5 shrink-0 text-fg-3" strokeWidth={2.6} />
       )}
       <span>{children}</span>
     </li>
@@ -530,7 +530,7 @@ function KeptSection() {
       <h2 id="otlp-kept" className="pb-2 text-caption text-fg-3">
         What this service keeps
       </h2>
-      <p className="border-t border-line py-2.5 text-small text-fg">
+      <p className="border-t border-line py-2 text-small text-fg">
         Only HTTP server request duration is kept: the metric http.server.request.duration (the
         older http.server.duration in milliseconds is converted to seconds), with the method, route,
         status code and error type, per service.name.
@@ -554,7 +554,7 @@ function KeptSection() {
           Exponential histograms are re-bucketed onto fixed bucket bounds and marked as approximate.
         </Kept>
       </ul>
-      <p className="border-t border-line py-2.5 text-small text-fg-2">
+      <p className="border-t border-line py-2 text-small text-fg-2">
         Your own backend keeps the full data. The exporter to it is unchanged and receives every
         metric, trace and log as before; only the second exporter, the one with the token, sends
         here.
@@ -604,7 +604,7 @@ function Guide({ guide }: { guide: OtelGuide }) {
           ) : (
             <pre
               key={b.text}
-              className="overflow-x-auto rounded-md border border-line bg-sunken px-3 py-2.5 font-mono text-caption font-normal whitespace-pre-wrap text-fg"
+              className="overflow-x-auto rounded-md border border-line bg-sunken px-3 py-2 font-mono text-caption font-normal whitespace-pre-wrap text-fg"
             >
               <code>{b.text}</code>
             </pre>

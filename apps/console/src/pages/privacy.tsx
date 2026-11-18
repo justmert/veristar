@@ -289,7 +289,7 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
         aria-label="Request erasure"
         className="flex flex-col rounded-xl border border-line bg-raised"
       >
-        <h3 className="border-b border-line px-4 py-3.5 text-title text-fg sm:px-5">
+        <h3 className="border-b border-line px-4 py-3 text-title text-fg sm:px-5">
           Request erasure
         </h3>
         <div className="flex flex-col gap-5 p-4 sm:p-5">
@@ -434,9 +434,9 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
           {confirming ? null : special ? (
             <p
               role="alert"
-              className="flex animate-fade-in items-start gap-2 rounded-md border border-critical-line bg-critical-soft px-2.5 py-2 text-small text-fg"
+              className="flex animate-fade-in items-start gap-2 rounded-md border border-critical-line bg-critical-soft px-2 py-2 text-small text-fg"
             >
-              <X aria-hidden className="mt-0.5 size-3.5 shrink-0 text-critical" />
+              <X aria-hidden className="mt-1 size-3.5 shrink-0 text-critical" />
               {special}
             </p>
           ) : (
@@ -528,7 +528,7 @@ function History({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
     >
       <h2
         id="erasure-history"
-        className="border-b border-line px-4 py-3.5 text-title text-fg sm:px-5"
+        className="border-b border-line px-4 py-3 text-title text-fg sm:px-5"
       >
         Request history
       </h2>
@@ -588,10 +588,10 @@ export function HistoryRow({ r, domain }: { r: ErasureRequest; domain: string })
         ? `session ${r.session_id ?? ""}`
         : "all web data";
   return (
-    <div className="grid gap-x-4 gap-y-1.5 px-4 py-3 text-small sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:px-5">
+    <div className="grid gap-x-4 gap-y-1 px-4 py-3 text-small sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:px-5">
       <span
         className={cn(
-          "flex items-center gap-1.5 font-medium [&_svg]:size-3.5",
+          "flex items-center gap-1 font-medium [&_svg]:size-3.5",
           look?.text ?? "text-fg-2",
         )}
       >
@@ -641,7 +641,7 @@ function Explanation() {
             day.
           </p>
           <dl className="flex flex-col gap-3">
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-1">
               <dt className="font-medium text-fg">One visitor, today</dt>
               <dd>
                 Works only on the UTC day of the visit. On that day the service can compute the
@@ -651,7 +651,7 @@ function Explanation() {
                 person, so a request for an earlier day finds nothing and says so.
               </dd>
             </div>
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-1">
               <dt className="font-medium text-fg">One session</dt>
               <dd>
                 Works for as long as raw data is kept. If the visitor can point to a visit (for
@@ -659,7 +659,7 @@ function Explanation() {
                 erase it by its id.
               </dd>
             </div>
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-1">
               <dt className="font-medium text-fg">Whole site</dt>
               <dd>
                 Deletes every event and session of the site, counted and quarantined, and its
@@ -760,7 +760,7 @@ export function SessionFinder({
                   aria-pressed={chosen === x.id}
                   onClick={() => onChoose(x.id)}
                   className={cn(
-                    "flex w-full flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-sm px-2 py-1.5 text-left text-small transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring",
+                    "flex w-full flex-wrap items-baseline gap-x-3 gap-y-1 rounded-sm px-2 py-1 text-left text-small transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring",
                     chosen === x.id && "bg-selected",
                   )}
                 >

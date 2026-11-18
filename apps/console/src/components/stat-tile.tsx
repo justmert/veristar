@@ -60,14 +60,14 @@ export function StatTile({
       aria-pressed={onPress ? pressed : undefined}
       onClick={onPress}
       className={cn(
-        "group/tile flex min-w-0 flex-col gap-1.5 rounded-lg border bg-raised px-4 pt-3.5 pb-3 text-left tabular transition duration-(--vs-duration-reveal) ease-standard",
+        "group/tile flex min-w-0 flex-col gap-1 rounded-lg border bg-raised px-4 pt-3 pb-3 text-left tabular transition duration-(--vs-duration-reveal) ease-standard",
         onPress && "focus-ring hover:border-line-strong hover:bg-hover active:translate-y-px",
         pressed ? "border-fg-disabled bg-overlay hover:bg-overlay" : "border-line",
         className,
       )}
     >
       <span className="flex w-full items-center justify-between gap-2">
-        <span className="flex min-w-0 items-center gap-1.5 text-small text-fg-2">
+        <span className="flex min-w-0 items-center gap-1 text-small text-fg-2">
           <span className="truncate">{label}</span>
           {hint ? (
             <Tooltip content={hint}>
@@ -83,21 +83,21 @@ export function StatTile({
           ) : null}
         </span>
         {pressed ? (
-          <span className="shrink-0 animate-fade-in whitespace-nowrap rounded-full border border-line-strong px-1.5 text-axis font-medium text-fg">
+          <span className="shrink-0 animate-fade-in whitespace-nowrap rounded-full border border-line-strong px-1 text-axis font-medium text-fg">
             In chart
           </span>
         ) : null}
       </span>
       {state === "loading" ? (
-        <span aria-busy="true" className="flex flex-col gap-2.5 pt-1">
+        <span aria-busy="true" className="flex flex-col gap-2 pt-1">
           <Skeleton className="h-7 w-3/5" />
           <Skeleton className="h-3 w-2/5" />
           <Skeleton className="h-10 w-full" />
         </span>
       ) : state === "error" ? (
-        <span className="flex flex-col gap-1.5 pt-0.5">
+        <span className="flex flex-col gap-1 pt-1">
           <span className="font-mono text-metric text-fg-3">n/a</span>
-          <span className="flex items-center gap-1.5 text-small text-critical">
+          <span className="flex items-center gap-1 text-small text-critical">
             <CircleAlert aria-hidden className="size-3.5" />
             Could not load
           </span>
@@ -116,10 +116,10 @@ export function StatTile({
           {state === "empty" ? (
             <span className="text-small text-fg-2">{emptyText}</span>
           ) : trend ? (
-            <span className="flex items-center gap-1.5 text-caption font-normal">
+            <span className="flex items-center gap-1 text-caption font-normal">
               <span
                 className={cn(
-                  "flex items-center gap-0.5 font-mono",
+                  "flex items-center gap-1 font-mono",
                   trend.good === null || trend.direction === "flat"
                     ? "text-fg-2"
                     : trend.good

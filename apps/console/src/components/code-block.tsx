@@ -30,7 +30,7 @@ export function CodeBlock({
       </div>
       <pre
         className={cn(
-          "overflow-x-auto px-3.5 py-3 text-small text-fg",
+          "overflow-x-auto px-3 py-3 text-small text-fg",
           wrap ? "whitespace-pre-wrap break-all" : "whitespace-pre",
         )}
       >
@@ -53,11 +53,11 @@ export function CopyField({
   return (
     <div
       className={cn(
-        "flex min-w-0 items-center gap-1 rounded-md border border-line bg-sunken pl-2.5",
+        "flex min-w-0 items-center gap-1 rounded-md border border-line bg-sunken pl-2",
         className,
       )}
     >
-      <code className="min-w-0 flex-1 truncate py-1.5 text-small text-fg">{value}</code>
+      <code className="min-w-0 flex-1 truncate py-1 text-small text-fg">{value}</code>
       <CopyButton text={value} label={`Copy ${label}`} size="xs" variant="ghost" iconOnly />
     </div>
   );

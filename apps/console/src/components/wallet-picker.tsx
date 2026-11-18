@@ -98,7 +98,7 @@ export function WalletPicker({
           </p>
         ) : null}
         {installed.length > 0 ? (
-          <ul className="flex flex-col gap-1.5" aria-label="Wallets in this browser">
+          <ul className="flex flex-col gap-1" aria-label="Wallets in this browser">
             {installed.map((w) => (
               <li key={w.id}>
                 <Button
@@ -118,7 +118,7 @@ export function WalletPicker({
         ) : null}
         {error ? <FormMessage error={error} /> : null}
         {others.length > 0 ? (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1">
             <p className="text-caption text-fg-3">Not installed</p>
             <ul className="flex flex-wrap gap-x-3 gap-y-1">
               {others.map((w) => (

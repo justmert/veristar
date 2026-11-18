@@ -166,13 +166,13 @@ function SetupAside({ site }: { site: Site }) {
       <div className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-4">
         <span className="text-caption tracking-wide text-fg-3 uppercase">This site</span>
         <dl className="flex flex-col gap-3 text-small">
-          <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col gap-1">
             <dt className="text-caption font-normal text-fg-3">Domain</dt>
             <dd className="break-all font-mono text-fg">{site.domain}</dd>
           </div>
-          <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col gap-1">
             <dt className="text-caption font-normal text-fg-3">Allowed origins</dt>
-            <dd className="flex flex-col gap-0.5">
+            <dd className="flex flex-col gap-1">
               {site.origins.map((o) => (
                 <span key={o} className="break-all font-mono text-fg">
                   {o}
@@ -302,7 +302,7 @@ function Step({
         {last ? null : <span aria-hidden className="mt-2 w-px flex-1 bg-line" />}
       </div>
       <div className={cn("flex min-w-0 flex-col gap-3", last ? "" : "pb-8")}>
-        <h3 className="pt-0.5 text-title text-fg">{title}</h3>
+        <h3 className="pt-1 text-title text-fg">{title}</h3>
         {children}
       </div>
     </li>
@@ -418,7 +418,7 @@ function Install({
                 />
               </div>
             </div>
-            <pre className="overflow-x-auto px-3.5 py-3 font-mono text-small break-all whitespace-pre-wrap text-fg">
+            <pre className="overflow-x-auto px-3 py-3 font-mono text-small break-all whitespace-pre-wrap text-fg">
               <code>{g.code}</code>
             </pre>
           </div>
@@ -435,13 +435,13 @@ function Install({
                 checked={consent}
                 onCheckedChange={(c) => setConsent(c === true)}
                 aria-describedby={`${consentId}-d`}
-                className="mt-0.5"
+                className="mt-1"
               />
               <label htmlFor={consentId} className="text-body text-fg">
                 Wait for consent before measuring
               </label>
             </div>
-            <p id={`${consentId}-d`} className="pl-7 text-small text-fg-2">
+            <p id={`${consentId}-d`} className="pl-6 text-small text-fg-2">
               {npm ? (
                 <>
                   Passes <code className="font-mono text-fg">autoTrack: false</code> to{" "}
@@ -459,7 +459,7 @@ function Install({
             </p>
             <AnimatePresence initial={false}>
               {consent ? (
-                <motion.div {...fade} className="pl-7">
+                <motion.div {...fade} className="pl-6">
                   <CodeBlock
                     code={CONSENT_START}
                     label="When the visitor agrees"
@@ -478,13 +478,13 @@ function Install({
                   checked={title}
                   onCheckedChange={(c) => setTitle(c === true)}
                   aria-describedby={`${titleId}-d`}
-                  className="mt-0.5"
+                  className="mt-1"
                 />
                 <label htmlFor={titleId} className="text-body text-fg">
                   Send the page title
                 </label>
               </div>
-              <p id={`${titleId}-d`} className="pl-7 text-small text-fg-2">
+              <p id={`${titleId}-d`} className="pl-6 text-small text-fg-2">
                 {npm ? (
                   <>
                     Passes <code className="font-mono text-fg">sendTitle: true</code> to{" "}
@@ -513,7 +513,7 @@ function Install({
             </summary>
             <div className="flex flex-col gap-3 border-t border-line p-3">
               <div className="flex flex-wrap items-end gap-3">
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1">
                   <label htmlFor={pickerId} className="text-small font-medium text-fg">
                     Tracker version
                   </label>
@@ -531,7 +531,7 @@ function Install({
                   </NativeSelect>
                 </div>
                 {v ? (
-                  <p className="pb-1.5 text-small text-fg-2">
+                  <p className="pb-1 text-small text-fg-2">
                     Released {formatDate(`${v.released}T00:00:00Z`)}, {formatBytes(v.gzip_bytes)}{" "}
                     compressed ({formatBytes(v.bytes)} raw)
                   </p>
@@ -636,7 +636,7 @@ function FirstEventState({
               <CircleAlert aria-hidden className="size-4 text-warning" />
               Events are arriving, but they are refused
             </span>
-            <ul className="flex flex-col gap-1.5 text-small">
+            <ul className="flex flex-col gap-1 text-small">
               {reasons.map((r) => (
                 <li key={r.key} className="flex flex-col">
                   <span className="text-fg">
@@ -674,7 +674,7 @@ function FirstEventState({
           </motion.div>
         ) : (
           <motion.div key="waiting" {...fade} className="flex flex-col gap-2">
-            <span className="flex items-center gap-2.5 text-body font-medium text-fg">
+            <span className="flex items-center gap-2 text-body font-medium text-fg">
               <StatusDot tone="accent" live className="size-2" />
               Listening for the first event
             </span>

@@ -211,8 +211,8 @@ export function TimeChart({
       aria-label={title}
       className={cn("flex min-w-0 flex-col rounded-lg border border-line bg-raised", className)}
     >
-      <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-4 pt-3.5 pb-2 sm:px-5">
-        <div className="flex min-w-0 flex-col gap-0.5">
+      <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-4 pt-3 pb-2 sm:px-5">
+        <div className="flex min-w-0 flex-col gap-1">
           <h2 className="text-title text-fg">{title}</h2>
           {description ? <p className="text-small text-fg-2">{description}</p> : null}
         </div>
@@ -220,7 +220,7 @@ export function TimeChart({
           {series.length > 1 ? (
             <ul aria-label="Legend" className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {series.map((s) => (
-                <li key={s.key} className="flex items-center gap-1.5 text-caption text-fg-2">
+                <li key={s.key} className="flex items-center gap-1 text-caption text-fg-2">
                   <span aria-hidden className={cn("size-2.5 rounded-bar", SWATCH[s.tone])} />
                   {s.label}
                 </li>
@@ -233,7 +233,7 @@ export function TimeChart({
               aria-pressed={showPrev}
               onClick={() => setShowPrev((v) => !v)}
               className={cn(
-                "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-caption transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-(--vs-control-touch)",
+                "inline-flex h-7 items-center gap-1 rounded-md border px-2 text-caption transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-(--vs-control-touch)",
                 showPrev
                   ? "border-fg-disabled bg-selected text-fg"
                   : "border-line-strong text-fg-2 hover:bg-hover hover:text-fg",
@@ -313,7 +313,7 @@ export function TimeChart({
                 {state === "loading" ? (
                   <div
                     aria-busy="true"
-                    className="flex items-end gap-0.5 pl-12"
+                    className="flex items-end gap-1 pl-12"
                     style={{ height: PLOT_H }}
                   >
                     <span className="sr-only">Loading the chart</span>
@@ -331,7 +331,7 @@ export function TimeChart({
                     className="flex flex-col items-center justify-center gap-3 text-center"
                     style={{ height: PLOT_H }}
                   >
-                    <span className="flex items-center gap-1.5 text-body text-fg">
+                    <span className="flex items-center gap-1 text-body text-fg">
                       <CircleAlert aria-hidden className="size-4 text-critical" />
                       The chart could not be loaded
                     </span>
@@ -515,7 +515,7 @@ export function TimeChart({
                 )}
               </div>
               {n > 0 ? (
-                <div className="mt-1.5 flex justify-between pl-12 font-mono text-axis text-fg-3">
+                <div className="mt-1 flex justify-between pl-12 font-mono text-axis text-fg-3">
                   <span>{buckets[0]?.tick}</span>
                   {n > 2 ? <span className="max-sm:hidden">{buckets[mid]?.tick}</span> : null}
                   <span>{buckets[n - 1]?.tick} UTC</span>
@@ -549,7 +549,7 @@ function Readout({
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute top-2 z-10 flex min-w-44 animate-fade-in flex-col gap-1.5 rounded-md border border-line-strong bg-overlay px-3 py-2 text-small shadow-overlay"
+      className="pointer-events-none absolute top-2 z-(--vs-layer-raised) flex min-w-44 animate-fade-in flex-col gap-1 rounded-md border border-line-strong bg-overlay px-3 py-2 text-small shadow-overlay"
       style={{ left: x, transform: flip ? "translateX(calc(-100% - 12px))" : "translateX(12px)" }}
     >
       <span className="text-caption text-fg-2">
@@ -564,7 +564,7 @@ function Readout({
         </span>
       ))}
       {previous !== null ? (
-        <span className="flex items-center gap-2 border-t border-line pt-1.5">
+        <span className="flex items-center gap-2 border-t border-line pt-1">
           <span className="flex-1 text-fg-3">{previousLabel}</span>
           <span className="font-mono text-fg-2 tabular">{previous}</span>
         </span>

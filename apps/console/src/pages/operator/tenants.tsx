@@ -86,7 +86,7 @@ export function TenantsPage() {
       </h2>
 
       <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-raised">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 border-b border-line px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-4 py-3">
           <SearchBox
             value={search}
             onChange={setSearch}
@@ -94,7 +94,7 @@ export function TenantsPage() {
             placeholder="Name, address, website or site domain"
             className="w-full sm:w-64"
           />
-          <fieldset className="flex flex-wrap items-center gap-1.5">
+          <fieldset className="flex flex-wrap items-center gap-1">
             <legend className="sr-only">Status</legend>
             {tenantStatus.options.map((s) => (
               <FilterChip key={s} on={q.status.includes(s)} onToggle={() => toggleStatus(s)}>
@@ -155,7 +155,7 @@ export function TenantsPage() {
             <TableScroll label="Projects table" dim={list.isPlaceholderData}>
               <TenantTable items={items} sort={q.sort} order={q.order} onSort={sortBy} />
             </TableScroll>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-2">
               <p className="text-caption text-fg-3" aria-live="polite">
                 {formatCount(items.length)} {items.length === 1 ? "project" : "projects"} shown
                 {list.hasNextPage ? ", more to load" : ""}

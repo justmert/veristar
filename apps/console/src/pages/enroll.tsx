@@ -213,7 +213,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
       : null;
 
   const errorCount = Object.keys(errors).length;
-  const legend = "px-1.5 text-caption tracking-wide text-fg-3 uppercase";
+  const legend = "px-1 text-caption tracking-wide text-fg-3 uppercase";
   const fieldset =
     "flex min-w-0 flex-col gap-4 rounded-lg border border-line bg-raised px-4 pt-2 pb-5 sm:px-5";
 
@@ -370,7 +370,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                   onCheckedChange={(c) => setValues((s) => ({ ...s, termsAccepted: c === true }))}
                   aria-invalid={errors.termsAccepted ? true : undefined}
                   aria-describedby={errors.termsAccepted ? `${termsId}-e` : undefined}
-                  className="mt-0.5"
+                  className="mt-1"
                 />
                 <label htmlFor={termsId} className="text-body text-fg">
                   I accept the{" "}
@@ -390,7 +390,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 <p
                   id={`${termsId}-e`}
                   role="alert"
-                  className="animate-fade-in pl-7 text-caption font-normal text-critical"
+                  className="animate-fade-in pl-6 text-caption font-normal text-critical"
                 >
                   {errors.termsAccepted}
                 </p>
@@ -421,7 +421,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
           </form>
         </div>
 
-        <aside aria-labelledby={`${termsId}-after`} className="flex flex-col xl:pt-24">
+        <aside aria-labelledby={`${termsId}-after`} className="flex flex-col xl:pt-16">
           <h2
             id={`${termsId}-after`}
             className="pb-2 text-caption tracking-wide text-fg-3 uppercase"
@@ -432,10 +432,10 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
             {AFTER.map((step, i) => (
               <li
                 key={step.title}
-                className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2.5 border-t border-line py-3"
+                className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2 border-t border-line py-3"
               >
-                <span className="pt-0.5 font-mono text-caption font-normal text-fg-3">{i + 1}</span>
-                <span className="flex flex-col gap-0.5">
+                <span className="pt-1 font-mono text-caption font-normal text-fg-3">{i + 1}</span>
+                <span className="flex flex-col gap-1">
                   <span className="text-body font-medium text-fg">{step.title}</span>
                   <span className="text-small text-fg-2">{step.text}</span>
                 </span>

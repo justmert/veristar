@@ -172,7 +172,7 @@ export function AuditPage() {
             {active.map((f) => (
               <span
                 key={f}
-                className="inline-flex h-7 max-w-full animate-fade-in items-center gap-1.5 rounded-md border border-line-strong pr-0.5 pl-2.5 text-small"
+                className="inline-flex h-7 max-w-full animate-fade-in items-center gap-1 rounded-md border border-line-strong pr-1 pl-2 text-small"
               >
                 <span className="text-fg-3">{FIELD_LABEL[f]}</span>
                 <span className="min-w-0 truncate font-mono text-caption text-fg">
@@ -517,7 +517,7 @@ export function AuditEntries({
     >
       {groups.map((g) => (
         <li key={g.day} className="flex flex-col">
-          <h3 className="border-b border-line-subtle bg-raised px-4 pt-3 pb-1.5 text-caption font-medium tracking-wide text-fg-3 uppercase">
+          <h3 className="border-b border-line-subtle bg-raised px-4 pt-3 pb-1 text-caption font-medium tracking-wide text-fg-3 uppercase">
             {dayLabel(g.items[0]?.at ?? g.day, today)}
           </h3>
           <ol className="flex flex-col">
@@ -551,7 +551,7 @@ function AuditRow({ e }: { e: AuditEntry }) {
       >
         {initials(e)}
       </span>
-      <div className="flex min-w-0 flex-col gap-1.5">
+      <div className="flex min-w-0 flex-col gap-1">
         <p className="text-body break-words">
           <span className={cn("font-semibold", system ? "text-fg-2" : "text-fg")} title={e.actor}>
             {actorName(e)}
@@ -585,11 +585,11 @@ function AuditRow({ e }: { e: AuditEntry }) {
           ) : null}
         </p>
         {changes.length > 0 || reason ? (
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1">
             {changes.map((c) => (
               <span
                 key={c.key}
-                className="inline-flex items-center gap-1.5 rounded-sm border border-line px-1.5 py-px text-caption font-normal"
+                className="inline-flex items-center gap-1 rounded-sm border border-line px-1 py-px text-caption font-normal"
               >
                 <span className="text-fg-3">{c.key}</span>
                 <span className="sr-only">changed from</span>
@@ -611,12 +611,12 @@ function AuditRow({ e }: { e: AuditEntry }) {
           <summary className="w-fit cursor-pointer rounded-sm text-caption font-normal text-fg-3 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring">
             Raw JSON
           </summary>
-          <pre className="mt-1.5 animate-rise-in overflow-x-auto rounded-md border border-line bg-sunken p-2.5 font-mono text-caption text-fg-2">
+          <pre className="mt-1 animate-rise-in overflow-x-auto rounded-md border border-line bg-sunken p-2 font-mono text-caption text-fg-2">
             {JSON.stringify(e, null, 2)}
           </pre>
         </details>
       </div>
-      <div className="col-start-2 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 sm:col-start-3 sm:row-start-1 sm:flex-col sm:items-end">
+      <div className="col-start-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 sm:col-start-3 sm:row-start-1 sm:flex-col sm:items-end">
         <time
           dateTime={e.at}
           title={formatDateTimeUtc(e.at)}

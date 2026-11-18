@@ -130,11 +130,11 @@ export function EvidenceList({ items, stacked }: { items: EvidenceItem[]; stacke
         <li
           key={e.key}
           className={cn(
-            "grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-2.5 py-1.5 text-small",
+            "grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-2 py-1 text-small",
             !stacked && "sm:grid-cols-[1rem_10rem_minmax(0,1fr)]",
           )}
         >
-          <span className="mt-0.5 flex">{SIGNAL_ICON[e.signal]}</span>
+          <span className="mt-1 flex">{SIGNAL_ICON[e.signal]}</span>
           <span className="text-fg-2">
             {e.label}
             <span className="sr-only">, {SIGNAL_WORD[e.signal]}:</span>
@@ -270,7 +270,7 @@ export function DecisionPanel({
               aria-keyshortcuts={c === "approve" ? "A" : "R"}
               onClick={() => pick(c)}
               className={cn(
-                "flex items-center justify-between gap-2 rounded-md border px-3 py-2.5 text-left text-body font-medium transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:min-h-(--vs-control-touch)",
+                "flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-body font-medium transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:min-h-(--vs-control-touch)",
                 on
                   ? c === "approve"
                     ? "border-success bg-selected text-fg"
@@ -295,7 +295,7 @@ export function DecisionPanel({
       </div>
 
       {choice === "reject" ? (
-        <fieldset className="flex flex-wrap gap-1.5">
+        <fieldset className="flex flex-wrap gap-1">
           <legend className="sr-only">Reason presets</legend>
           {PRESETS.map((p) => {
             const on = reason.trim() === p;
@@ -309,7 +309,7 @@ export function DecisionPanel({
                   setFieldError(null);
                 }}
                 className={cn(
-                  "h-7 rounded-full border px-2.5 text-caption transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-9",
+                  "h-7 rounded-full border px-2 text-caption transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-9",
                   on
                     ? "border-fg bg-selected text-fg"
                     : "border-line-strong text-fg-2 hover:bg-hover hover:text-fg",
@@ -322,7 +322,7 @@ export function DecisionPanel({
         </fieldset>
       ) : null}
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         <label htmlFor={`${ids}-r`} className="text-small font-medium text-fg">
           Reason{" "}
           <span className="font-normal text-fg-3">{required ? "(required)" : "(optional)"}</span>
@@ -351,9 +351,9 @@ export function DecisionPanel({
       {conflict ? (
         <div
           role="alert"
-          className="flex animate-fade-in flex-wrap items-start gap-2.5 rounded-md border border-line-strong px-3 py-2.5 text-small text-fg"
+          className="flex animate-fade-in flex-wrap items-start gap-2 rounded-md border border-line-strong px-3 py-2 text-small text-fg"
         >
-          <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
+          <CircleAlert aria-hidden className="mt-1 size-4 shrink-0 text-warning" />
           <span className="min-w-0 flex-1">
             Someone decided first. {run.error instanceof Error ? run.error.message : null}
           </span>
@@ -396,7 +396,7 @@ export function DecisionPanel({
 
 export function Waiting({ since, now }: { since: string; now: number }) {
   return (
-    <span className="flex items-center gap-1.5 text-caption text-warning">
+    <span className="flex items-center gap-1 text-caption text-warning">
       <Clock aria-hidden className="size-3" strokeWidth={2.4} />
       {waitingText(since, now)}
     </span>

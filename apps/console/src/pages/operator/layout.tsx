@@ -114,7 +114,7 @@ function AlertsBadge({
   if (failed) {
     return (
       <span
-        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-critical-line bg-critical-soft px-1.5 font-mono text-axis font-medium text-critical"
+        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-critical-line bg-critical-soft px-1 font-mono text-axis font-medium text-critical"
         title="Alert source unreachable"
       >
         !<span className="sr-only">, alert source unreachable</span>
@@ -126,8 +126,8 @@ function AlertsBadge({
     <span
       className={
         critical > 0
-          ? "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-critical-solid px-1.5 font-mono text-axis font-medium text-on-critical tabular"
-          : "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-selected px-1.5 font-mono text-axis font-medium text-fg tabular"
+          ? "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-critical-solid px-1 font-mono text-axis font-medium text-on-critical tabular"
+          : "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-selected px-1 font-mono text-axis font-medium text-fg tabular"
       }
     >
       {count}

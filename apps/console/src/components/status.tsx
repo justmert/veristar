@@ -60,7 +60,7 @@ export function Pill({
   return (
     <span
       className={cn(
-        "inline-flex h-6 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-line-strong px-2 text-caption font-medium text-fg",
+        "inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-line-strong px-2 text-caption font-medium text-fg",
         className,
       )}
     >

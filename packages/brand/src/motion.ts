@@ -16,9 +16,11 @@ export const transition = {
   change: { duration: s(m.duration.change), ease },
   arrival: { duration: s(m.duration.arrival), ease },
   page: { duration: s(m.duration.page), ease },
+  // a value counting to its new number
+  number: { duration: s(m.duration.number), ease },
   exit: { duration: s(m.duration.press), ease: easeExit },
-  // a spring for layout moves (the selected nav item, tab underline)
-  layout: { type: "spring", stiffness: 520, damping: 42, mass: 0.8 },
+  // a spring for layout moves (the current nav item, a segmented marker)
+  layout: { type: "spring", ...m.spring },
 } as const;
 
 const d = m.distance;
@@ -53,7 +55,9 @@ export const page = {
 
 // lists reveal their children one after another, briefly
 export const stagger = {
-  animate: { transition: { staggerChildren: 0.03, delayChildren: 0.02 } },
+  animate: {
+    transition: { staggerChildren: s(m.stagger.children), delayChildren: s(m.stagger.delay) },
+  },
 } as const;
 
 export const fade = {

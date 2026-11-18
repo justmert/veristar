@@ -183,14 +183,14 @@ export function Markdown({ source, afterTitle }: { source: string; afterTitle?: 
             return (
               <blockquote
                 key={key}
-                className="rounded-md border border-warning-line bg-warning-soft px-3.5 py-2.5 text-small text-fg"
+                className="rounded-md border border-warning-line bg-warning-soft px-3 py-2 text-small text-fg"
               >
                 {inline(b.text)}
               </blockquote>
             );
           case "ul":
             return (
-              <ul key={key} className="flex list-disc flex-col gap-1.5 pl-5 marker:text-fg-3">
+              <ul key={key} className="flex list-disc flex-col gap-1 pl-5 marker:text-fg-3">
                 {b.items.map((it, j) => (
                   <li key={`${key}-${j}`}>{inline(it)}</li>
                 ))}
@@ -198,7 +198,7 @@ export function Markdown({ source, afterTitle }: { source: string; afterTitle?: 
             );
           case "ol":
             return (
-              <ol key={key} className="flex list-decimal flex-col gap-1.5 pl-5 marker:text-fg-3">
+              <ol key={key} className="flex list-decimal flex-col gap-1 pl-5 marker:text-fg-3">
                 {b.items.map((it, j) => (
                   <li key={`${key}-${j}`}>{inline(it)}</li>
                 ))}

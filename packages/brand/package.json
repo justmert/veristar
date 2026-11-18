@@ -5,6 +5,7 @@
   "description": "veristar brand tokens, tailwind theme, motion presets and the mark",
   "exports": {
     "./index.css": "./src/index.css",
+    "./spacing.css": "./src/spacing.generated.css",
     "./tokens": "./src/tokens.ts",
     "./motion": "./src/motion.ts",
     "./mark": "./src/mark.tsx",

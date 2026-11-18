@@ -51,7 +51,7 @@ export function VerifyPage() {
       {site ? (
         <section
           aria-label="stellar.toml"
-          className="rounded-lg border border-line bg-raised px-4 py-3.5 sm:px-5"
+          className="rounded-lg border border-line bg-raised px-4 py-3 sm:px-5"
         >
           <StellarTomlSummary
             toml={site.stellar_toml}
@@ -113,7 +113,7 @@ function Verify({ v, tenantId }: { v: SiteVerification; tenantId: string }) {
       className="flex flex-col rounded-lg border border-line bg-raised"
     >
       <header className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4 sm:px-5">
-        <div className="flex min-w-0 flex-col gap-0.5">
+        <div className="flex min-w-0 flex-col gap-1">
           <h2 id="verify-title" className="text-title text-fg">
             Prove you control <span className="break-all">{v.domain}</span>
           </h2>
@@ -173,7 +173,7 @@ function Verify({ v, tenantId }: { v: SiteVerification; tenantId: string }) {
 
       <div className="mt-4 flex flex-col gap-3 border-t border-line px-4 py-4 sm:px-5">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1">
             <label htmlFor="verify-choice" className="text-small font-medium text-fg">
               Check
             </label>
@@ -197,8 +197,8 @@ function Verify({ v, tenantId }: { v: SiteVerification; tenantId: string }) {
         </div>
         <div aria-live="polite" className="min-h-12">
           <AnimatePresence mode="wait" initial={false}>
-            <motion.div key={`${line.tone}-${line.title}`} {...fade} className="flex gap-2.5">
-              <span className="mt-0.5 flex">
+            <motion.div key={`${line.tone}-${line.title}`} {...fade} className="flex gap-2">
+              <span className="mt-1 flex">
                 {line.tone === "checking" ? (
                   <LoaderCircle aria-hidden className="size-4 animate-spin text-fg-2" />
                 ) : line.tone === "failed" ? (
@@ -209,7 +209,7 @@ function Verify({ v, tenantId }: { v: SiteVerification; tenantId: string }) {
                   <span aria-hidden className="m-1 size-2 rounded-full bg-fg-3" />
                 )}
               </span>
-              <span className="flex min-w-0 flex-col gap-0.5 text-small">
+              <span className="flex min-w-0 flex-col gap-1 text-small">
                 <span
                   className={cn(
                     "break-words",

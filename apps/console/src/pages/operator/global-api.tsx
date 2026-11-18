@@ -143,7 +143,7 @@ export function GlobalApiPage() {
       <RangeControl resolved={resolved} onChange={(range) => set({ ...state, range })} />
 
       <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-raised">
-        <div className="flex flex-col gap-2.5 border-b border-line px-4 py-3">
+        <div className="flex flex-col gap-2 border-b border-line px-4 py-3">
           <FiltersPanel
             filters={state.filters}
             onChange={(filters) => set({ ...state, filters })}
@@ -261,7 +261,7 @@ export function GlobalApiPage() {
         ) : null}
 
         {list.data && first?.total !== 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-2">
             <p className="text-caption text-fg-3" aria-live="polite">
               {formatCount(first?.total ?? 0)} {first?.total === 1 ? "project" : "projects"} match
             </p>
@@ -300,7 +300,7 @@ export function SourceBadge({
     <span
       title={traces ? SPAN_NOTE : undefined}
       className={cn(
-        "inline-flex h-6 items-center gap-1.5 rounded-full border px-2 text-caption font-medium whitespace-nowrap text-fg",
+        "inline-flex h-6 items-center gap-1 rounded-full border px-2 text-caption font-medium whitespace-nowrap text-fg",
         traces ? "border-warning-line" : "border-line-strong",
       )}
     >
@@ -357,7 +357,7 @@ function ApiRow({
           {t.status !== "active" ? <StatusPill status={t.status} /> : null}
         </span>
         {p.lossy ? (
-          <span className="mt-0.5 block text-caption text-fg-3">
+          <span className="mt-1 block text-caption text-fg-3">
             Some latency buckets are approximate
           </span>
         ) : null}

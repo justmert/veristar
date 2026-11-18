@@ -47,7 +47,7 @@ function Tabs({
 const tabsListVariants = cva("relative inline-flex w-fit items-center text-fg-2", {
   variants: {
     variant: {
-      default: "gap-0.5 rounded-md border border-line bg-sunken p-0.5",
+      default: "gap-1 rounded-md border border-line bg-sunken p-1",
       line: "w-full gap-1 border-b border-line",
     },
   },
@@ -88,8 +88,8 @@ function TabsTrigger({
       data-slot="tabs-trigger"
       value={value}
       className={cn(
-        "relative inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium transition-colors duration-(--vs-duration-reveal) ease-standard hover:text-fg focus-ring disabled:pointer-events-none disabled:opacity-50 data-[state=active]:text-fg [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-        line ? "h-10 px-3 text-body" : "h-7 rounded-sm px-2.5 text-small",
+        "relative inline-flex items-center justify-center gap-1 whitespace-nowrap font-medium transition-colors duration-(--vs-duration-reveal) ease-standard hover:text-fg focus-ring disabled:pointer-events-none disabled:opacity-50 data-[state=active]:text-fg [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        line ? "h-10 px-3 text-body" : "h-7 rounded-sm px-2 text-small",
         className,
       )}
       {...props}
@@ -106,7 +106,7 @@ function TabsTrigger({
           }
         />
       ) : null}
-      <span className="relative inline-flex items-center gap-1.5">{children}</span>
+      <span className="relative inline-flex items-center gap-1">{children}</span>
     </TabsPrimitive.Trigger>
   );
 }

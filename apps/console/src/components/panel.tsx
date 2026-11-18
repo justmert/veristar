@@ -59,8 +59,8 @@ export function Panel({
       {...rest}
     >
       {title || actions ? (
-        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-4 pt-3.5 pb-3 sm:px-5">
-          <div className="flex min-w-0 flex-col gap-0.5">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-4 pt-3 pb-3 sm:px-5">
+          <div className="flex min-w-0 flex-col gap-1">
             {title ? <h2 className="text-title text-fg">{title}</h2> : null}
             {description ? <p className="text-small text-fg-2">{description}</p> : null}
           </div>
@@ -91,7 +91,7 @@ export function Fact({
   className?: string;
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-col gap-0.5", className)}>
+    <div className={cn("flex min-w-0 flex-col gap-1", className)}>
       <dt className="text-caption text-fg-3">{label}</dt>
       <dd className="min-w-0 text-body text-fg">{children}</dd>
     </div>

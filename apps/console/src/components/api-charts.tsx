@@ -110,7 +110,7 @@ export function Legend({ series, shape = "line" }: { series: Series[]; shape?: "
   return (
     <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption font-normal text-fg-2">
       {series.map((s) => (
-        <li key={s.key} className="inline-flex items-center gap-1.5">
+        <li key={s.key} className="inline-flex items-center gap-1">
           <Swatch s={s} shape={shape} />
           {s.label}
         </li>
@@ -152,13 +152,13 @@ export function ChartCard({
       )}
     >
       <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <div className="flex min-w-0 flex-col gap-0.5">
+        <div className="flex min-w-0 flex-col gap-1">
           <h3 id={id} className="text-title text-fg">
             {title}
           </h3>
           <p className="max-w-prose text-caption font-normal text-fg-3">{description}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           {legend}
           {actions}
           <Button
@@ -339,7 +339,7 @@ export function TimePlot({
   const empty = all.every((v) => v === 0);
   const bars = series.filter((s) => s.kind === "bar");
   const lines = series.filter((s) => s.kind === "line");
-  const gap = n <= 90 ? "gap-0.5" : n <= 240 ? "gap-px" : "";
+  const gap = n <= 90 ? "gap-1" : n <= 240 ? "gap-px" : "";
 
   function pick(clientX: number) {
     const el = plotRef.current;
@@ -528,7 +528,7 @@ export function TimePlot({
               <div
                 id={tipId}
                 role="tooltip"
-                className="pointer-events-none absolute top-1.5 z-10 flex min-w-44 animate-fade-in flex-col gap-1.5 rounded-md border border-line-strong bg-overlay px-3 py-2.5 text-caption font-normal shadow-overlay"
+                className="pointer-events-none absolute top-1.5 z-(--vs-layer-raised) flex min-w-44 animate-fade-in flex-col gap-1 rounded-md border border-line-strong bg-overlay px-3 py-2 text-caption font-normal shadow-overlay"
                 style={{
                   left: `${x(hv)}%`,
                   transform: tipLeft ? "translateX(calc(-100% - 12px))" : "translateX(12px)",
@@ -553,7 +553,7 @@ export function TimePlot({
                   </span>
                 ) : null}
                 {d ? (
-                  <span className="flex justify-between gap-3 border-t border-line pt-1.5 whitespace-nowrap text-fg-2">
+                  <span className="flex justify-between gap-3 border-t border-line pt-1 whitespace-nowrap text-fg-2">
                     <span>vs previous</span>
                     <span
                       className={cn(
@@ -592,7 +592,7 @@ export function TimePlot({
         </div>
         <div
           aria-hidden
-          className="flex justify-between gap-2 pt-1.5 font-mono text-axis whitespace-nowrap text-fg-3"
+          className="flex justify-between gap-2 pt-1 font-mono text-axis whitespace-nowrap text-fg-3"
         >
           <span>{times[0] ? tick(times[0]) : ""}</span>
           {n > 2 ? <span>{tick(times[mid] ?? "")}</span> : null}
@@ -1005,7 +1005,7 @@ export function StatusClassBar({ status }: { status: ApiStatus }) {
               `${CLASS_META[c.class].label} ${formatCount(c.requests)}, ${share(c.requests, total)}`,
           )
           .join("; ")}`}
-        className="flex h-3 w-full gap-0.5 overflow-hidden rounded-sm"
+        className="flex h-3 w-full gap-1 overflow-hidden rounded-sm"
       >
         {parts.length === 0 ? <div className="h-full flex-1 rounded-bar bg-muted" /> : null}
         {parts.map((c) => (
@@ -1019,7 +1019,7 @@ export function StatusClassBar({ status }: { status: ApiStatus }) {
           />
         ))}
       </div>
-      <ul className="grid gap-x-6 gap-y-1.5 text-small sm:grid-cols-2">
+      <ul className="grid gap-x-6 gap-y-1 text-small sm:grid-cols-2">
         {status.classes.map((c) => (
           <li
             key={c.class}

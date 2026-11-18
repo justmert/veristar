@@ -29,6 +29,11 @@
   --color-fg-2: var(--vs-fg-2);
   --color-fg-3: var(--vs-fg-3);
   --color-fg-disabled: var(--vs-fg-disabled);
+  --color-disabled-fill: var(--vs-disabled-fill);
+  --color-disabled-fg: var(--vs-disabled-fg);
+  --color-disabled-line: var(--vs-disabled-line);
+  --color-pressed: var(--vs-pressed);
+  --color-pressed-line: var(--vs-pressed-line);
   --color-on-accent: var(--vs-on-accent);
   --color-on-critical: var(--vs-on-critical);
   --color-accent: var(--vs-accent);
@@ -54,6 +59,7 @@
   --color-series-5: var(--vs-series-5);
   --color-series-prev: var(--vs-series-prev);
   --color-series-focus: var(--vs-series-focus);
+  --color-series-partial: var(--vs-series-partial);
   --color-grid: var(--vs-grid);
   --color-axis: var(--vs-axis);
   --color-shadow-soft: var(--vs-shadow-soft);
@@ -84,6 +90,10 @@
   --text-section--line-height: var(--vs-text-section-line);
   --text-section--font-weight: var(--vs-text-section-weight);
   --text-section--letter-spacing: var(--vs-text-section-tracking);
+  --text-heading: var(--vs-text-heading);
+  --text-heading--line-height: var(--vs-text-heading-line);
+  --text-heading--font-weight: var(--vs-text-heading-weight);
+  --text-heading--letter-spacing: var(--vs-text-heading-tracking);
   --text-page: var(--vs-text-page);
   --text-page--line-height: var(--vs-text-page-line);
   --text-page--font-weight: var(--vs-text-page-weight);

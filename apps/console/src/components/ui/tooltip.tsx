@@ -28,7 +28,7 @@ function Tooltip({
           sideOffset={6}
           collisionPadding={8}
           className={cn(
-            "z-50 max-w-72 rounded-md border border-line-strong bg-overlay px-2.5 py-1.5 text-caption font-normal text-fg shadow-overlay data-[state=closed]:animate-reveal-out data-[state=delayed-open]:animate-reveal-in data-[state=instant-open]:animate-fade-in",
+            "z-(--vs-layer-overlay) max-w-72 rounded-md border border-line-strong bg-overlay px-2 py-1 text-caption font-normal text-fg shadow-overlay data-[state=closed]:animate-reveal-out data-[state=delayed-open]:animate-reveal-in data-[state=instant-open]:animate-fade-in",
             className,
           )}
         >

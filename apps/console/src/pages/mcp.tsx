@@ -87,7 +87,7 @@ export function McpPage() {
         ].map((t) => (
           <li
             key={t}
-            className="inline-flex min-h-6 items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-caption text-fg-2"
+            className="inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 py-1 text-caption text-fg-2"
           >
             <ShieldCheck aria-hidden className="size-3.5 shrink-0 text-success" />
             {t}
@@ -280,7 +280,7 @@ export function McpKeyCreateForm({
         <Button
           type="submit"
           variant="outline"
-          className="sm:mt-6.5 max-lg:h-(--vs-control-touch)"
+          className="sm:mt-6 max-lg:h-(--vs-control-touch)"
           pending={m.isPending}
         >
           {m.isPending ? null : <KeyRound aria-hidden />}
