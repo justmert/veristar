@@ -89,7 +89,7 @@ for tool in "$@"; do
 		;;
 	uv)
 		# make ansible-venv builds the controller venv with uv
-		v=0.13.7
+		v=0.13.9
 		a=uv-x86_64-unknown-linux-gnu.tar.gz
 		fetch "https://github.com/astral-sh/uv/releases/download/$v/$a" "https://github.com/astral-sh/uv/releases/download/$v/$a.sha256" "$a"
 		tar -xzf "$work/$a" -C "$work"
