@@ -25,8 +25,6 @@ const skip = new Set([
 // values; each leaves the list when its page moves onto the scale.
 const spacingRoots = ["apps/console/src"];
 const spacingPending = new Set([
-  "apps/console/src/pages/onchain.tsx",
-  "apps/console/src/components/onchain.tsx",
   "apps/console/src/pages/scf-view.tsx",
   "apps/console/src/pages/public-report.tsx",
 ]);

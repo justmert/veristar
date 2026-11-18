@@ -48,6 +48,7 @@ test.afterAll(async () => {
 test("an owner declares an account and gets a challenge to prove it", async () => {
   const { page } = owner;
   await page.goto(`${APP}/projects/${tenant.id}/onchain`);
+  await expect(page.getByRole("heading", { name: "On-chain", level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Accounts and contracts" })).toBeVisible();
   await page.getByLabel("Account or contract").fill("not-a-key");
   await page.getByRole("button", { name: "Add", exact: true }).click();
@@ -57,7 +58,8 @@ test("an owner declares an account and gets a challenge to prove it", async () =
 
   await page.getByLabel("Account or contract").fill(ACCOUNT);
   await page.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(page.getByText(ACCOUNT, { exact: true })).toBeVisible();
+  // the id shows in its short form, the whole id in its tooltip
+  await expect(page.locator(`[data-strkey="${ACCOUNT}"]`)).toBeVisible();
   await expect(page.getByText("Unverified").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Prove control" }).click();
@@ -107,6 +109,21 @@ test("an owner declares an account and gets a challenge to prove it", async () =
   }
   expect(weekly.body.totals.weekly_active_accounts.average).toBeNull();
   expect(weekly.body.totals.weekly_active_accounts.weeks_missing).toBe(weekly.body.weeks.length);
+  // the on-chain page shows every week of its default range with its
+  // reason, and the summary says that none was counted
+  await page.goto(`${APP}/projects/${tenant.id}/onchain`);
+  await expect(page.getByRole("heading", { name: "Weekly active accounts" })).toBeVisible();
+  const weeks = page.getByRole("list", { name: "Weekly active accounts per ISO week" });
+  await expect(weeks.locator("[data-week]")).toHaveCount(weekly.body.weeks.length);
+  await expect(
+    weeks.locator("[data-week]").first().locator("[data-missing]").first(),
+  ).toBeAttached();
+  await expect(weeks.locator("[data-week]").first()).not.toContainText(/\b0\b/);
+  await expect(page.getByTestId("waa-summary")).toContainText("No complete week counted");
+  // the project has no verified id, so its activity counts nothing yet
+  await expect(page.getByTestId("activity-scope")).toContainText(
+    "0 of 1 account or contract verified",
+  );
 });
 
 test("what scf sees and the overview export answer for the project", async () => {
@@ -163,7 +180,7 @@ test("another project's member sees none of it", async ({ browser }) => {
     const chainId = view.body.ids[0]?.id ?? "";
     for (const [method, path, body] of [
       ["GET", `/api/tenants/${tenant.id}/onchain`],
-      ["GET", `/api/tenants/${tenant.id}/scf`],
+      ["GET", `/api/tenants/${tenant.id}/scf-view`],
       ["GET", `/api/tenants/${tenant.id}/overview.csv`],
       ["POST", `/api/tenants/${tenant.id}/onchain/ids`, { strkey: ACCOUNT }],
       ["POST", `/api/tenants/${tenant.id}/onchain/ids/${chainId}/challenge`, {}],
@@ -258,7 +275,7 @@ test("an unverified contract shows no calls per function, and the routes keep to
 
   await page.goto(`${APP}/projects/${tenant.id}/onchain`);
   const block = page.getByRole("region", { name: `Calls per function of ${CONTRACT}` });
-  await expect(block).toContainText("Calls per function show once the contract is verified");
+  await expect(block).toContainText("Calls per function show when the contract is verified");
   await expect(block.getByRole("table")).toHaveCount(0);
 
   const fns = await api<Functions>(
@@ -325,10 +342,11 @@ test("an unverified contract shows no calls per function, and the routes keep to
       `${APP}/api/operator/tenants/${tenant.id}/onchain/ids/${contractId}/functions.csv`,
     );
     expect(file.status()).toBe(200);
-    await opPage.goto(`${APP}/operator/tenants/${tenant.id}`);
+    await opPage.goto(`${APP}/operator/projects/${tenant.id}`);
+    await opPage.getByText("On-chain ids", { exact: true }).click();
     await expect(
       opPage.getByRole("region", { name: `Calls per function of ${CONTRACT}` }),
-    ).toContainText("Calls per function show once the contract is verified");
+    ).toContainText("Calls per function show when the contract is verified");
   } finally {
     await op.close();
   }
