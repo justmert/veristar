@@ -19,6 +19,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ErrorPanel, FormMessage, Loading, StateBlock } from "@/components/error-panel";
 import { SelectField, TextField } from "@/components/form-field";
 import { Panel } from "@/components/panel";
+import { DateField } from "@/components/range-control";
 import { Button } from "@/components/ui/button";
 import { countOf, formatCount, formatDateRange } from "@/lib/format";
 import { isDay } from "@/lib/global";
@@ -478,13 +479,7 @@ function Matches({
       description={describeRule(rule)}
       actions={
         <span className="flex flex-wrap items-end gap-2">
-          <TextField
-            label="Evaluated on"
-            type="date"
-            value={asOf}
-            onChange={(e) => onAsOf(e.target.value)}
-            className="h-(--vs-control-sm)"
-          />
+          <DateField label="Evaluated on" value={asOf} onChange={onAsOf} />
           <Button asChild variant="outline" size="sm">
             <a href={ruleMatchesCsv(rule.id, asOf)} download>
               <Download aria-hidden />

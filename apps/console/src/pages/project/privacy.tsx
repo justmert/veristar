@@ -16,6 +16,7 @@ import { SelectField, TextAreaField, TextField } from "@/components/form-field";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { Notice } from "@/components/notice";
 import { PageHeader, Panel } from "@/components/panel";
+import { DateField } from "@/components/range-control";
 import { Segmented } from "@/components/segmented";
 import { StatusDot, type Tone } from "@/components/status";
 import { Button } from "@/components/ui/button";
@@ -715,13 +716,11 @@ export function SessionFinder({
       <legend className="px-1 text-small font-medium text-fg">Find the session</legend>
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-44">
-          <TextField
+          <DateField
             label="Day of the visit (UTC)"
-            type="date"
             value={day}
-            max={utcToday(new Date())}
-            onChange={(e) => {
-              if (e.target.value) setDay(e.target.value);
+            onChange={(v) => {
+              if (v) setDay(v);
               setPage(1);
             }}
           />

@@ -72,8 +72,8 @@ export function DateField({
       optional={optional}
       disabled={disabled}
       placeholder={time ? "2026-11-18 14:00" : "2026-11-18"}
-      // a phone keyboard with digits and the dash; the pattern tells
-      // assistive technology the shape
+      // a text keyboard: the numeric pad of a phone has no dash. the
+      // pattern tells assistive technology the shape
       inputMode="text"
       pattern={time ? "\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}" : "\\d{4}-\\d{2}-\\d{2}"}
       autoComplete="off"

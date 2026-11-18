@@ -11,7 +11,8 @@ import { Link, useLocation } from "react-router";
 import { type Cohort, type CohortValue, cohortListQuery, type Kpi } from "@/api/cohorts";
 import { type TenantStatus, tenantStatus } from "@/api/schemas";
 import { SERIES_BG } from "@/components/compare-charts";
-import { NativeSelect, TextField } from "@/components/form-field";
+import { NativeSelect } from "@/components/form-field";
+import { DateField } from "@/components/range-control";
 import { Segmented } from "@/components/segmented";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -118,21 +119,19 @@ export function RangeControl({
           className="flex animate-reveal-in flex-wrap items-end gap-3"
         >
           <div className="w-40">
-            <TextField
+            <DateField
               label="From (UTC day)"
-              type="date"
               value={draft.from}
               error={errors.from}
-              onChange={(e) => setDraft({ ...draft, from: e.target.value })}
+              onChange={(v) => setDraft({ ...draft, from: v })}
             />
           </div>
           <div className="w-40">
-            <TextField
+            <DateField
               label="To (UTC day)"
-              type="date"
               value={draft.to}
               error={errors.to}
-              onChange={(e) => setDraft({ ...draft, to: e.target.value })}
+              onChange={(v) => setDraft({ ...draft, to: v })}
             />
           </div>
           <Button type="submit" variant="outline">
@@ -524,7 +523,9 @@ function DayInput({
       </label>
       <Input
         id={id}
-        type="date"
+        inputMode="text"
+        placeholder="2026-11-18"
+        pattern="\d{4}-\d{2}-\d{2}"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="h-(--vs-control-sm) sm:w-38 max-lg:h-(--vs-control-touch)"
