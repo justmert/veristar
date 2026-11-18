@@ -381,10 +381,9 @@ describe("operator project list, status view", () => {
     await waitFor(() =>
       expect(calls.some((c) => c.url.includes("sort=name&order=asc"))).toBe(true),
     );
-    await waitFor(() => byRole(host, "button", "Load more"));
-    await click(byRole(host, "button", "Load more"));
+    // a page of 25 the first rows do not fill loads the next rows by itself
     await waitFor(() => expect(host.textContent).toContain("Second"));
-    expect(calls.at(-1)?.url).toContain("cursor=Y3Vyc29y");
+    expect(calls.some((c) => c.url.includes("cursor=Y3Vyc29y"))).toBe(true);
   });
 });
 

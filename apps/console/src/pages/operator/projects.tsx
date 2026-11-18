@@ -6,7 +6,7 @@ import { cohortListQuery } from "@/api/cohorts";
 import type { TenantListQuery } from "@/api/endpoints";
 import { apiProjectsQuery, operatorTenantsQuery, webProjectsQuery } from "@/api/queries";
 import { type ApiSort, apiSort, type TenantStatus, tenantStatus, webSort } from "@/api/schemas";
-import { DataTable } from "@/components/data-table";
+import { DataTable, PAGE_SIZE } from "@/components/data-table";
 import { DbIpAttribution } from "@/components/dbip-attribution";
 import { Disclosure } from "@/components/disclosure";
 import { type Filter, FilterBar } from "@/components/filter-bar";
@@ -59,7 +59,7 @@ import {
   VIEWS,
 } from "@/lib/operator-projects";
 import { PortfolioBar, type Segment, usePortfolio } from "./portfolio";
-import { apiColumns, pick, statusColumns, webColumns } from "./project-columns";
+import { apiColumns, blankColumns, pick, statusColumns, webColumns } from "./project-columns";
 import { handedOver, ListRange, type Selection, SeriesSwatch } from "./shared";
 
 const SEARCH_DELAY_MS = 250;
@@ -147,18 +147,47 @@ export function OperatorProjectsPage() {
   };
 
   const slot = (id: string) => selected.findIndex((s) => s.id === id);
-  const shown = shownColumns(view, chosen[view], sort);
+  // every loaded row of the view, and the page of 25 the table shows
+  const statusRows = badDays ? [] : (statusList.data?.pages.flatMap((p) => p.items) ?? []);
+  const webRows = badDays ? [] : (webList.data?.pages.flatMap((p) => p.items) ?? []);
+  const apiRows = badDays ? [] : (apiList.data?.pages.flatMap((p) => p.items) ?? []);
+  const loaded =
+    view === "status" ? statusRows.length : view === "web" ? webRows.length : apiRows.length;
+  // pages of 25 like every table: the server answers 50 rows at a time,
+  // and a page past the loaded rows asks for the next 50. the page goes
+  // back to the first when the view, the filters or the sort change
+  const listKey = JSON.stringify(view === "status" ? [view, statusQ] : [view, listState]);
+  const [pageAt, setPageAt] = useState({ page: 0, key: listKey });
+  const lastPage = Math.max(0, Math.ceil(loaded / PAGE_SIZE) - 1);
+  const page =
+    pageAt.key !== listKey ? 0 : list.hasNextPage ? pageAt.page : Math.min(pageAt.page, lastPage);
+  const onPage = (p: number) => setPageAt({ page: p, key: listKey });
+  // a page the loaded rows do not fill asks for the next rows
+  const short = (page + 1) * PAGE_SIZE > loaded;
+  useEffect(() => {
+    if (short && list.hasNextPage && !list.isFetchingNextPage && !list.isPlaceholderData)
+      list.fetchNextPage();
+  }, [short, list]);
+  const pageOf = <R,>(rows: R[]) => rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  // by default a column with no value on any row of the page (no previous
+  // range to change from, no on-chain id) is left out; Columns still offers it
+  const blank =
+    chosen[view] !== null
+      ? new Set<string>()
+      : view === "web"
+        ? blankColumns(pageOf(webRows))
+        : view === "api"
+          ? blankColumns(pageOf(apiRows))
+          : new Set<string>();
+  const shown = shownColumns(view, chosen[view], sort).filter(
+    (id) => !blank.has(id) || columnsOf(view).find((c) => c.id === id)?.sortKey === sort,
+  );
   const phone = phoneColumns(view, shown, sort);
 
   const first = view === "web" ? webList.data?.pages[0] : apiList.data?.pages[0];
   const resolved = view !== "status" && first ? { from: first.from, to: first.to } : null;
   const total = view === "status" ? null : (first?.total ?? null);
-  const loaded =
-    view === "status"
-      ? (statusList.data?.pages.flatMap((p) => p.items).length ?? 0)
-      : view === "web"
-        ? (webList.data?.pages.flatMap((p) => p.items).length ?? 0)
-        : (apiList.data?.pages.flatMap((p) => p.items).length ?? 0);
   const filtered =
     view === "status"
       ? statusQ.status.length > 0 || statusQ.review || statusQ.q.trim() !== ""
@@ -206,10 +235,14 @@ export function OperatorProjectsPage() {
     error: list.error,
     onRetry: () => list.refetch(),
     footer: {
-      kind: "more" as const,
-      hasMore: list.hasNextPage,
-      loading: list.isFetchingNextPage,
-      onMore: () => list.fetchNextPage(),
+      kind: "pager" as const,
+      page,
+      pageSize: PAGE_SIZE,
+      // the web and api lists count every match; the status list counts
+      // what it has loaded, with more to come
+      total: total ?? loaded,
+      more: total === null && list.hasNextPage,
+      onPage,
     },
     loadingRows: 8,
     className: list.isPlaceholderData
@@ -232,12 +265,12 @@ export function OperatorProjectsPage() {
 
   let table: ReactNode;
   if (view === "status") {
-    const rows = badDays ? [] : (statusList.data?.pages.flatMap((p) => p.items) ?? []);
+    const rows = statusRows;
     table = (
       <DataTable
         label="Projects"
         columns={pick(statusColumns(slot), shown, phone)}
-        rows={rows}
+        rows={pageOf(rows)}
         getRowKey={(t) => t.id}
         rowLabel={(t) => t.name}
         rowHref={(t) => `/operator/projects/${t.id}`}
@@ -247,12 +280,12 @@ export function OperatorProjectsPage() {
       />
     );
   } else if (view === "web") {
-    const rows = badDays ? [] : (webList.data?.pages.flatMap((p) => p.items) ?? []);
+    const rows = webRows;
     table = (
       <DataTable
         label="Projects, web numbers"
         columns={pick(webColumns(resolved ?? webState.range, slot), shown, phone)}
-        rows={rows}
+        rows={pageOf(rows)}
         getRowKey={(p) => p.tenant.id}
         rowLabel={(p) => p.tenant.name}
         rowHref={(p) => `/operator/projects/${p.tenant.id}`}
@@ -262,12 +295,12 @@ export function OperatorProjectsPage() {
       />
     );
   } else {
-    const rows = badDays ? [] : (apiList.data?.pages.flatMap((p) => p.items) ?? []);
+    const rows = apiRows;
     table = (
       <DataTable
         label="Projects, API numbers"
         columns={pick(apiColumns(slot), shown, phone)}
-        rows={rows}
+        rows={pageOf(rows)}
         getRowKey={(p) => p.tenant.id}
         rowLabel={(p) => p.tenant.name}
         rowHref={(p) => `/operator/projects/${p.tenant.id}`}
