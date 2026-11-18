@@ -118,6 +118,10 @@ func catalogue(terms string) []route {
 		{http.MethodPost, "/api/me/identities/passkey/challenge"}, {http.MethodPost, "/api/me/identities/passkey"},
 		{http.MethodDelete, "/api/me/identities/passkey"},
 		{http.MethodGet, "/api/tenants"}, {http.MethodPost, "/api/tenants"},
+		// the scf award search of the enrollment form (contract 4.2.8):
+		// organisation data of the award directory, no tenant. covered by
+		// the scfawards search tests
+		{http.MethodGet, "/api/scf/awards/search"},
 	} {
 		add(kindOwn, r.m, r.p, nil)
 	}
@@ -248,10 +252,6 @@ func catalogue(terms string) []route {
 	add(kindOperator, http.MethodDelete, op+"/rules/{rule_id}", nil)
 	add(kindOperator, http.MethodGet, op+"/rules/{rule_id}/matches", nil)
 	add(kindOperator, http.MethodGet, op+"/rules/{rule_id}/matches.csv", nil)
-	// the scf award directory (contract 19.5)
-	add(kindOperator, http.MethodGet, op+"/scf/awards", nil)
-	add(kindOperator, http.MethodGet, op+"/scf/awards.csv", nil)
-	add(kindOperator, http.MethodGet, op+"/scf/imports", nil)
 	// the operator roster (contract 5.16)
 	add(kindOperator, http.MethodGet, op+"/roster", nil)
 	add(kindOperator, http.MethodPost, op+"/roster", fixed(map[string]any{

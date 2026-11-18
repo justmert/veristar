@@ -144,7 +144,7 @@ func TestImportMatchAndAutofill(t *testing.T) {
 	require.Equal(t, 1, rep.Autofill.NotEnrolled)
 	require.Equal(t, 1, rep.Autofill.Proposed)
 	require.Equal(t, map[string]int{CohortProposed: 1, CohortConfirmedDiffers: 1, CohortMemberProposalDiffers: 1}, rep.Autofill.States)
-	require.Len(t, rep.Autofill.AmbiguousAwards, 1)
+	require.Equal(t, 3, rep.Autofill.Projects)
 
 	// only organisation data reached the database
 	stored := f.query(t, `select json_agg(x)::text from cp.scf_awards x`)
@@ -263,4 +263,40 @@ func TestProposalSourceGuard(t *testing.T) {
 		return tenants.ProposeCohort(ctx, tx, tenant, user, tenants.CohortValues{Round: &round})
 	}))
 	require.Equal(t, SourceMember, *f.cohort(t, tenant).ProposalSource)
+}
+
+// a project funded in two rounds under one website matches both awards
+// and gets one proposal, from the most recent; a later export that adds a
+// newer round moves the pending proposal to it
+func TestMultiRoundProposal(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	id := f.tenant(t, "multi", "active", "multi.example", "https://multi.example")
+	first, second := good("Multi"), good("Multi")
+	first.round, first.date = "SCF #36", "3/1/2025"
+	second.round, second.date = "SCF #41", "2/1/2026"
+	rep, err := Import(ctx, f.d, encode(t, '\t', nil, first, second), ActorPlatformctl, now)
+	require.NoError(t, err)
+	require.Equal(t, 2, rep.Autofill.Matched)
+	require.Equal(t, 1, rep.Autofill.Projects)
+	require.Zero(t, rep.Autofill.Ambiguous)
+	require.Equal(t, 1, rep.Autofill.Proposed)
+	require.Equal(t, "SCF #41", *f.cohort(t, id).Proposal.Round)
+	require.Len(t, f.audits(t, ActionCohortPropose), 1)
+
+	third := good("Multi")
+	third.round, third.date = "SCF #45", "9/1/2026"
+	rep, err = Import(ctx, f.d, encode(t, '\t', nil, first, second, third), ActorPlatformctl, now)
+	require.NoError(t, err)
+	require.Equal(t, 1, rep.Inserted)
+	require.Equal(t, 1, rep.Autofill.Proposed)
+	c := f.cohort(t, id)
+	require.Equal(t, "SCF #45", *c.Proposal.Round)
+	require.Equal(t, "2026-09-01", *c.Proposal.AwardDate)
+	require.Equal(t, SourceSCFImport, *c.ProposalSource)
+	props := f.audits(t, ActionCohortPropose)
+	require.Len(t, props, 2)
+	old := props[1]["detail"].(map[string]any)["proposal"].(map[string]any)["old"].(map[string]any)
+	require.Equal(t, "SCF #41", old["round"])
 }

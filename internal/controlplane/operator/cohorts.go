@@ -39,10 +39,10 @@ type CohortRecord struct {
 	ConfirmedAt *httpx.Timestamp `json:"confirmed_at"`
 	Proposal    *Cohort          `json:"proposal"`
 	ProposedAt  *httpx.Timestamp `json:"proposed_at"`
-	// ProposalSource says who made the pending proposal: member (the
-	// project) or scf_import (the award directory, section 19.5); null
-	// without a proposal
-	ProposalSource *string `json:"proposal_source"`
+	// ProposalSource says who made the pending proposal, member or
+	// scf_import (00050); the audit rows of a confirm and a dismissal name
+	// it, the answers do not
+	ProposalSource *string `json:"-"`
 }
 
 func tsPtr(t *time.Time) *httpx.Timestamp {
@@ -143,8 +143,6 @@ type CohortProposal struct {
 	Confirmed  *Cohort         `json:"confirmed"`
 	Proposal   Cohort          `json:"proposal"`
 	ProposedAt httpx.Timestamp `json:"proposed_at"`
-	// Source is member or scf_import
-	Source string `json:"source"`
 }
 
 // CohortList is the answer of GET /api/operator/cohorts.
@@ -188,8 +186,7 @@ func (h *Cohorts) list(w http.ResponseWriter, r *http.Request) error {
 		}
 		rows, err := tx.Query(ctx, `select t.id, t.slug, t.name, t.status, t.created_at,
 			       co.confirmed_at is not null, co.program, co.round, co.category, co.award_date,
-			       co.proposed_program, co.proposed_round, co.proposed_category, co.proposed_award_date, co.proposed_at,
-			       co.proposed_source
+			       co.proposed_program, co.proposed_round, co.proposed_category, co.proposed_award_date, co.proposed_at
 			from cp.tenant_cohorts co join cp.tenants t on t.id = co.tenant_id
 			where not t.is_internal and t.status <> 'removed' and co.proposed_at is not null
 			order by co.proposed_at, t.id`)
@@ -204,7 +201,7 @@ func (h *Cohorts) list(w http.ResponseWriter, r *http.Request) error {
 			var award, pAward *time.Time
 			err := row.Scan(&p.Tenant.ID, &p.Tenant.Slug, &p.Tenant.Name, &p.Tenant.Status, &at, &confirmed,
 				&c.Program, &c.Round, &c.Category, &award,
-				&p.Proposal.Program, &p.Proposal.Round, &p.Proposal.Category, &pAward, &proposedAt, &p.Source)
+				&p.Proposal.Program, &p.Proposal.Round, &p.Proposal.Category, &pAward, &proposedAt)
 			p.Tenant.CreatedAt = httpx.Timestamp(at)
 			p.ProposedAt = httpx.Timestamp(proposedAt)
 			p.Proposal.AwardDate = dateString(pAward)

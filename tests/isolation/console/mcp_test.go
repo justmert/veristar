@@ -489,7 +489,6 @@ func testMCPOperator(t *testing.T, e *env, alice *client, ta, tb uuid.UUID) {
 		{"get_tenant_onchain", map[string]any{"tenant_id": ta.String()}},
 		{"list_cohorts", nil},
 		{"list_threshold_rules", nil},
-		{"list_scf_awards", nil},
 		{"get_global_web_overview", map[string]any{"sort": "visitors_growth", "program": "Build Award"}},
 	} {
 		r := call(t, cs, c.name, c.args)

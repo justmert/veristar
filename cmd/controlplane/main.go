@@ -370,10 +370,10 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	// the scf award directory (contract 19.5) and its matching on
-	// enrollment and site creation; background matches finish before the
-	// pools close
-	scfAwards, err := operator.NewSCFAwards(d, time.Now)
+	// the scf award search of the enrollment form (contract 4.2.8) and the
+	// award matching on enrollment and site creation (19.5); background
+	// matches finish before the pools close
+	scfSearch, err := scfawards.NewSearch(d, time.Now)
 	if err != nil {
 		return err
 	}
@@ -439,7 +439,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		Reads: []mcpserver.Routes{
 			tenants.NewRoutes(scope), sites.NewRoutes(scope), metricRoutes, onchainRoutes, scfView,
 			tenantCohort,
-			controlplane.RoutesFunc(guard.Mount(review, global, onchainOperator, cohortRoutes, ruleRoutes, scfAwards)),
+			controlplane.RoutesFunc(guard.Mount(review, global, onchainOperator, cohortRoutes, ruleRoutes)),
 		},
 		Web:      webReader,
 		Issuer:   cfg.ConsoleOrigin,
@@ -470,6 +470,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			controlplane.RoutesFunc(authH.Private),
 			accountRoutes,
 			tenants.NewRoutes(scope).OnEnroll(scfHooks),
+			scfSearch,
 			memberRoutes,
 			sites.NewRoutes(scope).OnCreate(checks, scfHooks),
 			checks,
@@ -489,7 +490,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			mcpSrv.TenantRoutes(scope),
 			mcpSrv.ConsentRoutes(),
 			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys, alertRoutes,
-				mcpSrv.OperatorRoutes(), onchainOperator, operatorExports, cohortRoutes, ruleRoutes, scfAwards, roster)),
+				mcpSrv.OperatorRoutes(), onchainOperator, operatorExports, cohortRoutes, ruleRoutes, roster)),
 		},
 		// keys only: no session middleware runs there (contract 9.1); the
 		// mcp endpoint and its oauth server authenticate by bearer

@@ -169,22 +169,15 @@ type AutofillResult struct {
 	NotEnrolled int
 	// Proposed counts the proposals written in this run
 	Proposed int
-	// states counts the matched awards by cohort state after the run
+	// Projects counts the matched projects; a project funded in several
+	// rounds matches several awards
+	Projects int
+	// States counts the matched projects by cohort state after the run
 	States map[string]int
-	// AmbiguousAwards lists the ambiguous awards and their candidates
-	AmbiguousAwards []AmbiguousAward
 }
 
-// AmbiguousAward is an award that matched nothing because the evidence is
-// not one to one.
-type AmbiguousAward struct {
-	Award      AwardRow
-	Candidates []*Tenant
-	SharedWith []uuid.UUID
-}
-
-// Autofill matches every award and writes a cohort proposal for each
-// matched project in only (every matched project when only is nil) whose
+// Autofill matches every award and writes a cohort proposal, from the
+// project's most recent award, for each matched project in only (every matched project when only is nil) whose
 // cohort lacks one: no confirmed cohort, no proposal of the member's own,
 // and no earlier proposal of the same award that the operator confirmed or
 // dismissed. a proposal of an earlier import is replaced when the award or
@@ -218,14 +211,14 @@ func Autofill(ctx context.Context, tx pgx.Tx, actor string, only []uuid.UUID) (A
 			continue
 		case StateAmbiguous:
 			res.Ambiguous++
-			amb := AmbiguousAward{Award: a, SharedWith: m.SharedWith}
-			for _, c := range m.Candidates {
-				amb.Candidates = append(amb.Candidates, tenants[c.TenantID])
-			}
-			res.AmbiguousAwards = append(res.AmbiguousAwards, amb)
 			continue
 		}
 		res.Matched++
+		// a project's proposal comes from its most recent award only
+		if !m.Primary {
+			continue
+		}
+		res.Projects++
 		tid := m.Tenant()
 		if only != nil && !want[tid] {
 			continue

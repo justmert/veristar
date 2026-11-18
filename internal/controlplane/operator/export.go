@@ -20,7 +20,6 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/integrityview"
 	"github.com/justmert/veristar/internal/controlplane/onchain"
 	"github.com/justmert/veristar/internal/controlplane/session"
-	"github.com/justmert/veristar/internal/db"
 )
 
 // the csv exports of the global and compare views (contract 16.1). a list
@@ -85,11 +84,6 @@ func withQuery(r *http.Request, q url.Values) *http.Request {
 
 // auditExport writes the audit row of an export under cp_system.
 func (e *Exports) auditExport(ctx context.Context, view string, q url.Values, rows int, tenantIDs []uuid.UUID) error {
-	return auditExportIn(ctx, e.g.db, view, q, rows, tenantIDs)
-}
-
-// auditExportIn writes the audit row of an export of any operator view.
-func auditExportIn(ctx context.Context, d *db.DB, view string, q url.Values, rows int, tenantIDs []uuid.UUID) error {
 	u, err := session.MustUser(ctx)
 	if err != nil {
 		return err
@@ -103,7 +97,7 @@ func auditExportIn(ctx context.Context, d *db.DB, view string, q url.Values, row
 	if len(ids) > 0 {
 		detail["tenants"] = ids
 	}
-	return d.WithSystem(ctx, func(tx pgx.Tx) error {
+	return e.g.db.WithSystem(ctx, func(tx pgx.Tx) error {
 		return audit.InSystem(ctx, tx, audit.Entry{
 			Actor: audit.User(u.ID), Action: exports.ActionExport, Target: "operator:" + view, Detail: detail,
 		})
