@@ -1,8 +1,9 @@
 // the person's theme choice: system, light or dark. "system" follows the
 // operating system live. the choice is kept in this browser only, and the
 // page still works when storage is refused. theme-boot.js applies the same
-// rule before the first paint.
-import { useCallback, useEffect, useState } from "react";
+// rule before the first paint. one store for the page: every useTheme reads
+// and changes the same choice, so two controls never disagree.
+import { useEffect, useSyncExternalStore } from "react";
 
 export type ThemeChoice = "system" | "light" | "dark";
 const KEY = "veristar-theme";
@@ -23,8 +24,34 @@ function apply(choice: ThemeChoice) {
   document.documentElement.dataset.theme = resolved;
 }
 
+let current: ThemeChoice | null = null;
+const listeners = new Set<() => void>();
+
+function choiceNow(): ThemeChoice {
+  current ??= read();
+  return current;
+}
+
+function subscribe(l: () => void) {
+  listeners.add(l);
+  return () => listeners.delete(l);
+}
+
+// stores the choice, applies it and tells every control
+export function setThemeChoice(next: ThemeChoice) {
+  try {
+    if (next === "system") localStorage.removeItem(KEY);
+    else localStorage.setItem(KEY, next);
+  } catch {
+    // not stored; the choice lasts until the page is reloaded
+  }
+  current = next;
+  apply(next);
+  for (const l of listeners) l();
+}
+
 export function useTheme() {
-  const [choice, setChoice] = useState<ThemeChoice>(read);
+  const choice = useSyncExternalStore(subscribe, choiceNow, () => "system" as ThemeChoice);
   useEffect(() => {
     apply(choice);
     if (choice !== "system") return;
@@ -33,14 +60,5 @@ export function useTheme() {
     m.addEventListener("change", on);
     return () => m.removeEventListener("change", on);
   }, [choice]);
-  const set = useCallback((next: ThemeChoice) => {
-    try {
-      if (next === "system") localStorage.removeItem(KEY);
-      else localStorage.setItem(KEY, next);
-    } catch {
-      // not stored; the choice lasts until the page is reloaded
-    }
-    setChoice(next);
-  }, []);
-  return { choice, setChoice: set };
+  return { choice, setChoice: setThemeChoice };
 }
