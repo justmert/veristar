@@ -15,14 +15,19 @@ const WIDTH = { sm: "max-w-dialog-sm", md: "max-w-dialog" } as const;
 // the first field of the body, else the first button of the footer (Cancel
 // in a confirmation), never the close button, so a ring does not land on
 // the corner and Enter never confirms by accident
+// on a touch screen a focused field opens the keyboard over the dialog
+// before the person has read it, so focus starts on the footer there
 function initialFocus(d: HTMLDialogElement) {
+  const touch = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  const field = touch
+    ? null
+    : (d.querySelector<HTMLElement>("[data-autofocus]") ??
+      d.querySelector<HTMLElement>(
+        "[data-dialog-body] :is(input:not([type=hidden]), textarea, select):not(:disabled)",
+      ));
   const target =
-    d.querySelector<HTMLElement>("[data-autofocus]") ??
-    d.querySelector<HTMLElement>(
-      "[data-dialog-body] :is(input:not([type=hidden]), textarea, select):not(:disabled)",
-    ) ??
-    d.querySelector<HTMLElement>("[data-dialog-footer] button:not(:disabled)");
-  target?.focus();
+    field ?? d.querySelector<HTMLElement>("[data-dialog-footer] button:not(:disabled)");
+  target?.focus({ preventScroll: true });
 }
 
 export function Dialog({
