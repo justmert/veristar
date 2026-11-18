@@ -666,7 +666,7 @@ function KeptSection() {
           name.
         </li>
         <li>
-          Other metrics, traces and logs are dropped. Ids and keys in routes become placeholders.
+          Other metrics, traces and logs are dropped. IDs and keys in routes become placeholders.
         </li>
         <li className="text-fg">Your own backend keeps the full data.</li>
       </ul>

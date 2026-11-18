@@ -49,7 +49,7 @@ export const ACTION_FAMILIES: { value: string; label: string }[] = [
   { value: "cohort.", label: "Cohorts" },
   { value: "rule.", label: "Rules" },
   { value: "report.", label: "Reports" },
-  { value: "onchain.", label: "On-chain ids" },
+  { value: "onchain.", label: "On-chain IDs" },
   { value: "export.", label: "Exports" },
   { value: "mcp.", label: "AI assistant calls" },
   { value: "mcp_credential.", label: "AI assistant keys" },

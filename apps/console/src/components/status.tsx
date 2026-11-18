@@ -168,7 +168,7 @@ const SETUP: Record<SetupStatus, StatusEntry> = {
   refused: { tone: "critical", word: "Events refused" },
   unverified: { tone: "warning", word: "Domain not verified" },
   failed: { tone: "critical", word: "Domain check failed" },
-  done: { tone: "success", word: "Set up" },
+  done: { tone: "success", word: "Ready" },
 };
 
 const GRADE: Record<IntegrityGrade, StatusEntry> = {

@@ -293,7 +293,7 @@ function Ids({
           title="No accounts or contracts"
         >
           {canChange
-            ? "Add an account (G…) or a contract (C…). Ids from your enrollment show here."
+            ? "Add an account (G…) or a contract (C…). IDs from your enrollment show here."
             : "An owner or member adds them after the terms are accepted."}
         </EmptyState>
       ) : (

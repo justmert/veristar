@@ -174,7 +174,7 @@ export function MissingDays({ id }: { id: ChainId }) {
     <ul className="flex flex-col gap-1 text-caption text-fg-2">
       {reasons.map((r) => (
         <li key={r.code} data-missing-reason={r.code}>
-          {countOf(r.days, "day")} without data: {missingText(r.code)}
+          {countOf(r.days, "day")} without data. {missingText(r.code)}
         </li>
       ))}
     </ul>
