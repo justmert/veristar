@@ -55,11 +55,11 @@ c as (
 const apiListCTE = `with ` + baseCTE + `,` + apiChosenCTE + `,
 m as (
   select tenant_id,
-         coalesce(sum(count) filter (where traffic_class = 'app'), 0)::bigint as requests,
-         coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 400 and 499), 0)::bigint as requests_4xx,
-         coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0)::bigint as requests_5xx,
-         coalesce(sum(count) filter (where traffic_class <> 'app'), 0)::bigint as infrastructure_requests,
-         api.sum_buckets(counts) filter (where traffic_class = 'app') as buckets,
+         least(coalesce(sum(count) filter (where traffic_class = 'app'), 0), 9223372036854775807)::bigint as requests,
+         least(coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 400 and 499), 0), 9223372036854775807)::bigint as requests_4xx,
+         least(coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0), 9223372036854775807)::bigint as requests_5xx,
+         least(coalesce(sum(count) filter (where traffic_class <> 'app'), 0), 9223372036854775807)::bigint as infrastructure_requests,
+         api.sum_buckets_read(counts) filter (where traffic_class = 'app') as buckets,
          (count(distinct service) filter (where traffic_class = 'app'))::bigint as services,
          (count(distinct (service, route)) filter (where route <> '' and traffic_class = 'app'))::bigint as routes,
          (count(distinct service) filter (where source = 'span' and traffic_class = 'app'))::bigint as span_services,
@@ -376,17 +376,20 @@ func emptyAPISeries(rg dayRange) []APIPoint {
 }
 
 // numbersCols are the select columns of APINumbers over rows of c: the
-// application numbers, then the infrastructure requests. an empty sum of
+// application numbers, then the infrastructure requests. request sums
+// saturate at the 64-bit limit and buckets are summed with
+// api.sum_buckets_read (00049), so a tenant whose counts pass that limit
+// over a long range cannot fail the query for every tenant with 22003. an empty sum of
 // buckets has no quantile, so a group of infrastructure rows only has null
 // percentiles.
 const numbersCols = `
-  coalesce(sum(count) filter (where traffic_class = 'app'), 0)::bigint,
-  coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 400 and 499), 0)::bigint,
-  coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0)::bigint,
-  api.histogram_quantile(0.5, api.sum_buckets(counts) filter (where traffic_class = 'app')),
-  api.histogram_quantile(0.95, api.sum_buckets(counts) filter (where traffic_class = 'app')),
-  api.histogram_quantile(0.99, api.sum_buckets(counts) filter (where traffic_class = 'app')),
-  coalesce(sum(count) filter (where traffic_class <> 'app'), 0)::bigint`
+  least(coalesce(sum(count) filter (where traffic_class = 'app'), 0), 9223372036854775807)::bigint,
+  least(coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 400 and 499), 0), 9223372036854775807)::bigint,
+  least(coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0), 9223372036854775807)::bigint,
+  api.histogram_quantile(0.5, api.sum_buckets_read(counts) filter (where traffic_class = 'app')),
+  api.histogram_quantile(0.95, api.sum_buckets_read(counts) filter (where traffic_class = 'app')),
+  api.histogram_quantile(0.99, api.sum_buckets_read(counts) filter (where traffic_class = 'app')),
+  least(coalesce(sum(count) filter (where traffic_class <> 'app'), 0), 9223372036854775807)::bigint`
 
 func scanNumbers(dst *APINumbers, scan func(...any) error, before ...any) error {
 	var p50, p95, p99 *float64

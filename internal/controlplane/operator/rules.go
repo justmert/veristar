@@ -450,7 +450,7 @@ rs as (
   from rr group by tenant_id, service
 ),
 d as (
-  select rr.tenant_id, rr.day, coalesce(sum(rr.count) filter (where rr.traffic_class = 'app'), 0)::bigint as v
+  select rr.tenant_id, rr.day, least(coalesce(sum(rr.count) filter (where rr.traffic_class = 'app'), 0), 9223372036854775807)::bigint as v
   from rr join rs on rs.tenant_id = rr.tenant_id and rs.service = rr.service and rs.source = rr.source
   group by rr.tenant_id, rr.day
 )`,
