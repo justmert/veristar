@@ -560,6 +560,72 @@ func TestIsolationGate(t *testing.T) {
 	t.Run("MachineAPIScope", func(t *testing.T) { testMachineAPI(t, e, w, cat) })
 	t.Run("MCPRoutes", func(t *testing.T) { testMCPRoutes(t, e, w, cat) })
 	t.Run("PublicReports", func(t *testing.T) { testPublicRoutes(t, e, w, cat) })
+	// last: it revokes tenant a's token, key and report link
+	t.Run("TenantChangesNeedCurrentTerms", func(t *testing.T) { testTermsGate(t, e, w, cat) })
+}
+
+// termsExempt names the mutating tenant routes that work while the project
+// has not accepted the current terms (contract 4.2.6), each with why. every
+// other mutating tenant route must answer 403 terms_not_accepted, so a new
+// route that skips the gate turns this gate red until it is either gated
+// or listed here with a reason.
+var termsExempt = map[string]struct {
+	reason string
+	// body replaces the catalogue body: an exempt route that would start
+	// work is sent a body it refuses after the point a gate would sit
+	body func(gateIDs) any
+}{
+	"POST /api/tenants/{tenant_id}/terms": {reason: "it is how the project accepts the current terms",
+		body: fixed(map[string]any{"version": "2026-01-01-draft.1"})},
+	"DELETE /api/tenants/{tenant_id}/members/{user_id}":               {reason: "leaving or removing a member only reduces access"},
+	"DELETE /api/tenants/{tenant_id}/otlp-tokens/{token_id}":          {reason: "a revocation only reduces exposure"},
+	"POST /api/tenants/{tenant_id}/reports/{report_id}/revoke":        {reason: "a revocation only reduces exposure"},
+	"DELETE /api/tenants/{tenant_id}/mcp-credentials/{credential_id}": {reason: "a revocation only reduces exposure"},
+	"POST /api/tenants/{tenant_id}/erasure": {reason: "an erasure answers a data subject's request",
+		body: fixed(map[string]any{"kind": "not-a-kind"})},
+	"POST /api/tenants/{tenant_id}/mcp-credentials": {reason: "an mcp access key reads only, and reads need no current terms"},
+}
+
+func testTermsGate(t *testing.T, e *env, w *gateWorld, cat []route) {
+	seen := map[string]bool{}
+	for _, r := range cat {
+		seen[r.key()] = true
+	}
+	for k, x := range termsExempt {
+		require.True(t, seen[k], "termsExempt names %s, which the catalogue does not hold", k)
+		require.NotEmpty(t, x.reason, k)
+	}
+	e.superuser(t, func(c *pgx.Conn) {
+		_, err := c.Exec(context.Background(), `update cp.tenants set accepted_terms_version = '2026-01-01-draft.1' where id = $1`, w.ta)
+		require.NoError(t, err)
+	})
+	a := w.aIDs()
+	gated, exempt := 0, 0
+	for _, r := range cat {
+		if r.kind != kindTenant || r.method == http.MethodGet {
+			continue
+		}
+		path := r.fill(a)
+		body := any(nil)
+		x, isExempt := termsExempt[r.key()]
+		switch {
+		case isExempt && x.body != nil:
+			body = x.body(a)
+		case r.body != nil:
+			body = r.body(a)
+		}
+		res := w.alice.call(t, r.method, path, body)
+		refused := res.status == http.StatusForbidden && res.code(t) == "terms_not_accepted"
+		if isExempt {
+			require.False(t, refused, "%s is exempt (%s) but answers terms_not_accepted", r.key(), x.reason)
+			require.Less(t, res.status, 500, "%s: %s", r.key(), res.body)
+			exempt++
+			continue
+		}
+		require.True(t, refused, "%s changes the project without the current terms: %d %s", r.key(), res.status, res.body)
+		gated++
+	}
+	t.Logf("%d mutating tenant routes refuse without the current terms, %d are exempt", gated, exempt)
 }
 
 // testPublicRoutes: a report link answers that one report, to anyone,
