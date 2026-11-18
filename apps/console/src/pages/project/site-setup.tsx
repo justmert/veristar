@@ -24,17 +24,14 @@ import { formatBytes, formatCount, formatDate } from "@/lib/format";
 import { outcomeHint, rejectionRows } from "@/lib/outcomes";
 import {
   type FirstEvent,
-  nextText,
   type SetupStep,
   type StepKey,
   setupProgress,
-  setupStatus,
   setupSteps,
   siteSettingsPath,
 } from "@/lib/site-setup";
 import { CONSENT_START, readsTitleChoice, snippetGuides } from "@/lib/snippet-guides";
 import { webPath } from "@/lib/web-dashboard";
-import { Breakable } from "@/pages/project/breakable";
 import { useProject } from "@/pages/project-layout";
 import { NotFoundPage } from "@/pages/public/not-found";
 import { SitePageLoading, SitesBackLink } from "./page-frame";
@@ -73,8 +70,11 @@ function SiteSetup({ site }: { site: Site }) {
   const version = params.get("version");
   const snippet = useQuery(snippetQuery(site.id, version));
   const first = useFirstEvent(site);
-  const steps = setupSteps(site, first.event);
-  const status = setupStatus(site, first.event);
+  // stellar.toml is optional: a file that is not there yet leaves the step
+  // open, never a warning mark next to the required ones
+  const steps = setupSteps(site, first.event).map((x) =>
+    x.optional && x.state === "attention" ? { ...x, state: "todo" as const } : x,
+  );
   const { done, total } = setupProgress(steps);
   const step = (k: StepKey) => steps.find((s) => s.key === k) as SetupStep;
   // a link to one step (#domain) scrolls to it once the page is drawn
@@ -110,7 +110,7 @@ function SiteSetup({ site }: { site: Site }) {
           </Button>
         }
       />
-      <Progress steps={steps} done={done} total={total} text={nextText(status)} />
+      <Progress steps={steps} done={done} total={total} />
       {site.in_review ? (
         <Notice tone="info" title="In review">
           This domain belonged to a removed project. An operator checks it before the site receives
@@ -123,77 +123,53 @@ function SiteSetup({ site }: { site: Site }) {
         </Notice>
       ) : null}
 
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <ol aria-label="Setup steps" className="flex min-w-0 flex-col">
-          <Step n={1} step={step("install")} id="install" settled={first.event !== null}>
-            {snippet.isPending ? (
-              <div role="status" aria-busy="true" className="flex flex-col gap-3">
-                <span className="sr-only">Loading the tag</span>
-                <Skeleton className="h-8 w-2/3" />
-                <Skeleton className="h-32 w-full" />
-              </div>
-            ) : snippet.error ? (
-              <ErrorState
-                title="The tag did not load"
-                error={snippet.error}
-                onRetry={() => snippet.refetch()}
-                compact
-              />
-            ) : (
-              <Install
-                snippet={snippet.data}
-                onVersion={(v) => {
-                  const next = new URLSearchParams(params);
-                  next.set("version", v);
-                  setParams(next, { replace: true });
-                }}
-              />
-            )}
-          </Step>
-          <Step n={2} step={step("event")} id="event" keepOpen>
-            <FirstEventState site={site} first={first} />
-          </Step>
-          <Step
-            n={3}
-            step={step("domain")}
-            id="domain"
-            description="Prove that the project controls the domain. Operators see the proof. Events arrive without it."
-          >
-            <VerifyDomain site={site} current={step("domain").state === "current"} />
-          </Step>
-          <Step
-            n={4}
-            step={step("toml")}
-            id="toml"
-            last
-            description="The service reads it after setup and once a day. SCF reviewers see what it lists."
-          >
-            <StellarTomlSummary
-              toml={site.stellar_toml}
-              checkedAt={site.stellar_toml_checked_at}
-              domain={site.domain}
+      <ol aria-label="Setup steps" className="flex min-w-0 flex-col">
+        <Step n={1} step={step("install")} id="install" settled={first.event !== null}>
+          {snippet.isPending ? (
+            <div role="status" aria-busy="true" className="flex flex-col gap-3">
+              <span className="sr-only">Loading the tag</span>
+              <Skeleton className="h-8 w-2/3" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+          ) : snippet.error ? (
+            <ErrorState
+              title="The tag did not load"
+              error={snippet.error}
+              onRetry={() => snippet.refetch()}
+              compact
             />
-          </Step>
-        </ol>
-        <SiteAside site={site} />
-      </div>
+          ) : (
+            <Install
+              snippet={snippet.data}
+              onVersion={(v) => {
+                const next = new URLSearchParams(params);
+                next.set("version", v);
+                setParams(next, { replace: true });
+              }}
+            />
+          )}
+        </Step>
+        <Step n={2} step={step("event")} id="event" keepOpen>
+          <FirstEventState site={site} first={first} />
+        </Step>
+        <Step n={3} step={step("domain")} id="domain">
+          <VerifyDomain site={site} current={step("domain").state === "current"} />
+        </Step>
+        <Step n={4} step={step("toml")} id="toml" last>
+          <StellarTomlSummary
+            toml={site.stellar_toml}
+            checkedAt={site.stellar_toml_checked_at}
+            domain={site.domain}
+          />
+        </Step>
+      </ol>
     </div>
   );
 }
 
 // the one progress line of the setup: a bar of the required steps and the
 // next thing to do
-function Progress({
-  steps,
-  done,
-  total,
-  text,
-}: {
-  steps: SetupStep[];
-  done: number;
-  total: number;
-  text: string;
-}) {
+function Progress({ steps, done, total }: { steps: SetupStep[]; done: number; total: number }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       <span
@@ -221,11 +197,8 @@ function Progress({
             />
           ))}
       </span>
-      <span className="text-small text-fg-2">
-        <span className="tabular">
-          {done} of {total}
-        </span>{" "}
-        done. {text}
+      <span className="text-small text-fg-2 tabular">
+        {done} of {total}
       </span>
     </div>
   );
@@ -699,46 +672,5 @@ function FirstEventState({
         )}
       </AnimatePresence>
     </div>
-  );
-}
-
-function SiteAside({ site }: { site: Site }) {
-  return (
-    <aside
-      aria-label="This site"
-      className="flex min-w-0 flex-col gap-4 rounded-lg border border-line bg-raised p-4 lg:sticky lg:top-6"
-    >
-      <span className="text-caption text-fg-2">This site</span>
-      <dl className="flex min-w-0 flex-col gap-3 text-small">
-        <div className="flex min-w-0 flex-col gap-1">
-          <dt className="text-caption text-fg-2">Domain</dt>
-          <dd className="font-mono text-fg" title={site.domain}>
-            <Breakable text={site.domain} />
-          </dd>
-        </div>
-        <div className="flex min-w-0 flex-col gap-1">
-          <dt className="text-caption text-fg-2">Allowed origins</dt>
-          <dd className="flex min-w-0 flex-col gap-1">
-            {site.origins.map((o) => (
-              <span key={o} className="font-mono text-fg" title={o}>
-                <Breakable text={o} />
-              </span>
-            ))}
-            <Link
-              to={siteSettingsPath(site)}
-              className="mt-1 w-fit rounded-sm text-fg-2 underline decoration-line-strong underline-offset-4 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg hover:decoration-fg focus-ring"
-            >
-              Edit origins
-            </Link>
-          </dd>
-        </div>
-        <div className="flex min-w-0 flex-col gap-1">
-          <dt className="text-caption text-fg-2">Site id</dt>
-          <dd>
-            <CopyField value={site.id} label="site id" />
-          </dd>
-        </div>
-      </dl>
-    </aside>
   );
 }
