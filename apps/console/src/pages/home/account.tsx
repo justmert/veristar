@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type ThemeChoice, useTheme } from "@veristar/brand/theme";
 import { KeyRound, Wallet } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
@@ -14,6 +15,7 @@ import { Notice } from "@/components/notice";
 import { OperatorPasskeys } from "@/components/operator-passkeys";
 import { PageHeader } from "@/components/page-header";
 import { PasskeyDialog } from "@/components/passkey-dialog";
+import { Segmented } from "@/components/segmented";
 import { ErrorState } from "@/components/states";
 import { steppedUp } from "@/components/step-up";
 import { toast } from "@/components/toast";
@@ -69,7 +71,8 @@ const METHOD_NAME: Record<Method, string> = {
 
 const HEADER = {
   title: "Account",
-  description: "How you sign in to the console. Operators also manage their passkeys here.",
+  description:
+    "How you sign in to the console and the theme of this browser. Operators also manage their passkeys here.",
 };
 
 // the signed-in person's own account: the sign-in methods linked to it
@@ -101,6 +104,7 @@ export function AccountPage() {
       <PageHeader {...HEADER} />
       <SignInMethods me={me.data} />
       {me.data.user.is_operator ? <OperatorPasskeys userName={me.data.user.display_name} /> : null}
+      <Appearance />
       <DeleteAccount me={me.data} />
     </div>
   );
@@ -563,6 +567,36 @@ function DeleteAccount({ me }: { me: Me }) {
         error={blocked.length > 0 ? null : del.error}
         typed={{ value: login, label: `Type ${login} to confirm` }}
         onConfirm={() => del.mutate()}
+      />
+    </section>
+  );
+}
+
+const THEMES: readonly { value: ThemeChoice; label: string }[] = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
+
+// the theme of this browser; the account menu shows the same choice
+function Appearance() {
+  const theme = useTheme();
+  return (
+    <section aria-labelledby="theme-h" className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 id="theme-h" className="text-title text-fg">
+          Theme
+        </h2>
+        <p className="max-w-prose text-small text-fg-2">
+          This browser keeps the choice. System follows your device.
+        </p>
+      </div>
+      <Segmented<ThemeChoice>
+        label="Theme"
+        value={theme.choice}
+        options={THEMES}
+        onChange={theme.setChoice}
+        size="md"
       />
     </section>
   );
