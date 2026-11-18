@@ -144,7 +144,7 @@ export function FunctionsDaily({ data }: { data: ContractFunctions }) {
         <ul className="flex flex-col gap-1 text-caption text-fg-2">
           {[...reasons.entries()].map(([code, n]) => (
             <li key={code}>
-              {countOf(n, "day")} without data: {missingText(code)}
+              {countOf(n, "day")} without data. {missingText(code)}
             </li>
           ))}
           {partial ? (

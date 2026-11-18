@@ -261,8 +261,8 @@ function CohortPlace({ v }: { v: SCFView }) {
       />
       {hidden ? (
         <p className="text-caption text-fg-2" data-testid="percentile-hidden">
-          Percentiles show from a cohort of 5 projects. Yours has{" "}
-          {countOf(c.cohort_size, "project")}, so one project more or less moves them too far.
+          Percentiles show once a cohort has 5 projects. This cohort has{" "}
+          {countOf(c.cohort_size, "project")}. One project more or less moves them too far.
         </p>
       ) : null}
     </div>

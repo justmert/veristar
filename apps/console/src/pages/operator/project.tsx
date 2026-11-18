@@ -202,7 +202,7 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
             />
           </Fold>
 
-          <Fold id="onchain" title="On-chain ids">
+          <Fold id="onchain" title="On-chain IDs">
             <TenantOnchainSection tenantId={t.id} />
           </Fold>
 

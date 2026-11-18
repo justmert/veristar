@@ -105,13 +105,13 @@ export function RemovedNotice({ name, reason }: { name: string; reason: string |
         <span className="font-medium text-fg">{name}</span>: its sites no longer accept traffic and
         its dashboards were deleted.
       </p>
-      {reason ? <p>Reason given: {reason}</p> : null}
+      {reason ? <p>Reason given: “{reason}”</p> : null}
     </MessagePage>
   );
 }
 
 export function StatusNotice({ tenant, isOwner }: { tenant: Tenant; isOwner: boolean }) {
-  const reason = tenant.status_reason ? ` Reason given: ${tenant.status_reason}` : "";
+  const reason = tenant.status_reason ? ` Reason given: “${tenant.status_reason}”` : "";
   switch (tenant.status) {
     case "pending":
       return (

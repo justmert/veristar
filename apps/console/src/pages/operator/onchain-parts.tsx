@@ -80,7 +80,7 @@ export function TenantOnchainSection({ tenantId }: { tenantId: string }) {
   const q = useQuery(operatorOnchainQuery(tenantId, {}));
   if (q.isPending)
     return (
-      <LoadingState label="Loading the on-chain ids">
+      <LoadingState label="Loading the on-chain IDs">
         <Skeleton.Table rows={2} columns={2} />
       </LoadingState>
     );
@@ -88,7 +88,7 @@ export function TenantOnchainSection({ tenantId }: { tenantId: string }) {
     return (
       <ErrorState
         compact
-        title="The on-chain ids did not load"
+        title="The on-chain IDs did not load"
         error={q.error}
         onRetry={() => q.refetch()}
       />

@@ -218,9 +218,9 @@ describe("on-chain page activity (contract 15.3)", () => {
     expect(host.textContent).toContain("Unverified");
     expect(host.textContent).toContain("stellar.toml linked both ways");
     // a failed read is a missing day with its reason, not a zero
-    expect(host.textContent).toContain("3 days without data: The ledger API refused more requests");
+    expect(host.textContent).toContain("3 days without data. The ledger API refused more requests");
     expect(host.textContent).toContain(
-      "1 day without data: Before the first day read for this account",
+      "1 day without data. Before the first day read for this account",
     );
     // a stored zero is drawn as a bar, a missing day as a dashed cell
     const strip = host.querySelector(`[aria-label="Daily operations of ${f.G_KEY}"]`);
@@ -802,7 +802,7 @@ describe("calls per contract function (contract 15.8)", () => {
   it("draws a day not read as missing with its reason, never as zero", async () => {
     const data = contractFunctions.parse(functionsBody);
     const host = await render(<FunctionsDaily data={data} />);
-    expect(host.textContent).toContain("1 day without data: More activity than one run reads");
+    expect(host.textContent).toContain("1 day without data. More activity than one run reads");
     expect(host.textContent).toContain("1 day with the calls of accounts only");
     const strip = host.querySelector('[aria-label="Daily calls of Other functions by contracts"]');
     expect(strip?.querySelectorAll(".bg-series-1")).toHaveLength(1);
