@@ -191,8 +191,12 @@ test("a new project waits in the review queue and the operator approves it", asy
   await page.waitForURL(`${APP}/operator/projects/${tenant.id}`);
   // enrollment answers and the site with its evidence
   await expect(page.getByText("Soroban contracts on testnet", { exact: true })).toBeVisible();
-  await expect(page.getByRole("article", { name: site.name })).toContainText(site.domain);
-  await expect(page.getByRole("article", { name: site.name })).toContainText("stellar.toml");
+  const siteRow = page
+    .getByRole("table", { name: "Sites" })
+    .getByRole("row")
+    .filter({ hasText: site.name });
+  await expect(siteRow).toContainText(site.domain);
+  await expect(siteRow).toContainText("stellar.toml");
   // one decision panel for approve and reject; remove waits in the menu
   const decision = page.getByRole("form", { name: `Decision on ${tenant.name}` });
   await expect(decision.getByRole("radio")).toHaveText([/Approve/, /Reject/]);
