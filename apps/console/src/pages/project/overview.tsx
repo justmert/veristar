@@ -5,7 +5,7 @@
 
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { ArrowDown, ArrowRight, ArrowUp, Check, Globe } from "lucide-react";
+import { ArrowRight, Check, Globe } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import type { ApiFilters } from "@/api/endpoints";
@@ -16,7 +16,7 @@ import { type WebSummary, webSummaryQuery } from "@/api/web";
 import { DbIpAttribution } from "@/components/dbip-attribution";
 import { PageHeader } from "@/components/page-header";
 import { RangeControl } from "@/components/range-control";
-import { StatCard, type StatChange } from "@/components/stat-card";
+import { StatCard } from "@/components/stat-card";
 import { EmptyState, ErrorState, Missing, Skeleton } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import {
@@ -50,6 +50,7 @@ import {
 } from "@/lib/web-dashboard";
 import { AddSiteButton, canAddSites } from "@/pages/project/sites";
 import { useProject } from "@/pages/project-layout";
+import { type Mover, Movers } from "./movers";
 import { OverviewSkeleton, PAGE_HEADERS } from "./page-frame";
 import { Step, type StepState, Steps } from "./steps";
 import { METRIC_LABEL, WebTrendChart } from "./web-chart";
@@ -426,43 +427,6 @@ function Numbers({
       )}
     </div>
   );
-}
-
-type Mover = { key: string; label: string; change: StatChange | null };
-
-// what moved against the previous period, largest move first: the line a
-// reader takes in before the cards. nothing shows without a previous value.
-function Movers({ items }: { items: Mover[] }) {
-  const moved = items
-    .filter((m): m is Mover & { change: StatChange } => m.change !== null)
-    .filter((m) => m.change.direction !== "flat")
-    .sort((x, y) => size(y.change.text) - size(x.change.text))
-    .slice(0, 3);
-  if (moved.length === 0) return <span />;
-  return (
-    <ul aria-label="What moved" data-movers="" className="flex flex-wrap gap-x-5 gap-y-1">
-      {moved.map((m) => {
-        const Icon = m.change.direction === "up" ? ArrowUp : ArrowDown;
-        const tone =
-          m.change.good === null ? "text-fg" : m.change.good ? "text-success" : "text-critical";
-        return (
-          <li key={m.key} data-mover={m.key} className="flex items-baseline gap-2 text-body">
-            <span className="text-fg-2">{m.label}</span>
-            <span className={cn("inline-flex items-center gap-1 font-medium tabular", tone)}>
-              <Icon aria-hidden className="size-3.5 self-center" />
-              {m.change.text.replace(/^[+-]/, "")}
-            </span>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-// the size of a change from its text ("+50%", "-1.2 pp")
-function size(text: string): number {
-  const n = Number.parseFloat(text.replace(/[^\d.]/g, ""));
-  return Number.isFinite(n) ? n : 0;
 }
 
 function usesApi(o: ApiOverview): boolean {

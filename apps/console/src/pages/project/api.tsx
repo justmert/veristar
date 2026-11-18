@@ -33,7 +33,7 @@ import { type Filter, FilterBar } from "@/components/filter-bar";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
 import { parseUtcDayTime, RangeControl } from "@/components/range-control";
-import { Sparkline, StatCard } from "@/components/stat-card";
+import { Sparkline, StatCard, StatGrid } from "@/components/stat-card";
 import { EmptyState, ErrorState, Missing } from "@/components/states";
 import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
@@ -76,6 +76,7 @@ import {
   OPEN_BUCKET,
 } from "@/lib/format";
 import { useProject } from "@/pages/project-layout";
+import { Movers } from "./movers";
 import { ApiSkeleton, PAGE_HEADERS } from "./page-frame";
 import { SelectFilter } from "./select-filter";
 
@@ -461,6 +462,16 @@ function Dashboard({
   const previous =
     series.data && prevData ? alignPrevious(series.data.points, series.data.range, prevData) : null;
   const [metric, setMetric] = useState<Metric>("requests");
+  // a range of days whose requests all fall on its last day (a new
+  // project) is drawn per hour of the last 24 hours: one bar at the end of
+  // empty days says nothing
+  const narrow = series.data ? lastDayOnly(series.data.points, series.data.range) : false;
+  const hours = useQuery({
+    ...apiTimeseriesQuery(tenantId, { range: "24h" }, state.filters),
+    enabled: narrow,
+  });
+  const chart = narrow && hours.data ? hours.data : series.data;
+  const chartPrevious = narrow ? null : previous;
 
   return (
     <div className="flex flex-col gap-8">
@@ -484,12 +495,18 @@ function Dashboard({
       <ApiChart
         key={metric}
         metric={metric}
-        state={series.isPending ? "loading" : series.error ? "error" : "data"}
+        state={
+          series.isPending || (narrow && hours.isPending)
+            ? "loading"
+            : series.error
+              ? "error"
+              : "data"
+        }
         error={series.error}
         onRetry={() => series.refetch()}
-        range={series.data?.range ?? null}
-        points={series.data?.points ?? []}
-        previous={previous}
+        range={chart?.range ?? null}
+        points={chart?.points ?? []}
+        previous={chartPrevious}
         dim={series.isPlaceholderData}
       />
 
@@ -507,6 +524,13 @@ function Dashboard({
       </div>
     </div>
   );
+}
+
+// a range per day with requests on its last day only
+export function lastDayOnly(points: ApiPoint[], range: ApiRange): boolean {
+  if (range.resolution !== "day" || points.length < 2) return false;
+  const busy = points.filter((p) => p.requests > 0);
+  return busy.length === 1 && busy[0] === points[points.length - 1];
 }
 
 // the previous period, bucket by bucket: the same offset into the previous
@@ -597,7 +621,31 @@ function Summary({
       <h2 id="api-summary" className="sr-only">
         Summary
       </h2>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Movers
+        items={[
+          {
+            key: "requests",
+            label: "Requests",
+            change: toStatChange(relativeChange(cur.requests, prev.requests), null),
+          },
+          {
+            key: "4xx",
+            label: "4xx rate",
+            change: toStatChange(rateChange(cur.rate_4xx, prev.rate_4xx), true),
+          },
+          {
+            key: "5xx",
+            label: "5xx rate",
+            change: toStatChange(rateChange(cur.rate_5xx, prev.rate_5xx), true),
+          },
+          {
+            key: "p95",
+            label: "p95 latency",
+            change: toStatChange(percentileChange(cur.p95, prev.p95), true),
+          },
+        ]}
+      />
+      <StatGrid>
         <StatCard
           data-tile="Requests"
           label="Requests"
@@ -625,6 +673,7 @@ function Summary({
               spark={spark((p) => (k === "4xx" ? p.rate_4xx : p.rate_5xx))}
               selected={metric === k}
               onSelect={() => onMetric(k)}
+              hideWhenEmpty
               footer={
                 <span className="text-caption text-fg-2">
                   {formatCount(n)} {k === "4xx" ? "client errors" : "server errors"}
@@ -643,6 +692,7 @@ function Summary({
           spark={spark(p95Plot)}
           selected={metric === "p95"}
           onSelect={() => onMetric("p95")}
+          hideWhenEmpty
           footer={
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption">
               {percent("p50")}
@@ -651,11 +701,9 @@ function Summary({
             </span>
           }
         />
-      </div>
-      <p className="text-caption text-fg-2">
-        {hadPrevious
-          ? `Compared with ${formatRange(overview.previous.range)}.`
-          : "The previous range of equal length has no requests, so no change shows."}
+      </StatGrid>
+      <p className="text-caption text-fg-2 empty:hidden">
+        {hadPrevious ? `Compared with ${formatRange(overview.previous.range)}.` : null}
         {cur.infrastructure_requests > 0 ? (
           <span data-testid="infrastructure-requests">
             {" "}
