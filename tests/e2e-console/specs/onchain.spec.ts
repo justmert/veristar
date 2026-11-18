@@ -211,7 +211,7 @@ test("an operator sees the column, exports the rows on screen and reads the deta
     await expect(page.getByRole("columnheader", { name: /^On-chain\W+Operations/ })).toBeVisible();
     const row = page.locator(`tr[data-tenant="${tenant.id}"]`);
     // the summary is read with the number: a tooltip on hover and focus
-    await expect(row.locator("[data-col=onchain]")).toContainText("0 of 1 id verified");
+    await expect(row.locator("[data-col=onchain]")).toContainText("0 of 1 ID verified");
 
     const href = await page.getByRole("link", { name: "Export CSV" }).getAttribute("href");
     expect(href).toContain("/api/operator/web/projects.csv?");
