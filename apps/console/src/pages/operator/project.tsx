@@ -27,6 +27,7 @@ import { StellarTomlSummary, VerificationDetail } from "@/components/evidence";
 import { EvidenceList, evidenceOf } from "@/components/evidence-list";
 import { IntegrityReportView } from "@/components/integrity";
 import { PageHeader } from "@/components/page-header";
+import { Section } from "@/components/panel";
 import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
@@ -196,7 +197,7 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
               <h2 id="evidence-h" className="text-title text-fg">
                 Evidence
               </h2>
-              <EvidenceList items={withNumbers(evidenceOf(detail), numbers)} stacked />
+              <EvidenceList items={withNumbers(evidenceOf(detail), numbers)} />
             </section>
             <Answers detail={detail} />
           </div>
@@ -572,38 +573,9 @@ function Sites({
       numeric: true,
       cell: (x) => formatCount(x.origins.length),
     },
-    {
-      key: "details",
-      header: "Actions",
-      align: "right",
-      action: true,
-      cell: (x) => (
-        <Menu>
-          <MenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Actions for ${x.domain}`}
-              className="relative z-(--vs-layer-raised) max-lg:size-(--vs-control-touch)"
-            >
-              <MoreHorizontal aria-hidden />
-            </Button>
-          </MenuTrigger>
-          <MenuContent align="end">
-            <MenuItem onSelect={() => setOpen(x)}>Show checks</MenuItem>
-          </MenuContent>
-        </Menu>
-      ),
-    },
   ];
   return (
-    <section aria-labelledby="sites-h" className="flex min-w-0 flex-col gap-3">
-      <h2 id="sites-h" className="text-title text-fg">
-        Sites{" "}
-        {sites.length > 0 ? (
-          <span className="font-normal text-fg-2">({formatCount(sites.length)})</span>
-        ) : null}
-      </h2>
+    <Section title="Sites" count={sites.length > 0 ? sites.length : null}>
       {waiting.length > 0 ? (
         <ul className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-raised">
           {waiting.map((x) => (
@@ -623,6 +595,7 @@ function Sites({
           getRowKey={(x) => x.id}
           rowLabel={(x) => x.name}
           rowProps={(x) => ({ "data-site": x.id })}
+          rowActions={(x) => [{ label: "Show checks", onSelect: () => setOpen(x) }]}
           footer={paged.footer}
         />
       )}
@@ -635,7 +608,7 @@ function Sites({
       >
         {open ? <SiteChecks site={open} /> : null}
       </Dialog>
-    </section>
+    </Section>
   );
 }
 

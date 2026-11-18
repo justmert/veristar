@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CirclePause, KeyRound, MoreHorizontal, Plus, UserMinus } from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { CirclePause, KeyRound, UserMinus } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { ApiError } from "@/api/client";
 import {
   operatorKeys,
@@ -13,16 +13,15 @@ import {
 import { keys, meQuery } from "@/api/queries";
 import type { User } from "@/api/schemas";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CreateDialog } from "@/components/create-dialog";
 import { type Column, DataTable } from "@/components/data-table";
-import { FormMessage } from "@/components/error-panel";
 import { SelectField, TextField } from "@/components/form-field";
+import { useOperatorAdmin } from "@/components/nav/operator-role";
 import { PageHeader } from "@/components/page-header";
+import type { RowAction } from "@/components/row-menu";
 import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { Pill } from "@/components/status";
 import { toast } from "@/components/toast";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { countOf, formatDateTimeUtc } from "@/lib/format";
 import { shortAddress } from "@/lib/stellar-wallet";
 import { fieldMessage, githubLogin, strkey } from "@/lib/validate";
@@ -54,30 +53,11 @@ function mine(e: RosterEntry, u: User) {
 export function OperatorsPage() {
   const me = useQuery(meQuery);
   const roster = useQuery(rosterQuery);
-  const admin =
-    me.data && roster.data
-      ? roster.data.items.some(
-          (e) => mine(e, me.data.user) && e.status === "active" && e.role === "operator_admin",
-        )
-      : false;
+  const admin = useOperatorAdmin() === true;
   const error = me.error ?? roster.error;
-  const [adding, setAdding] = useState(false);
   return (
     <div className="flex min-w-0 flex-col gap-8">
-      <PageHeader
-        title="Operators"
-        primary={
-          admin ? (
-            <Button onClick={() => setAdding(true)} className="max-lg:h-(--vs-control-touch)">
-              <Plus aria-hidden />
-              Add operator
-            </Button>
-          ) : null
-        }
-      />
-      <Dialog open={admin && adding} onOpenChange={setAdding} title="Add an operator">
-        {admin && adding ? <AddOperator onClose={() => setAdding(false)} /> : null}
-      </Dialog>
+      <PageHeader title="Operators" primary={admin ? <AddOperator /> : null} />
       {me.isPending || roster.isPending ? (
         <LoadingState label="Loading the operators">
           <Skeleton.Table rows={4} columns={4} />
@@ -233,14 +213,8 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
       ),
     },
   ];
-  if (admin)
-    columns.push({
-      key: "actions",
-      mobile: true,
-      header: "Actions",
-      align: "right",
-      cell: (e) => <RowActions entry={e} onPick={(action) => setPending({ entry: e, action })} />,
-    });
+  const pick = (entry: RosterEntry) => (action: RosterAction | RosterRole) =>
+    setPending({ entry, action });
   return (
     <section aria-label="Roster" className="flex min-w-0 flex-col gap-3">
       <DataTable
@@ -250,6 +224,7 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
         getRowKey={(e) => e.id}
         rowLabel={(e) => identity(e)}
         rowProps={(e) => ({ "data-roster": e.id })}
+        rowActions={admin ? (e) => rosterActions(e, pick(e)) : undefined}
       />
       <ConfirmDialog
         open={pending !== null}
@@ -273,63 +248,45 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
   );
 }
 
-// one menu per row: the everyday changes first, the destructive ones last
-function RowActions({
-  entry,
-  onPick,
-}: {
-  entry: RosterEntry;
-  onPick: (a: RosterAction | RosterRole) => void;
-}) {
-  return (
-    <Menu>
-      <MenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`Actions for ${identity(entry)}`}
-          className="max-lg:size-(--vs-control-touch)"
-        >
-          <MoreHorizontal aria-hidden />
-        </Button>
-      </MenuTrigger>
-      <MenuContent align="end">
-        {entry.bootstrap ? null : (
-          <>
-            <MenuItem
-              onSelect={() =>
-                onPick(entry.role === "operator_admin" ? "operator" : "operator_admin")
-              }
-            >
-              {entry.role === "operator_admin" ? "Make operator" : "Make operator admin"}
-            </MenuItem>
-            {entry.status === "active" ? null : (
-              <MenuItem onSelect={() => onPick("resume")}>Resume</MenuItem>
-            )}
-          </>
-        )}
-        <MenuItem tone="critical" onSelect={() => onPick("reset-passkeys")}>
-          <KeyRound aria-hidden />
-          Reset passkeys
-        </MenuItem>
-        {entry.bootstrap ? null : (
-          <>
-            {entry.status === "active" ? (
-              <MenuItem tone="critical" onSelect={() => onPick("suspend")}>
-                <CirclePause aria-hidden />
-                Suspend
-              </MenuItem>
-            ) : null}
-            <MenuSeparator />
-            <MenuItem tone="critical" onSelect={() => onPick("remove")}>
-              <UserMinus aria-hidden />
-              Remove from the roster
-            </MenuItem>
-          </>
-        )}
-      </MenuContent>
-    </Menu>
-  );
+// the row menu: the everyday changes first, the destructive ones last.
+// each opens the confirmation with its reason.
+function rosterActions(
+  entry: RosterEntry,
+  onPick: (a: RosterAction | RosterRole) => void,
+): (RowAction | null)[] {
+  return [
+    entry.bootstrap
+      ? null
+      : {
+          label: entry.role === "operator_admin" ? "Make operator" : "Make operator admin",
+          onSelect: () => onPick(entry.role === "operator_admin" ? "operator" : "operator_admin"),
+        },
+    entry.bootstrap || entry.status === "active"
+      ? null
+      : { label: "Resume", onSelect: () => onPick("resume") },
+    {
+      label: "Reset passkeys",
+      icon: <KeyRound aria-hidden />,
+      destructive: true,
+      onSelect: () => onPick("reset-passkeys"),
+    },
+    entry.bootstrap || entry.status !== "active"
+      ? null
+      : {
+          label: "Suspend",
+          icon: <CirclePause aria-hidden />,
+          destructive: true,
+          onSelect: () => onPick("suspend"),
+        },
+    entry.bootstrap
+      ? null
+      : {
+          label: "Remove from the roster",
+          icon: <UserMinus aria-hidden />,
+          destructive: true,
+          onSelect: () => onPick("remove"),
+        },
+  ];
 }
 
 // the roster's add rules (5.16): the identity of its kind, a reason of 1 to
@@ -349,14 +306,15 @@ export function validateAddOperator(form: {
   return out;
 }
 
-// the form opens in a dialog from the header button, as the create forms
-// of the other operator pages do
-export function AddOperator({ onClose }: { onClose?: () => void }) {
+// the header button and the form in its dialog, as on the other operator
+// pages
+export function AddOperator() {
   const [kind, setKind] = useState<"github" | "stellar">("github");
   const [value, setValue] = useState("");
   const [role, setRole] = useState<RosterRole>("operator");
   const [reason, setReason] = useState("");
   const [errors, setErrors] = useState<{ identity?: string; reason?: string }>({});
+  const [open, setOpen] = useState(false);
   const m = useMutation({
     mutationFn: () =>
       operatorsApi.addOperator({
@@ -369,7 +327,7 @@ export function AddOperator({ onClose }: { onClose?: () => void }) {
       setValue("");
       setReason("");
       refresh();
-      onClose?.();
+      setOpen(false);
     },
   });
   // a 422 names its fields (2.5); each is shown at its field
@@ -378,15 +336,27 @@ export function AddOperator({ onClose }: { onClose?: () => void }) {
   const identityError =
     errors.identity ?? serverField(kind === "github" ? "github_login" : "stellar_address");
   const reasonError = errors.reason ?? serverField("reason");
-  function submit(e: FormEvent) {
-    e.preventDefault();
+  function submit() {
     const v = validateAddOperator({ kind, value, reason });
     setErrors(v);
     if (v.identity || v.reason) return;
     m.mutate();
   }
   return (
-    <form onSubmit={submit} className="grid gap-4 pb-4" noValidate aria-label="Add an operator">
+    <CreateDialog
+      label="Add operator"
+      title="Add an operator"
+      pendingLabel="Adding"
+      pending={m.isPending}
+      error={m.error instanceof ApiError && Object.keys(fields).length > 0 ? null : m.error}
+      onSubmit={submit}
+      open={open}
+      onOpenChange={setOpen}
+      onClosed={() => {
+        setErrors({});
+        m.reset();
+      }}
+    >
       <SelectField
         label="Signs in with"
         name="kind"
@@ -399,11 +369,7 @@ export function AddOperator({ onClose }: { onClose?: () => void }) {
       </SelectField>
       <TextField
         label={kind === "github" ? "GitHub login" : "Stellar address"}
-        hint={
-          kind === "github"
-            ? undefined
-            : "A wallet's G-address, or the C-address of a passkey account from the person's Account page."
-        }
+        placeholder={kind === "github" ? undefined : "G… or C…"}
         name="identity"
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -430,23 +396,7 @@ export function AddOperator({ onClose }: { onClose?: () => void }) {
         onChange={(e) => setReason(e.target.value)}
         error={reasonError}
       />
-      <FormMessage error={m.error} />
-      <div className="flex flex-wrap justify-end gap-2">
-        {onClose ? (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onClose}
-            className="max-lg:h-(--vs-control-touch)"
-          >
-            Cancel
-          </Button>
-        ) : null}
-        <Button type="submit" pending={m.isPending} className="max-lg:h-(--vs-control-touch)">
-          {m.isPending ? "Adding" : "Add operator"}
-        </Button>
-      </div>
-    </form>
+    </CreateDialog>
   );
 }
 

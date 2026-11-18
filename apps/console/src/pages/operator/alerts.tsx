@@ -72,17 +72,19 @@ export function AlertsPage() {
             </span>
           ) : null
         }
+        freshness={
+          alerts.data && !alerts.error
+            ? {
+                at: alerts.data.checked_at,
+                cadence: `The page checks again every ${EVERY}.`,
+              }
+            : null
+        }
         details={
           alerts.isPending
             ? undefined
             : [
                 { label: "Source", value: <SourceFact error={alerts.error} data={data} /> },
-                {
-                  label: "Checked",
-                  value: (
-                    <LiveState error={alerts.error} checkedAt={alerts.data?.checked_at ?? null} />
-                  ),
-                },
                 ...(RUNBOOKS
                   ? [
                       {
@@ -137,43 +139,27 @@ const RUNBOOKS = runbookUrl("docs/runbooks/alerts.md#where-alerts-show");
 // where the alerts come from: the alert service and its servers, the
 // addresses on hover
 function SourceFact({ error, data }: { error: unknown; data: OperatorAlerts | null }) {
-  if (error instanceof ApiError && error.code === "alert_source_not_configured")
-    return <span>None set up</span>;
-  if (!data) return <span>Alertmanager</span>;
+  if (error || !data)
+    return (
+      <span className="inline-flex items-center gap-1" data-sources="">
+        <StatusDot tone="critical" />
+        {error instanceof ApiError && error.code === "alert_source_not_configured"
+          ? "None set up"
+          : "Not answering"}
+      </span>
+    );
   const answered = data.sources.filter((s) => s.reachable).length;
   return (
-    <span title={data.sources.map((s) => s.address).join(", ")} data-sources="">
+    <span
+      className="inline-flex items-center gap-1"
+      title={data.sources.map((s) => s.address).join(", ")}
+      data-sources=""
+    >
+      <StatusDot tone={answered === data.sources.length ? "success" : "warning"} live />
       Alertmanager,{" "}
       {answered === data.sources.length
         ? countOf(data.sources.length, "server")
         : `${answered} of ${countOf(data.sources.length, "server")}`}
-    </span>
-  );
-}
-
-// the breathing dot says the page is listening; it stops when the source
-// does not answer, because then nothing is heard
-function LiveState({ error, checkedAt }: { error: unknown; checkedAt: string | null }) {
-  if (error)
-    return (
-      <span className="inline-flex items-center gap-1">
-        <StatusDot tone="critical" />
-        {error instanceof ApiError && error.code === "alert_source_not_configured"
-          ? "No alert source"
-          : "Not answering"}
-      </span>
-    );
-  return (
-    <span className="inline-flex items-center gap-1">
-      <StatusDot tone="success" live />
-      {checkedAt ? (
-        <span>
-          <time dateTime={checkedAt}>{formatTimeUtc(checkedAt, { seconds: true })}</time>, every{" "}
-          {ALERTS_REFRESH_MS / 1000} s
-        </span>
-      ) : (
-        "Live"
-      )}
     </span>
   );
 }

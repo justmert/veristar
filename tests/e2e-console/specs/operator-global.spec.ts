@@ -449,7 +449,7 @@ test("an api key is created, read with from a client without a session, and revo
   await expect(page.getByRole("heading", { level: 1, name: "Access keys" })).toBeVisible();
   // the header button opens the form in a dialog
   await page.getByRole("button", { name: "Create key" }).click();
-  const form = page.getByRole("form", { name: "Create a key" });
+  const form = page.getByRole("dialog", { name: "Create a key" });
   const name = `e2e ${run}`;
   // a machine api key is the first type
   await expect(form.getByRole("radio", { name: /Machine API key/ })).toBeChecked();
@@ -486,9 +486,10 @@ test("an api key is created, read with from a client without a session, and revo
     expect(cookieOnly.status()).toBe(401);
 
     // the key is shown once: after dismissing, only its prefix remains
-    await expect(shown.getByRole("button", { name: "Done" })).toBeDisabled();
+    const done = page.getByRole("dialog").getByRole("button", { name: "Done" });
+    await expect(done).toBeDisabled();
     await shown.getByRole("checkbox").check();
-    await shown.getByRole("button", { name: "Done" }).click();
+    await done.click();
     await expect(shown).toHaveCount(0);
     const row = page
       .getByRole("table", { name: "Keys and connections" })

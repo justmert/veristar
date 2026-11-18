@@ -208,9 +208,7 @@ describe("operator project page", () => {
     expect(evidence.dataset.signal).toBe("partial");
     expect(evidence.textContent).toContain("1 of 30 sites verified");
     expect(host.textContent).toContain("1 to 10 of 30");
-    const trigger = host.querySelector(
-      'button[aria-label="Actions for s1.example.org"]',
-    ) as HTMLElement;
+    const trigger = host.querySelector('button[aria-label="Actions for Site 1"]') as HTMLElement;
     await act(async () => {
       trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
     });
@@ -881,8 +879,10 @@ describe("adding an operator (contract 5.16)", () => {
   it("shows an empty reason at its field and sends nothing", async () => {
     const calls = stubFetch([]);
     const host = await renderRoutes([{ path: "/", element: <AddOperator /> }], "/");
-    await type(byLabel(host, "GitHub login"), "octocat");
     await click(byRole(host, "button", "Add operator"));
+    const dialog = host.querySelector("dialog") as HTMLElement;
+    await type(byLabel(dialog, "GitHub login"), "octocat");
+    await click(byRole(dialog, "button", "Add operator"));
     expect(host.textContent).toContain("Enter a reason. It is recorded in the audit log.");
     expect(byLabel(host, "Reason").getAttribute("aria-invalid")).toBe("true");
     expect(calls).toEqual([]);
@@ -896,9 +896,11 @@ describe("adding an operator (contract 5.16)", () => {
       },
     ]);
     const host = await renderRoutes([{ path: "/", element: <AddOperator /> }], "/");
-    await type(byLabel(host, "GitHub login"), "nobody-here");
-    await type(byLabel(host, "Reason"), "joins the on-call rotation");
     await click(byRole(host, "button", "Add operator"));
+    const dialog = host.querySelector("dialog") as HTMLElement;
+    await type(byLabel(dialog, "GitHub login"), "nobody-here");
+    await type(byLabel(dialog, "Reason"), "joins the on-call rotation");
+    await click(byRole(dialog, "button", "Add operator"));
     await waitFor(() => expect(host.textContent).toContain("No GitHub user has this username."));
   });
 });

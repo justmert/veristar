@@ -115,9 +115,9 @@ describe("access keys", () => {
 
     // the header button opens the form in a dialog, which shows the new
     // key once too
-    expect(host.querySelector("form[aria-label='Create a key']")).toBeNull();
+    expect(host.querySelector("dialog[open]")).toBeNull();
     await click(byRole(host, "button", "Create key"));
-    const form = host.querySelector("dialog[open] form[aria-label='Create a key']") as HTMLElement;
+    const form = host.querySelector("dialog[open] form") as HTMLElement;
     expect(form).not.toBeNull();
     await type(byLabel(form, "Name") as HTMLInputElement, "warehouse");
     await click(byRole(form, "button", "Create key"));
@@ -139,7 +139,7 @@ describe("access keys", () => {
 
     // done stays disabled until the operator says the key is stored
     expect(byRole(host, "button", "Done").hasAttribute("disabled")).toBe(true);
-    const stored = host.querySelector("section[aria-label='New secret'] [role=checkbox]");
+    const stored = host.querySelector("dialog[open] [role=checkbox]");
     await click(stored as HTMLElement);
     await click(byRole(host, "button", "Done"));
     await waitFor(() => expect(host.querySelector(`[data-key-id="${f.KEY_ID}"]`)).not.toBeNull());
