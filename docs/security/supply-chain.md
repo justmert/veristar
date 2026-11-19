@@ -327,7 +327,7 @@ health checks; there is no migration.
 | `prober` | `v0.4.2` | `sha256:08b2e7eb298d48f56508b5486495b9eb4b3bf07946fb19b5c75ebf72741fb7c0` |
 | `replayer` | `v0.4.2` | `sha256:9210013c287b029b6ed6052ff5e0bfafd2df0ccad12939951bbeea49db3275fd` |
 
-**Release `v0.4.3` (2026-11-19), the release production runs.** Built in key mode by
+**Release `v0.4.3` (2026-11-19).** Built in key mode by
 `scripts/supply-chain/release-workstation.sh v0.4.3 <work dir>` from a clean worktree at the tag
 (annotated tag `v0.4.3` at commit `0f869a7` on `main`), from 06:57:37 to 07:11:38 UTC, while the
 repository's GitHub Actions are off: the licence gate first (`licences.json`, `console-bundle.txt`;
@@ -361,7 +361,7 @@ changelog describes; there is no migration.
 | `prober` | `v0.4.3` | `sha256:94b5aeb91cad472cf8f47fca36981e1da3c20f50c80613f24845c9d0e359f9f3` |
 | `replayer` | `v0.4.3` | `sha256:8cb3b61cdee5829d2229e14982b7e61e006879cfb3b6063603d3fd872345db65` |
 
-**Release `v0.4.4` (2026-11-19).** Built in key mode by
+**Release `v0.4.4` (2026-11-19), the release production runs.** Built in key mode by
 `SITE_ORIGIN=https://veristar.app REPO_URL=https://github.com/justmert/veristar scripts/supply-chain/release-workstation.sh v0.4.4 <work dir>`
 from a clean worktree at the tag (annotated tag `v0.4.4` at commit `5873080` on `main`), from
 12:01:01 to 12:16:11 UTC. The repository is public and its GitHub Actions are on; the repository
@@ -376,8 +376,10 @@ verified with `infra/ansible/vars/release-cosign.pub`, and the manifest, `licenc
 `console-bundle.txt` attached to the GitHub release `v0.4.4`. Every digest verified again with
 `cosign verify --key infra/ansible/vars/release-cosign.pub --insecure-ignore-tlog=true` from a
 docker configuration without credentials, and the gateway's SBOM attestation with
-`cosign verify-attestation --type spdxjson`. The console image's website carries the canonical
-origin `https://veristar.app` and links to the repository. `collector` came out with the `v0.4.1`
+`cosign verify-attestation --type spdxjson`. `deploy.yml` verified every digest with the release
+key (`-e sa_signature_mode=key`) before it touched a node. The console image's website carries the
+canonical origin `https://veristar.app` and links to the repository; after the deploy every node
+served it so. `collector` came out with the `v0.4.1`
 digest. `caddy` and `postgres-ha` have no source change since `v0.4.0` and `v0.2.0`, but the
 workstation's build cache no longer held their layers, so they were built again: the same Caddy
 modules and Go version (`caddy build-info` is identical) and the same PostgreSQL, Patroni and
