@@ -18,8 +18,10 @@ x-defaults: &defaults
   read_only: true
   # the writable /tmp of a read-only container. gatus's sqlite needs a
   # temporary directory once a query spills to a temporary file; without
-  # one the statuses api answers "disk I/O error (6410)" (SQLITE_IOERR_GETTEMPPATH)
-  tmpfs: ["/tmp:size=64m"]
+  # one the statuses api answers "disk I/O error (6410)" (SQLITE_IOERR_GETTEMPPATH).
+  # mode 1777 because docker on the probe host mounts it 0755 root otherwise,
+  # which gatus (uid 8080) cannot write either
+  tmpfs: ["/tmp:size=64m,mode=1777"]
   security_opt: ["no-new-privileges:true"]
   cap_drop: [ALL]
   logging:
