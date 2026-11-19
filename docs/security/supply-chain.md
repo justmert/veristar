@@ -57,8 +57,8 @@ runs every step below; it refuses a checkout that is not exactly at the tag or t
 changes. Before it builds anything it runs the licence gate (section 7) into `<work dir>/licences`,
 so a tag whose dependencies fail the gate is never released, and step 4 attaches the report beside
 the manifest. Release `v0.1.0` was built by `release-images.yml`; `v0.2.0`, `v0.2.1` and `v0.2.2` were built
-on a workstation; `v0.2.3` and `v0.3.0` were built by `release-images.yml` in keyless mode; `v0.4.0`
-and `v0.4.1` were built on a workstation again, in key mode, while the repository's GitHub Actions are off. The steps, run from a clean checkout of the tag:
+on a workstation; `v0.2.3` and `v0.3.0` were built by `release-images.yml` in keyless mode; `v0.4.0`,
+`v0.4.1` and `v0.4.2` were built on a workstation again, in key mode, while the repository's GitHub Actions are off. The steps, run from a clean checkout of the tag:
 
 1. **Build and push** each image of the matrix in `release-images.yml` with the same Dockerfile,
    context and build arguments (`VERSION=<tag>`, `DBIP_MONTH` from the tag's commit month,
@@ -281,6 +281,39 @@ partitions delivered from every core node, the server-side audit log search, and
 | `postgres-ha` | `18.7-v0.4.1` | `sha256:ac80c5ba3ca0ab798bfc5d40a00da5cb84fa09fdf0457d06d5f9ed158cddd6e5` (same as `v0.2.0`) |
 | `prober` | `v0.4.1` | `sha256:69b75003e12c1c68a53c770c644cd9edbe0791d0d62d9b82eecf4ed1bfce2dc0` |
 | `replayer` | `v0.4.1` | `sha256:6af8a32981e68742debb231c621e5797b09140ab67b1252ede6d2809efd8719d` |
+
+**Release `v0.4.2` (2026-11-19).** Built in key mode by
+`scripts/supply-chain/release-workstation.sh v0.4.2 <work dir>` from a clean worktree at the tag
+(annotated tag `v0.4.2` at commit `e092408` on `main`), from 05:55:57 to 06:10:27 UTC, while the
+repository's GitHub Actions are off: the licence gate first (`licences.json`, `console-bundle.txt`;
+509 shipped packages, 0 failing), then eleven images built, pushed and gated by `scan-image.sh` (syft 1.57.1,
+Trivy 0.76.2; no image had a fixable critical or high finding), signed and SBOM-attested with
+cosign 3.1.4 and the release key read from the SOPS file into the process's environment only
+(`env://`), no transparency log. `release-images.json` (SHA-256
+`a15110b464f39ce0d7bb693198f8ed124d13ae4a00b9e29cf31c6350fa08c3b8`) was written, every digest
+verified with `infra/ansible/vars/release-cosign.pub`, and the manifest, `licences.json` and
+`console-bundle.txt` attached to the GitHub release `v0.4.2`. Every digest verified again with
+`cosign verify --key infra/ansible/vars/release-cosign.pub --insecure-ignore-tlog=true` from a
+docker configuration without credentials, and the gateway's SBOM attestation with
+`cosign verify-attestation --type spdxjson`. `caddy` has no source change since `v0.4.0`,
+`collector` none since `v0.4.1` and `postgres-ha` none since `v0.2.0`; all three came out with the
+earlier digests. Since `v0.4.1` it reads contract transactions in JSON-RPC batches of at most 10
+`getTransaction` calls, and the console's Go guide shows the exporters' HTTP client with HTTP/2
+health checks; there is no migration.
+
+| Image | Tag | Digest |
+|---|---|---|
+| `caddy` | `v0.4.2` | `sha256:007bf33a6466dfe2a495fea44ae3c1564e9b3f7aec2d3fdeb9bcd67064c8c5e3` (same as `v0.4.0`) |
+| `collector` | `v0.4.2` | `sha256:436d82c1929340980ab08c98081a4d5b8a7926b7a6d84f250199b49edafddbd0` (same as `v0.4.1`) |
+| `console` | `v0.4.2` | `sha256:d50724e043d0a5fd4c48eefa0432e025a35c9a6c710fc2e73a1f207961fc7439` |
+| `controlplane` | `v0.4.2` | `sha256:6dec176dde70623ebb6c226f2f98b1dbca9cbbba910f0ba4b746d1cf6b14c9df` |
+| `gateway` | `v0.4.2` | `sha256:b1baa59024c387fda55b63a47b231e4ffade2c7c91c6e906aefc8ee66db9dd21` |
+| `jobs` | `v0.4.2` | `sha256:16c2426c9e98dc416de593cc3e14523ad8b2007a2b9d5e35fd76802d660876fc` |
+| `metricswriter` | `v0.4.2` | `sha256:fe4fef213f6a610fca04473a363ec5bef7c75e532cbc02f536541732a7f4428e` |
+| `platformctl` | `v0.4.2` | `sha256:07daac1f0d0251ab3ca82c07ed97a913de451a7a3d0466ef5880196e7b33ad84` |
+| `postgres-ha` | `18.7-v0.4.2` | `sha256:ac80c5ba3ca0ab798bfc5d40a00da5cb84fa09fdf0457d06d5f9ed158cddd6e5` (same as `v0.2.0`) |
+| `prober` | `v0.4.2` | `sha256:08b2e7eb298d48f56508b5486495b9eb4b3bf07946fb19b5c75ebf72741fb7c0` |
+| `replayer` | `v0.4.2` | `sha256:9210013c287b029b6ed6052ff5e0bfafd2df0ccad12939951bbeea49db3275fd` |
 
 ## 3. Deploy-time verification (every playbook that pulls images)
 
