@@ -282,7 +282,7 @@ partitions delivered from every core node, the server-side audit log search, and
 | `prober` | `v0.4.1` | `sha256:69b75003e12c1c68a53c770c644cd9edbe0791d0d62d9b82eecf4ed1bfce2dc0` |
 | `replayer` | `v0.4.1` | `sha256:6af8a32981e68742debb231c621e5797b09140ab67b1252ede6d2809efd8719d` |
 
-**Release `v0.4.2` (2026-11-19), the release production runs.** Built in key mode by
+**Release `v0.4.2` (2026-11-19).** Built in key mode by
 `scripts/supply-chain/release-workstation.sh v0.4.2 <work dir>` from a clean worktree at the tag
 (annotated tag `v0.4.2` at commit `e092408` on `main`), from 05:55:57 to 06:10:27 UTC, while the
 repository's GitHub Actions are off: the licence gate first (`licences.json`, `console-bundle.txt`;
@@ -316,7 +316,7 @@ health checks; there is no migration.
 | `prober` | `v0.4.2` | `sha256:08b2e7eb298d48f56508b5486495b9eb4b3bf07946fb19b5c75ebf72741fb7c0` |
 | `replayer` | `v0.4.2` | `sha256:9210013c287b029b6ed6052ff5e0bfafd2df0ccad12939951bbeea49db3275fd` |
 
-**Release `v0.4.3` (2026-11-19).** Built in key mode by
+**Release `v0.4.3` (2026-11-19), the release production runs.** Built in key mode by
 `scripts/supply-chain/release-workstation.sh v0.4.3 <work dir>` from a clean worktree at the tag
 (annotated tag `v0.4.3` at commit `a31b132` on `main`), from 06:57:37 to 07:11:38 UTC, while the
 repository's GitHub Actions are off: the licence gate first (`licences.json`, `console-bundle.txt`;
@@ -329,11 +329,12 @@ verified with `infra/ansible/vars/release-cosign.pub`, and the manifest, `licenc
 `console-bundle.txt` attached to the GitHub release `v0.4.3`. Every digest verified again with
 `cosign verify --key infra/ansible/vars/release-cosign.pub --insecure-ignore-tlog=true` from a
 docker configuration without credentials, and the gateway's SBOM attestation with
-`cosign verify-attestation --type spdxjson`. `caddy` has no source change since `v0.4.0`,
+`cosign verify-attestation --type spdxjson`. `deploy.yml` verified every digest with the release
+key (`-e sa_signature_mode=key`) before it touched a node. `caddy` has no source change since `v0.4.0`,
 `collector` none since `v0.4.1` and `postgres-ha` none since `v0.2.0`; all three came out with the
 earlier digests. Since `v0.4.2` the console image carries the public website at `/srv/site`, which
 the core Caddy serves at the zone apex, and the console's pages are reworked as the
-changelog; there is no migration.
+changelog describes; there is no migration.
 
 | Image | Tag | Digest |
 |---|---|---|
