@@ -15,6 +15,16 @@
       "id": "GHSA-vhf9-rcmp-v5fc",
       "reviewed": "2026-11-15",
       "decision": "sql injection in the reports api (POST /api/reports/*) through filters[*].paramName, unauthenticated with a share token from GET /api/share/<slug>; advisory range <= 3.4.0, no patched version stated. the pinned 3.5.0 carries the fix (upstream commit 4fa9769519, src/lib/params.ts derives the placeholder name from the validated key). not reachable from the internet either: no public host serves umami, and make test-caddy-closed (deploy/caddy/umami_closed_test.go) fails when an internet-facing caddy config refers to it. checked on the private network against the pinned image: the advisory's payloads run as plain filters (200, no division by zero, no sleep), while umami 3.4.0 answers the same payloads with a database error and a 4 second delay. no upgrade or deny rule needed."
+    },
+    {
+      "id": "GHSA-mfr8-8qww-v76h",
+      "reviewed": "2026-11-19",
+      "decision": "next 16.4.2 in umami 3.5.0 (fixed in 16.4.5). needs a 'use cache' function that reads a root param and is also called through unstable_cache(). umami 3.5.0 has no 'use cache', no unstable_cache, no next/root-params and no cacheComponents in next.config.ts, and no public host serves umami (adr 0005). umami 3.5.0 is the newest release; revisit at the next one, through make umami-upgrade."
+    },
+    {
+      "id": "GHSA-vc7v-qv4w-wrv8",
+      "reviewed": "2026-11-19",
+      "decision": "next 16.4.2 in umami 3.5.0 (fixed in 16.4.5). needs cache components with nested 'use cache' functions reading next/root-params. umami 3.5.0 enables neither (next.config.ts sets only experimental.useTypeScriptCli) and uses no 'use cache', and no public host serves umami (adr 0005). umami 3.5.0 is the newest release; revisit at the next one, through make umami-upgrade."
     }
   ],
   "upstream_image_findings": [
@@ -41,27 +51,28 @@
         "CVE-2026-78667 stdlib",
         "CVE-2026-78669 golang.org/x/net",
         "CVE-2026-78669 stdlib",
-        "CVE-2026-97031 stdlib"
+        "CVE-2026-97031 stdlib",
+        "CVE-2026-97054 stdlib"
       ],
       "reviewed": "2026-11-13",
-      "rechecked": "2026-11-15",
-      "decision": "every finding is in a bundled data source plugin binary under data/plugins-bundled. the only provisioned data source is prometheus, grafana listens on 127.0.0.1 only, sign-up and anonymous access are off. 13.3.1, the newest release, carries the same findings.",
+      "rechecked": "2026-11-19",
+      "decision": "every finding is in a bundled data source plugin binary under data/plugins-bundled. the only provisioned data source is prometheus, grafana listens on 127.0.0.1 only, sign-up and anonymous access are off. 13.3.1, the newest release, carries the same findings. CVE-2026-97054 (go 1.26.11 / 1.27.4, net/http): an http/1 handler that reads a MaxBytesReader body while it writes the response header can panic the server; rechecked 2026-11-19, no release is built with a fixed go. grafana listens on 127.0.0.1 only (ssh tunnel); 13.3.1 carries it too.",
       "revisit": "13.2.7, or a 13.x release without these findings"
     },
     {
       "image": "natsio/prometheus-nats-exporter:0.20.3",
-      "findings": ["CVE-2026-107891 musl", "CVE-2026-107891 musl-utils", "CVE-2026-85091 zlib"],
+      "findings": ["CVE-2026-107891 musl", "CVE-2026-107891 musl-utils", "CVE-2026-85091 zlib", "CVE-2026-97054 stdlib"],
       "reviewed": "2026-11-13",
-      "rechecked": "2026-11-15",
-      "decision": "alpine musl and zlib packages; the exporter is a statically linked go binary that loads neither, and the entrypoint shell takes no outside input. newest release.",
+      "rechecked": "2026-11-19",
+      "decision": "alpine musl and zlib packages; the exporter is a statically linked go binary that loads neither, and the entrypoint shell takes no outside input. newest release. CVE-2026-97054 (go 1.26.11 / 1.27.4, net/http): an http/1 handler that reads a MaxBytesReader body while it writes the response header can panic the server; rechecked 2026-11-19, no release is built with a fixed go. the exporter is on the node's tier network only, not published; only prometheus reaches it, through the relay. a crash restarts it (unless-stopped).",
       "revisit": "the next release"
     },
     {
       "image": "prom/alertmanager:v0.34.2",
-      "findings": ["CVE-2026-78661 golang.org/x/net"],
+      "findings": ["CVE-2026-78661 golang.org/x/net", "CVE-2026-97054 stdlib"],
       "reviewed": "2026-11-13",
-      "rechecked": "2026-11-15",
-      "decision": "govulncheck -mode=binary: the x/net/html symbols are not in the binary. 0.35.0 carries the same finding.",
+      "rechecked": "2026-11-19",
+      "decision": "govulncheck -mode=binary: the x/net/html symbols are not in the binary. 0.35.0 carries the same finding. CVE-2026-97054 (go 1.26.11 / 1.27.4, net/http): an http/1 handler that reads a MaxBytesReader body while it writes the response header can panic the server; rechecked 2026-11-19, no release is built with a fixed go. alertmanager is on the private address only, https with the node certificate; 0.35.0 carries it too.",
       "revisit": "a release built with golang.org/x/net 0.62.0"
     },
     {
@@ -82,55 +93,21 @@
         "CVE-2026-78667 stdlib",
         "CVE-2026-78669 golang.org/x/net",
         "CVE-2026-78669 stdlib",
-        "CVE-2026-97031 stdlib"
+        "CVE-2026-97031 stdlib",
+        "CVE-2026-97054 stdlib"
       ],
       "reviewed": "2026-11-13",
-      "rechecked": "2026-11-15",
-      "decision": "govulncheck -mode=binary: x/net/html, x/crypto, x/text, CVE-2026-46600 and CVE-2026-78667 are not in the binary; the rest are denial of service in the http server, tls and parsers or an x509 client issue. the exporter listens on the private address only, without tls, and only prometheus scrapes it. newest release.",
+      "rechecked": "2026-11-19",
+      "decision": "govulncheck -mode=binary: x/net/html, x/crypto, x/text, CVE-2026-46600 and CVE-2026-78667 are not in the binary; the rest are denial of service in the http server, tls and parsers or an x509 client issue. the exporter listens on the private address only, without tls, and only prometheus scrapes it. newest release. CVE-2026-97054 (go 1.26.11 / 1.27.4, net/http): an http/1 handler that reads a MaxBytesReader body while it writes the response header can panic the server; rechecked 2026-11-19, no release is built with a fixed go. the exporter serves only GET /metrics, on the private address, to prometheus.",
       "revisit": "the next node_exporter release"
     },
     {
       "image": "prom/prometheus:v3.15.1",
-      "findings": ["CVE-2026-78661 golang.org/x/net"],
+      "findings": ["CVE-2026-78661 golang.org/x/net", "CVE-2026-97054 stdlib"],
       "reviewed": "2026-11-13",
-      "rechecked": "2026-11-15",
-      "decision": "govulncheck -mode=binary: the x/net/html symbols are not in the binary. 3.16.0 carries the same finding.",
+      "rechecked": "2026-11-19",
+      "decision": "govulncheck -mode=binary: the x/net/html symbols are not in the binary. 3.16.0 carries the same finding. CVE-2026-97054 (go 1.26.11 / 1.27.4, net/http): an http/1 handler that reads a MaxBytesReader body while it writes the response header can panic the server; rechecked 2026-11-19, no release is built with a fixed go. prometheus is published on 127.0.0.1 only (ssh tunnel), no remote write receiver; 3.16.0 carries it too.",
       "revisit": "a release built with golang.org/x/net 0.62.0"
-    },
-    {
-      "image": "prometheuscommunity/postgres-exporter:v0.20.1",
-      "findings": [
-        "CVE-2026-111943 stdlib",
-        "CVE-2026-33818 stdlib",
-        "CVE-2026-39821 stdlib",
-        "CVE-2026-39822 stdlib",
-        "CVE-2026-46600 golang.org/x/net",
-        "CVE-2026-46600 stdlib",
-        "CVE-2026-56851 golang.org/x/text",
-        "CVE-2026-56852 golang.org/x/text",
-        "CVE-2026-56853 stdlib",
-        "CVE-2026-56854 golang.org/x/crypto",
-        "CVE-2026-56858 stdlib",
-        "CVE-2026-56859 stdlib",
-        "CVE-2026-56860 stdlib",
-        "CVE-2026-56862 stdlib",
-        "CVE-2026-78661 golang.org/x/net",
-        "CVE-2026-78667 stdlib",
-        "CVE-2026-78669 golang.org/x/net",
-        "CVE-2026-78669 stdlib",
-        "CVE-2026-97031 stdlib"
-      ],
-      "reviewed": "2026-11-13",
-      "rechecked": "2026-11-15",
-      "decision": "govulncheck -mode=binary: x/net/html, x/crypto, x/text, CVE-2026-39821, -39822, -56859 and -78667 are not in the binary. the exporter is on the private address of the postgresql hosts only, scraped by prometheus, and connects only to postgresql as a pg_monitor role. newest release.",
-      "revisit": "the next release"
-    },
-    {
-      "image": "quay.io/coreos/etcd:v3.7.3",
-      "findings": ["CVE-2026-78661 golang.org/x/net"],
-      "reviewed": "2026-11-17",
-      "decision": "the same finding as 3.6.16, which carried it from 2026-11-13 (trivy 0.76.2 lists no other fixable critical or high finding in 3.7.3). x/net html parser denial of service; the symbol is in the binary but no etcd api takes html. etcd ports are on the private address only, firewalled to the private network, and patroni is the only client.",
-      "revisit": "3.7.4, or a release built with golang.org/x/net 0.62.0"
     },
     {
       "image": "twinproduction/gatus:v5.38.0",
@@ -139,11 +116,12 @@
         "CVE-2026-46603 golang.org/x/image",
         "CVE-2026-63209 github.com/klauspost/compress",
         "CVE-2026-78661 golang.org/x/net",
-        "CVE-2026-78669 golang.org/x/net"
+        "CVE-2026-78669 golang.org/x/net",
+        "CVE-2026-97054 stdlib"
       ],
       "reviewed": "2026-11-13",
-      "rechecked": "2026-11-15",
-      "decision": "govulncheck -mode=binary: the x/image and x/net/html symbols are not in the binary. go-jose is used only by the oidc login, which gatus.yml does not configure. the gatus port is not published; only the probe caddy reaches it over http/1.1, so no outside client sends it http/2 frames. newest release.",
+      "rechecked": "2026-11-19",
+      "decision": "govulncheck -mode=binary: the x/image and x/net/html symbols are not in the binary. go-jose is used only by the oidc login, which gatus.yml does not configure. the gatus port is not published; only the probe caddy reaches it over http/1.1, so no outside client sends it http/2 frames. newest release. CVE-2026-97054 (go 1.26.11 / 1.27.4, net/http): an http/1 handler that reads a MaxBytesReader body while it writes the response header can panic the server; rechecked 2026-11-19, no release is built with a fixed go. net/http.maxBytesReader is not linked into the binary (go tool nm), and the gatus port is not published.",
       "revisit": "5.39"
     }
   ],
