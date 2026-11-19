@@ -37,7 +37,7 @@ func TestCohortProposalNeedsTheCurrentTerms(t *testing.T) {
 		values ($1, 'terms', 'terms', 'active', $2, '2026-01-01')`, tenant, owner)
 	superExec(t, pg, `insert into cp.tenant_members (tenant_id, user_id, role) values ($1, $2, 'owner')`, tenant, owner)
 
-	scope, err := tenants.NewScope(d, "2026-11-18-draft.6", tenants.ReconcileFunc(func(context.Context, uuid.UUID) error {
+	scope, err := tenants.NewScope(d, "2026-11-19.1", tenants.ReconcileFunc(func(context.Context, uuid.UUID) error {
 		return nil
 	}), slog.New(slog.DiscardHandler))
 	require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestCohortProposalNeedsTheCurrentTerms(t *testing.T) {
 	code, _ = do(http.MethodGet, nil)
 	require.Equal(t, http.StatusOK, code)
 
-	superExec(t, pg, `update cp.tenants set accepted_terms_version = '2026-11-18-draft.6' where id = $1`, tenant)
+	superExec(t, pg, `update cp.tenants set accepted_terms_version = '2026-11-19.1' where id = $1`, tenant)
 	code, _ = do(http.MethodPut, map[string]any{"program": "Build Award"})
 	require.Equal(t, http.StatusOK, code)
 }

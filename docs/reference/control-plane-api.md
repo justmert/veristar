@@ -337,7 +337,7 @@ effect at the person's next request. The operator routes of section 5 build on i
     "stellar_ids": ["GA...", "CA..."],
     "scf_round_url": null
   },
-  "accepted_terms_version": "2026-11-12-draft.1",
+  "accepted_terms_version": "2026-11-19.1",
   "provisioning": "ready",
   "role": "owner",
   "created_at": "...",
@@ -622,9 +622,9 @@ Session.
             "operator_role": null },
   "tenants": [
     { "id": "uuid", "slug": "stellar-dex", "name": "Stellar DEX", "status": "active", "role": "owner",
-      "accepted_terms_version": "2026-11-12-draft.1", "terms_current": true }
+      "accepted_terms_version": "2026-11-19.1", "terms_current": true }
   ],
-  "terms": { "current_version": "2026-11-12-draft.1", "status": "draft", "url": "/terms" }
+  "terms": { "current_version": "2026-11-19.1", "status": "final", "url": "/terms" }
 }
 ```
 
@@ -645,7 +645,7 @@ Returns the current terms of service.
 Public.
 
 ```json
-{ "version": "2026-11-12-draft.1", "status": "draft", "markdown": "# Terms ..." }
+{ "version": "2026-11-19.1", "status": "final", "markdown": "# Terms ..." }
 ```
 
 Served from `docs/compliance/terms.md`, embedded in the binary at build time. The
@@ -975,7 +975,7 @@ Session. Enrollment.
     "stellar_ids": ["GA..."],
     "scf_round_url": "https://communityfund.stellar.org/..."
   },
-  "accepted_terms_version": "2026-11-12-draft.1",
+  "accepted_terms_version": "2026-11-19.1",
   "cohort": { "program": "Build Award", "round": "SCF #38", "category": "DeFi", "award_date": "2026-10-01" }
 }
 ```
