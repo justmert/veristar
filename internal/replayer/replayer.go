@@ -547,9 +547,13 @@ func (r *Replayer) lead(parent context.Context, part int, lock *natsx.Lock, yiel
 	return lr.run(ctx, parent)
 }
 
-// setOwned refreshes the gauges of what this instance holds.
+// setOwned refreshes the gauges of what this instance holds. the gauges are
+// set under the same lock as the count: holds that start together each call
+// this, and a call that counted fewer holds must not set its count after
+// one that counted more, or the gauge stays short until the next change.
 func (r *Replayer) setOwned() {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	parts, legacy := 0, false
 	for k := range r.leads {
 		if k == legacyLead {
@@ -558,7 +562,6 @@ func (r *Replayer) setOwned() {
 			parts++
 		}
 	}
-	r.mu.Unlock()
 	r.m.owned.Set(float64(parts))
 	r.m.legacyLeader.Set(b2f(legacy))
 	r.m.leader.Set(b2f(parts > 0 || legacy))
