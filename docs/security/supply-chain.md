@@ -439,7 +439,7 @@ found, fails the gate.
 
 | Section | What it contains | How it is derived | Fails on |
 |---|---|---|---|
-| shipped | Go modules linked into a platform binary; npm packages of the console bundle, `sdk.js` and the npm package of the tracker | `go list -deps ./cmd/...` in the root module and `go list -deps .` in the collector distribution that ocb generates (`dist/scf-otelcol`, from `collector/builder-config.yaml`); the `dependencies` and `optionalDependencies` closure of the shipped importers `apps/console` and `packages/tracker` in `pnpm-lock.yaml` | any licence not on the OSI list |
+| shipped | Go modules linked into a platform binary; npm packages of the console bundle, the website bundle, `sdk.js` and the npm package of the tracker | `go list -deps ./cmd/...` in the root module and `go list -deps .` in the collector distribution that ocb generates (`dist/scf-otelcol`, from `collector/builder-config.yaml`); the `dependencies` and `optionalDependencies` closure of the shipped importers `apps/console`, `apps/site` and `packages/tracker` in `pnpm-lock.yaml` | any licence not on the OSI list |
 | not shipped | everything else in `go.mod`, the collector module, `pnpm-lock.yaml`, the example lockfiles (`package-lock.json`, `uv.lock`, `Cargo.lock`, `go.mod`, the Java example's `pom.xml`) and `infra/ansible/requirements.txt`, each with the importers that pull it in | the rest of the same graphs | a non-OSI licence without a matching allowlist entry, and any allowlist entry that no longer matches (package gone, upgraded, relicensed or now shipped) |
 
 Trivy reads the Java example's dependency tree from the poms in the local Maven repository. The
