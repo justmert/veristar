@@ -16,6 +16,8 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-19
+
 ### Added
 
 - The repository variable `RELEASE_BUILDER=workstation` skips every job of
@@ -31,6 +33,27 @@ here, before they take effect, as the processing terms require
   the repository's URL, and `scripts/supply-chain/release-workstation.sh`
   passes both from its environment. Release `v0.4.3` passed neither, so its
   website had no GitHub links.
+
+### Upgrade notes
+
+**Before the deploy**
+
+- This release is signed in key mode on a workstation
+  ([docs/security/supply-chain.md](docs/security/supply-chain.md) section
+  2.1), with the repository variable `RELEASE_BUILDER=workstation`, so
+  pushing its tag starts no build in `release-images.yml`. Add
+  `ANSIBLE_EXTRA='-e sa_signature_mode=key'` to every `make <env>-deploy`;
+  without it `verify-release.yml` refuses the release before any node is
+  touched.
+- No migration and no NATS topology change: the rolling deploy of
+  [docs/deploy/upgrade.md](docs/deploy/upgrade.md) replaces the images. The
+  only change in behaviour since 0.4.3 is the website in the console image,
+  which now links to the repository.
+
+**After the deploy**
+
+- Check: `https://<BASE_DOMAIN>/` links to the repository, and its canonical
+  link is `https://<BASE_DOMAIN>/`.
 
 ## [0.4.3] - 2026-11-19
 
@@ -1526,7 +1549,8 @@ How to check a file against its release:
   starts tracking on `umami.start()`, the server-issued proof of work, and a
   byte-identical rebuild of every committed release.
 
-[Unreleased]: https://github.com/justmert/veristar/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/justmert/veristar/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/justmert/veristar/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/justmert/veristar/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/justmert/veristar/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/justmert/veristar/compare/v0.4.0...v0.4.1
