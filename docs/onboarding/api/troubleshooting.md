@@ -72,6 +72,66 @@ Work through these in order:
    server instrumentation (only a client, a queue consumer, a cron job) has nothing the platform
    keeps. See [what-gets-dropped.md](what-gets-dropped.md).
 
+## Exports time out until the app restarts
+
+Your SDK logs a timeout on every export (`context deadline exceeded` in Go,
+`InterruptedIOException: timeout` in Java), the empty request above still answers 200 from the
+same host, and a restart of the app fixes it at once.
+
+The cause is a dead HTTP/2 connection. An HTTP/2 client sends all exports over one connection.
+When the network path under that connection disappears without a close, for example when a NAT
+or firewall between you and the platform drops its mapping, the client receives no error. Each
+export times out, and the client keeps the connection and sends the next export on it as well,
+for many minutes, so only a restart ends it quickly. An HTTP/1.1 client closes a connection whose
+request timed out, so its next export opens a new connection and gets through.
+
+HTTP/2 health checks fix this: the client pings a connection that stays silent and closes it when
+the ping goes unanswered, so the next export opens a new connection.
+
+| SDK | Protocol to the platform | Affected | What to do |
+|---|---|---|---|
+| Go, OTLP/HTTP (`otlpmetrichttp`, `otlptracehttp`) | HTTP/2 | yes | pass an HTTP client with HTTP/2 health checks, see below |
+| Go, OTLP/gRPC (`otlpmetricgrpc`, `otlptracegrpc`) | HTTP/2 | yes | add gRPC keepalive, see below |
+| OpenTelemetry Collector, `otlphttp` exporter | HTTP/2 | yes | set `http2_read_idle_timeout` and `http2_ping_timeout` ([collector-fanout.md](collector-fanout.md)) |
+| Java agent and Java SDK | HTTP/2 | yes | send through a Collector with the two settings above; the Java exporters have no HTTP/2 health check option |
+| Node.js | HTTP/1.1 | no | nothing |
+| Python | HTTP/1.1 | no | nothing |
+| Rust, `reqwest` client | HTTP/1.1 with the example's features | no | if your build enables reqwest's `http2` feature, the exporter speaks HTTP/2: build the reqwest client with `http2_keep_alive_interval`, `http2_keep_alive_timeout` and `http2_keep_alive_while_idle(true)`, and pass it with `with_http_client` |
+
+The OpenTelemetry Go exporters have no option or environment variable for HTTP/2 health checks.
+Give them an HTTP client whose transport sets them (Go 1.24 or newer), as the [Go guide](go.md)
+does for all four of its exporters:
+
+{/* include examples/otel-go-nethttp/main.go region=client */}
+```go
+// exportClient is the http client of all four exporters. go's http/2 client
+// keeps a connection whose peer vanished without a fin or rst (a lost nat
+// mapping, a node that went away) and queues every export onto it for many
+// minutes, so only a restart ends it quickly. a ping after 15 s without a
+// frame from the peer, unanswered within 5 s, closes such a connection and
+// the next export dials a new one. a client of your own replaces the
+// exporter's timeout, tls and proxy options, so it sets the sdk's 10 s
+// export timeout itself.
+func exportClient() *http.Client {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.HTTP2 = &http.HTTP2Config{SendPingTimeout: 15 * time.Second, PingTimeout: 5 * time.Second}
+	return &http.Client{Transport: tr, Timeout: 10 * time.Second}
+}
+```
+
+Pass it to each exporter with `otlpmetrichttp.WithHTTPClient(client)` and
+`otlptracehttp.WithHTTPClient(client)`. A client you pass replaces the exporter's `WithTimeout`,
+`WithTLSClientConfig` and `WithProxy` options and the `OTEL_EXPORTER_OTLP_*TIMEOUT` and
+`OTEL_EXPORTER_OTLP_*CERTIFICATE` variables, so the client sets the 10 second export timeout
+itself.
+
+For the gRPC exporters, add keepalive pings with
+`WithDialOption(grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 30 * time.Second,
+Timeout: 10 * time.Second, PermitWithoutStream: true}))`.
+
+`GODEBUG=http2client=0` also avoids the problem in Go, by making the OTLP/HTTP exporters speak
+HTTP/1.1 instead.
+
 ## Numbers look wrong
 
 | What you see | Cause and fix |
