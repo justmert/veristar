@@ -14,6 +14,12 @@ The agent instruments Spring MVC, Tomcat, JDBC, HTTP clients and over a hundred 
 when the JVM starts. The same setup works for any Java service the agent supports; for the Stellar
 Anchor Platform, see [anchor-platform.md](anchor-platform.md).
 
+For production, send the agent's metrics through an OpenTelemetry Collector that forwards to the
+platform with HTTP/2 health pings ([collector-fanout.md](collector-fanout.md)). The agent's own
+HTTP/2 sender has no health check, so after a silent network drop its exports time out for
+minutes before it reconnects; the Collector notices the dead connection within seconds
+([troubleshooting](troubleshooting.md#exports-time-out-until-the-app-restarts)).
+
 ## Attach the agent
 
 Download the agent jar from Maven Central and verify its checksum. The example's image does both
