@@ -12,7 +12,9 @@ does not use up the 24 hour patch window:
     release's pnpm-lock.yaml, nats-server, caddy, the opentelemetry collector
     and haproxy's and etcd's go modules where they exist: github's global
     advisory database queried with affects=<package>@<version>, which matches
-    on the advisory's version ranges.
+    on the advisory's version ranges. an advisory id listed as reviewed is
+    skipped here too, so a triaged advisory of a package only an upstream
+    release can move (next inside umami) is not filed again every hour.
   - postgresql: a newer minor release of the pinned major on postgresql.org.
     every postgresql minor release carries security fixes, so a newer minor
     is a finding without reading release notes.
@@ -156,7 +158,7 @@ def main(argv):
 
         for eco, pkg, ver, where in checks:
             for a in global_advisories(eco, pkg, ver):
-                if a.get("withdrawn_at"):
+                if a.get("withdrawn_at") or a["ghsa_id"] in reviewed_ids:
                     continue
                 findings.append({
                     "id": a["ghsa_id"], "source": f"github advisory database ({where})",
