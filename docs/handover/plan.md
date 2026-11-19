@@ -51,7 +51,7 @@ settings, and container registry paths that include the GitHub owner's name
 3. The new operator creates its own accounts: a GitHub owner, a cloud project, a DNS account, a
    probe account, an alert receiver, and age identities for at least two people.
 
-### 2.2 Shadow period (at least 4 weeks, proposed)
+### 2.2 Shadow period (at least 4 weeks)
 
 The original operator still runs production. The new operator works alongside with read access
 and no write access to production, and builds its own copy.
