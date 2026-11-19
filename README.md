@@ -1,9 +1,15 @@
 # Veristar
 
-Multi-tenant web, API and on-chain analytics for projects building on Stellar, run as a shared, free
-service for the Stellar Community Fund (SCF). Projects get private dashboards of their own
-traffic; designated SCF operators get a cross-project view built from aggregates, for
-funding and ecosystem-visibility decisions.
+Veristar is free web, API and on-chain analytics for every project built on Stellar. A project
+adds a script tag to its site, sends OpenTelemetry from its API and declares its Stellar accounts.
+It then gets private dashboards of its own usage, without cookies and without stored IP
+addresses, measured the same way for every project. Because every project is measured by one
+method, the numbers can be trusted beyond the team that produced them. A project can share a
+signed usage report with anyone who needs proof of real usage, such as a grant program, an
+investor or a partner, and anyone can verify it without an account. Veristar runs as a shared
+service for the ecosystem, overseen by the Stellar Community Fund (SCF). SCF operators approve and
+remove projects and compare them in a cross-project view built from aggregates, and they never see
+individual visitors.
 
 - **Web analytics.** A small, version-pinned script sends page views and custom events to an
   edge gateway. The gateway checks each event (a proof of work issued by the server, the
@@ -15,7 +21,7 @@ funding and ecosystem-visibility decisions.
   midnight. In the countries that require consent for it, the tracker's consent mode sends nothing
   until the visitor agrees ([docs/compliance/jurisdictions.md](docs/compliance/jurisdictions.md)).
 - **API analytics.** Tenant applications dual-export OpenTelemetry data to their own backend
-  and to the SCF collector. The collector drops traces, spans and logs, keeps HTTP request
+  and to the Veristar collector. The collector drops traces, spans and logs, keeps HTTP request
   counts, status codes and latency histograms per normalized route, and stores them in
   PostgreSQL for at least 24 months.
 - **On-chain activity.** Projects declare their Stellar accounts and Soroban contracts and prove
@@ -23,8 +29,8 @@ funding and ecosystem-visibility decisions.
   active accounts and calls per contract function from public ledger APIs
   ([docs/onboarding/onchain.md](docs/onboarding/onchain.md)).
 - **Signed reports.** A project creates a usage report for any period, signed with the
-  service's published Stellar key, and shares it with SCF reviewers, who verify it without an
-  account ([docs/onboarding/signed-reports.md](docs/onboarding/signed-reports.md)).
+  service's published Stellar key, and shares it with whoever needs proof of usage, such as a
+  grant program, an investor or a partner, who verifies it without an account ([docs/onboarding/signed-reports.md](docs/onboarding/signed-reports.md)).
 
 How it fits together: [docs/architecture.md](docs/architecture.md). Why Umami and why beside
 it rather than a fork: [docs/adr](docs/adr).

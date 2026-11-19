@@ -2,7 +2,7 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
   "name": "Veristar",
-  "description": "Privacy-friendly web and API analytics for projects building on Stellar.",
+  "description": "Free web, API and on-chain analytics for every project built on Stellar.",
   "colors": {
     "primary": "#171717",
     "light": "#EEEEEE",

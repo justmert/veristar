@@ -16,6 +16,10 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+### Changed
+
+- The README, the documentation introduction and the website describe Veristar as analytics for every project built on Stellar, with signed usage reports for anyone who needs proof of usage and SCF as the overseer of the shared service. No feature changes.
+
 ### Fixed
 
 - A `stellar.toml` fetch whose body ends only after the 10 second request deadline is now a timeout, never a file, so a body cut short at the deadline is not read as complete. The slow-host test names the path, status, size and time when it fails.
