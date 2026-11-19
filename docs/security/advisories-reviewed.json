@@ -61,7 +61,12 @@
     },
     {
       "image": "natsio/prometheus-nats-exporter:0.20.3",
-      "findings": ["CVE-2026-107891 musl", "CVE-2026-107891 musl-utils", "CVE-2026-85091 zlib", "CVE-2026-97054 stdlib"],
+      "findings": [
+        "CVE-2026-107891 musl",
+        "CVE-2026-107891 musl-utils",
+        "CVE-2026-85091 zlib",
+        "CVE-2026-97054 stdlib"
+      ],
       "reviewed": "2026-11-13",
       "rechecked": "2026-11-19",
       "decision": "alpine musl and zlib packages; the exporter is a statically linked go binary that loads neither, and the entrypoint shell takes no outside input. newest release. CVE-2026-97054 (go 1.26.11 / 1.27.4, net/http): an http/1 handler that reads a MaxBytesReader body while it writes the response header can panic the server; rechecked 2026-11-19, no release is built with a fixed go. the exporter is on the node's tier network only, not published; only prometheus reaches it, through the relay. a crash restarts it (unless-stopped).",
