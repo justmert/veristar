@@ -558,7 +558,11 @@ describe("the public report page (contract 20.5)", () => {
     expect(host.querySelector("[data-hero=onchain_operations]")).toBeNull();
     expect(host.textContent).not.toContain("Transactions");
     expect(host.textContent).not.toContain("Days without data");
-    expect(host.textContent).not.toContain("77");
+    // the signer key and the signature are random per run and may hold the
+    // digits by chance, so they are dropped before looking for the count
+    const figures = (host.textContent ?? "").replace(/[A-Za-z0-9+/=]{40,}/g, " ");
+    expect(figures).toContain("Signature details");
+    expect(figures).not.toContain("77");
   });
 
   it("titles a signature by a key Veristar does not publish as not Veristar's", async () => {
