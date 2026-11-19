@@ -474,7 +474,8 @@ function Install({ snippet, onVersion }: { snippet: Snippet; onVersion: (v: stri
             ) : (
               <>Adds {code('data-auto-track="false"')} to the tag.</>
             )}{" "}
-            The tracker then sends nothing until your consent banner calls {code("veristar.start()")}.
+            The tracker then sends nothing until your consent banner calls{" "}
+            {code("veristar.start()")}.
           </p>
           <AnimatePresence initial={false}>
             {consent ? (
