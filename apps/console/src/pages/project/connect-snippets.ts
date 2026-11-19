@@ -28,10 +28,15 @@ export function exporterSnippet(stack: Stack["id"], endpoint: string, token: str
         "})",
       ].join("\n");
     case "go":
+      // go's http/2 client keeps a dead connection for minutes; the health
+      // pings close it, so the snippet carries them and a copy is safe as is
       return [
+        "tr := http.DefaultTransport.(*http.Transport).Clone()",
+        "tr.HTTP2 = &http.HTTP2Config{SendPingTimeout: 15 * time.Second, PingTimeout: 5 * time.Second}",
         "otlpmetrichttp.New(ctx,",
         `\totlpmetrichttp.WithEndpointURL("${url}"),`,
-        `\totlpmetrichttp.WithHeaders(map[string]string{"Authorization": "Bearer ${token}"}))`,
+        `\totlpmetrichttp.WithHeaders(map[string]string{"Authorization": "Bearer ${token}"}),`,
+        "\totlpmetrichttp.WithHTTPClient(&http.Client{Transport: tr, Timeout: 10 * time.Second}))",
       ].join("\n");
     case "python":
       return [
