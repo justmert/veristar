@@ -9,6 +9,9 @@ export type Links = {
   signIn: string | null;
   docs: (path?: string) => string | null;
   status: string | null;
+  // the source repository, linked only once it is public: the build sets
+  // VITE_REPO_URL then. unset, every repository link stays hidden.
+  repo: string | null;
 };
 
 // www.<domain> and a two-label <domain> are the site's own hosts. anything
@@ -26,7 +29,7 @@ function trimOrigin(v: unknown): string | null {
   return v.trim().replace(/\/+$/, "");
 }
 
-export function links(hostname: string, consoleOrigin: unknown): Links {
+export function links(hostname: string, consoleOrigin: unknown, repoUrl?: unknown): Links {
   const domain = siteDomain(hostname);
   const fallback = trimOrigin(consoleOrigin);
   const signIn = domain ? `https://app.${domain}/sign-in` : fallback ? `${fallback}/sign-in` : null;
@@ -35,10 +38,12 @@ export function links(hostname: string, consoleOrigin: unknown): Links {
     signIn,
     docs: (path = "") => (domain ? `https://docs.${domain}/${path.replace(/^\//, "")}` : null),
     status: domain ? `https://status.${domain}` : null,
+    repo: trimOrigin(repoUrl),
   };
 }
 
 export const site: Links = links(
   typeof window === "undefined" ? "" : window.location.hostname,
   import.meta.env.VITE_CONSOLE_ORIGIN,
+  import.meta.env.VITE_REPO_URL,
 );

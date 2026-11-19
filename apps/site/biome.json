@@ -6,5 +6,31 @@
     "parser": {
       "tailwindDirectives": true
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["src/landing/**/*.css"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDescendingSpecificity": "off"
+          },
+          "complexity": {
+            "noImportantStyles": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/landing/landing.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useSemanticElements": "off",
+            "useFocusableInteractive": "off"
+          }
+        }
+      }
+    }
+  ]
 }

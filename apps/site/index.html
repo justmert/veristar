@@ -3,15 +3,37 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark light" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f1ea" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12110f" />
     <script src="/theme.js"></script>
     <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <title>Veristar, usage you can prove</title>
     <meta
       name="description"
-      content="Free web and API analytics for projects building on Stellar, run as a shared service for the Stellar Community Fund. No cookies, no stored IP addresses."
+      content="Web, API and on-chain analytics for every project on Stellar. One method for every project, so the Stellar Community Fund can trust and compare the numbers. Free, with no cookies and no stored IP addresses."
     />
+    <link rel="canonical" href="%VITE_SITE_ORIGIN%/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Veristar, analytics for Stellar projects</title>
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Veristar" />
+    <meta property="og:url" content="%VITE_SITE_ORIGIN%/" />
+    <meta property="og:title" content="Veristar, usage you can prove" />
+    <meta
+      property="og:description"
+      content="Web, API and on-chain analytics for every project on Stellar, with one method for every project."
+    />
+    <meta property="og:image" content="%VITE_SITE_ORIGIN%/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Veristar. Usage you can prove. Web, API and on-chain analytics for every project on Stellar."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- the site measures itself with veristar; see README.md, Tracker -->
+    <script defer src="https://in.veristar.app/v/1.4.0/sdk.js" integrity="sha384-8bYExYW1FMGfNg5LETdGYFjtJPLfyY+gJQwWA0rL5xNM7Xl+3wK99GxSV3+siv/A" crossorigin="anonymous" data-website-id="01a1f1c1-5f8e-7a93-9396-c9847a3d7acd"></script>
   </head>
   <body>
     <div id="root"></div>
