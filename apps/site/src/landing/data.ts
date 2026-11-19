@@ -18,7 +18,7 @@ export const heroBars = [
   { h: 50, dy: -8, r: -2, v: "v2" },
 ] as const;
 
-// the problem: the review cycle that scf reviewers run today, and veristar's fix for each step
+// the problem: the review cycle a project goes through today, and veristar's fix for each step
 export const reviewSteps = [
   { step: "A project assembles its own usage report", fix: "Veristar measures it for you" },
   { step: "Reviewers question the numbers", fix: "Five checks on every page view" },
@@ -40,7 +40,7 @@ export const verbs = [
   {
     who: "Everyone",
     w: "Read",
-    p: "Your team reads a private dashboard. SCF reads totals across projects. Reviewers verify signed reports.",
+    p: "Your team reads a private dashboard. Anyone you share a signed report with verifies it. SCF operators compare totals across projects.",
   },
 ];
 
@@ -417,16 +417,9 @@ export const doors = [
   {
     for: "For project teams",
     name: "Builders",
-    p: "Free analytics without cookies. A signed report for your next SCF application, instead of screenshots.",
+    p: "Free analytics without cookies. A signed usage report for a grant program, an investor or a partner, instead of screenshots.",
     link: "Enroll your project",
     href: hrefs.signIn,
-  },
-  {
-    for: "For the Stellar Community Fund",
-    name: "SCF",
-    p: "Compare every project on the same metrics. Review, approve and remove projects from one place.",
-    link: "Operator guide",
-    href: hrefs.docs("operators/overview"),
   },
   {
     for: "For anyone who checks",
@@ -434,6 +427,13 @@ export const doors = [
     p: "Open the link of a signed report. Check the numbers and the signature without an account.",
     link: "Signed reports",
     href: hrefs.docs("onboarding/signed-reports"),
+  },
+  {
+    for: "For the Stellar Community Fund",
+    name: "SCF",
+    p: "Compare every project on the same metrics. Review, approve and remove projects from one place.",
+    link: "Operator guide",
+    href: hrefs.docs("operators/overview"),
   },
 ];
 
@@ -470,6 +470,6 @@ export const faq = [
   },
   {
     q: "What does Veristar cost?",
-    a: "Nothing. Projects, SCF and everyone else pay no fees. There is no paid tier and there are no ads.",
+    a: "Nothing. Veristar is a free shared service for the Stellar ecosystem. There is no paid tier and there are no ads.",
   },
 ];
