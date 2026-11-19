@@ -124,6 +124,7 @@ func TestAssembleRefusesUnknownInput(t *testing.T) {
 func coreEnv() map[string]string {
 	return map[string]string{
 		"BASE_DOMAIN": "sa.test", "CONTROLPLANE_UPSTREAM": "controlplane:8085", "CONSOLE_ROOT": "/srv/console",
+		"SITE_ROOT": "/srv/site",
 	}
 }
 
@@ -198,6 +199,16 @@ func TestAssembledNodeServesMetrics(t *testing.T) {
 			code, _, err := get("80/tcp", "/")
 			require.NoError(t, err)
 			require.Equal(t, http.StatusServiceUnavailable, code)
+			// the website's health (/site) needs nothing but caddy on the
+			// tiers that serve the website; the edge tier has no such path
+			// and answers it with its own health
+			code, _, err = get("80/tcp", "/site")
+			require.NoError(t, err)
+			if tc.name == "edge" {
+				require.Equal(t, http.StatusServiceUnavailable, code)
+			} else {
+				require.Equal(t, http.StatusPermanentRedirect, code)
+			}
 			// caddy serves the metrics site while its config load is still
 			// finishing (the internal ca on a slow host) and sets the reload
 			// gauge only at the end of the load, so it is polled; a failed load

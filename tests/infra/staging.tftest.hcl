@@ -141,7 +141,7 @@ run "inventory" {
     condition = jsonencode(output.ansible_inventory.all.vars) == jsonencode({
       sa_environment          = "staging"
       sa_base_domain          = "example.org"
-      sa_hostnames            = { app = "app.example.org", in = "in.example.org", otlp = "otlp.example.org", status = "status.example.org" }
+      sa_hostnames            = { app = "app.example.org", in = "in.example.org", otlp = "otlp.example.org", site = "example.org", status = "status.example.org" }
       sa_private_network_cidr = "10.20.0.0/16"
       sa_admin_cidrs          = ["192.0.2.0/24", "198.51.100.7/32", "2001:db8:ad::/48"]
       sa_object_storage       = { endpoint = "https://fixturebackups.blob.core.windows.net", region = "swedencentral", backup_bucket = "pgbackrest" }
@@ -156,14 +156,15 @@ run "inventory" {
 }
 
 # failover: every hostname over the three node addresses. in and otlp probe
-# the edge health ("/") every 10 s, app the core health ("/core")
+# the edge health ("/") every 10 s, app the core health ("/core") and
+# site, the website at the apex and www, caddy's own health ("/site")
 # every 30 s, all on port 80 where 308 is healthy
 run "failover" {
   command = apply
 
   assert {
     condition = { for k, e in module.failover.endpoints : k => e.target } == merge([
-      for l in ["in", "otlp", "app"] : { for i in [0, 1, 2] : "${l}/${i}" => "203.0.113.1${i + 1}" }
+      for l in ["in", "otlp", "app", "site"] : { for i in [0, 1, 2] : "${l}/${i}" => "203.0.113.1${i + 1}" }
     ]...)
     error_message = "traffic manager endpoints do not carry the three node addresses"
   }
@@ -179,29 +180,37 @@ run "failover" {
   assert {
     condition = (
       module.failover.monitors["in"].path == "/" && module.failover.monitors["otlp"].path == "/" &&
-      module.failover.monitors["app"].path == "/core"
+      module.failover.monitors["app"].path == "/core" && module.failover.monitors["site"].path == "/site"
     )
-    error_message = "ingestion profiles probe the edge health, dashboard profiles the core health"
+    error_message = "ingestion profiles probe the edge health, dashboard profiles the core health, the website caddy's own"
   }
 
   assert {
     condition = (
       module.failover.monitors["in"].interval == 10 && module.failover.monitors["otlp"].interval == 10 &&
-      module.failover.monitors["app"].interval == 30
+      module.failover.monitors["app"].interval == 30 && module.failover.monitors["site"].interval == 30
     )
-    error_message = "ingestion profiles probe every 10 s, dashboard profiles every 30 s"
+    error_message = "ingestion profiles probe every 10 s, dashboard and website profiles every 30 s"
   }
 }
 
-# dns: one dns-only cname per hostname to its profile, plus caa
+# dns: one dns-only cname per hostname to its profile, the apex and www to
+# the website's profile, plus caa
 run "dns" {
   command = apply
 
   assert {
-    condition = { for k, r in module.dns.records : k => r.value if r.type == "CNAME" } == {
-      for l in ["app", "in", "otlp"] : "${l}/CNAME" => module.failover.fqdns[l]
-    }
+    condition = { for k, r in module.dns.records : k => r.value if r.type == "CNAME" } == merge(
+      { for l in ["app", "in", "otlp"] : "${l}/CNAME" => module.failover.fqdns[l] },
+      { "@/CNAME" = module.failover.fqdns["site"], "www/CNAME" = module.failover.fqdns["site"] },
+    )
     error_message = "every hostname must be a cname to its traffic manager profile"
+  }
+
+  # the apex and www keep the zone's own names: no site.<domain> record
+  assert {
+    condition     = module.dns.hostnames["site"] == "example.org" && !contains(keys(module.dns.records), "site/CNAME")
+    error_message = "the website lives at the zone apex, not at a site. label"
   }
 
   assert {

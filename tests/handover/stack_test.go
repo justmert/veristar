@@ -797,6 +797,7 @@ func (s *Stack) StartApp(t testing.TB) {
 		"-v", filepath.Join(repoRoot(), "apps", "console", "dist") + ":/srv/console:ro",
 	}, envOpts(map[string]string{
 		"BASE_DOMAIN": baseDomain, "APP_TLS": "internal", "CONTROLPLANE_UPSTREAM": "controlplane:8081", "CONSOLE_ROOT": "/srv/console",
+		"SITE_ROOT": "/srv/site",
 	})...), umamictr.CaddyImage)
 	s.Routes["app."+baseDomain+":443"] = "127.0.0.1:" + port
 	waitTLS(t, "127.0.0.1:"+port, "app."+baseDomain, "/")

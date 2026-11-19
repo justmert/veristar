@@ -1,14 +1,18 @@
 # core tier caddy for app.<BASE_DOMAIN>: the console single-page app as
 # static files, and the control plane api under /api
-# (docs/reference/control-plane-api.md section 1).
+# (docs/reference/control-plane-api.md section 1). the same caddy serves the
+# public website (apps/site) at <BASE_DOMAIN>, with www.<BASE_DOMAIN>
+# redirecting to it.
 #
 # environment, all required; each one is used where caddy refuses an empty
 # value, so a missing variable fails `caddy validate` and startup:
-#   BASE_DOMAIN            registered domain; the site is app.<BASE_DOMAIN>
+#   BASE_DOMAIN            registered domain; the sites are app.<BASE_DOMAIN>,
+#                          <BASE_DOMAIN> and www.<BASE_DOMAIN>
 #   CONTROLPLANE_UPSTREAM  host:port of the control plane api listener on the
 #                          private network (CONTROLPLANE_ADDR), for example
 #                          controlplane:8085
 #   CONSOLE_ROOT           directory holding the console build (apps/console/dist)
+#   SITE_ROOT              directory holding the website build (apps/site/dist)
 #   APP_TLS                first argument of the tls directive: the acme account
 #                          email in production, "internal" for the local ca in tests
 #
@@ -171,6 +175,78 @@ app.{$BASE_DOMAIN} {
 	# console reports a proxy error without an envelope by its status.
 	handle_errors {
 		import app_security_headers
+		header Cache-Control no-store
+		respond "{err.status_code} {err.status_text}" {err.status_code}
+	}
+}
+
+(site_security_headers) {
+	# the website is static files plus the platform's own tracker, loaded
+	# from the gateway in.<BASE_DOMAIN> (docs/onboarding/web/content-security-policy.md):
+	# script-src for sdk.js, connect-src for its challenge and events. the
+	# build has no inline script or style (apps/site/vite.config.ts), and
+	# animation styles go through the cssom, which style-src does not
+	# govern. img-src also allows data: urls, so an inlined icon in a later
+	# build of the css needs no policy change.
+	# the referrer policy matches the page's own meta element.
+	# cross-origin-resource-policy is not sent: link previews on other sites
+	# load the open graph image from here.
+	header {
+		Content-Security-Policy "default-src 'self'; script-src 'self' https://in.{$BASE_DOMAIN}; connect-src 'self' https://in.{$BASE_DOMAIN}; style-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Cross-Origin-Opener-Policy same-origin
+		Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), browsing-topics=()"
+		-Server
+		defer
+	}
+}
+
+# the public website (apps/site): static files only. it proxies nothing, so
+# no request to these names reaches the control plane or any other service.
+{$BASE_DOMAIN}, www.{$BASE_DOMAIN} {
+	tls {$APP_TLS}
+	import app_log
+
+	encode zstd gzip
+
+	import site_security_headers
+
+	# one canonical name: www moves to the apex, path and query kept
+	@www host www.{$BASE_DOMAIN}
+	handle @www {
+		redir https://{$BASE_DOMAIN}{uri} 308
+	}
+
+	handle {
+		root {$SITE_ROOT}
+
+		# hashed build assets never change under the same name; the html
+		# pages and the unhashed files (favicon, theme.js, robots.txt) are
+		# cached briefly, so a new release shows within minutes
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@other not path /assets/*
+		header @other Cache-Control "public, max-age=300"
+
+		file_server
+	}
+
+	# every path that is not a file is answered with the site's 404 page
+	# and status 404
+	handle_errors 404 {
+		import site_security_headers
+		root {$SITE_ROOT}
+		header Cache-Control "public, max-age=300"
+		rewrite * /404.html
+		file_server
+	}
+
+	# caddy's other errors bypass deferred headers, so they get them here
+	handle_errors {
+		import site_security_headers
 		header Cache-Control no-store
 		respond "{err.status_code} {err.status_text}" {err.status_code}
 	}

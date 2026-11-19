@@ -40,7 +40,8 @@ func TestCaddyfilesNameNoUmami(t *testing.T) {
 }
 
 // the assembled configs a node runs adapt to json whose hosts are only the
-// public names (in., otlp., app.) and whose upstreams never dial umami
+// public names (in., otlp., app. and the website at the bare domain and
+// www.) and whose upstreams never dial umami
 func TestAssembledConfigsReachNoUmami(t *testing.T) {
 	health := map[string]string{"NODE_HEALTH_UPSTREAM": "health:9090", "NODE_HEALTH_PATH": "/edgez", "SA_TLS": "internal"}
 	for _, tc := range []struct {
@@ -49,8 +50,8 @@ func TestAssembledConfigsReachNoUmami(t *testing.T) {
 		env   map[string]string
 		hosts []string
 	}{
-		{"core", []string{"core", "app.Caddyfile"}, coreEnv(), []string{"app.sa.test"}},
-		{"node", []string{"node", "edge.Caddyfile", "app.Caddyfile"}, nodeEnv(), []string{"in.sa.test", "otlp.sa.test", "app.sa.test"}},
+		{"core", []string{"core", "app.Caddyfile"}, coreEnv(), []string{"app.sa.test", "sa.test", "www.sa.test"}},
+		{"node", []string{"node", "edge.Caddyfile", "app.Caddyfile"}, nodeEnv(), []string{"in.sa.test", "otlp.sa.test", "app.sa.test", "sa.test", "www.sa.test"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := assemble(t, tc.args...)
