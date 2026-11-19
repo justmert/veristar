@@ -248,17 +248,23 @@ export function uniqueHost(label: string): string {
 
 export const NOT_FOUND = { error: expect.objectContaining({ code: "not_found" }) };
 
-// opens the web dashboard of a site the way a tenant does: the analytics
-// link of its row in the project overview's sites table
-// opens the web page of a project with one site from the overview, whose
-// link to web names that site
+// opens the web dashboard of a site the way a tenant does, from the
+// overview's link to web. that link names the site only when the project has
+// one; with more it opens all sites, and the web page's site filter picks it
 export async function openDashboard(page: Page, tenantId: string, site: Site): Promise<void> {
+  const web = `/projects/${tenantId}/web`;
   await page.goto(`${APP}/projects/${tenantId}`);
-  await page
+  const link = page
     .getByRole("main")
-    .locator(`a[href="/projects/${tenantId}/web?site=${site.id}"]`)
-    .click();
-  await page.waitForURL(`${APP}/projects/${tenantId}/web?site=${site.id}`);
+    .locator(`a[href="${web}?site=${site.id}"], a[href="${web}"]`)
+    .first();
+  const all = (await link.getAttribute("href")) === web;
+  await link.click();
+  if (all) {
+    await page.waitForURL(`${APP}${web}`);
+    await page.getByLabel("Site", { exact: true }).selectOption(site.id);
+  }
+  await page.waitForURL(`${APP}${web}?site=${site.id}`);
   await expect(page.getByRole("heading", { name: "Web", exact: true })).toBeVisible();
 }
 
