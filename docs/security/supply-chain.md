@@ -58,7 +58,7 @@ changes. Before it builds anything it runs the licence gate (section 7) into `<w
 so a tag whose dependencies fail the gate is never released, and step 4 attaches the report beside
 the manifest. Release `v0.1.0` was built by `release-images.yml`; `v0.2.0`, `v0.2.1` and `v0.2.2` were built
 on a workstation; `v0.2.3` and `v0.3.0` were built by `release-images.yml` in keyless mode; `v0.4.0`,
-`v0.4.1` and `v0.4.2` were built on a workstation again, in key mode, while the repository's GitHub Actions are off. The steps, run from a clean checkout of the tag:
+`v0.4.1`, `v0.4.2` and `v0.4.3` were built on a workstation again, in key mode, while the repository's GitHub Actions are off. The steps, run from a clean checkout of the tag:
 
 1. **Build and push** each image of the matrix in `release-images.yml` with the same Dockerfile,
    context and build arguments (`VERSION=<tag>`, `DBIP_MONTH` from the tag's commit month,
@@ -315,6 +315,39 @@ health checks; there is no migration.
 | `postgres-ha` | `18.7-v0.4.2` | `sha256:ac80c5ba3ca0ab798bfc5d40a00da5cb84fa09fdf0457d06d5f9ed158cddd6e5` (same as `v0.2.0`) |
 | `prober` | `v0.4.2` | `sha256:08b2e7eb298d48f56508b5486495b9eb4b3bf07946fb19b5c75ebf72741fb7c0` |
 | `replayer` | `v0.4.2` | `sha256:9210013c287b029b6ed6052ff5e0bfafd2df0ccad12939951bbeea49db3275fd` |
+
+**Release `v0.4.3` (2026-11-19).** Built in key mode by
+`scripts/supply-chain/release-workstation.sh v0.4.3 <work dir>` from a clean worktree at the tag
+(annotated tag `v0.4.3` at commit `a31b132` on `main`), from 06:57:37 to 07:11:38 UTC, while the
+repository's GitHub Actions are off: the licence gate first (`licences.json`, `console-bundle.txt`;
+511 shipped packages, 0 failing), then eleven images built, pushed and gated by `scan-image.sh` (syft 1.57.1,
+Trivy 0.76.2; no image had a fixable critical or high finding), signed and SBOM-attested with
+cosign 3.1.4 and the release key read from the SOPS file into the process's environment only
+(`env://`), no transparency log. `release-images.json` (SHA-256
+`cd2839d6386e77669d05adb1fabaaf032c46639fd2faee1f1a98ebef5684bd16`) was written, every digest
+verified with `infra/ansible/vars/release-cosign.pub`, and the manifest, `licences.json` and
+`console-bundle.txt` attached to the GitHub release `v0.4.3`. Every digest verified again with
+`cosign verify --key infra/ansible/vars/release-cosign.pub --insecure-ignore-tlog=true` from a
+docker configuration without credentials, and the gateway's SBOM attestation with
+`cosign verify-attestation --type spdxjson`. `caddy` has no source change since `v0.4.0`,
+`collector` none since `v0.4.1` and `postgres-ha` none since `v0.2.0`; all three came out with the
+earlier digests. Since `v0.4.2` the console image carries the public website at `/srv/site`, which
+the core Caddy serves at the zone apex, and the console's pages are reworked as the
+changelog; there is no migration.
+
+| Image | Tag | Digest |
+|---|---|---|
+| `caddy` | `v0.4.3` | `sha256:007bf33a6466dfe2a495fea44ae3c1564e9b3f7aec2d3fdeb9bcd67064c8c5e3` (same as `v0.4.0`) |
+| `collector` | `v0.4.3` | `sha256:436d82c1929340980ab08c98081a4d5b8a7926b7a6d84f250199b49edafddbd0` (same as `v0.4.1`) |
+| `console` | `v0.4.3` | `sha256:f3a88459986d7337487e5b563e6b50dafa3e7c18865522cfbf0161170c3cd4d5` |
+| `controlplane` | `v0.4.3` | `sha256:f17815d76206cbeb163b1a4ff5d6bbe8adb5b40490930a1bee97b2a7943f73d9` |
+| `gateway` | `v0.4.3` | `sha256:31bbb48c4282b2499da8f364bc4968f59582b3161f66370749c21b61a9e446e2` |
+| `jobs` | `v0.4.3` | `sha256:a80c65ceb734bbf2bec1609979a8d9ed0aea3ad83e71945bd2a1ab723eb0d44c` |
+| `metricswriter` | `v0.4.3` | `sha256:553ead6a254ca6b6379c997e33d4314af3b1bd80f8147e0d7dac294b3db20588` |
+| `platformctl` | `v0.4.3` | `sha256:cd1c2ddfc910606915d67d4a7bc6c98459063fbe4675c73641ca43e2876c2bd4` |
+| `postgres-ha` | `18.7-v0.4.3` | `sha256:ac80c5ba3ca0ab798bfc5d40a00da5cb84fa09fdf0457d06d5f9ed158cddd6e5` (same as `v0.2.0`) |
+| `prober` | `v0.4.3` | `sha256:94b5aeb91cad472cf8f47fca36981e1da3c20f50c80613f24845c9d0e359f9f3` |
+| `replayer` | `v0.4.3` | `sha256:8cb3b61cdee5829d2229e14982b7e61e006879cfb3b6063603d3fd872345db65` |
 
 ## 3. Deploy-time verification (every playbook that pulls images)
 
