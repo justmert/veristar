@@ -397,16 +397,26 @@
   transform-origin: left;
   transition: transform var(--dur-reveal) var(--ease-out);
 }
+/* the sweep spans the stage and slides by its own width, as a transform, so
+   the line moves no layout; ::before draws the line at its left edge */
 .hm-sweep {
   position: absolute;
   top: calc(var(--space-6) * -1);
   bottom: calc(var(--space-4) * -1);
   left: 0;
+  width: 100%;
+  pointer-events: none;
+  opacity: 0;
+}
+.hm-sweep::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 0;
   width: var(--border-heavy);
   border-radius: var(--radius-pill);
   background: var(--color-accent);
   box-shadow: 0 0 var(--space-5) var(--color-accent);
-  opacity: 0;
 }
 .hm.on .hm-bar {
   transform: none;
@@ -426,7 +436,7 @@
 }
 @keyframes hm-sweep {
   0% {
-    left: 0;
+    translate: 0 0;
     opacity: 0;
   }
   8% {
@@ -436,7 +446,7 @@
     opacity: 1;
   }
   100% {
-    left: 100%;
+    translate: 100% 0;
     opacity: 0;
   }
 }

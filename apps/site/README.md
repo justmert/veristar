@@ -44,11 +44,13 @@ VITE_SITE_ORIGIN=https://example.org pnpm --filter @veristar/site build
 
 ## Tracker
 
-The site measures itself with Veristar. The tag from the console goes in `index.html` in place of
-the comment `<!-- tracker: ... -->`, in the same form as
-[the static HTML guide](../../docs/onboarding/web/static-html.md). The tag loads a pinned,
-same-version file with an `integrity` hash. Add its origin to the policy below: `script-src` and
-`connect-src` both need the tracker host.
+The site measures itself with Veristar, as the site `veristar.app`. The tag in `index.html` is the
+one from the console, in the same form as
+[the static HTML guide](../../docs/onboarding/web/static-html.md): a pinned tracker version with an
+`integrity` hash, loaded from the gateway `https://in.veristar.app`. The policy below allows that
+origin in `script-src` (the file) and `connect-src` (the challenge and the events), as
+[the content security policy guide](../../docs/onboarding/web/content-security-policy.md) asks.
+A new tracker version is a new tag from the console.
 
 ## Serving
 
@@ -61,7 +63,7 @@ by a Caddy site for `<BASE_DOMAIN>` and `www.<BASE_DOMAIN>`, with:
 - `Cache-Control: public, max-age=31536000, immutable` on `assets/*`, and a short cache on the
   two HTML files;
 - the console's security headers, including
-  `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`.
+  `Content-Security-Policy: default-src 'none'; script-src 'self' https://in.veristar.app; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self' https://in.veristar.app; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`.
   The build has no inline script or style, so this policy holds.
 
-The site sets no cookie. Until the tracker tag is added it loads nothing from another origin.
+The site sets no cookie. The only other origin it loads from is the Veristar gateway, for its own tracker.
