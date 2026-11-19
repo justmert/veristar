@@ -10,14 +10,16 @@ routes are sections 4.2.1 and 5 of the [control plane API reference](../referenc
 
 ## Enrollment modes
 
-The mode is on the operator **Admin**, **Settings** tab, under **Enrollment mode**, or through
+The mode is on the **Settings** page of the operator area, under **Enrollment mode**: choose
+**Open** or **Approval required**, press **Change setting** and confirm with **Switch mode**. The
+same setting is reachable through
 `GET` and `PUT /api/operator/settings/enrollment-mode` with `{"mode": "open"}` or
 `{"mode": "approval"}`.
 
 | Mode | A new project | Its sites |
 |---|---|---|
 | `open` (the seeded default) | becomes `active` at once | are set up in Umami and accepted by the gateway as soon as the reconciler has run |
-| `approval` | is created `pending` and appears in the review queue | get nothing: no Umami websites, no gateway registry entry. The gateway refuses their events as `rejected_unknown_site`, and the web dashboard shows that set-up is pending |
+| `approval` | is created `pending` and appears in the review queue | get nothing: no Umami websites, no gateway registry entry. The gateway refuses their events as `rejected_unknown_site`, and the project's **Web** page shows that set-up is pending |
 
 - The mode is read at each enrollment, so a switch applies to the next enrollment without a
   restart.
@@ -29,6 +31,9 @@ The mode is on the operator **Admin**, **Settings** tab, under **Enrollment mode
 Enrollment itself asks the project for its website, how it uses Stellar, optional Stellar
 account or contract ids and an optional SCF round link, and the acceptance of the current
 terms ([terms of service](../compliance/terms.md)). A user can create at most 10 projects per day.
+
+To enroll a project for someone from the command line, see
+[Enrolling a project on its behalf](enroll-on-behalf.md).
 
 ## The review queue
 
@@ -66,7 +71,10 @@ The decision whether a project is built on Stellar is the operator's judgement o
 ## Actions on a project
 
 On the project page the console shows only the actions that are valid from the current
-status. Each one asks for confirmation.
+status. Approve and reject are the decision panel: choose **Approve** or **Reject**, then press
+**Approve project** or **Reject project**. Suspend, resume and remove are in the **Actions**
+menu as **Suspend project**, **Resume project** and **Remove project**; each asks for
+confirmation, and **Remove project** also asks you to type the project's slug.
 
 | Action | From | To | Reason | Effect |
 |---|---|---|---|---|
@@ -86,7 +94,8 @@ status. Each one asks for confirmation.
 
 ## Actions on a site in review
 
-A site in review shows **In review** on the project page, with **Approve site** and
+A site in review shows **In review** on the project page, above the **Sites** table, with its
+own decision panel: choose **Approve** or **Reject**, then press **Approve site** or
 **Reject site**. Approving makes the site active and it starts receiving traffic. Rejecting
 requires a reason, sets the site to `removed` and shows the reason to the project's owners. Sites of a
 `pending` project are not approved one by one; they are approved with the project. Audit
@@ -94,12 +103,12 @@ actions: `site.approve`, `site.reject`, and `site.review_queue` when the site en
 
 ## Finding projects
 
-The **Projects** tab searches name, slug, website and site domains, filters by status, and
+The **All projects** page, in its **Status** view, searches name, slug, website and site domains, filters by status, and
 sorts by enrollment date, last status change or name. Through the API the same list is
 `GET /api/operator/tenants`, and `review=true` gives the review queue.
 
 ## Checking what happened
 
-The **Audit log** tab filters by project id, action (exact, or a prefix ending in a dot such
+The **Audit log** page filters by project id, action (exact, or a prefix ending in a dot such
 as `tenant.`), actor (`user:<id>` or `system:<task>`), target and a time range of at most
 400 days. The same list is `GET /api/operator/audit`.

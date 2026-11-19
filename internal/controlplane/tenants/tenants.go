@@ -167,31 +167,10 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var f Fields
-	var name, slug, desc string
-	if b.Name == nil {
-		f.Add("name", httpx.FieldRequired)
-	} else {
-		name = Text(&f, "name", *b.Name, 1, 100)
-	}
-	if b.Description != nil {
-		desc = Text(&f, "description", *b.Description, 0, 1000)
-	}
-	if b.Slug != nil {
-		slug = *b.Slug
-		if !slugRe.MatchString(slug) {
-			f.Add("slug", httpx.FieldInvalidFormat)
-		}
-	} else if b.Name != nil {
-		if slug = DeriveSlug(name); slug == "" {
-			// nothing in the name maps to [a-z0-9]; the client must choose one
-			f.Add("slug", httpx.FieldRequired)
-		}
-	}
-	stored := checkEnrollment(&f, b.Enrollment)
-	var cohort CohortValues
-	if b.Cohort != nil {
-		cohort = CheckCohort(&f, "cohort", b.Cohort, time.Now().UTC(), false)
-	}
+	v := CheckNewTenant(&f, NewTenantInput{
+		Name: b.Name, Slug: b.Slug, Description: b.Description, Enrollment: b.Enrollment, Cohort: b.Cohort,
+	}, time.Now().UTC())
+	name, slug, desc, stored, cohort := v.Name, v.Slug, v.Description, v.Enrollment, v.Cohort
 	var awardID uuid.UUID
 	if b.SCFAwardID != nil {
 		id, err := uuid.Parse(*b.SCFAwardID)
@@ -214,7 +193,7 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 	if *b.AcceptedTermsVersion != h.s.termsVersion {
 		return httpx.Conflict(httpx.CodeTermsVersionMismatch, "accepted terms version is not the current one")
 	}
-	answers, err := json.Marshal(stored)
+	answers, err := v.Answers()
 	if err != nil {
 		return err
 	}

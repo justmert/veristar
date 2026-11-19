@@ -10,7 +10,7 @@ funding and ecosystem-visibility decisions.
   page's origin, rate limits, a same-network check), keeps the client address in memory only
   for the request, and queues the event. A replayer delivers it to an unmodified
   [Umami](https://umami.is) 3.5.0, the engine that stores the events and computes the
-  metrics on the private network; each project reads them in the console's web dashboard. No
+  metrics on the private network; each project reads them on the console's **Web** page. No
   cookies and no stored IP addresses; visitors are counted per UTC day with a secret that is destroyed at
   midnight. In the countries that require consent for it, the tracker's consent mode sends nothing
   until the visitor agrees ([docs/compliance/jurisdictions.md](docs/compliance/jurisdictions.md)).
@@ -52,9 +52,9 @@ Measured gateway capacity is in
 
 1. Sign in at `https://app.<BASE_DOMAIN>` with GitHub, a Stellar wallet or a passkey, and enroll
    your project.
-2. Add a site, copy its snippet, and put it in your pages: [docs/onboarding](docs/onboarding).
-3. For API metrics, create an OTLP token and add a second exporter to your application.
-4. For on-chain activity, declare your accounts and contracts and prove that you control them.
+2. Add a site on the **Sites** page, copy its snippet, and put it in your pages: [docs/onboarding](docs/onboarding).
+3. For API metrics, create an OTLP token on the **Connect API** page and add a second exporter to your application.
+4. For on-chain activity, declare your accounts and contracts on the **On-chain** page and prove that you control them.
 5. Questions and problems: [docs/support.md](docs/support.md). The service is free, and
    charges no fees to anyone.
 

@@ -11,7 +11,8 @@ operator guide, [Removing a project](../operators/removal.md). The code is
 [control plane API reference](../reference/control-plane-api.md).
 
 Every action is an operator route: it needs a console session of an operator on the roster,
-confirmed with a passkey ([Adding and removing operators](operators.md)). Run the SQL below on the
+confirmed with a passkey ([Adding and removing operators](operators.md)). Removal also runs from
+`platformctl`, as described below. Run the SQL below on the
 database leader, as described in the [runbooks overview](overview.md).
 
 ## Suspending a project
@@ -21,7 +22,8 @@ question about a project is open (traffic that looks forged, a project that
 may not be part of the ecosystem, an abuse report), or as the reversible
 first step before removal.
 
-1. In the console operator area open the project and choose **Suspend**, or
+1. In the console operator area open the project from **All projects** and choose
+   **Suspend project** in its **Actions** menu, or
    call `POST /api/operator/tenants/{tenant_id}/suspend` with
    `{"reason": "..."}`. The reason is required and the project's members see
    it. Only an `active` project can be suspended; anything else answers
@@ -30,9 +32,9 @@ first step before removal.
    (`tenant.suspend`), then the reconciler switches the project's entries in
    the `registry_sites` and `registry_otlp` buckets to `suspended`. From then
    on the gateways refuse the project's web events and the collectors refuse
-   its OTLP tokens. Refusals are counted, so the project's ingest view shows
+   its OTLP tokens. Refusals are counted, so the project's **Web** page shows
    them.
-3. The project's web dashboard stays readable for the members. Data already
+3. The project's **Web** page stays readable for the members. Data already
    stored stays. Members see the status and reason in the console.
 4. Check it took effect:
 
@@ -44,17 +46,38 @@ first step before removal.
 
    The gateway's refusal of a suspended site is `rejected_inactive_site` in `cp.web_ingest_hourly`.
 
-**Resume** with **Resume** or `POST /api/operator/tenants/{tenant_id}/resume`
+**Resume** with **Resume project** in the **Actions** menu or `POST /api/operator/tenants/{tenant_id}/resume`
 (`reason` optional). The registry entries switch back to `active` and
 ingestion restarts. Events sent while suspended were refused, not queued, and
 do not come back.
 
 ## Removing a project
 
-1. In the console operator area, open the project and choose **Remove**, or
+1. In the console operator area, open the project from **All projects** and choose
+   **Remove project** in its **Actions** menu, or
    call `POST /api/operator/tenants/{tenant_id}/remove` with
    `{"reason": "..."}`. The reason is required and the project's members see
-   it.
+   it. Without console access, run `platformctl tenant remove` on the core
+   node that holds the Patroni leader, with the flags of
+   [bootstrap step 10](../deploy/bootstrap.md):
+
+   ```sh
+   ssh <core node> sudo docker run --rm --network veristar-core_default \
+     --env-file /etc/veristar/env/platformctl.env \
+     -v /etc/veristar/tls/ca:/etc/sa-tls:ro \
+     -e PLATFORM_DB_HOST=haproxy -e PLATFORM_DB_PORT=5000 -e PLATFORM_DB_NAME=platform \
+     -e PLATFORM_DB_SSLMODE=verify-full -e PLATFORM_DB_SSLROOTCERT=/etc/sa-tls/ca.crt \
+     ghcr.io/justmert/veristar/platformctl:<release> \
+     tenant remove -slug <slug> -reason "<reason>"
+   ```
+
+   `-tenant <tenant id>` names the project instead of `-slug`, and `-dry-run`
+   performs the removal and rolls it back. The command runs the same
+   transaction as the console, records `requested_by` as empty and writes the
+   audit row with the actor `system:platformctl-tenant`. It refuses the
+   internal monitoring project. The console triggers the reconciler at once;
+   after the command, the jobs task `reconcile` starts the purge within 10
+   minutes.
 2. In one transaction the control plane sets the project to `removed`, sets
    every site to `removed` (domains stay on the rows), deletes open invites,
    inserts the `cp.tenant_removals` row and writes the `tenant.remove` audit

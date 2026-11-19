@@ -4,12 +4,12 @@ sidebarTitle: "Alerts"
 description: "The console's Alerts page: the platform's live alerts, how to read them, and what the page shows when alerting itself is broken."
 ---
 
-The **Alerts** tab of the operator area, `https://app.<BASE_DOMAIN>/operator/alerts`,
+The **Alerts** page of the operator area, `https://app.<BASE_DOMAIN>/operator/alerts`,
 shows the platform's alerts as Alertmanager holds them right now. It is the platform's alert
 channel: operators read firing alerts here. A Discord push channel can be added on top of it
 (see [Push notifications](#push-notifications)).
 
-Only operator admins see the tab. The control plane answers its route,
+Only operator admins can open the page. The control plane answers its route,
 `GET /api/operator/alerts`, with `403 operator_admin_required` for an operator without the
 `operator_admin` role and `403 operator_required` for everyone else, and does not ask
 Alertmanager for them ([contract section 11](../reference/control-plane-api.md#11-operator-alerts)).
@@ -18,8 +18,8 @@ needs the admin role.
 
 ## What the page shows
 
-- **Alerts by severity.** `Page` (act now) first, then `Ticket` (act within a working day),
-  each with the number of alerts in it. Inside a group the alert that has fired longest
+- **Alerts by severity.** **Act now** (severity `page`) first, then **Act within a working day**
+  (severity `ticket`), each with the number of alerts in it. Inside a group the alert that has fired longest
   comes first.
 - **Each alert**: its name, which links to its section of the
   [alerts runbook](../runbooks/alerts.md); the summary; the node, service and instance it
@@ -37,12 +37,12 @@ core node, port 9093), not in the console.
 
 Across the operator area:
 
-- The **Alerts** tab carries the number of firing alerts, red while one of severity `page`
-  is among them, and `!` while the alert source is unreachable.
-- Every operator page of an operator admin shows a banner while an alert of severity `page` fires, with a link to
-  the Alerts tab.
+- The **Alerts** item in the sidebar carries the number of firing alerts, red while one of
+  severity `page` is among them, and a red alert icon while the alert source is unreachable.
+- Every operator page of an operator admin shows the line "1 critical alert is firing." while an alert of severity
+  `page` fires, with the link **Open alerts**.
 
-Project members never see any of this. The tab, the badge and the banner exist only inside
+Project members never see any of this. The page, the badge and the alert line exist only inside
 the operator area, and a member's browser never asks for alerts.
 
 ## When alerting itself is broken
@@ -52,10 +52,10 @@ answer cannot be trusted:
 
 | What the page shows | What it means | What to do |
 |---|---|---|
-| **Alerting pipeline down** | The always-firing `Watchdog` alert is missing. Prometheus is not evaluating the rules or cannot reach Alertmanager, so the list can miss alerts that are due to fire. If nothing else is listed, the page says that this is not all clear. | [Watchdog runbook](../runbooks/alerts.md#watchdog) |
-| **Alert source unreachable** | No Alertmanager member answered the control plane. No list is shown. The message names each member and its error. | Check `docker compose ps` in `/opt/veristar/observability` on the core nodes ([alerts runbook](../runbooks/alerts.md#where-alerts-show)) |
-| **N of M Alertmanager members did not answer** | Some members are down. The list comes from the others; every member holds every alert, so it is complete. | Bring the named member back |
-| **No alert source configured** | The control plane has no `ALERTMANAGER_URLS`. Deployments made with the Ansible roles always set it. | [Contract section 11.3](../reference/control-plane-api.md#113-configuration) |
+| **The alert checks do not run** | The always-firing `Watchdog` alert is missing. Prometheus is not evaluating the rules or cannot reach Alertmanager, so the list can miss alerts that are due to fire. If nothing else is listed, the page says that an alert can fire without showing. | [Watchdog runbook](../runbooks/alerts.md#watchdog) |
+| **The alert service does not answer** | No Alertmanager member answered the control plane. No list is shown. **Try again** asks at once. | Check `docker compose ps` in `/opt/veristar/observability` on the core nodes ([alerts runbook](../runbooks/alerts.md#where-alerts-show)) |
+| **N of M alert servers did not answer** | Some Alertmanager members are down. The list comes from the others; every member holds every alert, so it is complete. **Servers and errors** names each member that did not answer and its error. | Bring the named member back |
+| **No alert service is set up** | The control plane has no `ALERTMANAGER_URLS`. Deployments made with the Ansible roles always set it. | [Contract section 11.3](../reference/control-plane-api.md#113-configuration) |
 
 ## Push notifications
 

@@ -170,7 +170,7 @@ export function StatusNotice({ tenant, isOwner }: { tenant: Tenant; isOwner: boo
   }
 }
 
-function TermsNotice({
+export function TermsNotice({
   tenant,
   version,
   isOwner,
@@ -180,6 +180,10 @@ function TermsNotice({
   isOwner: boolean;
 }) {
   const label = termsVersionLabel(version);
+  // a project an operator enrolled for its owner has accepted no terms yet,
+  // so nothing "changed" for it
+  const first = tenant.accepted_terms_version === null;
+  const terms = first ? "the terms" : "the new terms";
   const accept = useMutation({
     mutationFn: () => api.acceptTerms(tenant.id, version),
     onSuccess: async (t) => {
@@ -204,7 +208,7 @@ function TermsNotice({
     <ToneNotice
       tone="warning"
       icon={<FileText aria-hidden />}
-      title="The terms of the service changed"
+      title={first ? "Accept the terms of the service" : "The terms of the service changed"}
       actions={
         isOwner ? (
           <>
@@ -225,8 +229,8 @@ function TermsNotice({
       }
     >
       {isOwner
-        ? `${label}. Until an owner accepts the new terms, you can view this project but not change it.`
-        : `${label}. Until an owner accepts the new terms, you can view this project but not change it. Ask an owner to accept them.`}
+        ? `${label}. Until an owner accepts ${terms}, you can view this project but not change it.`
+        : `${label}. Until an owner accepts ${terms}, you can view this project but not change it. Ask an owner to accept them.`}
       <FormMessage error={accept.error} className="mt-2" />
     </ToneNotice>
   );

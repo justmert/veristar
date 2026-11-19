@@ -180,22 +180,7 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var f tenants.Fields
-	var name, domain string
-	if b.Name == nil {
-		f.Add("name", httpx.FieldRequired)
-	} else {
-		name = tenants.Text(&f, "name", *b.Name, 1, 100)
-	}
-	if b.Domain == nil {
-		f.Add("domain", httpx.FieldRequired)
-	} else if domain = *b.Domain; !ValidDomain(domain) {
-		f.Add("domain", httpx.FieldInvalidDomain)
-	}
-	if b.Domain != nil && ValidDomain(domain) {
-		CheckOrigins(&f, b.Origins, domain)
-	} else if len(b.Origins) == 0 {
-		f.Add("origins", httpx.FieldRequired)
-	}
+	name, domain := CheckNewSite(&f, b.Name, b.Domain, b.Origins)
 	if err := f.Err(); err != nil {
 		return err
 	}

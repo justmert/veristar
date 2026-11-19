@@ -429,6 +429,13 @@ func (f *fakeRPC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.batches.Add(1)
 		var reqs []rpcReq
 		_ = json.Unmarshal(raw, &reqs)
+		// public stellar rpc servers refuse a batch of more than 10 calls with
+		// one error object, as mainnet.sorobanrpc.com does
+		if len(reqs) > 10 {
+			_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": nil,
+				"error": map[string]any{"code": -32600, "message": "batch exceeds the limit of 10 calls"}})
+			return
+		}
 		out := make([]map[string]any, 0, len(reqs))
 		for i := len(reqs) - 1; i >= 0; i-- {
 			q := reqs[i]
@@ -642,4 +649,19 @@ func TestCheckNetwork(t *testing.T) {
 	horizonPass.Store(PublicNetwork)
 	rpcPass.Store("Test SDF Future Network ; October 2022")
 	require.Equal(t, CodeWrongNetwork, Code(CheckNetwork(t.Context(), h, r, PublicNetwork)))
+}
+
+// TestTransactionsStayWithinTheBatchLimit: a day with more transactions than
+// one batch may carry is read in several batches the public rpc servers accept
+func TestTransactionsStayWithinTheBatchLimit(t *testing.T) {
+	f := &fakeRPC{envelopes: map[string]string{}}
+	hashes := make([]string, 23)
+	for i := range hashes {
+		hashes[i] = fmt.Sprintf("t%02d", i)
+		f.envelopes[hashes[i]] = "AAAA"
+	}
+	got, err := NewRPC(testEndpoint(t, f)).Transactions(t.Context(), hashes)
+	require.NoError(t, err)
+	require.Len(t, got, 23)
+	require.Equal(t, int64(3), f.batches.Load())
 }

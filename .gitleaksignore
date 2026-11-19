@@ -37,3 +37,7 @@ c7683bfb0ee0ae44ddac2ca78a3e0dab8d8a54e8:tests/observability/up.sh:generic-api-k
 # on-chain routes test sends to prove the ids endpoint refuses it; strkeys
 # are public ledger ids, never credentials
 63fb564b3b932930e5525baace6346dff7884ef5:internal/controlplane/onchain/routes_test.go:generic-api-key:374
+# reviewed 2026-11-18: a public account address (a G strkey) in the audit
+# entry detail that the console test shortens to its first and last four
+# characters; strkeys are public ledger ids, never credentials
+b6dc26c5a2a679439e8f08a685ceb92e774507ac:apps/console/test/operator.test.tsx:generic-api-key:478

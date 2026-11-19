@@ -27,9 +27,9 @@ Every firing alert is listed on the console's **Alerts** page,
 `https://app.<BASE_DOMAIN>/operator/alerts`, for operators only. The control
 plane reads every Alertmanager member live, and the page refreshes every 30
 seconds, groups the alerts by severity, says how long each has been firing
-and links each one to its section below. The operator tabs carry the number
-of firing alerts, and every operator page shows a banner while an alert of
-severity `page` fires. Details: [the operator guide](../operators/alerts.md).
+and links each one to its section below. The **Alerts** item in the operator sidebar carries
+the number of firing alerts, and every operator page shows the line "1 critical
+alert is firing." with **Open alerts** while an alert of severity `page` fires. Details: [the operator guide](../operators/alerts.md).
 
 That page is the alert channel. Prometheus evaluates every rule,
 Alertmanager holds every alert, and the Alerts page, Grafana and the status
@@ -505,8 +505,8 @@ configured. Then both Prometheus servers, both Alertmanagers or the whole
 core tier are down, or the core tier cannot reach the probe, and no other
 alert can be sent from inside.
 The console's Alerts page uses the same signal: while no Alertmanager
-member holds `Watchdog`, it shows "Alerting pipeline down" instead of the
-all-clear, with or without a probe.
+member holds `Watchdog`, it shows "The alert checks do not run" instead of
+**All clear**, with or without a probe.
 Action when the status page or the console reports it missing: check the core nodes
 ([database-failover.md](database-failover.md) if both are down), then
 `docker compose ps` in `/opt/veristar/observability` on each core

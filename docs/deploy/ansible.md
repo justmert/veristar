@@ -26,7 +26,8 @@ Build notes:
   without recommends, which leaves only `consul` and `kubernetes` usable. The image
   installs `python3-etcd` explicitly and imports `patroni.dcs.etcd3` at build time.
 - Node 26 no longer ships corepack; the console image installs pnpm 12.18.0 with npm.
-- `go-service.Dockerfile` copies `db/` (platformctl embeds the migrations), and
+- `go-service.Dockerfile` copies `db/` (platformctl embeds the migrations) and the tracker
+  releases (`TRACKER_RELEASE_DIR=/releases`, for the script tag of `platformctl tenant create`), and
   `controlplane.Dockerfile` copies `docs/reference/openapi` (the control plane embeds the metrics
   API contract) and the tracker releases (`TRACKER_RELEASE_DIR=/releases`).
 

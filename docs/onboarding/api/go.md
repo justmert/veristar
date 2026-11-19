@@ -31,7 +31,27 @@ require (
 ## The SDK setup
 
 One tracer provider and one meter provider, each with two exporters, so both backends see the same
-data from the same SDK state. Only the platform exporters carry the token:
+data from the same SDK state. Only the platform exporters carry the token. All four exporters
+share one HTTP client with HTTP/2 health checks:
+
+{/* include examples/otel-go-nethttp/main.go region=client */}
+```go
+// exportClient is the http client of all four exporters. go's http/2 client
+// keeps a connection whose peer vanished without a fin or rst (a lost nat
+// mapping, a node that went away) and queues every export onto it for many
+// minutes, so only a restart ends it quickly. a ping after 15 s without a
+// frame from the peer, unanswered within 5 s, closes such a connection and
+// the next export dials a new one. a client of your own replaces the
+// exporter's timeout, tls and proxy options, so it sets the sdk's 10 s
+// export timeout itself.
+func exportClient() *http.Client {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.HTTP2 = &http.HTTP2Config{SendPingTimeout: 15 * time.Second, PingTimeout: 5 * time.Second}
+	return &http.Client{Transport: tr, Timeout: 10 * time.Second}
+}
+```
+
+The providers and their exporters:
 
 {/* include examples/otel-go-nethttp/main.go region=telemetry */}
 ```go
@@ -44,13 +64,15 @@ func setupTelemetry(ctx context.Context, c config) (func(context.Context) error,
 		return nil, err
 	}
 	auth := map[string]string{"Authorization": "Bearer " + c.platformToken}
+	client := exportClient()
 
-	tenantSpans, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(c.tenantEndpoint+"/v1/traces"))
+	tenantSpans, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(c.tenantEndpoint+"/v1/traces"),
+		otlptracehttp.WithHTTPClient(client))
 	if err != nil {
 		return nil, err
 	}
 	platformSpans, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(c.platformEndpoint+"/v1/traces"),
-		otlptracehttp.WithHeaders(auth))
+		otlptracehttp.WithHeaders(auth), otlptracehttp.WithHTTPClient(client))
 	if err != nil {
 		return nil, err
 	}
@@ -76,12 +98,13 @@ func setupTelemetry(ctx context.Context, c config) (func(context.Context) error,
 			}
 		}
 		tenantMetrics, err := otlpmetrichttp.New(ctx, otlpmetrichttp.WithEndpointURL(c.tenantEndpoint+"/v1/metrics"),
+			otlpmetrichttp.WithHTTPClient(client),
 			otlpmetrichttp.WithTemporalitySelector(temporality), otlpmetrichttp.WithAggregationSelector(aggregation))
 		if err != nil {
 			return nil, err
 		}
 		platformMetrics, err := otlpmetrichttp.New(ctx, otlpmetrichttp.WithEndpointURL(c.platformEndpoint+"/v1/metrics"),
-			otlpmetrichttp.WithHeaders(auth),
+			otlpmetrichttp.WithHeaders(auth), otlpmetrichttp.WithHTTPClient(client),
 			otlpmetrichttp.WithTemporalitySelector(temporality), otlpmetrichttp.WithAggregationSelector(aggregation))
 		if err != nil {
 			return nil, err
@@ -147,6 +170,17 @@ func (s *store) routes() *http.ServeMux {
 
 - **Shut down cleanly.** Call the returned shutdown function after `http.Server.Shutdown`, so the
   last interval's metrics are exported. The meter provider is shut down before the tracer provider.
+- **HTTP/2 health checks.** The exporters speak HTTP/2 to the platform and send every export
+  over one connection. Go's HTTP/2 client sends no health checks by default, so when the network
+  path under that connection disappears without a close (a NAT or firewall drops its mapping, an
+  outage between you and the platform), every export times out on the dead connection for many
+  minutes, and only a restart helps. `http.HTTP2Config` with `SendPingTimeout` and `PingTimeout`
+  (Go 1.24 or newer) makes the client ping a connection that stays silent and close it when the
+  ping goes unanswered, so the next export opens a new connection. The exporters have no option
+  or environment variable for this; you pass the client with `WithHTTPClient`. A client you pass
+  replaces the exporter's `WithTimeout`, `WithTLSClientConfig` and `WithProxy` options and the
+  `OTEL_EXPORTER_OTLP_*TIMEOUT` and `OTEL_EXPORTER_OTLP_*CERTIFICATE` variables, so set the
+  timeout on the client. See [troubleshooting](troubleshooting.md#exports-time-out-until-the-app-restarts).
 - **Endpoints** are given as full URLs with `WithEndpointURL` (`.../v1/metrics`,
   `.../v1/traces`). The standard `OTEL_EXPORTER_OTLP_*` variables would apply to both exporters
   alike, so the example does not use them for the platform copy.

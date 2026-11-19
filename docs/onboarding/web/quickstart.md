@@ -16,16 +16,18 @@ from there, not from this page.
 ## 1. Enroll your project
 
 Sign in to the console with GitHub, a Stellar wallet or a passkey ([Signing in](../sign-in.md)).
-Choose **Enroll a project** and fill in the project name, its website and a short description.
+Choose **Enroll a project**, fill in **Project name**, **Website** and **How does the project use
+Stellar?**, then choose **Enroll project**.
 Depending on how the operators run the service, the project is active at once or waits for an
 operator's review; the console shows which. You can add sites while a project waits, and they
 receive data once it is active.
 
-Add everyone who needs to see the dashboards under the project's **Settings**, **Members**.
+Add everyone who needs to see the dashboards on the project's **Members** page.
 
 ## 2. Add a site
 
-Open the project's **Sites** page and choose **Add site**:
+Open the project's **Sites** page and choose **Add site** (a project without sites shows the
+**Add your first site** form at once):
 
 - **Name**: anything that tells your sites apart.
 - **Domain**: the domain the site runs on, for example `docs.example.org`.
@@ -34,7 +36,7 @@ Open the project's **Sites** page and choose **Add site**:
   `localhost` and `127.0.0.1`: add for example `http://localhost:5173` (with your dev server's
   port) to test from your machine.
 
-Choose **Add and set up**. The console opens the site's setup page, which walks you through the
+Choose **Add site**. The console opens the site's setup page, which walks you through the
 next steps. A site whose domain belonged to a removed project is marked **In review** and waits
 for an operator before it receives data.
 
@@ -43,11 +45,12 @@ count towards yours.
 
 ## 3. Copy the tag
 
-On the setup page, pick how the site is built under **Install the tracker**; the console shows the
-tag for the newest tracker version, marked recommended, and where it goes. Two options change the
-tag: **Wait for consent before measuring** adds `data-auto-track="false"` ([consent.md](consent.md)),
-and **Send the page title** adds `data-send-title="true"`. To come back to it later, open the site from the **Sites** panel and choose
-**Snippet** on its **Setup** tab. The site id is on the same page. The guides use version 1.4.0,
+On the setup page, in the **Install the tag** step, pick an answer under **How is the site built?**;
+the console shows the tag for the newest tracker version, marked recommended, and where it goes.
+Two options change the tag: **Wait for consent before measuring** adds `data-auto-track="false"`
+([consent.md](consent.md)), and **Send the page title** adds `data-send-title="true"`. To come
+back to it later, open the site from the project's **Sites** page; the setup page shows the tag
+again. The site id is on the same page. The guides use version 1.4.0,
 the newest release, which looks like this:
 
 {/* snippet version=1.4.0 */}
@@ -94,17 +97,17 @@ tab shows three requests to the gateway:
 | `GET /v1/c?w=<site id>` | 200 | a challenge, once per page load |
 | `POST /v1/e` | 202 | the pageview, accepted and queued |
 
-The setup page's **First event** step turns to **First event received** once the gateway counted
+The setup page's **First event** step shows **First event arrived** once the gateway counted
 an event from the site; if events arrive but are refused, it names the reasons. If the tracker file
 is missing or the event answers something else, see [Troubleshooting](#troubleshooting) below.
 
-Verifying the domain (**Verify domain** on the site's **Setup** tab) is optional: it shows the
-service's operators that the project controls the domain, and data flows without it.
+Verifying the domain (the **Verify the domain** step on the site's setup page) shows the
+service's operators that the project controls the domain. Data flows without it.
 
 ## 6. Open the dashboard
 
-Open **Web** in your project in the console, or choose **Analytics** next to the site in the
-**Sites** panel of the **Overview**. The dashboard shows page views, unique visitors, visits, bounce rate and visit
+Open **Web** in your project in the console, or choose **Open web data** next to the site on the
+**Sites** page once its setup is complete. The dashboard shows page views, unique visitors, visits, bounce rate and visit
 duration for today, 7, 30 or 90 days or any range of UTC days you pick, each against the previous
 period, with pages, entry and exit pages, referrers, countries, browsers, operating systems,
 devices and custom events. Choose a site to see it alone, or **All sites** for the whole project.
@@ -117,7 +120,7 @@ they follow within the hour. Pages, custom events and the hours of a single day 
 Each site keeps a second band, **Quarantined**. Events from one network address that shows many
 different visitors within an hour (offices, campuses, carrier networks and VPN exits, but also
 scripted traffic) go there instead of the counted traffic. They are kept apart, never deleted.
-Switch **Traffic** to **Quarantined** to see them.
+Choose **Show quarantined traffic** in the **Not counted** section of the **Web** page to see them.
 
 Countries come from the DB-IP country database:
 <a href='https://db-ip.com'>IP Geolocation by DB-IP</a>.
@@ -137,7 +140,8 @@ Countries come from the DB-IP country database:
   turned on, and the gateway drops any event that carries it.
 - **URLs are cleaned before they are stored.** Query parameters are removed. Campaign
   parameters (`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` and `ref`)
-  are kept only if you turn on "Keep campaign parameters" for the site in the console; it is off
+  are kept only if you turn on **Keep campaign parameters** under **Campaign parameters** in the
+  site's **Settings**; it is off
   by default. Fragments other than `#/` routes are never sent, referrers are cut to their scheme and host, and Stellar keys and
   email addresses are replaced with placeholders.
 
@@ -184,7 +188,7 @@ tracker.
 | `sdk.js` answers 410 | that tracker version was revoked; pick a current one in the console and replace the tag ([upgrading.md](upgrading.md)) |
 | no request to the gateway at all | the tag is not in the page the browser received, a content blocker removed it, the browser sends Global Privacy Control, the opt-out flag is set, or `data-auto-track="false"` is set without `umami.start()` |
 | the browser console reports a content security policy violation | add the gateway to your policy ([content-security-policy.md](content-security-policy.md)) |
-| `POST /v1/e` answers 403 | most often the page's origin is not one of the site's allowed origins: add it on the site's **Settings** tab. The setup page's **First event** step names the refusal reason |
+| `POST /v1/e` answers 403 | most often the page's origin is not one of the site's allowed origins: add it in the site's **Settings** (the button on the site's setup page). The setup page's **First event** step names the refusal reason |
 | `POST /v1/e` answers 404 | the site id is wrong, or the site or project is not active yet |
 | `POST /v1/e` answers 429 | the site sent more than the gateway's rate limit; it recovers by itself |
-| events arrive but the dashboard stays empty | switch **Traffic** to **Quarantined** on the **Web** page; on a shared network your own test visits can land there |
+| events arrive but the dashboard stays empty | choose **Show quarantined traffic** under **Not counted** on the **Web** page; on a shared network your own test visits can land there |

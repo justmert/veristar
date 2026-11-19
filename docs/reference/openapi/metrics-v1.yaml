@@ -37,7 +37,12 @@ info:
     name: Apache-2.0
     identifier: Apache-2.0
 servers:
-  - url: /api/metrics/v1
+  - url: https://{host}/api/metrics/v1
+    description: The console host of a deployment.
+    variables:
+      host:
+        default: app.veristar.app
+        description: The console host name, app.veristar.app on the hosted service.
 security:
   - operatorKey: []
 paths:
