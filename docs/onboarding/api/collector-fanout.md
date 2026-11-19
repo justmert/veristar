@@ -41,6 +41,11 @@ exporters:
     endpoint: ${env:PLATFORM_OTLP_ENDPOINT}
     headers:
       Authorization: Bearer ${env:PLATFORM_OTLP_TOKEN}
+    # http/2 health checks: a connection silent for 15 s gets a ping, and one
+    # unanswered for 5 s is closed, so a connection whose network path is gone
+    # does not hold every later export for many minutes
+    http2_read_idle_timeout: 15s
+    http2_ping_timeout: 5s
     # retries the 429, 502 and 503 answers the platform gives for rate limits
     # and short outages, and queues in memory meanwhile
     retry_on_failure:
@@ -80,7 +85,8 @@ part of the core and contrib distributions.
 
 If your Collector already has receivers, processors and an exporter, add two things:
 
-1. the `otlphttp/platform` exporter with the `Authorization` header, and
+1. the `otlphttp/platform` exporter with the `Authorization` header and the two HTTP/2 health
+   check settings, and
 2. that exporter added to the `metrics` and `traces` pipelines.
 
 Keep it out of the `logs` pipeline: the platform accepts logs and discards them, so sending them
@@ -98,5 +104,9 @@ only costs bandwidth.
 - **Sampling.** If your Collector samples traces (tail sampling) and your apps send no metrics, the
   platform derives request counts from the sampled spans and undercounts. Export metrics, or send
   the platform copy from a pipeline before sampling.
+- **HTTP/2 health checks.** The `otlphttp` exporter speaks HTTP/2 to the platform and sends no
+  health checks unless you set `http2_read_idle_timeout` and `http2_ping_timeout`. Without them, a
+  connection whose network path disappears without a close holds every export for many minutes
+  ([troubleshooting](troubleshooting.md#exports-time-out-until-the-app-restarts)).
 - **Retries.** The platform answers 429 when a project exceeds its rate limit and 502 or 503 during
   short outages; the exporter's retry and queue settings above handle both.

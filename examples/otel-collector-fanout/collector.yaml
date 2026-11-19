@@ -32,6 +32,11 @@ exporters:
     endpoint: ${env:PLATFORM_OTLP_ENDPOINT}
     headers:
       Authorization: Bearer ${env:PLATFORM_OTLP_TOKEN}
+    # http/2 health checks: a connection silent for 15 s gets a ping, and one
+    # unanswered for 5 s is closed, so a connection whose network path is gone
+    # does not hold every later export for many minutes
+    http2_read_idle_timeout: 15s
+    http2_ping_timeout: 5s
     # retries the 429, 502 and 503 answers the platform gives for rate limits
     # and short outages, and queues in memory meanwhile
     retry_on_failure:
