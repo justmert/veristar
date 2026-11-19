@@ -35,8 +35,9 @@ flowchart LR
   end
 
   subgraph core["Core role: every node"]
-    ccaddy["Caddy<br/>app. host"]
+    ccaddy["Caddy<br/>app. host and the website"]
     console["console<br/>React static files"]
+    site["website<br/>static files"]
     cp["controlplane"]
     umami["Umami 3.5.0<br/>unmodified"]
     rep["replayer"]
@@ -77,6 +78,7 @@ flowchart LR
   machine -- "/api/metrics/v1/, Bearer sa_op_" --> ccaddy
   ai -- "/mcp, Bearer sa_mcp_ or OAuth" --> ccaddy
   ccaddy --> console
+  ccaddy --> site
   ccaddy --> cp
   cp -- "REST: provisioning, and reads as the member's own Umami user" --> umami
   cp <-- "registry KV, visitor-token request" --> nats
@@ -93,6 +95,7 @@ flowchart LR
 | `in.<BASE_DOMAIN>` | tracker files, challenge `GET /v1/c`, events `POST /v1/e` | edge | `deploy/caddy/edge.Caddyfile`, `internal/gateway` |
 | `otlp.<BASE_DOMAIN>` | OTLP gRPC on 443 and OTLP HTTP `/v1/metrics`, `/v1/traces`, `/v1/logs` | edge | `collector/` |
 | `app.<BASE_DOMAIN>` | the console, the control plane API under `/api`, the metrics API under `/api/metrics/v1/`, the MCP server at `/mcp` with its OAuth paths | core | `deploy/caddy/app.Caddyfile`, `apps/console`, `internal/controlplane` |
+| `<BASE_DOMAIN>` | the public website, static files only; `www.<BASE_DOMAIN>` redirects to it with 308 | core | `deploy/caddy/app.Caddyfile`, `apps/site` |
 | `status.<BASE_DOMAIN>` | Gatus status page | probe | `infra/ansible/roles/observability` |
 
 No host name or path uses a word that ad-block filter lists penalise (analytics, track,

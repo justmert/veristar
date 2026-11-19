@@ -16,6 +16,58 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+### Added
+
+- The nodes serve the public website (`apps/site`) at `<BASE_DOMAIN>`, and
+  `www.<BASE_DOMAIN>` redirects to it with 308. The console image carries the
+  website build at `/srv/site` beside the console, and the core Caddy serves
+  it as static files with its own content security policy, which allows the
+  platform's tracker from `in.<BASE_DOMAIN>`. Hashed assets are cached for a
+  year, every other file for five minutes, and any path that is not a file
+  answers the website's 404 page with status 404. The website proxies nothing.
+- Port 80 of a core or converged node answers `/site`, the website's health:
+  308 whenever Caddy runs and the node is not draining.
+- OpenTofu adds the Traffic Manager profile `site` (the three nodes, `/site`,
+  30 s probing) and points the zone apex and `www` at it with DNS-only CNAMEs;
+  Cloudflare flattens the one at the apex. The inventory's `sa_hostnames`
+  gains `site`.
+- The console image takes two optional build arguments for the website,
+  `SITE_ORIGIN` and `REPO_URL` (`VITE_SITE_ORIGIN` and `VITE_REPO_URL`,
+  [apps/site/README.md](apps/site/README.md)).
+
+### Upgrade notes
+
+**Before the deploy**
+
+- The Caddy config of the new release needs `SITE_ROOT`, which the core
+  role's Compose file sets to `/srv/site`. A core Caddy started from a
+  hand-written Compose file needs the same variable.
+
+**During the rolling deploy**
+
+- Each node's Caddy gets certificates for `<BASE_DOMAIN>` and
+  `www.<BASE_DOMAIN>` by DNS-01, so it needs no DNS change first. The deploy
+  waits for `/site` beside `/` and `/core` on every node.
+
+**After the deploy**
+
+- Any record at the zone apex or at `www` that OpenTofu does not manage must
+  go first: Cloudflare refuses a CNAME beside an A, AAAA or CNAME record of the
+  same name. Delete those records, and any Page Rule or redirect rule that
+  answers for the apex or `www`, in the Cloudflare dashboard, then run
+  `make <env>-plan`. The plan adds the profile `site`, its three endpoints and
+  the two CNAMEs (`module.dns.cloudflare_dns_record.site["@"]` and
+  `["www"]`), and changes the inventory output. Apply it with
+  `make <env>-apply` and copy the new `hosts.json` to every checkout that
+  deploys the environment.
+- Check: `dig +short <BASE_DOMAIN>` returns the node addresses,
+  `curl -sI https://<BASE_DOMAIN>/` answers 200 with the website's
+  `Content-Security-Policy`, and `curl -sI https://www.<BASE_DOMAIN>/` answers
+  308 to the apex.
+- Rollback: a release before this one serves no website, so roll the DNS
+  back first. Apply OpenTofu from that release's checkout, which removes the
+  profile and the two CNAMEs, then deploy the release.
+
 ## [0.4.1] - 2026-11-19
 
 ### Added
