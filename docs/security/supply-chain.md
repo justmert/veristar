@@ -567,7 +567,7 @@ Pins moved together in `infra/ansible/vars/pins.yml`, the observability role def
 | prometheus-nats-exporter 0.20.3 (newest) | Alpine `musl` CVE-2026-107891 (`regcomp`), `zlib` CVE-2026-85091 | The exporter is a statically linked Go binary (go1.27.3), so it loads neither library. Only the image's `/entrypoint.sh` runs under BusyBox `sh` (linked to musl) to `exec` the exporter, with no regular expression and no input from outside. Revisit at the next release. |
 
 Each row is also an entry under `upstream_image_findings` in
-[advisories-reviewed.json](advisories-reviewed.json), with the image tag and the findings, so the
+[advisories-reviewed.json](https://github.com/justmert/veristar/blob/main/docs/security/advisories-reviewed.json), with the image tag and the findings, so the
 hourly `security.yml` workflow does not file them. A fixable high finding that is not listed there
 has no recorded decision: the workflow files it, and it is handled under the 24-hour rule
 ([../runbooks/security-patch.md](../runbooks/security-patch.md)).
