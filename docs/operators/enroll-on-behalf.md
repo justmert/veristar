@@ -39,9 +39,9 @@ ssh <core node> sudo docker run --rm --network veristar-core_default \
   -e INGEST_ORIGIN=https://in.<BASE_DOMAIN> \
   ghcr.io/justmert/veristar/platformctl:<release> \
   tenant create -owner-github-login octo-dev -name "Anchor Pay" \
-    -website https://anchorpay.org -stellar-usage "Soroban payment contracts" \
+    -website https://anchorpay.example.org -stellar-usage "Soroban payment contracts" \
     -program "Build Award" -round "SCF #30" -category Applications -award-date 2025-03-01 \
-    -site-domain anchorpay.org -origin https://anchorpay.org -origin https://app.anchorpay.org \
+    -site-domain anchorpay.example.org -origin https://anchorpay.example.org -origin https://app.anchorpay.example.org \
     -otlp-token-name production
 ```
 
