@@ -58,7 +58,7 @@ changes. Before it builds anything it runs the licence gate (section 7) into `<w
 so a tag whose dependencies fail the gate is never released, and step 4 attaches the report beside
 the manifest. Release `v0.1.0` was built by `release-images.yml`; `v0.2.0`, `v0.2.1` and `v0.2.2` were built
 on a workstation; `v0.2.3` and `v0.3.0` were built by `release-images.yml` in keyless mode; `v0.4.0`
-was built on a workstation again, in key mode, while the repository's GitHub Actions are off. The steps, run from a clean checkout of the tag:
+and `v0.4.1` were built on a workstation again, in key mode, while the repository's GitHub Actions are off. The steps, run from a clean checkout of the tag:
 
 1. **Build and push** each image of the matrix in `release-images.yml` with the same Dockerfile,
    context and build arguments (`VERSION=<tag>`, `DBIP_MONTH` from the tag's commit month,
@@ -247,6 +247,40 @@ etcd 3.7.3 with compaction and its quota, the 8 MiB NATS `max_payload` and the r
 | `prober` | `v0.4.0` | `sha256:c366b6e57d75e7cd9f863eab6f3543c4d2d8d23d35c0b3159082b4d0d7c9cefa` |
 | `replayer` | `v0.4.0` | `sha256:701faea12bf2c43c94dead51d84c24e2f0a7a475b98b3949fe83731174415a4e` |
 
+**Release `v0.4.1` (2026-11-19).** Built in key mode by
+`scripts/supply-chain/release-workstation.sh v0.4.1 <work dir>` from a clean worktree at the tag
+(annotated tag `v0.4.1` at commit `4801886` on `main`), from 02:08:03 to 02:21:52 UTC, while the
+repository's GitHub Actions are off: the licence gate first (`licences.json`, `console-bundle.txt`;
+509 shipped packages, 0 failing), then eleven images built, pushed and gated by `scan-image.sh`
+(syft 1.57.1, Trivy 0.76.2; no image had a fixable critical or high finding), signed and
+SBOM-attested with cosign 3.1.4 and the release key read from the SOPS file into the process's
+environment only (`env://`), no transparency log. `release-images.json` (SHA-256
+`485e05dff0da1d9a10605bc0307e70523b255dd62567e051ba33e9b0a60f4dc0`) was written, every digest
+verified with `infra/ansible/vars/release-cosign.pub`, and the manifest, `licences.json` and
+`console-bundle.txt` attached to the GitHub release `v0.4.1`. Every digest verified again with
+`cosign verify --key infra/ansible/vars/release-cosign.pub --insecure-ignore-tlog=true` from a
+docker configuration without credentials, and the gateway's SBOM attestation with
+`cosign verify-attestation --type spdxjson`. `caddy` has no source change since `v0.4.0` and
+`postgres-ha` none since `v0.2.0`; both came out with the earlier digests. Since `v0.4.0` it adds
+`platformctl tenant create`, `invite` and `remove`, the tracker releases in the Go service images,
+the SCF awards import, search and matching, calls per contract function, web events in 32
+partitions delivered from every core node, the server-side audit log search, and tracker releases
+1.3.2 and 1.4.0, with migrations 00047 to 00052.
+
+| Image | Tag | Digest |
+|---|---|---|
+| `caddy` | `v0.4.1` | `sha256:007bf33a6466dfe2a495fea44ae3c1564e9b3f7aec2d3fdeb9bcd67064c8c5e3` (same as `v0.4.0`) |
+| `collector` | `v0.4.1` | `sha256:436d82c1929340980ab08c98081a4d5b8a7926b7a6d84f250199b49edafddbd0` |
+| `console` | `v0.4.1` | `sha256:2bd55eaa81f7655131c9147b5673b08476769d389f938d14093ea64782cfaed4` |
+| `controlplane` | `v0.4.1` | `sha256:9b8f1b58ba0212d3411c72fb425bcb78549a3da2f6662211df6989c741132a58` |
+| `gateway` | `v0.4.1` | `sha256:e6ae3ce5f7d7a76e0900efa065325505c2d1b8fb96946fbdb87c2c0fea9ecdc4` |
+| `jobs` | `v0.4.1` | `sha256:f922f8824bc1b70112a19f3c5c05c1692e3a54e2ddb1ffa72f5cc5626454be76` |
+| `metricswriter` | `v0.4.1` | `sha256:c989bb73c8e51be679ce3c076e7a95d0a24f07ab101ab508d6b167b049bdb96d` |
+| `platformctl` | `v0.4.1` | `sha256:48a23b5676f9466aa4925b3cfd469cf471d6a90630ee905f5b15e92a1e676c32` |
+| `postgres-ha` | `18.7-v0.4.1` | `sha256:ac80c5ba3ca0ab798bfc5d40a00da5cb84fa09fdf0457d06d5f9ed158cddd6e5` (same as `v0.2.0`) |
+| `prober` | `v0.4.1` | `sha256:69b75003e12c1c68a53c770c644cd9edbe0791d0d62d9b82eecf4ed1bfce2dc0` |
+| `replayer` | `v0.4.1` | `sha256:6af8a32981e68742debb231c621e5797b09140ab67b1252ede6d2809efd8719d` |
+
 ## 3. Deploy-time verification (every playbook that pulls images)
 
 `site.yml` (first converge and node replacement), `deploy.yml` (rolling deploy), `rotate-all.yml`
@@ -265,7 +299,7 @@ The run stops before any node is touched when:
   `platform_images`;
 - an upstream image in `vars/pins.yml` is not pinned by digest;
 - `cosign verify` fails for any digest in the signature mode of `vars/signing.yml`:
-  - `key` (releases `v0.1.0` to `v0.2.2`, and `v0.4.0` deployed with `-e sa_signature_mode=key`): the committed public key
+  - `key` (releases `v0.1.0` to `v0.2.2`, and `v0.4.0` and `v0.4.1` deployed with `-e sa_signature_mode=key`): the committed public key
     `infra/ansible/vars/release-cosign.pub`, with `--insecure-ignore-tlog`. This covers an unsigned
     digest and a signature by any other key;
   - `keyless` (the production mode since `v0.2.3`): identity
