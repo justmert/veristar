@@ -5,6 +5,7 @@ package collector_test
 import (
 	"context"
 	"crypto/tls"
+	"maps"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -144,8 +145,10 @@ func testRestartUnderLoad(t *testing.T, s *stack) {
 
 	want := uint64(recorded.Load())
 	ps := s.waitPoints(t, tn.ID, "http.server.request.duration", 60*time.Second, func(p []point) bool { return totalCount(p) >= want })
+	// a copy, not the map: the periodic reader keeps exporting through the
+	// counter while the counts below are read
 	counter.mu.Lock()
-	seen := counter.seen
+	seen := maps.Clone(counter.seen)
 	counter.mu.Unlock()
 	t.Logf("recorded %d, queued %d, responses %v", want, totalCount(ps), seen)
 	if totalCount(ps) != want {
