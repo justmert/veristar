@@ -60,9 +60,10 @@ updates:
     directories: ["/", "/.github/actions/release-image"]
     schedule: { interval: weekly, day: monday }
 
-  - package-ecosystem: terraform
-    # opentofu reads the same provider blocks; dependabot resolves them
-    # from the registry named in required_providers
+  - package-ecosystem: opentofu
+    # the opentofu ecosystem, not terraform: the terraform updater refreshes
+    # the lock file with the terraform cli, which rejects the encryption block
+    # in versions.tf ("blocks of type encryption are not expected here")
     directories: ["/infra/tofu/envs/staging", "/infra/tofu/envs/production", "/infra/tofu/modules/*"]
     schedule: { interval: weekly, day: monday }
 
