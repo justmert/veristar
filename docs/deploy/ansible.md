@@ -37,7 +37,7 @@ Build notes:
 |---|---|---|
 | `postgres-ha` | `deploy/images/postgres-ha.Dockerfile` | `PG_BASE` is the one place the PostgreSQL version is chosen; tag is `<pg version>-<release>` |
 | `caddy` | `caddy.Dockerfile` | edge nodes |
-| `console` | `console.Dockerfile` | `caddy` plus the console build at `/srv/console`; core nodes |
+| `console` | `console.Dockerfile` | `caddy` plus the console build at `/srv/console` and the website build (`apps/site`) at `/srv/site`; core nodes |
 | `gateway`, `collector`, `controlplane`, `replayer`, `metricswriter`, `jobs`, `platformctl`, `prober` | `go-service.Dockerfile`, `controlplane.Dockerfile`, `collector.Dockerfile` | |
 
 Names: `{{ sa_image_registry }}/<name>:{{ sa_image_tag }}`. Upstream images (NATS, etcd,
@@ -54,10 +54,10 @@ HAProxy, Umami) are pinned by digest in `infra/ansible/vars/pins.yml`.
 **Converged nodes (tier `node`).** Production runs three nodes that are each in the `edge` and the
 `core` group ([../reference/availability.md](../reference/availability.md)).
 Both roles run on such a node with their own Compose projects; the edge project then has no
-Caddy, and the core project's Caddy (the console image) serves `in.`, `otlp.` and `app.`
-from one config (`assemble.sh node`), joins the edge project's network to reach the gateway
-and the collector, and answers port 80 with the edge health at `/` and the core health at
-`/core`. Every node runs a Patroni member (three members), an etcd member and a NATS server, and
+Caddy, and the core project's Caddy (the console image) serves `in.`, `otlp.`, `app.` and the
+website at `<BASE_DOMAIN>` and `www.` from one config (`assemble.sh node`), joins the edge
+project's network to reach the gateway and the collector, and answers port 80 with the edge
+health at `/`, the core health at `/core` and the website's health at `/site`. Every node runs a Patroni member (three members), an etcd member and a NATS server, and
 the observability project on it carries both tiers' exporters and relay targets. Roles keep
 accepting single-tier `edge` and `core` nodes, which the local converge's default topology uses;
 `LC_TOPOLOGY=node` runs the production layout locally ([local-converge.md](local-converge.md)).
@@ -147,6 +147,8 @@ Composite health, served on port 80 by Caddy and behind it on the services' ops 
   Without `EDGE_HEALTH_COLLECTOR_URL` and `EDGE_HEALTH_NATS_URL` it answers 503.
 - core: control plane `/corez` = readiness (database pools, NATS), the database behind
   HAProxy is not in recovery, Umami heartbeat.
+- website: `/site` answers 308 whenever Caddy runs and the node is not draining. The website
+  is static files in the console image, so it needs no other service.
 
 Healthy answers 308 to https, unhealthy 503, whatever the Host header; Traffic Manager
 counts 200 to 299 and 308 as healthy (`infra/tofu/modules/failover`).

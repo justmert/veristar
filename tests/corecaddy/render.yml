@@ -1,0 +1,19 @@
+---
+# assembles the caddyfile the core role installs on a node, with the role's
+# own task file (roles/core tasks/caddyfile.yml), for render_test.go.
+#   ansible-playbook -i inventory.yml render.yml -e layout=node|core -e out=<dir>
+- name: Assemble the core caddyfile of one layout
+  hosts: "{{ layout }}"
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Run the core role's caddyfile task
+      ansible.builtin.include_role:
+        name: core
+        tasks_from: caddyfile.yml
+
+    - name: Write the assembled caddyfile
+      ansible.builtin.copy:
+        content: "{{ core_caddyfile.stdout }}\n"
+        dest: "{{ out }}/Caddyfile"
+        mode: "0644"

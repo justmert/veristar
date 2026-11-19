@@ -233,6 +233,7 @@ services:
       SA_TLS: files
       CONTROLPLANE_UPSTREAM: controlplane-1:8085
       CONSOLE_ROOT: /srv/console
+      SITE_ROOT: /srv/site
       NODE_HEALTH_UPSTREAM: controlplane-1:9090
       NODE_HEALTH_PATH: /corez
     volumes: ["${OBS}/conf/core.Caddyfile:/etc/caddy/Caddyfile:ro", "../../apps/console/dist:/srv/console:ro", "${OBS}/certs/core-1.crt:/certs/node.crt:ro", "${OBS}/certs/core-1.key:/certs/node.key:ro"]
