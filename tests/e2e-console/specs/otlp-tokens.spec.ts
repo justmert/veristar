@@ -58,7 +58,7 @@ test("the api analytics page shows the steps and one short exporter per stack", 
     .getByRole("link", { name: "Connect API" })
     .click();
   await page.waitForURL(`${APP}/projects/${tenant.id}/connect-api`);
-  await expect(page.getByRole("heading", { name: "Connect your API" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Connect API", exact: true })).toBeVisible();
   // a new project: the token is the step to do now, the rest waits
   await expect(page.locator('[data-check="1"]')).toHaveAttribute("data-state", "current");
   await expect(page.locator('[data-check="2"]')).toHaveAttribute("data-state", "todo");

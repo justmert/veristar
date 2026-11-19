@@ -181,7 +181,7 @@ describe("a project page while the project loads", () => {
       ["/onchain", "On-chain"],
       ["/scf", "SCF review"],
       ["/sites", "Sites"],
-      ["/connect-api", "Connect your API"],
+      ["/connect-api", "Connect API"],
       ["/ai", "AI assistants"],
       ["/members", "Members"],
       ["/privacy", "Privacy"],

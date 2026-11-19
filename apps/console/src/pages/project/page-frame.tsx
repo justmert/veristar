@@ -32,7 +32,7 @@ export const PAGE_HEADERS: Record<
   onchain: { title: "On-chain" },
   scf: { title: "SCF review" },
   sites: { title: "Sites" },
-  "connect-api": { title: "Connect your API" },
+  "connect-api": { title: "Connect API" },
   ai: { title: "AI assistants", description: "Read-only, this project only." },
   members: { title: "Members" },
   privacy: { title: "Privacy" },
