@@ -191,6 +191,11 @@ export function otelGuides(): OtelGuide[] {
       },
       {
         path: "main.go",
+        caption: "The exporters' HTTP client: HTTP/2 health checks close a dead connection.",
+        code: region(goMain, "client"),
+      },
+      {
+        path: "main.go",
         caption: "SDK setup: one tracer and one meter provider, each with two exporters.",
         code: region(goMain, "telemetry"),
       },
