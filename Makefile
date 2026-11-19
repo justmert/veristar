@@ -454,11 +454,12 @@ ansible-lint:
 
 # renders the role files that hold the nats liveness settings, the systemd
 # units and the etcd space settings and checks them (tests/natsconf,
-# tests/systemdunits, tests/etcdmaint) and the patroni leader order of the
-# rolling plays (tests/playbooks); needs the ansible venv, no host
+# tests/systemdunits, tests/etcdmaint), the patroni leader order of the
+# rolling plays (tests/playbooks) and the caddyfile the core role installs
+# (tests/corecaddy); needs the ansible venv, no host
 .PHONY: ansible-render-test
 ansible-render-test:
-	ANSIBLE_VENV=$(ANSIBLE_VENV) $(GO) test -tags ansiblerender -count=1 ./tests/natsconf/ ./tests/systemdunits/ ./tests/etcdmaint/ ./tests/playbooks/
+	ANSIBLE_VENV=$(ANSIBLE_VENV) $(GO) test -tags ansiblerender -count=1 ./tests/natsconf/ ./tests/systemdunits/ ./tests/etcdmaint/ ./tests/playbooks/ ./tests/corecaddy/
 
 staging-deploy production-deploy: %-deploy:
 	@test -f infra/ansible/inventories/$*/hosts.json || { echo "no inventory: run make $*-apply first" >&2; exit 1; }

@@ -7,8 +7,8 @@ description: "Diagnose and fix certificate issuance and renewal on edge and core
 Every node's Caddy gets its own certificates from Let's Encrypt with the ACME DNS-01 challenge
 in the Cloudflare zone (`caddy-dns/cloudflare`, with the environment's Cloudflare API token
 `cloudflare_api_token`), for the hostnames it serves: `in.<BASE_DOMAIN>` and
-`otlp.<BASE_DOMAIN>` on the edge tier, `app.<BASE_DOMAIN>` on the core
-tier, and `status.<BASE_DOMAIN>` on a probe host in the inventory. DNS-01 is used because every
+`otlp.<BASE_DOMAIN>` on the edge tier, `app.<BASE_DOMAIN>`, `<BASE_DOMAIN>` and
+`www.<BASE_DOMAIN>` on the core tier, and `status.<BASE_DOMAIN>` on a probe host in the inventory. DNS-01 is used because every
 node serves the same names, so an HTTP or TLS-ALPN challenge could land on another node ([../deploy/ansible.md](../deploy/ansible.md)
 section 3). The external probe bundle on its own host gets `status.<BASE_DOMAIN>` with HTTP-01
 instead ([../deploy/probe.md](../deploy/probe.md)). Certificates live in the node's `caddydata` volume under `/data/caddy/certificates/`.

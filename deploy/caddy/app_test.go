@@ -43,6 +43,7 @@ func appEnv() map[string]string {
 		"BASE_DOMAIN":           "sa.test",
 		"CONTROLPLANE_UPSTREAM": "controlplane:8085",
 		"CONSOLE_ROOT":          "/srv/console",
+		"SITE_ROOT":             "/srv/site",
 		"APP_TLS":               "internal",
 	}
 }
@@ -77,7 +78,7 @@ func TestAppCaddyfileValidates(t *testing.T) {
 	require.Contains(t, out, "Valid configuration")
 
 	// every variable is required: an unset one fails validation
-	for _, k := range []string{"BASE_DOMAIN", "CONTROLPLANE_UPSTREAM", "CONSOLE_ROOT", "APP_TLS"} {
+	for _, k := range []string{"BASE_DOMAIN", "CONTROLPLANE_UPSTREAM", "CONSOLE_ROOT", "SITE_ROOT", "APP_TLS"} {
 		env := appEnv()
 		delete(env, k)
 		code, out := appCaddyRun(t, env, "caddy", "validate", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile")
@@ -97,6 +98,8 @@ func TestAppCaddyfileValidates(t *testing.T) {
 		`"host":["app.sa.test"]`,
 		`"dial":"controlplane:8085"`,
 		`"root":"/srv/console"`,
+		`"host":["sa.test","www.sa.test"]`,
+		`"root":"/srv/site"`,
 		`"Strict-Transport-Security":["max-age=63072000; includeSubDomains"]`,
 		`"X-Frame-Options":["DENY"]`,
 		`"Cache-Control":["no-store"]`,
@@ -117,8 +120,9 @@ func TestAppCaddyfileValidates(t *testing.T) {
 		} `json:"logging"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(adapted), &cfg))
-	// the site log and caddy's default logger, which writes the access
-	// lines of requests for a host the file does not serve
+	// the console's and the website's site logs and caddy's default
+	// logger, which writes the access lines of requests for a host the file
+	// does not serve
 	require.Contains(t, cfg.Logging.Logs, "default")
 	var filtered int
 	for name, l := range cfg.Logging.Logs {
@@ -132,7 +136,7 @@ func TestAppCaddyfileValidates(t *testing.T) {
 		}
 		require.Equal(t, "regexp", l.Encoder.Fields["request>uri"].Filter, "%s must cut the query from the uri", name)
 	}
-	require.Equal(t, 2, filtered, "both loggers are filtered")
+	require.Equal(t, 3, filtered, "every logger is filtered")
 }
 
 // controlPlaneDouble stands in for the control plane behind caddy. it records

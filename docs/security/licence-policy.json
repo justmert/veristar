@@ -14,6 +14,12 @@
           "@creit.tech/stellar-wallets-kit": "the console imports the kit's module api and a fixed list of its wallet modules (apps/console/src/lib/stellar-wallet/modules.ts), never its walletconnect, hot, near, trezor or xbull connectors. the kit counts as shipped; each package below it counts as shipped exactly when the real console bundle (apps/console/scripts/bundle-packages.mjs) contains it, and the rest of its tree is recorded as not shipped"
         }
       },
+      "apps/site": {
+        "artifact": "the public website bundle, shipped in the console image at /srv/site (deploy/images/console.Dockerfile)",
+        "also_bundled": {
+          "tailwindcss": "src/index.css imports tailwindcss, whose preflight and utilities are compiled into the bundled css although it is a devDependency"
+        }
+      },
       "packages/tracker": {
         "artifact": "sdk.js and the npm package. both builds refuse any input outside src/ and releases/ (ownInputsOnly in packages/tracker/build.mjs), and the packed package.json declares no dependencies"
       }
