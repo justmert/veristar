@@ -214,7 +214,7 @@ wallet sign-in, with migrations 00032, 00033 and 00034.
 | `prober` | `v0.3.0` | `sha256:dfc127a00f1f6169c07808f9e58f3ac0e2e6c40f6810989e34001be5d6ecf277` |
 | `replayer` | `v0.3.0` | `sha256:a471b3b135c5ed2caa32a431cbdbd54a30ef7e34e7b4e59ee9515681ff035156` |
 
-**Release `v0.4.0` (2026-11-18), the release production runs.** Built in key mode by
+**Release `v0.4.0` (2026-11-18).** Built in key mode by
 `scripts/supply-chain/release-workstation.sh v0.4.0 <work dir>` from a clean worktree at the tag
 (annotated tag `v0.4.0` at commit `8b015d7` on `main`), from 03:30:20 to 03:48:01 UTC, while the
 repository's GitHub Actions are off: the licence gate first (`licences.json`, `console-bundle.txt`),
@@ -247,7 +247,7 @@ etcd 3.7.3 with compaction and its quota, the 8 MiB NATS `max_payload` and the r
 | `prober` | `v0.4.0` | `sha256:c366b6e57d75e7cd9f863eab6f3543c4d2d8d23d35c0b3159082b4d0d7c9cefa` |
 | `replayer` | `v0.4.0` | `sha256:701faea12bf2c43c94dead51d84c24e2f0a7a475b98b3949fe83731174415a4e` |
 
-**Release `v0.4.1` (2026-11-19).** Built in key mode by
+**Release `v0.4.1` (2026-11-19), the release production runs.** Built in key mode by
 `scripts/supply-chain/release-workstation.sh v0.4.1 <work dir>` from a clean worktree at the tag
 (annotated tag `v0.4.1` at commit `4801886` on `main`), from 02:08:03 to 02:21:52 UTC, while the
 repository's GitHub Actions are off: the licence gate first (`licences.json`, `console-bundle.txt`;
@@ -260,7 +260,8 @@ verified with `infra/ansible/vars/release-cosign.pub`, and the manifest, `licenc
 `console-bundle.txt` attached to the GitHub release `v0.4.1`. Every digest verified again with
 `cosign verify --key infra/ansible/vars/release-cosign.pub --insecure-ignore-tlog=true` from a
 docker configuration without credentials, and the gateway's SBOM attestation with
-`cosign verify-attestation --type spdxjson`. `caddy` has no source change since `v0.4.0` and
+`cosign verify-attestation --type spdxjson`. `deploy.yml` verified every digest with the release
+key (`-e sa_signature_mode=key`) before it touched a node. `caddy` has no source change since `v0.4.0` and
 `postgres-ha` none since `v0.2.0`; both came out with the earlier digests. Since `v0.4.0` it adds
 `platformctl tenant create`, `invite` and `remove`, the tracker releases in the Go service images,
 the SCF awards import, search and matching, calls per contract function, web events in 32
