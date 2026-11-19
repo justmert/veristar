@@ -10,8 +10,8 @@ import (
 func TestEmbeddedTerms(t *testing.T) {
 	tm, err := Current()
 	require.NoError(t, err)
-	require.Equal(t, "2026-11-18-draft.6", tm.Version)
-	require.Equal(t, "draft", tm.Status)
+	require.Equal(t, "2026-11-19.1", tm.Version)
+	require.Equal(t, "final", tm.Status)
 	require.True(t, strings.HasPrefix(tm.Markdown, "# Terms of use"))
 	require.NotContains(t, tm.Markdown, "version:")
 	require.NotContains(t, tm.Markdown, "\u2014", "no em dash in the terms")
@@ -20,7 +20,7 @@ func TestEmbeddedTerms(t *testing.T) {
 	require.Contains(t, tm.Markdown, "the hosting operator is the **processor**")
 	require.Contains(t, tm.Markdown, "### 1.1 Project statistics for SCF")
 	require.NotContains(t, tm.Markdown, "Today that is the Stellar\n  Community Fund")
-	// people read this text in the console: the draft status lives in the
+	// people read this text in the console: the status lives in the
 	// front matter, and the body names doc pages, not repository paths or
 	// configuration keys
 	require.NotContains(t, tm.Markdown, "Status: draft")

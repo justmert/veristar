@@ -16,6 +16,26 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+### Changed
+
+- Terms of use `2026-11-19.1` are the final version of the terms
+  ([docs/compliance/terms.md](docs/compliance/terms.md)). The text is the
+  same as `2026-11-18-draft.6`; only the version, the status (`final`) and
+  the effective date change, so `GET /api/terms` answers `"status": "final"`
+  and the console no longer labels the terms a draft. Every project accepts
+  it at its next sign-in.
+
+### Upgrade notes
+
+**After the deploy**
+
+- Every project accepts terms of use `2026-11-19.1` at its next sign-in;
+  until it does, changes to the project are blocked (403
+  `terms_not_accepted`, contract 4.2.6). No migration: the accepted version
+  is compared with the one embedded in the control plane binary.
+- Check: `https://app.<BASE_DOMAIN>/api/terms` answers version
+  `2026-11-19.1` with status `final`.
+
 ## [0.4.4] - 2026-11-19
 
 ### Added
