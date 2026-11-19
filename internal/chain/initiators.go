@@ -55,9 +55,10 @@ func OperationSource(envelopeXDR string, op uint32) (string, error) {
 }
 
 // EnvelopeBatch is how many getTransaction calls one json-rpc batch
-// carries. a soroban transaction's answer with its metadata is tens of
-// kilobytes, so 50 keep a batch well under the client's body limit.
-const EnvelopeBatch = 50
+// carries. public stellar rpc servers refuse a batch of more than 10
+// calls, and 10 answers with their metadata stay well under the client's
+// body limit.
+const EnvelopeBatch = 10
 
 // TxRecord is the part of a getTransaction answer the reader uses: the
 // envelope, for the initiator and the functions invoked at the top level,

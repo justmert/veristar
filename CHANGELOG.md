@@ -16,6 +16,10 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+### Fixed
+
+- Contract activity reads send at most 10 `getTransaction` calls per JSON-RPC batch. Public Stellar RPC servers refuse larger batches, so contracts with more than 10 transactions a day failed with `bad_response`.
+
 ## [0.4.1] - 2026-11-19
 
 ### Added

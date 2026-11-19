@@ -3839,7 +3839,7 @@ operation involving one of the project's **verified** ids that week:
 | Kind | Initiators of a day |
 |---|---|
 | account | the `source_account` of each operation `GET /accounts/{id}/operations` returns; Horizon fills it with the transaction's source when the operation names none, and with the base G account of a muxed source |
-| contract | for each operation with an event of the contract (15.2), the operation's source, or the transaction's when it names none, read from the envelope through `getTransaction` (JSON-RPC batches of 50); for a fee bump, the inner transaction's; a muxed source counts as its G account |
+| contract | for each operation with an event of the contract (15.2), the operation's source, or the transaction's when it names none, read from the envelope through `getTransaction` (JSON-RPC batches of 10, the most public RPC servers accept); for a fee bump, the inner transaction's; a muxed source counts as its G account |
 
 - The task `chain-activity` (15.6) reads a day's initiators together with its
   counts, once the day is over, so contract days are read while Stellar RPC
