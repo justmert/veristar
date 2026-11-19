@@ -58,20 +58,9 @@
     - { path: "{{ core_conf_dir }}/patroni", mode: "0700", owner: "999" }
     - { path: "{{ core_drain_dir }}", mode: "0755" }
 
-- name: Assemble the core caddyfile on the controller
-  ansible.builtin.command:
-    # a converged node's caddy serves the edge sites too
-    argv: >-
-      {{ ['sh', core_caddy_dir ~ '/assemble.sh', 'node' if core_node else 'core']
-         + ((['edge'] if core_node else []) + ['app']) | map('regex_replace', '^', core_caddy_dir ~ '/')
-           | map('regex_replace', '$', '.Caddyfile') | list }}
-  vars:
-    core_caddy_dir: "{{ playbook_dir }}/../../../deploy/caddy"
-  register: core_caddyfile
-  changed_when: false
-  delegate_to: localhost
-  run_once: true
-  become: false
+# the assembled caddyfile (tasks/caddyfile.yml), registered as core_caddyfile
+- name: Assemble the core caddyfile
+  ansible.builtin.import_tasks: caddyfile.yml
 
 - name: Install the caddyfile
   ansible.builtin.copy:
@@ -235,7 +224,8 @@
   changed_when: false
 
 # a converged node answers the edge health at "/" and the core health at
-# "/core" (deploy/caddy/assemble.sh, tier node); both must pass
+# "/core" (deploy/caddy/assemble.sh, tier node), and every core or node
+# caddy the website's health at "/site"; all must pass
 - name: Wait for this node's composite health on port 80
   ansible.builtin.uri:
     url: "http://{{ sa_public_bind_ipv4 | default(sa_public_ipv4) }}{{ item }}"
@@ -245,6 +235,6 @@
   until: core_health.status == 308
   retries: 90
   delay: 2
-  loop: "{{ ['/', '/core'] if core_node else ['/'] }}"
+  loop: "{{ ['/', '/core', '/site'] if core_node else ['/', '/site'] }}"
   when: core_stage != 'infra' and not (sa_draining | default(false))
   changed_when: false
