@@ -361,7 +361,7 @@ changelog describes; there is no migration.
 | `prober` | `v0.4.3` | `sha256:94b5aeb91cad472cf8f47fca36981e1da3c20f50c80613f24845c9d0e359f9f3` |
 | `replayer` | `v0.4.3` | `sha256:8cb3b61cdee5829d2229e14982b7e61e006879cfb3b6063603d3fd872345db65` |
 
-**Release `v0.4.4` (2026-11-19), the release production runs.** Built in key mode by
+**Release `v0.4.4` (2026-11-19).** Built in key mode by
 `SITE_ORIGIN=https://veristar.app REPO_URL=https://github.com/justmert/veristar scripts/supply-chain/release-workstation.sh v0.4.4 <work dir>`
 from a clean worktree at the tag (annotated tag `v0.4.4` at commit `5873080` on `main`), from
 12:01:01 to 12:16:11 UTC. The repository is public and its GitHub Actions are on; the repository
@@ -399,7 +399,7 @@ pgBackRest packages, with new digests. There is no migration.
 | `prober` | `v0.4.4` | `sha256:25bee95f9b2e6ac68d9593b2439282690c8cc68191ba3e6ecf72b61b6226b79c` |
 | `replayer` | `v0.4.4` | `sha256:99da5b7e52308c81b1c81d1de66e032eb069f090b021a0d0d99bcd53e4c97e9b` |
 
-**Release `v0.4.5` (2026-11-19).** Built in key mode by
+**Release `v0.4.5` (2026-11-19), the release production runs.** Built in key mode by
 `SITE_ORIGIN=https://veristar.app REPO_URL=https://github.com/justmert/veristar scripts/supply-chain/release-workstation.sh v0.4.5 <work dir>`
 from a clean worktree at the tag (annotated tag `v0.4.5` at commit `507b577` on `main`), from
 17:50:40 to 18:05:08 UTC. The repository variable `RELEASE_BUILDER=workstation` made
@@ -414,7 +414,11 @@ verified with `infra/ansible/vars/release-cosign.pub`, and the manifest, `licenc
 `console-bundle.txt` attached to the GitHub release `v0.4.5`. Every digest verified again with
 `cosign verify --key infra/ansible/vars/release-cosign.pub --insecure-ignore-tlog=true` from a
 docker configuration without credentials, and the gateway's SBOM attestation with
-`cosign verify-attestation --type spdxjson`. `caddy`, `console` and `postgres-ha` came out with the
+`cosign verify-attestation --type spdxjson`. `deploy.yml` verified every digest with the release
+key (`-e sa_signature_mode=key`) before it touched a node, and the rolling deploy moved every node
+to these digests, etcd 3.7.4 and postgres_exporter 0.21.1 with `failed=0`; afterwards the three
+etcd members were healthy on 3.7.4, `pg_up` was 1 on every node, and `GET /api/terms` answered
+`2026-11-19.1` with status `final`. The probe bundle runs the `v0.4.5` prober. `caddy`, `console` and `postgres-ha` came out with the
 `v0.4.4` digests and `collector` with the `v0.4.1` digest: none of them has a source change since and the build cache held their layers.
 The upstream pins that move with this release, etcd 3.7.4 and postgres_exporter 0.21.1,
 are not among the eleven images; the deploy pulls them by the digests in
