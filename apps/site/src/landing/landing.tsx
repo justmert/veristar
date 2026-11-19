@@ -903,7 +903,7 @@ function Handover() {
             <b>Month 6 to 12</b>
             <span className="small">
               SCF chooses the time. The new operator works beside the current one for a shadow
-              period that SCF sets, four weeks proposed.
+              period of at least four weeks, which SCF sets.
             </span>
           </div>
           <div className="reveal">
