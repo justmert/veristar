@@ -36,7 +36,7 @@ v0.3.0 rollout").
      the tag runs the same build and gate, signs with the release key from the production SOPS
      file and attaches `release-images.json`
      ([../security/supply-chain.md](../security/supply-chain.md) section 2.1). Releases `v0.2.0`
-     to `v0.2.2`, `v0.4.0` and `v0.4.1` are key-mode workstation releases.
+     to `v0.2.2`, `v0.4.0`, `v0.4.1` and `v0.4.2` are key-mode workstation releases.
 
    Download `release-images.json` of the release. `infra/ansible/vars/signing.yml` sets the mode
    the deploy verifies, `keyless`. For a key-mode release, add
