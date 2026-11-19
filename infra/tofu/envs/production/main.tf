@@ -136,6 +136,10 @@ module "failover" {
     in   = { ipv4 = local.serving[*].public_ipv4, fast = true, path = "/" }
     otlp = { ipv4 = local.serving[*].public_ipv4, fast = true, path = "/" }
     app  = { ipv4 = local.serving[*].public_ipv4, fast = false, path = "/core" }
+    # the public website at the zone apex and www: static files that each
+    # node's caddy serves by itself, so its health ("/site") is caddy's own
+    # and stays up while the control plane is down
+    site = { ipv4 = local.serving[*].public_ipv4, fast = false, path = "/site" }
   }
   tags = local.tags
 }
@@ -147,7 +151,9 @@ module "dns" {
   # the cname never changes; failover happens behind it in traffic manager,
   # whose answers carry their own ttl (module failover)
   ttl    = 300
-  cnames = module.failover.fqdns
+  cnames = { for label, fqdn in module.failover.fqdns : label => fqdn if label != "site" }
+  # the apex and www, flattened by cloudflare (module dns)
+  site_target = module.failover.fqdns["site"]
   # caddy gets every certificate from let's encrypt by dns-01
   caa_issuers = ["letsencrypt.org"]
   # the public status page on the probe host in azure east us, outside the

@@ -31,6 +31,12 @@ variable "cnames" {
   type        = map(string)
 }
 
+variable "site_target" {
+  description = "the name the website at the zone apex and www point at (a traffic manager profile); null leaves both names alone"
+  type        = string
+  default     = null
+}
+
 variable "a_records" {
   description = "label to an ipv4 address, for names served outside the platform's nodes (the status page)"
   type        = map(string)
@@ -59,6 +65,23 @@ resource "cloudflare_dns_record" "cname" {
   name    = "${each.key}.${var.base_domain}"
   type    = "CNAME"
   content = each.value
+  ttl     = var.ttl
+  proxied = false
+  comment = "managed by opentofu; health-checked by azure traffic manager"
+}
+
+# the public website at the zone apex and www. the apex cannot hold a plain
+# cname, so cloudflare flattens it: it resolves the profile and answers
+# with its addresses, on every plan. dns only, like every other name here,
+# so the nodes' caddy terminates tls and the profile's health decides the
+# answer. www redirects to the apex in caddy (deploy/caddy/app.Caddyfile).
+resource "cloudflare_dns_record" "site" {
+  for_each = var.site_target == null ? {} : { "@" = var.base_domain, www = "www.${var.base_domain}" }
+
+  zone_id = local.zone_id
+  name    = each.value
+  type    = "CNAME"
+  content = var.site_target
   ttl     = var.ttl
   proxied = false
   comment = "managed by opentofu; health-checked by azure traffic manager"
@@ -118,7 +141,11 @@ output "nameservers" {
 }
 
 output "hostnames" {
-  value = { for label in keys(var.cnames) : label => "${label}.${var.base_domain}" }
+  description = "label to hostname; site is the website at the zone apex"
+  value = merge(
+    { for label in keys(var.cnames) : label => "${label}.${var.base_domain}" },
+    var.site_target == null ? {} : { site = var.base_domain },
+  )
 }
 
 output "a_hostnames" {
@@ -129,6 +156,7 @@ output "records" {
   description = "every record by key, for review and tests"
   value = merge(
     { for k, r in cloudflare_dns_record.cname : "${k}/CNAME" => { type = r.type, value = r.content, proxied = r.proxied } },
+    { for k, r in cloudflare_dns_record.site : "${k}/CNAME" => { type = r.type, value = r.content, proxied = r.proxied } },
     { for k, r in cloudflare_dns_record.a : "${k}/A" => { type = r.type, value = r.content, proxied = r.proxied } },
     { for k, r in cloudflare_dns_record.caa_issue : "@/CAA/issue/${k}" => { type = r.type, value = r.data.value, proxied = false } },
     { "@/CAA/issuewild" = { type = "CAA", value = cloudflare_dns_record.caa_issuewild.data.value, proxied = false } },
