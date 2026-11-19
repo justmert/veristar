@@ -247,7 +247,7 @@ etcd 3.7.3 with compaction and its quota, the 8 MiB NATS `max_payload` and the r
 | `prober` | `v0.4.0` | `sha256:c366b6e57d75e7cd9f863eab6f3543c4d2d8d23d35c0b3159082b4d0d7c9cefa` |
 | `replayer` | `v0.4.0` | `sha256:701faea12bf2c43c94dead51d84c24e2f0a7a475b98b3949fe83731174415a4e` |
 
-**Release `v0.4.1` (2026-11-19), the release production runs.** Built in key mode by
+**Release `v0.4.1` (2026-11-19).** Built in key mode by
 `scripts/supply-chain/release-workstation.sh v0.4.1 <work dir>` from a clean worktree at the tag
 (annotated tag `v0.4.1` at commit `4801886` on `main`), from 02:08:03 to 02:21:52 UTC, while the
 repository's GitHub Actions are off: the licence gate first (`licences.json`, `console-bundle.txt`;
@@ -282,7 +282,7 @@ partitions delivered from every core node, the server-side audit log search, and
 | `prober` | `v0.4.1` | `sha256:69b75003e12c1c68a53c770c644cd9edbe0791d0d62d9b82eecf4ed1bfce2dc0` |
 | `replayer` | `v0.4.1` | `sha256:6af8a32981e68742debb231c621e5797b09140ab67b1252ede6d2809efd8719d` |
 
-**Release `v0.4.2` (2026-11-19).** Built in key mode by
+**Release `v0.4.2` (2026-11-19), the release production runs.** Built in key mode by
 `scripts/supply-chain/release-workstation.sh v0.4.2 <work dir>` from a clean worktree at the tag
 (annotated tag `v0.4.2` at commit `e092408` on `main`), from 05:55:57 to 06:10:27 UTC, while the
 repository's GitHub Actions are off: the licence gate first (`licences.json`, `console-bundle.txt`;
@@ -295,7 +295,8 @@ verified with `infra/ansible/vars/release-cosign.pub`, and the manifest, `licenc
 `console-bundle.txt` attached to the GitHub release `v0.4.2`. Every digest verified again with
 `cosign verify --key infra/ansible/vars/release-cosign.pub --insecure-ignore-tlog=true` from a
 docker configuration without credentials, and the gateway's SBOM attestation with
-`cosign verify-attestation --type spdxjson`. `caddy` has no source change since `v0.4.0`,
+`cosign verify-attestation --type spdxjson`. `deploy.yml` verified every digest with the release
+key (`-e sa_signature_mode=key`) before it touched a node. `caddy` has no source change since `v0.4.0`,
 `collector` none since `v0.4.1` and `postgres-ha` none since `v0.2.0`; all three came out with the
 earlier digests. Since `v0.4.1` it reads contract transactions in JSON-RPC batches of at most 10
 `getTransaction` calls, and the console's Go guide shows the exporters' HTTP client with HTTP/2
