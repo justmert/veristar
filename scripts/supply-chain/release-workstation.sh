@@ -17,6 +17,17 @@
 #
 #   scripts/supply-chain/release-workstation.sh <tag> <work dir>
 #
+# the website in the console image takes two optional values from the
+# environment, passed on as the console's build arguments of the same name:
+#   SITE_ORIGIN  its canonical origin (canonical link, open graph, sitemap);
+#                unset or empty, the site's own default applies
+#   REPO_URL     its source repository links; unset or empty, they stay hidden
+# release-images.yml passes the repository variable SITE_ORIGIN and the
+# repository's own url, so a workstation release of the public repository
+# sets both, for example
+#   SITE_ORIGIN=https://veristar.app REPO_URL=https://github.com/justmert/veristar \
+#     scripts/supply-chain/release-workstation.sh <tag> <work dir>
+#
 # needs: a clean checkout at the tag, docker with buildx, go, node with
 # pnpm, cosign 3.1.4, syft 1.57.1 and trivy 0.76.2 on PATH, sops 3.13.3 at $SOPS, the operator's
 # age identity, GH_TOKEN of the release account with write:packages (also
@@ -85,7 +96,10 @@ release controlplane deploy/images/controlplane.Dockerfile .
 for c in replayer metricswriter jobs platformctl prober; do
 	release "$c" deploy/images/go-service.Dockerfile . "CMD=$c"
 done
-release console deploy/images/console.Dockerfile . "CADDY_IMAGE=$caddy_ref"
+echo "console website: SITE_ORIGIN=${SITE_ORIGIN:-(site default)} REPO_URL=${REPO_URL:-(no repository links)}"
+# an unset or empty value is left out, so the dockerfile's empty default applies
+release console deploy/images/console.Dockerfile . "CADDY_IMAGE=$caddy_ref" \
+	${SITE_ORIGIN:+"SITE_ORIGIN=$SITE_ORIGIN"} ${REPO_URL:+"REPO_URL=$REPO_URL"}
 release postgres-ha deploy/images/postgres-ha.Dockerfile deploy/images
 
 python3 scripts/supply-chain/release-manifest.py "$work/digests" "$tag" >"$work/release-images.json"

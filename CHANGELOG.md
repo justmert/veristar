@@ -16,6 +16,22 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+### Added
+
+- The repository variable `RELEASE_BUILDER=workstation` skips every job of
+  `release-images.yml`, so pushing the tag of a release built on a workstation
+  starts no second build
+  ([docs/security/supply-chain.md](docs/security/supply-chain.md) section 2).
+
+### Fixed
+
+- A release builds the website in the console image with its canonical origin
+  and its repository links. `release-images.yml` passes the console build
+  `SITE_ORIGIN` from the repository variable of that name and `REPO_URL` from
+  the repository's URL, and `scripts/supply-chain/release-workstation.sh`
+  passes both from its environment. Release `v0.4.3` passed neither, so its
+  website had no GitHub links.
+
 ## [0.4.3] - 2026-11-19
 
 ### Added

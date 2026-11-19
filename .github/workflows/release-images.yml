@@ -11,6 +11,12 @@ name: release-images
 #
 # the last job writes release-images.json (name, reference, digest) to the
 # github release. deploy.yml reads that file and deploys by digest.
+#
+# repository variable RELEASE_BUILDER=workstation skips every job: the
+# release of the tag is built and signed on a workstation instead
+# (scripts/supply-chain/release-workstation.sh, docs/security/supply-chain.md
+# section 2.1), and pushing the tag must not start a second build. the caddy
+# and licences jobs carry the condition; the others need them and skip too.
 on:
   push:
     tags: ["v*"]
@@ -34,6 +40,7 @@ env:
 jobs:
   # caddy first: the console image is built on top of this release's caddy
   caddy:
+    if: vars.RELEASE_BUILDER != 'workstation'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -82,21 +89,33 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # placeholders in the matrix are resolved here, because a matrix entry
-      # cannot read another job's output or the tag
+      # cannot read another job's output, the tag or a variable. the value
+      # holds one KEY=value per line, the form release-image's build-args
+      # takes, so it is written as a multi-line output
       - id: args
         env:
           ARGS: ${{ matrix.args }}
           CADDY: ${{ needs.caddy.outputs.repo }}@${{ needs.caddy.outputs.digest }}
+          # the website in the console image: its canonical origin (repository
+          # variable SITE_ORIGIN; unset, the site's own default applies) and
+          # its source repository links
+          SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
         run: |
           case "$ARGS" in
             DBIP_MONTH=from-tag)
               # the db-ip month is a release input: the tag's commit date month,
               # so a re-run of the same tag picks the same file
               month="$(git log -1 --format=%cd --date=format:%Y-%m "$GITHUB_SHA")"
-              echo "value=DBIP_MONTH=$month" >> "$GITHUB_OUTPUT" ;;
-            CADDY_IMAGE=from-caddy-job) echo "value=CADDY_IMAGE=$CADDY" >> "$GITHUB_OUTPUT" ;;
-            *) echo "value=$ARGS" >> "$GITHUB_OUTPUT" ;;
+              lines="DBIP_MONTH=$month" ;;
+            CADDY_IMAGE=from-caddy-job)
+              lines="CADDY_IMAGE=$CADDY"
+              if [ -n "$SITE_ORIGIN" ]; then lines="$lines"$'\n'"SITE_ORIGIN=$SITE_ORIGIN"; fi
+              lines="$lines"$'\n'"REPO_URL=$REPO_URL" ;;
+            *) lines="$ARGS" ;;
           esac
+          delimiter="args_$(openssl rand -hex 8)"
+          printf 'value<<%s\n%s\n%s\n' "$delimiter" "$lines" "$delimiter" >> "$GITHUB_OUTPUT"
       - id: release
         uses: ./.github/actions/release-image
         with:
@@ -114,6 +133,7 @@ jobs:
   # release records the licences of what it ships. a failing gate stops the
   # release before the manifest is published
   licences:
+    if: vars.RELEASE_BUILDER != 'workstation'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
