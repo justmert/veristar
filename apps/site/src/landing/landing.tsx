@@ -125,9 +125,9 @@ function Hero() {
         </h1>
         <div className="hero-row">
           <p className="hero-sub enter d2">
-            Web, API and on-chain analytics for every project on Stellar.{" "}
-            <strong>One method for every project</strong>, so the Stellar Community Fund can trust
-            and compare the numbers.
+            Free web, API and on-chain analytics for every project built on Stellar.{" "}
+            <strong>One method for every project</strong>, so your numbers are trusted beyond your
+            own team.
           </p>
           <div className="enter d3">
             <div className="cta">
@@ -215,9 +215,9 @@ function Problem() {
       <div className="wrap">
         <div className="mq-after">
           <p className="mq-body reveal">
-            SCF has no shared, trusted source of usage data for the projects it funds. Reviewers
-            check eligibility for Growth Hack, the Public Goods Award and the Integration Track with
-            numbers that each project reports itself.
+            Each project measures its usage its own way and reports the numbers itself. A grant
+            program, an investor or a partner cannot check them or compare them with another
+            project.
           </p>
           <p className="mq-out reveal">
             Veristar measures every project with <em>the same method.</em> The circle stops.
@@ -396,8 +396,8 @@ function Trust() {
             </div>
             <h3 className="h3">Each project gets an integrity grade, with the reasons.</h3>
             <p className="small">
-              You see the same grade as SCF and can appeal it. The grade goes into every signed
-              report. A reviewer opens the link and checks the signature without an account.
+              You see the same grade as SCF operators and can appeal it. The grade goes into every
+              signed report. Whoever gets the link checks the signature without an account.
             </p>
             <TLink href={hrefs.docs("onboarding/signed-reports")}>How signed reports work</TLink>
           </div>
@@ -928,7 +928,7 @@ function Comparison() {
         <SplitHead
           title="Why not"
           em="Google Analytics?"
-          lead="General tools measure one site for its owner. Veristar measures every Stellar project in the same way, for its team and for SCF."
+          lead="General tools measure one site for its owner. Veristar measures every Stellar project in the same way, so its numbers mean the same to anyone who reads them."
         />
         <div
           className="versus-wrap reveal"
@@ -986,7 +986,7 @@ function Doors() {
         <div className="split-head reveal">
           <div>
             <h2 className="h2">
-              For builders, for SCF, <em>for reviewers.</em>
+              For builders, for reviewers, <em>for SCF.</em>
             </h2>
           </div>
         </div>
@@ -1061,8 +1061,8 @@ function Closing() {
         </h2>
         <div className="reveal">
           <p>
-            <strong>Measure your project the way SCF reads it.</strong> Share numbers that anyone
-            can check, instead of numbers that you must defend.
+            <strong>Measure your project the same way as every project on Stellar.</strong> Share
+            numbers that anyone can check, instead of numbers that you must defend.
           </p>
           <div className="cta">
             <a className="btn btn-primary" href={hrefs.signIn}>
