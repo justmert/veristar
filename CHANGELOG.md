@@ -16,6 +16,10 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+### Changed
+
+- The website at veristar.app is a new landing page: what Veristar measures, how the numbers stay trustworthy, privacy, the operator view, integrations and service targets, with the site's own tracker and a strict content security policy.
+
 ## [0.4.2] - 2026-11-19
 
 ### Changed
