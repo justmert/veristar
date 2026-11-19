@@ -297,6 +297,11 @@ func (g *Guard) Get(ctx context.Context, host, path string, maxBody int64) (Resp
 	if err != nil {
 		return Response{}, err
 	}
+	// a body that only ended once the deadline had passed may be cut short;
+	// it counts as a timeout, never as a file
+	if err := ctx.Err(); err != nil {
+		return Response{}, err
+	}
 	if int64(len(b)) > maxBody {
 		out.TooLarge = true
 		return out, nil

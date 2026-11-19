@@ -192,7 +192,8 @@ func TestSlow(t *testing.T) {
 		"/trickle":      netguard.RequestTimeout + 2*time.Second,
 	} {
 		began := time.Now()
-		_, err := g.Get(t.Context(), host, p, 1024)
+		r, err := g.Get(t.Context(), host, p, 1024)
+		require.Error(t, err, "%s answered status %d with %d bytes after %s", p, r.Status, r.Bytes, time.Since(began))
 		requireCode(t, err, netguard.CodeTimeout)
 		require.Less(t, time.Since(began), within, p)
 	}

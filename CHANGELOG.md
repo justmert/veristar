@@ -16,6 +16,10 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+### Fixed
+
+- A `stellar.toml` fetch whose body ends only after the 10 second request deadline is now a timeout, never a file, so a body cut short at the deadline is not read as complete. The slow-host test names the path, status, size and time when it fails.
+
 ## [0.4.5] - 2026-11-19
 
 ### Changed
