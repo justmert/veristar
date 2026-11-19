@@ -16,10 +16,37 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+### Changed
+
+- The website at veristar.app is a new landing page: what Veristar measures, how the numbers stay trustworthy, privacy, the operator view, integrations and service targets, with the site's own tracker and a strict content security policy.
+
+## [0.4.2] - 2026-11-19
+
+### Changed
+
+- The console's Go guide for API metrics shows the exporters' HTTP client with its HTTP/2 health checks, next to the SDK setup.
+- The guides, the README and the operator pages name the console's pages and controls as the redesigned console labels them, and the documentation site keeps its buttons and links at a contrast of at least 4.5:1 in light and dark mode.
+
 ### Fixed
 
 - The Go example and the Collector fan-out example turn on HTTP/2 health checks for their OTLP exporters. Without them, a connection whose network path disappeared without a close (a lost NAT mapping, an outage between the app and the platform) held every export until TCP gave up, about 15 minutes for Go, and a restart was the only quick way out. The API troubleshooting guide lists which SDKs speak HTTP/2 to the platform and how to turn the checks on for each.
 - Contract activity reads send at most 10 `getTransaction` calls per JSON-RPC batch. Public Stellar RPC servers refuse larger batches, so contracts with more than 10 transactions a day failed with `bad_response`.
+
+### Upgrade notes
+
+- This release is signed in key mode on a workstation, while the
+  repository's GitHub Actions are off
+  ([docs/security/supply-chain.md](docs/security/supply-chain.md) section
+  2.1). Add `ANSIBLE_EXTRA='-e sa_signature_mode=key'` to every
+  `make <env>-deploy`; without it `verify-release.yml` refuses the release
+  before any node is touched.
+- No migration, NATS topology or configuration change: the rolling deploy
+  of [docs/deploy/upgrade.md](docs/deploy/upgrade.md) replaces the images
+  only.
+- A contract whose last read failed with `bad_response` is read again by
+  the first `chain-activity` run of the new jobs daemon that starts at
+  least 50 minutes after the failure, and stores the days Stellar RPC
+  still holds.
 
 ## [0.4.1] - 2026-11-19
 
@@ -1415,7 +1442,8 @@ How to check a file against its release:
   starts tracking on `umami.start()`, the server-issued proof of work, and a
   byte-identical rebuild of every committed release.
 
-[Unreleased]: https://github.com/justmert/veristar/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/justmert/veristar/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/justmert/veristar/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/justmert/veristar/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/justmert/veristar/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/justmert/veristar/compare/v0.2.3...v0.3.0

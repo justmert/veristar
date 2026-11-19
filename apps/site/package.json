@@ -9,6 +9,8 @@
     "check": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@fontsource-variable/figtree": "catalog:",
+    "@fontsource-variable/fraunces": "catalog:",
     "@veristar/brand": "workspace:*",
     "lucide-react": "catalog:",
     "motion": "catalog:",

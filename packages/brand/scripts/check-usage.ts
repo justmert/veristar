@@ -17,6 +17,8 @@ const skip = new Set([
   "packages/brand/src/tokens.ts",
   "packages/brand/src/tokens.css",
   "packages/brand/src/theme.generated.css",
+  // the landing page's own tokens: its softer accent stays landing-only
+  "apps/site/src/landing/tokens.css",
 ]);
 
 // the console takes its spacing from the scale (spacing.generated.css). the

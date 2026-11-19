@@ -1,0 +1,252 @@
+/* veristar landing page tokens. every colour, font, size, space, radius,
+   shadow and motion value of the page lives here; the page names roles only.
+   starts from packages/brand (terracotta on warm paper) and adds an
+   editorial voice: fraunces, soft and wonky, for display type. */
+
+:root {
+  /* colour: surfaces */
+  --color-ground: #f4f1ea;
+  --color-ground-2: #ebe7dd;
+  --color-paper: #fffdf8;
+  --color-tint: #ece8de;
+  --color-tint-raised: #e2ddd0;
+  --color-col-1: #efebe2;
+  --color-col-2: #e7e2d6;
+  --color-col-3: #dfd9cc;
+  --color-grid: rgba(26, 25, 23, 0.06);
+  --texture-stars: url("./stars.svg");
+  --color-line: #ddd8cc;
+  --color-line-strong: #b9b3a5;
+  /* colour: text */
+  --color-ink: #1a1917;
+  --color-ink-2: #4f4d47;
+  --color-ink-3: #6b6961;
+  --color-ghost: #8f8b80;
+  /* colour: accent (terracotta) */
+  --color-accent: #f39a80;
+  --color-accent-hover: #ee8b6f;
+  --color-accent-pressed: #e27c60;
+  --color-accent-text: #9e5034;
+  --color-on-accent: #1a1917;
+  --color-focus: #c8664a;
+  /* colour: outcomes */
+  --color-kept: #1a6a42;
+  --color-held: #80530a;
+  --color-dropped: #ab3328;
+  --color-redact: #1a1917;
+  /* colour: the dark band and the accent block (same in both themes) */
+  --color-band: #161513;
+  --color-band-raised: #211f1c;
+  --color-band-line: #3a3833;
+  --color-band-ink: #f4f1ea;
+  --color-band-ink-2: #a9a59a;
+  --color-band-ghost: #6f6b62;
+  --color-band-accent: #f39a80;
+  --color-block: #f39a80;
+  --color-block-ink: #1a1917;
+  --color-block-ink-2: #5a3326;
+  /* colour: mixes, kept here so the page names roles only */
+  --color-nav-glass: color-mix(in srgb, var(--color-ground) 80%, transparent);
+  --color-galaxy-glow: color-mix(in srgb, var(--color-band-accent) 10%, transparent);
+  --color-on-accent-line: color-mix(in srgb, var(--color-on-accent) 22%, transparent);
+  /* colour: shadow tints */
+  --color-shadow: rgba(40, 30, 20, 0.08);
+  --color-shadow-strong: rgba(40, 30, 20, 0.18);
+
+  /* fonts */
+  --font-display: "Fraunces Variable", "Iowan Old Style", Georgia, serif;
+  --font-body: "Figtree Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --display-axes: "SOFT" 100, "WONK" 1;
+  --display-axes-calm: "SOFT" 100, "WONK" 0;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-display: 420;
+  --weight-display-light: 300;
+
+  /* font sizes (fluid between 360 px and 1440 px) */
+  --text-mega: clamp(5.5rem, 2.2rem + 15vw, 17rem);
+  --text-display: clamp(3.25rem, 1.4rem + 8.2vw, 9rem);
+  --text-h2: clamp(2.375rem, 1.5rem + 3.9vw, 5rem);
+  --text-h3: clamp(1.5rem, 1.25rem + 1.1vw, 2.25rem);
+  --text-sentence: clamp(1.5rem, 1.05rem + 2vw, 2.875rem);
+  --text-figure: clamp(4rem, 2rem + 9vw, 10rem);
+  --text-odo: clamp(3rem, 1.4rem + 5.2vw, 7.5rem);
+  --text-verb: clamp(3.5rem, 1.9rem + 6.6vw, 8rem);
+  --text-question: clamp(2.25rem, 1.2rem + 4.6vw, 6rem);
+  --text-marquee: clamp(1.375rem, 1.05rem + 1.1vw, 2.125rem);
+  --text-answer: clamp(1rem, 0.94rem + 0.3vw, 1.25rem);
+  --text-lead: clamp(1.125rem, 1.02rem + 0.45vw, 1.4375rem);
+  --text-body: 1rem;
+  --text-small: 0.9375rem;
+  --text-caption: 0.8125rem;
+  --text-label: 0.75rem;
+  --leading-mega: 0.86;
+  --leading-display: 0.94;
+  --leading-heading: 1.04;
+  --leading-sentence: 1.75;
+  --leading-body: 1.55;
+  --tracking-display: -0.04em;
+  --tracking-heading: -0.025em;
+  --tracking-label: 0.12em;
+
+  /* spacing: one 4 px based scale for the whole page */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 6rem;
+  --space-10: 8rem;
+  --section-pad: clamp(6rem, 3.5rem + 9vw, 12rem);
+  --gutter: clamp(1.25rem, 0.5rem + 3vw, 4rem);
+  --container: 84rem;
+  --measure: 36rem;
+  --border: 1px;
+  --border-strong: 2px;
+  --border-heavy: 3px;
+  --touch: 2.75rem;
+  --label-col: 15rem;
+  --outcome-col: 9rem;
+  --marker: 1.75rem;
+  --odo-line: 1.12em;
+  --stars-size: 240px;
+  --panel-grow: 1.6;
+
+  /* page specific sizes */
+  --hero-top: clamp(2rem, 1rem + 3vw, 4.5rem);
+  --hero-side: 26rem;
+  --report-w: 56rem;
+  --hm-h: clamp(12rem, 8rem + 12vw, 20rem);
+  --hm-gap: clamp(0.5rem, 0.2rem + 1vw, 1.25rem);
+  --sheet-pad: clamp(1.5rem, 1rem + 2.5vw, 3.5rem);
+  --seal-mark: 2.5rem;
+  --icon-sm: 0.9rem;
+  --versus-min: 52rem;
+  --measure-wide: 44rem;
+  --measure-names: 30rem;
+  --measure-door: 24rem;
+  --measure-narrow: 22rem;
+  --measure-line: 20rem;
+  --card-min: 14rem;
+  --sent-col: 9rem;
+  --sup-size: 0.4em;
+  --focus-offset: 4px;
+  --nudge: 4px;
+  --nav-glass: blur(16px) saturate(1.3);
+
+  /* radii */
+  --radius-sm: 4px;
+  --radius-md: 10px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  /* shadows */
+  --shadow-sm: 0 1px 2px var(--color-shadow);
+  --shadow-paper: 0 2px 3px var(--color-shadow), 0 30px 80px -24px var(--color-shadow-strong);
+  /* the report sheet: a hairline edge and a short, soft fall-off, so it sits in the page */
+  --shadow-sheet: 0 0 0 var(--border) var(--color-line), 0 18px 40px -28px var(--color-shadow);
+  --shadow-sheet-lift: 0 26px 50px -30px var(--color-shadow);
+
+  /* motion */
+  --dur-instant: 100ms;
+  --dur-fast: 180ms;
+  --dur-base: 340ms;
+  --dur-reveal: 700ms;
+  --dur-flow: 3200ms;
+  --dur-count: 1600ms;
+  --enter-step: 90ms;
+  --stagger: 70ms;
+  --hm-step: 90ms;
+  --hm-sweep: 1400ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-stamp: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --lift: -3px;
+  --press: 0.97;
+  --reveal-shift: 32px;
+  --tilt: -2.2deg;
+  --seal-tilt: -12deg;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-ground: #12110f;
+    --color-ground-2: #1b1a17;
+    --color-paper: #1f1d1a;
+    --color-tint: #181715;
+    --color-tint-raised: #23211e;
+    --color-col-1: #161513;
+    --color-col-2: #1c1b18;
+    --color-col-3: #23211d;
+    --color-grid: rgba(244, 241, 234, 0.05);
+    --color-line: #2f2d29;
+    --color-line-strong: #4a4740;
+    --color-ink: #f4f1ea;
+    --color-ink-2: #c4c0b5;
+    --color-ink-3: #a29e93;
+    --color-ghost: #7d796f;
+    --color-accent-hover: #f6ad97;
+    --color-accent-pressed: #e88a6f;
+    --color-accent-text: #f39a80;
+    --color-focus: #f39a80;
+    --color-kept: #5cc495;
+    --color-held: #e5ae58;
+    --color-dropped: #f98a7f;
+    --color-redact: #f4f1ea;
+    --color-band: #080807;
+    --color-band-raised: #141311;
+    --color-shadow: rgba(0, 0, 0, 0.35);
+    --color-shadow-strong: rgba(0, 0, 0, 0.6);
+  }
+}
+
+:root[data-theme="dark"] {
+  --color-ground: #12110f;
+  --color-ground-2: #1b1a17;
+  --color-paper: #1f1d1a;
+  --color-tint: #181715;
+  --color-tint-raised: #23211e;
+  --color-col-1: #161513;
+  --color-col-2: #1c1b18;
+  --color-col-3: #23211d;
+  --color-grid: rgba(244, 241, 234, 0.05);
+  --color-line: #2f2d29;
+  --color-line-strong: #4a4740;
+  --color-ink: #f4f1ea;
+  --color-ink-2: #c4c0b5;
+  --color-ink-3: #a29e93;
+  --color-ghost: #7d796f;
+  --color-accent-hover: #f6ad97;
+  --color-accent-pressed: #e88a6f;
+  --color-accent-text: #f39a80;
+  --color-focus: #f39a80;
+  --color-kept: #5cc495;
+  --color-held: #e5ae58;
+  --color-dropped: #f98a7f;
+  --color-redact: #f4f1ea;
+  --color-band: #080807;
+  --color-band-raised: #141311;
+  --color-shadow: rgba(0, 0, 0, 0.35);
+  --color-shadow-strong: rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 0ms;
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-reveal: 0ms;
+    --dur-count: 0ms;
+    --lift: 0px;
+    --press: 1;
+    --reveal-shift: 0px;
+    --hm-step: 0ms;
+    --hm-sweep: 0ms;
+    --stagger: 0ms;
+    --enter-step: 0ms;
+  }
+}
