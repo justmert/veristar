@@ -7,7 +7,7 @@ addresses, measured the same way for every project. Because every project is mea
 method, the numbers can be trusted beyond the team that produced them. A project can share a
 signed usage report with anyone who needs proof of real usage, such as a grant program, an
 investor or a partner, and anyone can verify it without an account. Veristar runs as a shared
-service for the ecosystem, overseen by the Stellar Community Fund (SCF). SCF operators approve and
+service for the Stellar ecosystem. Stellar Community Fund (SCF) operators approve and
 remove projects and compare them in a cross-project view built from aggregates, and they never see
 individual visitors.
 
