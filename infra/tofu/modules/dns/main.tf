@@ -31,8 +31,14 @@ variable "cnames" {
   type        = map(string)
 }
 
+variable "site" {
+  description = "whether the zone apex and www point at site_target; false leaves both names alone. a separate flag because site_target is only known after apply on the first run, and for_each needs its keys at plan time"
+  type        = bool
+  default     = false
+}
+
 variable "site_target" {
-  description = "the name the website at the zone apex and www point at (a traffic manager profile); null leaves both names alone"
+  description = "the name the website at the zone apex and www point at (a traffic manager profile), used when site is true"
   type        = string
   default     = null
 }
@@ -76,7 +82,7 @@ resource "cloudflare_dns_record" "cname" {
 # so the nodes' caddy terminates tls and the profile's health decides the
 # answer. www redirects to the apex in caddy (deploy/caddy/app.Caddyfile).
 resource "cloudflare_dns_record" "site" {
-  for_each = var.site_target == null ? {} : { "@" = var.base_domain, www = "www.${var.base_domain}" }
+  for_each = var.site ? { "@" = var.base_domain, www = "www.${var.base_domain}" } : {}
 
   zone_id = local.zone_id
   name    = each.value
@@ -144,7 +150,7 @@ output "hostnames" {
   description = "label to hostname; site is the website at the zone apex"
   value = merge(
     { for label in keys(var.cnames) : label => "${label}.${var.base_domain}" },
-    var.site_target == null ? {} : { site = var.base_domain },
+    var.site ? { site = var.base_domain } : {},
   )
 }
 
