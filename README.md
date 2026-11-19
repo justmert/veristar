@@ -74,23 +74,6 @@ operator roster with its passkey step-up, and API keys for machine consumers.
 - Security policy and reporting a vulnerability: [docs/security/SECURITY.md](docs/security/SECURITY.md)
 - Handing the service to a new operator: [docs/handover/plan.md](docs/handover/plan.md)
 
-## Repository layout
-
-```
-cmd/                 gateway, replayer, metricswriter, controlplane, jobs, platformctl,
-                     prober, sloreport, issueage, adoptionreport
-internal/            the Go packages behind them
-collector/           the OpenTelemetry Collector distribution and its three custom components
-db/                  goose migrations and sqlc queries
-apps/console/        the console (Vite, React, Tailwind, shadcn/ui)
-packages/tracker/    tracker source and its immutable releases
-examples/            sample tenant sites and apps, also used as test targets
-deploy/              container images, Caddy configuration, the local development stack
-infra/               OpenTofu, Ansible and encrypted secrets
-tests/               end-to-end, isolation, load, ad-block, privacy, drill and other suites
-docs/                everything above in prose
-```
-
 ## Changes
 
 What each release changed: [CHANGELOG.md](CHANGELOG.md).
