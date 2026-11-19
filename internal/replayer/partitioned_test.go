@@ -91,6 +91,22 @@ func owned(nodes []*node) map[string]int {
 	return out
 }
 
+// waitBalanced waits until the live nodes own every partition evenly. on a
+// timeout it names the last counts it read, so a failure shows whether the
+// partitions did not move or the gauges did not follow.
+func waitBalanced(t *testing.T, nodes []*node, live int, timeout time.Duration, what string) {
+	t.Helper()
+	var last map[string]int
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if last = owned(nodes); balanced(last, live) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("timed out after %s waiting for %s, last read %v", timeout, what, last)
+}
+
 func balanced(got map[string]int, live int) bool {
 	sum := 0
 	for _, n := range got {
@@ -132,7 +148,7 @@ func TestPartitionedReplayersOnCluster(t *testing.T) {
 	for _, n := range nodes {
 		start(n)
 	}
-	waitFor(t, 90*time.Second, "the partitions spread over three nodes", func() bool { return balanced(owned(nodes), 3) })
+	waitBalanced(t, nodes, 3, 90*time.Second, "the partitions spread over three nodes")
 	t.Logf("partitions owned at start: %v", owned(nodes))
 
 	// each visitor sends an event on two of three 500 ms ticks across the
@@ -180,18 +196,18 @@ func TestPartitionedReplayersOnCluster(t *testing.T) {
 	}
 	_ = nodes[1].p.cmd.Wait()
 	t.Logf("killed %s holding %.0f messages in %.0f partitions", nodes[1].name, killed["replayer_in_flight_messages"], killed["replayer_partitions_owned"])
-	waitFor(t, 2*time.Minute, "two nodes own every partition", func() bool { return balanced(owned(nodes), 2) })
+	waitBalanced(t, nodes, 2, 2*time.Minute, "two nodes own every partition")
 	start(nodes[1])
-	waitFor(t, 2*time.Minute, "three nodes own every partition again", func() bool { return balanced(owned(nodes), 3) })
+	waitBalanced(t, nodes, 3, 2*time.Minute, "three nodes own every partition again")
 	if err := nodes[2].p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatal(err)
 	}
 	if err := nodes[2].p.cmd.Wait(); err != nil {
 		t.Errorf("%s did not stop cleanly: %v", nodes[2].name, err)
 	}
-	waitFor(t, time.Minute, "two nodes own every partition after the stop", func() bool { return balanced(owned(nodes), 2) })
+	waitBalanced(t, nodes, 2, time.Minute, "two nodes own every partition after the stop")
 	start(nodes[2])
-	waitFor(t, 2*time.Minute, "three nodes own every partition after the restart", func() bool { return balanced(owned(nodes), 3) })
+	waitBalanced(t, nodes, 3, 2*time.Minute, "three nodes own every partition after the restart")
 	stopPub()
 	pubWG.Wait()
 	waitFor(t, 5*time.Minute, "stream drained", func() bool { return drained(t, js) })
