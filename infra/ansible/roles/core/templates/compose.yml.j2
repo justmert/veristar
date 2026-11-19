@@ -322,6 +322,7 @@ services:
   caddy:
     <<: *defaults
     # the custom caddy build with the console's static files at /srv/console
+    # and the public website's at /srv/site
     image: {{ platform_images.console }}
     depends_on: [controlplane]
     # both networks: see the public network above
@@ -332,6 +333,7 @@ services:
       BASE_DOMAIN: "{{ sa_base_domain }}"
       CONTROLPLANE_UPSTREAM: controlplane:8085
       CONSOLE_ROOT: /srv/console
+      SITE_ROOT: /srv/site
       # caddy carries the ingest hot path on a converged node
       # (docs/reference/gateway-limits.md, "capacity")
       GOGC: "{{ sa_ingest_gogc }}"
