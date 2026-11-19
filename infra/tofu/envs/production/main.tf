@@ -153,6 +153,7 @@ module "dns" {
   ttl    = 300
   cnames = { for label, fqdn in module.failover.fqdns : label => fqdn if label != "site" }
   # the apex and www, flattened by cloudflare (module dns)
+  site        = true
   site_target = module.failover.fqdns["site"]
   # caddy gets every certificate from let's encrypt by dns-01
   caa_issuers = ["letsencrypt.org"]
