@@ -74,6 +74,10 @@ builds it and carries it at `/srv/site`, and every node's core Caddy serves it
 ([`deploy/caddy/app.Caddyfile`](../../deploy/caddy/app.Caddyfile), `SITE_ROOT`) at `<BASE_DOMAIN>`, with
 `www.<BASE_DOMAIN>` redirecting there with 308. The image build passes the build arguments
 `SITE_ORIGIN` and `REPO_URL` on as `VITE_SITE_ORIGIN` and `VITE_REPO_URL`; an empty one stays unset.
+A release sets both: `release-images.yml` from the repository variable `SITE_ORIGIN` and the
+repository's URL, `scripts/supply-chain/release-workstation.sh` from the environment variables
+`SITE_ORIGIN` and `REPO_URL`
+([../../docs/security/supply-chain.md](../../docs/security/supply-chain.md) section 2).
 
 The Caddy site sends:
 

@@ -27,7 +27,8 @@ v0.3.0 rollout").
 2. **Release the images** of tag `v<release>` in one of the two signing modes
    ([../security/supply-chain.md](../security/supply-chain.md) section 3):
 
-   - **Keyless** (`release-images.yml`, repository variable `SIGNING_MODE=keyless`): pushing the
+   - **Keyless** (`release-images.yml`, repository variables `SIGNING_MODE=keyless` and
+     `RELEASE_BUILDER` unset): pushing the
      tag builds and scans every image (Trivy fails on fixable critical or high findings), signs
      and attests it with the workflow's GitHub identity, and attaches `release-images.json` to the
      GitHub release. Releases `v0.2.3` and `v0.3.0` are keyless.
@@ -35,7 +36,10 @@ v0.3.0 rollout").
      `scripts/supply-chain/release-workstation.sh v<release> <work dir>` from a clean checkout of
      the tag runs the same build and gate, signs with the release key from the production SOPS
      file and attaches `release-images.json`
-     ([../security/supply-chain.md](../security/supply-chain.md) section 2.1). Releases `v0.2.0`
+     ([../security/supply-chain.md](../security/supply-chain.md) section 2.1). Set
+     `SITE_ORIGIN` and `REPO_URL` in its environment for the website's canonical origin and
+     repository links, and the repository variable `RELEASE_BUILDER=workstation` so that pushing
+     the tag does not start `release-images.yml`. Releases `v0.2.0`
      to `v0.2.2` and `v0.4.0` to `v0.4.3` are key-mode workstation releases.
 
    Download `release-images.json` of the release. `infra/ansible/vars/signing.yml` sets the mode

@@ -23,6 +23,16 @@ each download against the release's own checksum file. Every GitHub Action is pi
 
 ## 2. Image release (`release-images.yml`)
 
+Pushing a `v*` tag starts the workflow. With the repository variable
+`RELEASE_BUILDER=workstation` every job is skipped, because the tag's release is built and signed
+on a workstation (section 2.1); unset, the workflow releases the tag.
+
+The console image carries the public website, and its build gets the website's canonical origin
+from the repository variable `SITE_ORIGIN` (unset, the site's default `https://veristar.app`
+applies) and its repository links from the repository's own URL
+(`<server url>/<owner>/<repo>`), as the build arguments `SITE_ORIGIN` and `REPO_URL`
+([../../apps/site/README.md](../../apps/site/README.md)).
+
 For each image, in `.github/actions/release-image/action.yml`:
 
 1. Build with BuildKit and push to `ghcr.io/<owner>/<repo>/<name>:<tag>`. The postgres-ha tag is
@@ -62,7 +72,8 @@ on a workstation; `v0.2.3` and `v0.3.0` were built by `release-images.yml` in ke
 
 1. **Build and push** each image of the matrix in `release-images.yml` with the same Dockerfile,
    context and build arguments (`VERSION=<tag>`, `DBIP_MONTH` from the tag's commit month,
-   `CMD=` for the Go services, `CADDY_IMAGE=<caddy repo>@<digest>` for the console, the
+   `CMD=` for the Go services, `CADDY_IMAGE=<caddy repo>@<digest>` for the console, and for the
+   console also `SITE_ORIGIN` and `REPO_URL` from the environment of the same names when set, the
    `<PG_VERSION>-<tag>` tag for `postgres-ha`): `docker buildx build --push --provenance=false
    --sbom=false -t ghcr.io/justmert/veristar/<name>:<tag> ...`, signed in to `ghcr.io` with a
    token of the release account that has `write:packages` (`GH_TOKEN`), kept out of the
