@@ -61,7 +61,7 @@ To sign in with GitHub, a Stellar wallet or a passkey, and to link them to one a
 
 | Guide | For |
 |---|---|
-| [Share a signed report](signed-reports.md) | a signed, shareable report of your usage for an SCF submission, verifiable by anyone |
+| [Share a signed report](signed-reports.md) | a signed, shareable report of your usage for a grant program, an investor or a partner, verifiable by anyone |
 
 ## How the guides are tested
 

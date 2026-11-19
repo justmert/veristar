@@ -6,9 +6,10 @@ description: "Create a signed usage report of your project for a period, share i
 
 A signed usage report states your project's usage for a period: web traffic, API requests,
 on-chain activity including the calls per function of your verified contracts, your integrity grade with its reasons, your SCF cohort and your percentiles in
-it. Veristar signs it with its published Stellar key, so a reviewer can check that the numbers
-come from Veristar unchanged without an account and without trusting your copy. Attach the link
-or the file to an SCF submission instead of assembling screenshots.
+it. Veristar signs it with its published Stellar key, so whoever reads it can check that the
+numbers come from Veristar unchanged without an account and without trusting your copy. Send the
+link or the file to a grant program such as SCF, an investor or a partner instead of assembling
+screenshots.
 
 ## Create a report
 
