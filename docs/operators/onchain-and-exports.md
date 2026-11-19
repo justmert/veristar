@@ -11,7 +11,7 @@ global and compare view exports to CSV exactly as shown. The contracts are secti
 
 ## Read the on-chain column
 
-**Global web** and **Global API** carry an **On-chain** column: the operations of the project's
+The **Web** and **API** views of **All projects** carry an **On-chain** column: the operations of the project's
 verified ids over the range, with how many of its declared ids are verified and, when some days have
 no data, how many verified id-days are missing. Hover the cell for transactions and failing reads. A
 project without declared ids shows a dash.
@@ -94,7 +94,7 @@ The definitions and sources are on
 
 ## Read a project's detail
 
-**Projects**, then a project: the **On-chain** section lists each declared id with its proof, its
+**All projects**, then a project: the **On-chain IDs** section lists each declared id with its proof, its
 daily operations (dashed cells for missing days) and the reason for every missing day, and shows
 whether the project's stellar.toml and its accounts' home domain link the verified domain both
 ways, and the weekly active accounts of each ISO week of the range. **Compare** adds an
@@ -103,11 +103,11 @@ range.
 
 ## Export what you see
 
-- **Global web** and **Global API**: **Export CSV** under the table downloads exactly the rows the
-  table shows, with the same range, filters, sort and order. Load more rows first to export more,
+- The **Web** and **API** views of **All projects**: **Export CSV** under the table downloads exactly the rows the
+  table shows, with the same range, filters, sort and order. Press **Load more** first to export more rows,
   up to 5,000.
 - **Compare**: **Export web CSV** and **Export API CSV** download one row per project and day.
-- **A contract's calls**: **Export CSV** under **Calls per function** downloads one row per day,
+- A contract's calls: **Export CSV** under **Calls per function** downloads one row per day,
   function and caller of that contract over the detail's range.
 
 A value that is not known is an empty cell, never 0. Each file carries the on-chain columns, and

@@ -14,7 +14,8 @@ failing. The HTTP routes are sections 5.5, 5.13 and 8.7 of the
 
 ## How to remove
 
-On the **Projects** tab, open the project and choose **Remove**, or call
+On the **All projects** page, open the project, choose **Remove project** in the **Actions**
+menu, type the project's slug and press **Remove project**, or call
 `POST /api/operator/tenants/{tenant_id}/remove` with `{"reason": "..."}`. The reason is
 required. The project's former members see it once as a notice when they next open the
 console.
@@ -69,14 +70,15 @@ their console sign-in; they lose access to the project only.
 
 ## Keeping or deleting aggregates
 
-The **Settings** tab has **Aggregates of removed projects**. When set to keep, a project
+The **Settings** page has **Daily totals of removed projects**. When set to **Keep the daily
+totals**, a project
 removed from then on keeps its anonymous daily counts (web aggregates and grades, gateway
 outcome, evidence and signal counts, hourly and daily API data, daily ledger counts and
 closed ledger weeks, daily calls per contract function) in the tables the global views and the metrics API read. Raw web data,
 the Umami websites, per-minute API data, the network keys, the ledger read state, week
 members and open weeks, and the signed usage reports are deleted either way.
 
-- The default is **delete**. Through the API the setting is
+- The default is **Delete the daily totals**. Through the API the setting is
   `PUT /api/operator/settings/removal-keep-aggregates` with `{"keep": true}` or
   `{"keep": false}`.
 - The value is copied into each removal when it starts, so changing it never changes a removal

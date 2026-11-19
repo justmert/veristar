@@ -37,8 +37,8 @@ choose **Enroll a project**, as for web analytics
 ## 2. Create a token
 
 Open the project's **Connect API** page (Setup in the sidebar). It shows the OTLP endpoint for your
-service and lets any project member create tokens: give the token a name and, optionally, an
-environment (for example `production`), then choose **Create token**. The token (`sa_otlp_`
+service and lets any project member create tokens: in the **Create an ingest token** step, give the
+token a **Token name** and, optionally, an **Environment** (for example `production`), then choose **Create token**. The token (`sa_otlp_`
 followed by 40 characters) is shown once. Store it as a secret of your app, for example in your
 secret manager or deployment environment. If you lose it, create a new one and revoke the old one.
 
@@ -82,8 +82,8 @@ each example, how to set it yourself and what happens without it.
 
 ## 5. See the data
 
-Deploy, send some requests, and open **API** and then the **Traffic** tab (the **API traffic**
-page) in the console. Request counts, status codes and latency appear per service and route.
+Deploy, send some requests, and open the project's **API** page in the
+console, or choose **See the traffic** in the **First data** step of **Connect API**. Request counts, status codes and latency appear per service and route.
 Metrics arrive at the SDK's export interval (the OpenTelemetry default is 60 seconds; the examples
 use 10 seconds), so allow a minute.
 

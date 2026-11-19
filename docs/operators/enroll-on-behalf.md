@@ -83,7 +83,7 @@ The command prints one `key=value` line each:
 | `cohort_proposal` | `true` when the cohort flags wrote a proposal |
 | `scf_proposals` | proposals the SCF award matching wrote ([scf-awards.md](scf-awards.md)) |
 | `site_id`, `site_status`, `tracker_version` | the site and the tracker release of its tag |
-| `script_tag` | the tag the site pastes into its pages, the same one the console's snippet page shows |
+| `script_tag` | the tag the site pastes into its pages, the same one the site's page under **Sites** shows in the console |
 | `otlp_token_prefix`, `otlp_token` | the token; the full value prints once and is never shown again |
 
 Send the script tag and the token to the project over a private channel. The jobs `reconcile`
@@ -92,8 +92,8 @@ until then, the gateway refuses the site's events and the collector refuses the 
 
 ## What the owner sees
 
-At their next sign-in, the owner finds the project in the console with a notice to accept the terms
-of service. The command never accepts the terms for them. Until an owner accepts them, every
+At their next sign-in, the owner finds the project in the console with the notice **Accept the terms of
+the service**. The command never accepts the terms for them. Until an owner accepts them, every
 member can open the project, read its dashboards and copy the snippet, and every change is refused
 with `terms_not_accepted`: editing the project, adding sites, tokens or members.
 

@@ -6,14 +6,16 @@ description: "Bands, daily-unique visitors and span-derived API data, and how th
 Start with the **integrity grade**: every project carries an A, B or C grade over the range you
 look at, with the reasons that set it, computed from what the platform's edge observes (the
 class of each visitor's network, distinct networks, the quarantine band, proof failures and the
-site's own baseline). Sort the global web table by it, filter it to **C** or **B and below** to
-find the projects to look at first, and open the reasons panel before you rely on a project's
-numbers. The project sees the same grade and reasons on its own overview.
+site's own baseline). Sort the **Web** view of **All projects** by its **Grade** column, filter
+**Grade** to **C** or **B or C** to find the projects to look at first, and open the project's
+**Integrity report** before you rely on its numbers. The project sees the same grade on its
+**Overview** and the reasons in the **Integrity report** of its **SCF review** page.
 The rules are in [bot and inflation defences](../security/bot-and-inflation.md) section 9.
 
 The grade is automatic; you decide what it means for a project. A project that disagrees with its
-grade opens an **Integrity appeal** issue from its console, prefilled with its slug, sites, period,
-grades, reason codes and rule set version. Read the appeal next to the reasons panel of the same
+grade presses **Appeal this grade** on its **SCF review** page, which opens an
+**Integrity appeal** issue prefilled with its slug, sites, period,
+grades, reason codes and rule set version. Read the appeal next to the **Integrity report** of the same
 range, answer on the issue, and record your decision there. The stored grade does not change; when
 an appeal shows that a rule misreads a kind of traffic, the fix is a new rule set version
 ([appealing a grade](../security/bot-and-inflation.md#appealing-a-grade)).
@@ -45,8 +47,8 @@ Every site has two bands, each an Umami website of its own: the **primary band**
   anonymisers such as Tor exits (5 on a new site). Every gateway shares these counts through NATS, so the threshold holds
   across nodes.
 - Quarantine is a separate band, never a deletion. It is shown next to the primary numbers in
-  the global views (quarantined page views, visitors and share), and the project sees it on its
-  own web dashboard by switching to the quarantined band.
+  the global views (**Held back page views**, **Held back visitors** and **Held back**), and the project sees it on its
+  own **Web** page with **Show quarantined traffic**.
 - Shared networks can trip it too: VPN exits, offices, campuses and conference Wi-Fi, and
   carrier-grade NAT on a site that has no baseline yet. A high quarantined share can be real
   people on such networks, or one source producing many visitor identities to inflate the numbers.
@@ -105,10 +107,10 @@ apart:
   the spans. If the project samples its traces, only the sampled requests are counted.
 
 For each service and over the whole selected range, the numbers use metrics when the service
-sent any in the range, and spans otherwise. The two are never added. The global API view shows
-the source per project (`Metrics`, `From traces`, or `Metrics and traces` when its services
-differ), and the project's own API dashboard marks span-derived services with a "from
-traces" badge.
+sent any in the range, and spans otherwise. The two are never added. The **Data source** column of
+the API view shows the source per project (`Metrics`, `Traces`, or `Metrics and traces` when its
+services differ), and the project's own **API** page marks span-derived services with a
+**From traces** badge.
 
 How to read it: request counts from traces are a lower bound when traces are sampled, so a
 project that exports only traces can look smaller than it is, and its counts are not

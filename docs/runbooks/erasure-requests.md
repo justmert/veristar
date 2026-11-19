@@ -7,7 +7,7 @@ What an operator does when a data subject or a tenant asks for data to be erased
 erased and why is the [erasure statement](../compliance/erasure.md); the HTTP routes are section 10
 of the [control plane API reference](../reference/control-plane-api.md).
 
-The project's **owner** runs erasure, in the console on the project's Privacy page or with
+The project's **owner** runs erasure, in the console on the project's **Privacy** page or with
 `POST /api/tenants/{tenant_id}/erasure`. Operators have no route that erases a project's web data
 for it: the service does not know visitors, and only the project can identify the site and
 session concerned.
@@ -23,18 +23,21 @@ session concerned.
 
 ## Steps (owner, with operator support)
 
-1. **Choose the kind** ([../compliance/erasure.md](../compliance/erasure.md) section 1):
-   - `visitor_today`: the visitor gives their IP address and user agent, **the same UTC day** as
+1. **Choose what to erase** under **What to erase** on the project's **Privacy** page
+   ([../compliance/erasure.md](../compliance/erasure.md) section 1):
+   - **One visitor, today** (`visitor_today`): the visitor gives their IP address and user agent, **the same UTC day** as
      the visit. After midnight UTC the day's secret is gone and nothing can be found; the answer
      says `nothing_found`.
-   - `session`: the project's owner finds the session with the session finder on the project's
-     Privacy page (by site, UTC day, time, country and device; contract section 18.7) and gives
+   - **One session** (`session`): the project's owner finds the session with **Find the session**
+     on the same page (by site, UTC day, time, country and device; contract section 18.7) and gives
      its session id. Works for the whole raw retention.
-   - `site_reset`: the project's owner types the site's domain again to confirm.
+   - **Whole site** (`site_reset`): the project's owner types the site's domain again to confirm.
 
-2. **File it** on the project's Privacy page (`/projects/<tenant id>/privacy`). The page keeps the
+2. **File it** on the project's **Privacy** page (`/projects/<tenant id>/privacy`) with
+   **Request erasure** (or **Reset site data** for a whole site), then confirm with **Erase data**
+   or **Reset site data**. The page keeps the
    typed address and user agent in memory only. The answer is `202` and the request appears in
-   the history with status `running`.
+   **Request history** with status `running`.
 
 3. **Wait for the result.** The run first waits until every event of the site accepted before
    the request has left `WEB_EVENTS`, so a queued event is erased too. If that does not happen
@@ -43,7 +46,7 @@ session concerned.
    and file it again. One request per site runs at a time; a second answers
    `409 erasure_in_progress`.
 
-4. **Read the outcome** in the history or with `GET /api/tenants/{tenant_id}/erasure/{request_id}`:
+4. **Read the outcome** in **Request history** or with `GET /api/tenants/{tenant_id}/erasure/{request_id}`:
    `outcome`, `message`, `sessions_deleted`, `events_deleted`, `dlq_messages_deleted` and the
    affected days. `reaggregated_at` is set once the jobs task `erasure-followup` has re-read the
    operator aggregates for those days, so the global views stop counting the erased visits.

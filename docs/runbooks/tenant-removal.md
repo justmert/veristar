@@ -22,7 +22,8 @@ question about a project is open (traffic that looks forged, a project that
 may not be part of the ecosystem, an abuse report), or as the reversible
 first step before removal.
 
-1. In the console operator area open the project and choose **Suspend**, or
+1. In the console operator area open the project from **All projects** and choose
+   **Suspend project** in its **Actions** menu, or
    call `POST /api/operator/tenants/{tenant_id}/suspend` with
    `{"reason": "..."}`. The reason is required and the project's members see
    it. Only an `active` project can be suspended; anything else answers
@@ -31,9 +32,9 @@ first step before removal.
    (`tenant.suspend`), then the reconciler switches the project's entries in
    the `registry_sites` and `registry_otlp` buckets to `suspended`. From then
    on the gateways refuse the project's web events and the collectors refuse
-   its OTLP tokens. Refusals are counted, so the project's ingest view shows
+   its OTLP tokens. Refusals are counted, so the project's **Web** page shows
    them.
-3. The project's web dashboard stays readable for the members. Data already
+3. The project's **Web** page stays readable for the members. Data already
    stored stays. Members see the status and reason in the console.
 4. Check it took effect:
 
@@ -45,14 +46,15 @@ first step before removal.
 
    The gateway's refusal of a suspended site is `rejected_inactive_site` in `cp.web_ingest_hourly`.
 
-**Resume** with **Resume** or `POST /api/operator/tenants/{tenant_id}/resume`
+**Resume** with **Resume project** in the **Actions** menu or `POST /api/operator/tenants/{tenant_id}/resume`
 (`reason` optional). The registry entries switch back to `active` and
 ingestion restarts. Events sent while suspended were refused, not queued, and
 do not come back.
 
 ## Removing a project
 
-1. In the console operator area, open the project and choose **Remove**, or
+1. In the console operator area, open the project from **All projects** and choose
+   **Remove project** in its **Actions** menu, or
    call `POST /api/operator/tenants/{tenant_id}/remove` with
    `{"reason": "..."}`. The reason is required and the project's members see
    it. Without console access, run `platformctl tenant remove` on the core

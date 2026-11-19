@@ -7,14 +7,14 @@ description: "For the SCF operators who govern the shared service: enrollment, r
 Operators are the SCF people who govern the shared service: they decide who may enroll, which
 projects stay, and how projects compare. Operators see aggregate numbers, plus each project's
 enrollment answers, members and audit log for review. They are not members of any project and
-have no access to a project's own web dashboard, whose totals come from the same daily
+have no access to a project's own **Web** page, whose totals come from the same daily
 aggregates the operator views read.
 
 | Page | Covers |
 |---|---|
 | [review-and-enrollment.md](review-and-enrollment.md) | The review queue, approving and rejecting projects and sites, suspending and resuming, and the switch between open and approval-required enrollment |
 | [removal.md](removal.md) | Removing a project that is not part of the ecosystem, what is deleted, and the setting that keeps or deletes its aggregates |
-| [global-views.md](global-views.md) | The Web and API views of Projects and the Compare page: ranges, filters, sorting, growth, cohorts, percentiles and side-by-side comparison |
+| [global-views.md](global-views.md) | The Web and API views of All projects and the Compare page: ranges, filters, sorting, growth, cohorts, percentiles and side-by-side comparison |
 | [threshold-rules.md](threshold-rules.md) | Saved traction rules and the projects that meet them, with the evidence |
 | [scf-awards.md](scf-awards.md) | Importing an SCF awards file for the enrollment form's award search and for cohort proposals from exact matches |
 | [onchain-and-exports.md](onchain-and-exports.md) | Ledger activity of the accounts and contracts projects declare, calls per contract function, and the CSV exports |
@@ -50,7 +50,7 @@ Operator group, in two parts:
 |---|---|---|---|
 | Work | Review | `/operator` | Projects waiting for approval, and active projects with a site in review, oldest first |
 | Work | Alerts | `/operator/alerts` | The platform's firing alerts from Alertmanager, by severity, refreshed every 30 seconds ([alerts.md](alerts.md)) |
-| Work | Projects | `/operator/projects` | Every project in three views: Status (search, status filter, sort), Web and API (numbers over a range, with filters and sort). A project opens its detail page with its actions at `/operator/projects/<id>` |
+| Work | All projects | `/operator/projects` | Every project in three views: Status (search, status filter, sort), Web and API (numbers over a range, with filters and sort). A project opens its detail page with its actions at `/operator/projects/<id>` |
 | Work | Compare | `/operator/compare` | Up to five projects side by side, web and API |
 | Work | Rules | `/operator/rules` | Saved threshold rules and the projects that meet them ([threshold-rules.md](threshold-rules.md)) |
 | Admin | Settings | `/operator/settings` | Enrollment mode, and whether removed projects keep their aggregates |

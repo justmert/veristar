@@ -64,11 +64,11 @@ stored:
   `{uuid}`, long hex strings and hashes `{hex}` or `{hash}`, dates `{date}`, tokens `{token}`,
   Stellar account, muxed account and contract keys `{account}`, `{muxed}`, `{contract}`, assets
   `{asset}`, email and federation addresses `{email}` and `{federation}`, and a segment longer than
-  64 bytes `{long}`. A secret seed in a path becomes `{redacted-secret}`, and the **API traffic**
+  64 bytes `{long}`. A secret seed in a path becomes `{redacted-secret}`, and the **API**
   page warns you, because the seed was exposed in a URL.
 - **At most 300 distinct routes and 50 services per project and UTC day** (the service's current
   settings). Routes beyond that are counted under `{other}`, so their requests are still in the
-  totals, and the **API traffic** page shows a warning. A route that changes with every request (a
+  totals, and the project's **API** page shows a warning. A route that changes with every request (a
   slug, a name) fills the allowance quickly; set `http.route` to the template to avoid that.
 
 The rules are hard coded and the same for every project; they cannot be configured

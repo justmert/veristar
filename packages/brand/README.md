@@ -123,7 +123,7 @@ Tracking: `caption` 0.01em, `section` -0.01em, `heading` -0.015em, `metric` -0.0
 no other padding, margin or gap exists. Rhythm: page gutter 24 (16 on a phone), gap between page
 sections 32, card padding 20 (16 on a phone), gap inside a card 12, form field gap 16. Compact
 rows 36 px, comfortable 48 px; controls 36 px, small 32 px, 44 px touch targets on a phone. The
-website keeps Tailwind's own step for now (a quarter of its 14 px root).
+website uses Tailwind's own step (a quarter of its 14 px root).
 
 **Radius.** 2 (bar ends), 4 (chips), 6 (controls), 10 (cards), 12 (panels, dialogs), 16 (the
 website hero), full.

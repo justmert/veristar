@@ -9,8 +9,9 @@ You can import an SCF awards file with the command line. Veristar then uses it i
   picks the project's award. The form fills the cohort, the website and the Stellar ids, and the
   cohort arrives as the project's own proposal.
 - **Cohort proposals.** Veristar matches every award to the enrolled projects on exact evidence
-  and proposes the cohort of a matched project that has none. You confirm or dismiss the proposal
-  on the project's detail page, as any proposal ([global-views.md](global-views.md)).
+  and proposes the cohort of a matched project that has none. You confirm or dismiss it in the
+  **SCF cohort** panel of the project's page under **All projects**, with **Confirm proposal** or
+  **Dismiss proposal**, as any proposal ([global-views.md](global-views.md)).
 
 Apart from that search, which answers only the fields the form fills, no page or route lists the awards.
 
