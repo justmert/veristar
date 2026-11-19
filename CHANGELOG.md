@@ -16,6 +16,8 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-19
+
 ### Added
 
 - The nodes serve the public website (`apps/site`) at `<BASE_DOMAIN>`, and
@@ -38,11 +40,25 @@ here, before they take effect, as the processing terms require
 ### Changed
 
 - The website at veristar.app is a new landing page: what Veristar measures, how the numbers stay trustworthy, privacy, the operator view, integrations and service targets, with the site's own tracker and a strict content security policy.
+- The console's pages lead with what moved. Overview, Web and API put the change of each figure beside it and narrow a range of one day to its hours; the hourly web chart draws every hour of the day, and cards, breakdowns and outcomes without data drop out or show one line. On Web, the quarantined page views and the outcomes share one panel.
+- Tokens, access keys, AI keys, sites, rules and operators are created in a dialog, where the one-time secret of a new token or key replaces the form. Revoking a token or key and removing a member, an invite or a sign-in method are in each row's menu. Tables page at 25 rows, and All projects leaves out by default the columns no row of the page fills.
+- SCF review leads with one verdict block and keeps integrity, cohort and figures on demand; sparklines appear for three or more days with data. Operator review and the operator project page lead with the evidence and keep the decision in view.
+- The operator views show when their numbers were read and the change against the previous period. The audit log names actors and targets and is searched on the server.
+- The public report page leads with the figures and their change, and tells a revoked link from an unknown one.
 
 ### Upgrade notes
 
 **Before the deploy**
 
+- This release is signed in key mode on a workstation, while the
+  repository's GitHub Actions are off
+  ([docs/security/supply-chain.md](docs/security/supply-chain.md) section
+  2.1). Add `ANSIBLE_EXTRA='-e sa_signature_mode=key'` to every
+  `make <env>-deploy`; without it `verify-release.yml` refuses the release
+  before any node is touched.
+- No migration and no NATS topology change: the rolling deploy of
+  [docs/deploy/upgrade.md](docs/deploy/upgrade.md) replaces the images and
+  each core node's Caddyfile and Compose file.
 - The Caddy config of the new release needs `SITE_ROOT`, which the core
   role's Compose file sets to `/srv/site`. A core Caddy started from a
   hand-written Compose file needs the same variable.
@@ -1494,7 +1510,8 @@ How to check a file against its release:
   starts tracking on `umami.start()`, the server-issued proof of work, and a
   byte-identical rebuild of every committed release.
 
-[Unreleased]: https://github.com/justmert/veristar/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/justmert/veristar/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/justmert/veristar/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/justmert/veristar/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/justmert/veristar/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/justmert/veristar/compare/v0.3.0...v0.4.0
