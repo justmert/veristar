@@ -26,8 +26,8 @@ import {
 import { BreakdownList } from "@/components/charts";
 import { DbIpAttribution } from "@/components/dbip-attribution";
 import { Notice } from "@/components/notice";
-import { Panel } from "@/components/panel";
 import { PageHeader } from "@/components/page-header";
+import { Panel } from "@/components/panel";
 import { RangeControl } from "@/components/range-control";
 import { Segmented } from "@/components/segmented";
 import { Sparkline, StatCard, StatGrid } from "@/components/stat-card";

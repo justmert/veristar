@@ -185,9 +185,7 @@ describe("console shell", () => {
     );
     const host = await renderRoutes(routes, "/operator/projects");
     await waitFor(() => expect(current(host)).toEqual(["All projects"]));
-    await waitFor(() =>
-      expect(urls.some((u) => u.startsWith("/api/operator/tenants"))).toBe(true),
-    );
+    await waitFor(() => expect(urls.some((u) => u.startsWith("/api/operator/tenants"))).toBe(true));
     const nav = host.querySelector('aside nav[aria-label="Operator"]') as HTMLElement;
     expect(nav.textContent).toContain("Review");
     expect(nav.textContent).not.toContain("Alerts");

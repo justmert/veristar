@@ -298,41 +298,39 @@ export function CredentialSection({
     },
   ];
   return (
-    <>
-      <DataTable<McpCredential>
-        label="MCP keys and connections"
-        columns={columns}
-        rows={list.data ?? []}
-        getRowKey={(c) => c.id}
-        rowLabel={(c) => c.name}
-        rowProps={(c) => ({ "data-credential-id": c.id })}
-        state={list.isPending ? "loading" : list.error ? "error" : "data"}
-        error={list.error}
-        onRetry={() => list.refetch()}
-        loadingRows={2}
-        empty={{ title: "No key or connection yet" }}
-        rowActions={(c) => [
-          c.status === "active" &&
-            canRevoke(c) && {
-              label: "Revoke",
-              icon: <Ban aria-hidden />,
-              destructive: true,
-              confirm: {
-                title: `Revoke the key “${c.name}”?`,
-                description:
-                  "The next request of this client is refused. You cannot restore it. Make a new one instead.",
-                confirmLabel: "Revoke",
-                pendingLabel: "Revoking",
-                run: async () => {
-                  await revoke(c);
-                  toast.success(`${c.name} is revoked.`);
-                  invalidate();
-                },
+    <DataTable<McpCredential>
+      label="MCP keys and connections"
+      columns={columns}
+      rows={list.data ?? []}
+      getRowKey={(c) => c.id}
+      rowLabel={(c) => c.name}
+      rowProps={(c) => ({ "data-credential-id": c.id })}
+      state={list.isPending ? "loading" : list.error ? "error" : "data"}
+      error={list.error}
+      onRetry={() => list.refetch()}
+      loadingRows={2}
+      empty={{ title: "No key or connection yet" }}
+      rowActions={(c) => [
+        c.status === "active" &&
+          canRevoke(c) && {
+            label: "Revoke",
+            icon: <Ban aria-hidden />,
+            destructive: true,
+            confirm: {
+              title: `Revoke the key “${c.name}”?`,
+              description:
+                "The next request of this client is refused. You cannot restore it. Make a new one instead.",
+              confirmLabel: "Revoke",
+              pendingLabel: "Revoking",
+              run: async () => {
+                await revoke(c);
+                toast.success(`${c.name} is revoked.`);
+                invalidate();
               },
             },
-        ]}
-      />
-    </>
+          },
+      ]}
+    />
   );
 }
 
