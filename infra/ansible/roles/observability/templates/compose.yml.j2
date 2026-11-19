@@ -152,10 +152,13 @@ services:
     image: {{ observability_images.postgres_exporter }}
     env_file: [{{ secrets_env_dir }}/postgres-exporter.env]
     # tls to postgresql checked against the private address, and https with
-    # a client certificate for prometheus
-    command: ["--web.config.file=/etc/sa-web/web-config.yml"]
+    # a client certificate for prometheus. the address is a flag because
+    # 0.21 deprecates DATA_SOURCE_URI; user and password stay in the
+    # environment, which 0.21 keeps for secrets
+    command:
+      - "--web.config.file=/etc/sa-web/web-config.yml"
+      - "--datasource.uri={{ sa_private_ip }}:5432/postgres?sslmode=verify-full&sslrootcert=/etc/sa-tls/ca.crt"
     environment:
-      DATA_SOURCE_URI: "{{ sa_private_ip }}:5432/postgres?sslmode=verify-full&sslrootcert=/etc/sa-tls/ca.crt"
       DATA_SOURCE_USER: sa_monitor
     volumes:
       - {{ observability_conf_dir }}/web:/etc/sa-web:ro

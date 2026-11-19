@@ -37,7 +37,7 @@ x-nats: &nats
   restart: unless-stopped
 
 x-etcd: &etcd
-  image: quay.io/coreos/etcd:v3.7.3@sha256:8d1b6c24f08e12ed7623d1df421832b3cafabe221aa6b658b97288d07807582f
+  image: quay.io/coreos/etcd:v3.7.4@sha256:641c8cb2492aedf4c693b20029a56f325f9b18754bb7dc9f6eac22c99786228c
   restart: unless-stopped
 
 x-caddy-edge: &caddy-edge
@@ -293,11 +293,12 @@ services:
   # grafana reaches prometheus as http://prometheus:9090 (the role's
   # datasource); here that name is an alias of node-core-1
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
+    image: prometheuscommunity/postgres-exporter:v0.21.1@sha256:3b8e05a84282cd1199ad2fb6c66f362738bf4c68c1547d8f4226a34a7dd6d8d7
     restart: unless-stopped
     network_mode: "service:node-core-1"
     env_file: ["${OBS}/env/pgexp.env"]
-    environment: {DATA_SOURCE_URI: "postgres:5432/postgres?sslmode=disable", DATA_SOURCE_USER: sa_monitor}
+    command: ["--datasource.uri=postgres:5432/postgres?sslmode=disable"]
+    environment: {DATA_SOURCE_USER: sa_monitor}
   nats-exporter-edge-1: {image: "natsio/prometheus-nats-exporter:0.20.3@sha256:4b8ddc1c86fec360b5cd3d5e1fbc6fb52bdafd5805bba3901cc52926538af255", restart: unless-stopped, command: [-port, "7777", -jsz, all, -varz, -healthz, "http://172.30.17.21:8222"]}
   nats-exporter-edge-2: {image: "natsio/prometheus-nats-exporter:0.20.3@sha256:4b8ddc1c86fec360b5cd3d5e1fbc6fb52bdafd5805bba3901cc52926538af255", restart: unless-stopped, command: [-port, "7777", -jsz, all, -varz, -healthz, "http://172.30.17.22:8222"]}
   nats-exporter-edge-3: {image: "natsio/prometheus-nats-exporter:0.20.3@sha256:4b8ddc1c86fec360b5cd3d5e1fbc6fb52bdafd5805bba3901cc52926538af255", restart: unless-stopped, command: [-port, "7777", -jsz, all, -varz, -healthz, "http://172.30.17.23:8222"]}

@@ -707,6 +707,34 @@ pinned digests gives the same answer as above: CVE-2026-78661 is a symbol findin
 module-only finding in Prometheus, Alertmanager, node_exporter, postgres_exporter and Gatus; the
 module-only findings of node_exporter and postgres_exporter are the ones the table names.
 
+**Rechecked on 2026-11-19.** The hourly workflow filed one new high finding in eight upstream
+images: Go standard library CVE-2026-97054 (GO-2026-6859, fixed in Go 1.26.11 and 1.27.4). When the
+size limit of `http.MaxBytesReader` is exceeded, the HTTP/1 server sets `Connection: close` without
+synchronisation, so a handler that reads such a body while it writes the response header can crash
+the process. It is a denial of service only. Trivy 0.76.2 with the database of 2026-11-19 on each
+candidate:
+
+| Image | Result |
+|---|---|
+| etcd | 3.7.4 has no fixable critical or high finding, so CVE-2026-78661 is gone as well. **Pin moved** from 3.7.3 to 3.7.4, a patch release of the same line |
+| postgres_exporter | 0.21.1 has no fixable critical or high finding, so all 19 earlier findings are gone too. **Pin moved** from 0.20.1 to 0.21.1. The 0.21 line was released on 2026-11-18, and it is taken for the fixes despite the 30-day rule. 0.21 deprecates `DATA_SOURCE_URI`, so the address moved to `--datasource.uri`. User and password stay in the environment, which 0.21 keeps for secrets. The other 0.21 changes do not touch the metrics that the alerts and dashboards read (`pg_up`, `pg_replication_*`, `pg_stat_archiver_*`, `pg_stat_database_numbackends`, `pg_database_size_bytes`) |
+| Prometheus 3.15.1, Alertmanager 0.34.2 | 3.16.0 and 0.35.0 carry CVE-2026-97054 too. Pins kept. Prometheus is published on `127.0.0.1` only. Alertmanager is on the private address only and requires the node certificate |
+| Grafana 13.2.6 | 13.3.1 carries it too. Grafana is published on `127.0.0.1` only |
+| node_exporter 1.12.1, prometheus-nats-exporter 0.20.3 | No newer release exists. node_exporter answers only Prometheus's `GET /metrics` on the private address. The NATS exporter is not published: Prometheus reaches it through the relay |
+| Gatus 5.38.0 | No newer release exists. `net/http.(*maxBytesReader)` is not linked into the binary (`go tool nm`), so the panic cannot occur. The port is not published either |
+
+Where a vulnerable image stays, every client that can reach it is a platform component on the private
+network or an operator on loopback. The compose restart policy (`unless-stopped`) brings a crashed
+process back. Each image's entry in `advisories-reviewed.json` lists the finding, rechecked 2026-11-19.
+
+The same run filed two medium Next.js advisories in Umami 3.5.0 (`next` 16.4.2, both fixed in
+16.4.5): GHSA-mfr8-8qww-v76h and GHSA-vc7v-qv4w-wrv8. Both need `'use cache'` functions that read
+root parameters (`next/root-params`), through `unstable_cache()` or with Cache Components on. The
+Umami 3.5.0 source uses none of them: no `'use cache'`, no `unstable_cache`, no `next/root-params`,
+and `next.config.ts` turns on no Cache Components. No public host serves Umami either
+([ADR 0005](../adr/0005-umami-as-engine-only.md)). Umami 3.5.0 is the newest release, so both are
+recorded under `umami_repository_advisories` until the next one, through `make umami-upgrade`.
+
 **Umami repository advisory GHSA-vhf9-rcmp-v5fc (critical, published 2026-11-13).** An SQL
 injection in Umami's legacy reports API: `POST /api/reports/*` copies `filters[*].paramName` from
 the body into the SQL text, and a share token from `GET /api/share/<slug>` is enough to call it.
