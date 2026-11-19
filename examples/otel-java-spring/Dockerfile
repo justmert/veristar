@@ -4,7 +4,7 @@
 # base images pinned by tag and index digest. maven 3.10.1 exists only on
 # maven central so far; 3.10.0 is the newest maven image.
 
-FROM maven:3.10.0-eclipse-temurin-25-resolute@sha256:a4734fd7909a9c2beddcacfa1229bd308a349f000bea1ec8db3287c8a16ca2a3 AS build
+FROM maven:3-eclipse-temurin-27-resolute@sha256:3175c44b207d6698aecb9bbb5bf285b5b4efcf7f567d6f65d88cd218276a6ab2 AS build
 WORKDIR /src
 COPY pom.xml ./
 COPY src ./src
