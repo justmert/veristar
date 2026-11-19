@@ -40,7 +40,7 @@ v0.3.0 rollout").
      `SITE_ORIGIN` and `REPO_URL` in its environment for the website's canonical origin and
      repository links, and the repository variable `RELEASE_BUILDER=workstation` so that pushing
      the tag does not start `release-images.yml`. Releases `v0.2.0`
-     to `v0.2.2` and `v0.4.0` to `v0.4.4` are key-mode workstation releases.
+     to `v0.2.2` and `v0.4.0` to `v0.4.5` are key-mode workstation releases.
 
    Download `release-images.json` of the release. `infra/ansible/vars/signing.yml` sets the mode
    the deploy verifies, `keyless`. For a key-mode release, add
