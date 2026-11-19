@@ -68,7 +68,7 @@ changes. Before it builds anything it runs the licence gate (section 7) into `<w
 so a tag whose dependencies fail the gate is never released, and step 4 attaches the report beside
 the manifest. Release `v0.1.0` was built by `release-images.yml`; `v0.2.0`, `v0.2.1` and `v0.2.2` were built
 on a workstation; `v0.2.3` and `v0.3.0` were built by `release-images.yml` in keyless mode; `v0.4.0`,
-`v0.4.1`, `v0.4.2` and `v0.4.3` were built on a workstation again, in key mode, while the repository's GitHub Actions are off; `v0.4.4` was built on a workstation in key mode after the repository went public, with `RELEASE_BUILDER=workstation`. The steps, run from a clean checkout of the tag:
+`v0.4.1`, `v0.4.2` and `v0.4.3` were built on a workstation again, in key mode, while the repository's GitHub Actions are off; `v0.4.4` and `v0.4.5` were built on a workstation in key mode after the repository went public, with `RELEASE_BUILDER=workstation`. The steps, run from a clean checkout of the tag:
 
 1. **Build and push** each image of the matrix in `release-images.yml` with the same Dockerfile,
    context and build arguments (`VERSION=<tag>`, `DBIP_MONTH` from the tag's commit month,
@@ -398,6 +398,41 @@ pgBackRest packages, with new digests. There is no migration.
 | `postgres-ha` | `18.7-v0.4.4` | `sha256:765dd7a687ec526841c8f718629bb979aa3f8422b60e32a8cb1da942a79ecd42` |
 | `prober` | `v0.4.4` | `sha256:25bee95f9b2e6ac68d9593b2439282690c8cc68191ba3e6ecf72b61b6226b79c` |
 | `replayer` | `v0.4.4` | `sha256:99da5b7e52308c81b1c81d1de66e032eb069f090b021a0d0d99bcd53e4c97e9b` |
+
+**Release `v0.4.5` (2026-11-19).** Built in key mode by
+`SITE_ORIGIN=https://veristar.app REPO_URL=https://github.com/justmert/veristar scripts/supply-chain/release-workstation.sh v0.4.5 <work dir>`
+from a clean worktree at the tag (annotated tag `v0.4.5` at commit `507b577` on `main`), from
+17:50:40 to 18:05:08 UTC. The repository variable `RELEASE_BUILDER=workstation` made
+`release-images.yml` skip every job of the tag's run. The licence gate ran first
+(`licences.json`, `console-bundle.txt`; 511 shipped packages, 0 failing), then eleven images were
+built, pushed and gated by `scan-image.sh` (syft 1.57.1, Trivy 0.76.2; no image had a fixable
+critical or high finding), signed and SBOM-attested with cosign 3.1.4 and the release key read
+from the SOPS file into the process's environment only (`env://`), no transparency log.
+`release-images.json` (SHA-256
+`c2a90aebad7f90869268d3461678b1abde1eb264351514f0f3b537eecb69aefa`) was written, every digest
+verified with `infra/ansible/vars/release-cosign.pub`, and the manifest, `licences.json` and
+`console-bundle.txt` attached to the GitHub release `v0.4.5`. Every digest verified again with
+`cosign verify --key infra/ansible/vars/release-cosign.pub --insecure-ignore-tlog=true` from a
+docker configuration without credentials, and the gateway's SBOM attestation with
+`cosign verify-attestation --type spdxjson`. `caddy`, `console` and `postgres-ha` came out with the
+`v0.4.4` digests and `collector` with the `v0.4.1` digest: none of them has a source change since and the build cache held their layers.
+The upstream pins that move with this release, etcd 3.7.4 and postgres_exporter 0.21.1,
+are not among the eleven images; the deploy pulls them by the digests in
+`infra/ansible/vars/pins.yml` and the observability role. There is no migration.
+
+| Image | Tag | Digest |
+|---|---|---|
+| `caddy` | `v0.4.5` | `sha256:84ea2fc84d37dfe4b6907c833de4dae31418fb3d8b0900a00875a2619a372048` (same as `v0.4.4`) |
+| `collector` | `v0.4.5` | `sha256:436d82c1929340980ab08c98081a4d5b8a7926b7a6d84f250199b49edafddbd0` (same as `v0.4.1`) |
+| `console` | `v0.4.5` | `sha256:cfebda6c706ac265c255a03bc890d95e3476a9306fb6c1ecf371e3a6163ad0f4` (same as `v0.4.4`) |
+| `controlplane` | `v0.4.5` | `sha256:d4a43d471f6aac33dea7fd321ac7740f904734c57ec56f656950df65ffc63c1b` |
+| `gateway` | `v0.4.5` | `sha256:d99aba41632ad0b87c90384efd10d775e768b217cfeb563438716358d9c2890f` |
+| `jobs` | `v0.4.5` | `sha256:8fed3c069c0b03ea8ac289e3a322467c5b05221960ad4f2533be7aee0553283c` |
+| `metricswriter` | `v0.4.5` | `sha256:b5fad64fafcbb8349ddc1aeab4e7993ccbe6dfcea01bffefe250d62851af3f68` |
+| `platformctl` | `v0.4.5` | `sha256:0a314c1d79dc79b7c8bc5ce9ce5eb1a17ba4e01b885c7d171a25bcfb8e6100d3` |
+| `postgres-ha` | `18.7-v0.4.5` | `sha256:765dd7a687ec526841c8f718629bb979aa3f8422b60e32a8cb1da942a79ecd42` (same as `v0.4.4`) |
+| `prober` | `v0.4.5` | `sha256:6a5cb34e5eeeff060b3c79c7b5a6ff0f11c7cffa3c2c9487d2b46535390b58b5` |
+| `replayer` | `v0.4.5` | `sha256:7428e8606acd8fccb58a39fd573ee60d5e699ab5262bf4d2c2bfe88783973edf` |
 
 ## 3. Deploy-time verification (every playbook that pulls images)
 
