@@ -27,8 +27,8 @@ import (
 
 // limits of contract 4.2.5
 const (
-	maxMembersAndInvites = 50
-	inviteLifetime       = 14 * 24 * time.Hour
+	MaxMembersAndInvites = 50
+	InviteLifetime       = 14 * 24 * time.Hour
 )
 
 // githubLoginRe is github's login syntax: letters, digits and single
@@ -254,7 +254,7 @@ func (h *Routes) add(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		if total >= maxMembersAndInvites {
+		if total >= MaxMembersAndInvites {
 			return httpx.Validation("a project has at most 50 members and open invites",
 				map[string]string{p.field: httpx.FieldTooMany})
 		}
@@ -276,14 +276,14 @@ func (h *Routes) add(w http.ResponseWriter, r *http.Request) error {
 		if p.githubID != nil {
 			inv, err = q.CreateInvite(ctx, tenantq.CreateInviteParams{
 				GithubID: p.githubID, GithubLogin: p.githubLogin, Role: role, CreatedBy: a.User.ID,
-				ExpiresAt: time.Now().Add(inviteLifetime),
+				ExpiresAt: time.Now().Add(InviteLifetime),
 			})
 			detail["github_id"], detail["github_login"] = *p.githubID, *p.githubLogin
 		} else {
 			index = "invites_tenant_stellar_idx"
 			inv, err = q.CreateStellarInvite(ctx, tenantq.CreateStellarInviteParams{
 				StellarAddress: p.address, Role: role, CreatedBy: a.User.ID,
-				ExpiresAt: time.Now().Add(inviteLifetime),
+				ExpiresAt: time.Now().Add(InviteLifetime),
 			})
 			detail["stellar_address"] = *p.address
 		}

@@ -5,7 +5,7 @@ description: "Compare every enrolled project on the core web and API metrics."
 
 The global views compare every enrolled project on the core web and API metrics, for funding and
 ecosystem-visibility decisions. They are the **Web** and **API** views of the operator
-**Projects** page (`/operator/projects?view=web` and `?view=api`). They read daily aggregates only, never raw events or sessions.
+**All projects** page (`/operator/projects?view=web` and `?view=api`). They read daily aggregates only, never raw events or sessions.
 What the numbers mean, and how to compare projects fairly, is in
 [reading-the-numbers.md](reading-the-numbers.md); read it before drawing conclusions. The HTTP
 routes are section 8 of the [control plane API reference](../reference/control-plane-api.md).
@@ -28,11 +28,11 @@ quarantined.
 | Visitors | sum of daily unique visitors over the range (see daily-unique visitors) |
 | Visits | visits with at least one page view |
 | Bounce rate | visits with exactly one page view and no custom event, over all visits |
-| Average visit duration | time between the first and last page view of a visit, averaged; the time on the last page is not measured |
-| Quarantined page views, visitors, share | the quarantine band, and its share of all page views |
-| Gateway requests, rejected, rejected share | every request the gateway answered for the project's sites, and those it refused |
-| Not measured (privacy signals) | the estimated share of visits the tracker does not measure because the browser sends Global Privacy Control, from the tracker file requests of the range; shown from 100 requests on, a dash below that, with the requests carrying the signal and all requests on the line under it ([reading-the-numbers.md](reading-the-numbers.md)) |
-| Sites, verified sites, sites with stellar.toml | the project's non-removed sites and the evidence on them |
+| Average visit | time between the first and last page view of a visit, averaged; the time on the last page is not measured |
+| Held back page views, Held back visitors, Held back | the quarantine band, and its share of all page views |
+| Gateway requests, Refused requests, Refused | every request the gateway answered for the project's sites, and those it refused |
+| Not measured | the estimated share of visits the tracker does not measure because the browser sends Global Privacy Control, from the tracker file requests of the range; shown from 100 requests on, a dash below that, with the requests carrying the signal and all requests on the line under it ([reading-the-numbers.md](reading-the-numbers.md)) |
+| Sites, Verified sites, Sites with stellar.toml | the project's non-removed sites and the evidence on them |
 
 Each row also carries the top five referrers, countries, devices and browsers over the range.
 
@@ -42,8 +42,8 @@ accounts ([onchain-and-exports.md](onchain-and-exports.md)).
 
 Filters (all must hold): status, name or slug, domain verified, stellar.toml found, has web
 data in the range, has API data in the range, enrollment date range, the cohort filters
-(below), and **Integrity**: **C** lists the projects graded C over the range, **B and below**
-those graded B or C, **Graded** every project with a grade. Sort by any column,
+(below), and **Grade**: **C** lists the projects graded C over the range, **B or C**
+those graded B or C, **Any grade given** every project with a grade. Sort by any column,
 largest or smallest first; projects without a value for the sort column (a rate with no
 visits) come last either way.
 
@@ -54,10 +54,10 @@ One row per project.
 | Column | Meaning |
 |---|---|
 | Requests | application requests over every service of the project; the line under the count shows the infrastructure requests (CORS preflights, health and probe routes, known health checkers) left out of it |
-| 4xx, 5xx and their rates | requests answered with status 400 to 499 and 500 to 599; a request without a status code counts in requests only |
-| p50, p95, p99 | latency percentiles from the summed histogram buckets of the range, in seconds; `>10 s` when the percentile is above the last bucket bound |
+| 4xx responses, 5xx responses, 4xx rate, 5xx rate | requests answered with status 400 to 499 and 500 to 599; a request without a status code counts in requests only |
+| p50 latency, p95 latency, p99 latency | latency percentiles from the summed histogram buckets of the range, in seconds; `>10 s` when the percentile is above the last bucket bound |
 | Services, routes | distinct services, and distinct normalized routes |
-| Source | `Metrics`, `From traces` or `Metrics and traces` (see span-derived data) |
+| Data source | `Metrics`, `Traces` or `Metrics and traces` (see span-derived data) |
 
 Requests, error rates and latency count application requests only; infrastructure requests are
 shown apart and never mix into them. Sorting by requests in each direction finds the highest and
@@ -70,11 +70,11 @@ Both tables carry five key metrics for every project: verified visitors (the pri
 visitors), page views, application requests, error rate (application requests answered 500 to
 599 over all application requests) and on-chain operations. For each one you see:
 
-- **Change**: the value against the previous period of equal length, the days just before the
+- **Change** (for example **Visitors change**): the value against the previous period of equal length, the days just before the
   range. For the four counts it is relative (`+50%` means one and a half times the previous
   period); for the error rate it is the difference in percentage points. A project without a
   previous value shows no change rather than an infinite one.
-- **Percentile**: the share of the cohort's projects, among those with a value, whose value is at
+- **Percentile** (for example **Visitors percentile**): the share of the cohort's projects, among those with a value, whose value is at
   or below this project's. 100th means the largest value in the cohort. A project with no page
   views, no requests or no on-chain operations has no percentile for that metric. For the error
   rate, a higher percentile is a higher error rate.
@@ -125,8 +125,8 @@ page shows, for the same range:
   project;
 - API: daily charts of requests, p95 latency and the 4xx and 5xx rates, a totals table
   (requests, rates, p50, p95, p99, services, routes), and every service of each project ordered
-  by requests, so the first and last are the most and least used services. As on Global API,
-  these count application requests only, with the infrastructure requests shown apart.
+  by requests, so the first and last are the most and least used services. As in the API view of
+  All projects, these count application requests only, with the infrastructure requests shown apart.
 
 A day that the aggregation has not read yet (for example before a backfill) is a gap in the
 web charts and shows as not read in the tables. A day read without traffic shows 0. Compare

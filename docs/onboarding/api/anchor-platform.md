@@ -152,5 +152,5 @@ docker compose -f examples/otel-anchor-platform/compose.yaml up -d --build
 curl -s http://127.0.0.1:8080/sep24/info
 ```
 
-Open the project's **API traffic** page: `anchor-sep-server` shows `GET /sep24/info` after the
+Open the project's **API** page: `anchor-sep-server` shows `GET /sep24/info` after the
 next export.

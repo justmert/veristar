@@ -1,0 +1,29 @@
+/* the ink accent is near black, so a few theme colours that mintlify reuses
+   across both modes need a value that holds 4.5:1 on each page ground */
+
+/* light mode: the default grey 500 (#707070) reaches only 4.31:1 on the
+   #EFEFEF ground, and it colours the navbar repository link, the search
+   field and the response tabs of the API pages */
+html:not(.dark) {
+  --gray-500: 99 99 99;
+}
+
+/* dark mode: buttons fill with the dark accent behind white text, and the
+   outlined buttons hover to the light-mode accent. both are near black on
+   the near-black ground, so dark mode gets a mid ink fill and a light hover */
+html.dark {
+  --primary-dark: 107 107 107;
+}
+
+html.dark .dark\:hover\:text-primary:hover {
+  color: rgb(var(--primary-light));
+}
+
+/* the "powered by" footer link is light grey on the light ground */
+#footer a[href*="mintlify.com"] {
+  color: rgb(var(--gray-600));
+}
+
+html.dark #footer a[href*="mintlify.com"] {
+  color: rgb(var(--gray-400));
+}

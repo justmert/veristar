@@ -16,7 +16,7 @@ is retired, or when the person who created it leaves and the key's purpose is un
 
 ## Steps
 
-1. **Find the key.** In the console operator area open **Admin**, **API keys**, or list the keys
+1. **Find the key.** In the console operator area open **Access keys**, or list the keys
    through the API with an operator's console session (its cookie and CSRF rules are section 1.2
    of the control plane API reference):
 
@@ -25,7 +25,7 @@ is retired, or when the person who created it leaves and the key's purpose is un
    A leaked key is identified by its `prefix` field (the first characters of the key, for example
    `sa_op_` and four more), never by sending the full key anywhere.
 
-2. **Revoke it** with the **Revoke** button, or:
+2. **Revoke it** with **Revoke** in the key's row menu, then **Revoke** in the confirmation, or:
 
    `DELETE /api/operator/api-keys/<key id>`
 

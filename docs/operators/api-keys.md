@@ -23,7 +23,9 @@ rules are section 9 of the [control plane API reference](../reference/control-pl
 
 ## Creating a key
 
-An operator creates a key in the console, or with
+An operator creates a key on the **Access keys** page of the operator area: press
+**Create key**, choose **Machine API key**, give it a **Name**, an **Expires after, days**
+value and **Every project** or **One project**, and press **Create key**. The same is possible with
 `POST /api/operator/api-keys` and a body such as
 `{"name": "warehouse", "scope": "metrics:read", "expires_in_days": 90}`. Add
 `"tenant_id": "<id>"` for a key that reads one tenant. The answer holds the
@@ -48,14 +50,14 @@ What each route returns:
 
 - `/tenants`: the tenants the key may read, with site and verification counts.
 - `/web/daily`, `/web/dimensions`: daily web numbers and breakdowns per tenant
-  from the daily aggregates, the same numbers as the global web view.
+  from the daily aggregates, the same numbers as the Web view of All projects.
 - `/web/hourly`: one tenant's hourly web numbers read live from Umami,
   including the current hour.
 - `/web/integrity`: the integrity grade per tenant, site and day with its
   reasons and evidence; every `/web/daily` item also carries the day's grade.
 - `/api/daily`, `/api/routes/daily`, `/api/hourly`: request counts, error
   rates and p50, p95, p99 per tenant (and per route), the same numbers as the
-  global API view. Data derived from sampled traces is marked with
+  API view of All projects. Data derived from sampled traces is marked with
   `source: span`.
 - `/onchain/ids`, `/onchain/daily`, `/onchain/weekly`, `/onchain/functions`: the declared
   Stellar ids with their proofs and read state, the daily ledger counts, weekly active accounts
@@ -71,7 +73,8 @@ the sum of the daily numbers.
 
 ## Revoking a key
 
-Revoke in the console or with `DELETE /api/operator/api-keys/<id>`. The next
+Revoke on the **Access keys** page, with **Revoke** in the key's row menu and **Revoke** in
+the confirmation, or with `DELETE /api/operator/api-keys/<id>`. The next
 request with the key is refused (401); nothing caches a key. Revocation is in
 the audit log (`operator_api_key.revoke`). An expired key is refused the same
 way.
@@ -81,4 +84,5 @@ way.
 `GET /api/operator/api-keys/<id>/usage?from=<day>&to=<day>` lists requests
 and refusals per hour. Refusals count requests with a revoked or expired key,
 over the rate limit, or for a tenant outside the key's scope. `last_used_at`
-on the key is the last accepted request.
+on the key is the last accepted request. In the console, **Show usage** in the key's row menu
+shows the same numbers.

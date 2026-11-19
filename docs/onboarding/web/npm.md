@@ -12,7 +12,7 @@ You build the npm package from this repository with
 [`packages/tracker/scripts/pack.mjs`](https://github.com/justmert/veristar/blob/main/packages/tracker/scripts/pack.mjs),
 under a scoped package name of your choice, and publish it to a registry you control. When the
 service you use publishes the releases under a scoped name (the control plane setting
-`TRACKER_NPM_PACKAGE`), the site's setup page in the console has an **npm** tab with the exact
+`TRACKER_NPM_PACKAGE`), the site's setup page in the console has an **npm** choice under **How is the site built?** with the exact
 `npm install --save-exact` command, the import and the `init()` call for your site.
 
 ## Script tag or package

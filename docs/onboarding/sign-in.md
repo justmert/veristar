@@ -87,7 +87,7 @@ version of Chrome, Edge, Firefox or Safari.
 
 ## Link GitHub, a wallet and a passkey
 
-Open the account menu at the bottom of the sidebar (your name) and choose **Account**.
+Open the account menu (your name in the sidebar) and choose **Account**.
 Under **Sign-in methods**:
 
 - **Link a wallet** signs a challenge with the wallet you choose and adds its
@@ -111,7 +111,7 @@ device, and add a new passkey to sign in with one again.
 
 ## Being added to a project
 
-A project owner adds you under **Members** by your GitHub username, by your
+A project owner adds you with **Add a person** on the project's **Members** page by your GitHub username, by your
 wallet's Stellar address (`G…`) or by your passkey account address (`C…`). If
 you have no account yet, you get an invite and join the project the first time
 you sign in with that GitHub account, wallet or passkey.

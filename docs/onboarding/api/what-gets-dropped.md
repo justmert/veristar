@@ -61,7 +61,7 @@ message for names and marker strings that must not be there.
   apart and then stored together.
 - **Traffic class**: CORS preflights (`OPTIONS`), health and probe routes such as `/healthz`,
   `/readyz` or `/actuator/health/liveness`, and requests from known health checkers such as
-  `ELB-HealthChecker` or `kube-probe` are marked as infrastructure requests. The API traffic page
+  `ELB-HealthChecker` or `kube-probe` are marked as infrastructure requests. The **API** page
   counts them apart and leaves them out of requests, error rates and latency, so your own load
   balancer does not inflate your numbers. The full rule set is in the
   [collector reference](../../reference/collector.md), "Traffic classes".

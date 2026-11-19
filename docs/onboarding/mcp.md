@@ -6,7 +6,7 @@ description: "Ask Claude, ChatGPT, Cursor or any MCP client about your project's
 
 Veristar runs a [Model Context Protocol](https://modelcontextprotocol.io) server at
 `https://app.analytics.example/mcp` (your deployment's console address followed by `/mcp`; the
-project's **AI assistants** page shows it). Connect an AI client to it and ask questions in plain
+project's **AI assistants** page shows it as **Server URL** under **Connect a client**). Connect an AI client to it and ask questions in plain
 language: the client calls read-only tools that return your project's web analytics (from the
 tracker), API analytics (from OpenTelemetry) and on-chain activity. The contract is section 12 of
 [`docs/reference/control-plane-api.md`](../reference/control-plane-api.md).
@@ -31,11 +31,12 @@ tracker), API analytics (from OpenTelemetry) and on-chain activity. The contract
 | | Access key | Connector (OAuth) |
 |---|---|---|
 | Clients | Claude Code, Cursor, any client that sends a header | claude.ai, Claude Desktop, ChatGPT, Claude Code, Cursor |
-| Made on | the project's **AI assistants** page | the consent page the client opens |
+| Made on | **Create an access key** on the project's **AI assistants** page | the consent page the client opens |
 | Lifetime | 90 days by default, at most 365 | access token one hour, refreshed by the client; the connection lasts until revoked while the client refreshes it at least every 30 days |
 | Secret | `sa_mcp_` and 40 characters, shown once | handled by the client |
 
-Both appear in the list on the **AI assistants** page with when they were last used. Members can revoke
+Both appear under **Access keys and connections** on the **AI assistants** page with when they
+were last used. Members can revoke
 their own; owners can revoke any of the project's.
 
 ### Claude Code
@@ -86,7 +87,8 @@ Leave out `headers` and Cursor uses the OAuth flow instead.
 
 A connector sends your browser to `https://app.analytics.example/ai/consent`. The page asks you to
 sign in when needed (GitHub, a Stellar wallet or a passkey, see [Signing in](sign-in.md)), then shows the client's name, where your browser returns afterwards, and
-your projects. Pick one and approve; deny sends the client away without access. Only projects
+your projects under **Give access to**. Pick one and choose **Approve**; **Deny** sends the client
+away without access. Only projects
 that are active or in review can be chosen.
 
 ## Example questions

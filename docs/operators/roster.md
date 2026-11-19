@@ -4,7 +4,7 @@ description: "Manage the operator roster in the console and confirm the operator
 ---
 
 The operator roster lists the people who hold the operator view. Operator admins manage it on the
-**Operators** page (Admin, Operators). Every operator confirms the operator area with a passkey or a
+**Operators** page of the operator area, in the sidebar group **Admin**. Every operator confirms the operator area with a passkey or a
 security key on top of the sign-in.
 
 ## Roles
@@ -32,13 +32,13 @@ that are your path back in (see "Lockout recovery" below).
 
 ## Add an operator
 
-1. On the Operators page, under **Add an operator**, pick **GitHub** or **Stellar wallet or
-   passkey**.
+1. On the Operators page, press **Add operator**. In the **Add an operator** form, under
+   **Signs in with**, pick **GitHub** or **Stellar wallet or passkey**.
 2. Enter the GitHub login, or the Stellar address: a wallet's `G...` address, or the `C...` address
    of a passkey account, which the person finds on their **Account** page. A GitHub login is
    resolved to the account's numeric id at once, so a later rename of the login does not move the
    access.
-3. Pick the role, enter a reason, and select **Add operator**.
+3. Pick the **Role**, enter a **Reason**, and select **Add operator**.
 
 The new operator signs in, opens the operator area and registers a passkey. The first passkey needs
 no confirmation if it is registered within 24 hours of being added (`OPERATOR_ENROLL_WINDOW`), from a
@@ -47,17 +47,18 @@ person's passkeys, which opens a new window.
 
 ## Suspend, resume, change the role, remove
 
-Each action asks for a reason. The reason, the actor and the change go to the audit log
+Each action is in the row's actions menu and asks for a reason. The reason, the actor and the change go to the audit log
 (`operator.suspend`, `operator.resume`, `operator.role_change`, `operator.remove`). Adding an
 operator writes `operator.add`, and a passkey reset writes `operator.passkeys_reset`.
 
 - **Suspend** ends the operator view at once: the person's next request is refused, their console
   sessions end, and their AI assistant connections with operator access are revoked. Their passkeys
   stay, so a resumption needs only a sign-in and a confirmation.
-- **Remove** takes the row off the roster and the person's sessions end. Their operator passkeys are
+- **Remove from the roster** takes the row off the roster and the person's sessions end. Their operator passkeys are
   deleted unless another active row still makes them an operator (a second identity of the same
   person). They keep their ordinary console account and their project memberships.
-- **Make admin** and **Make operator** change the role.
+- **Make operator admin** and **Make operator** change the role; the confirmation is
+  **Give admin rights** or **Take admin rights**.
 
 The roster always keeps at least one active operator admin. A suspension, removal or demotion of the
 last one is refused with "The roster needs at least one active operator admin", and so is the
@@ -80,10 +81,12 @@ browser shows its own prompt; confirm with your fingerprint, face, screen lock o
 - **Your first passkey**: if your account has none, the operator area shows **Register a passkey**
   while your enrollment window is open. Give it a name, select **Register**, then **Create a
   passkey** and **Confirm with your passkey**. The registration also confirms the session.
-- **More passkeys**: on the **Account** page, under **Your passkeys**, enter a name and select **Add
-  a passkey**. Keep at least two, for example your phone and a security key, so a lost one does not
+- **Add a passkey**: on the **Account** page, under **Your passkeys**, enter a **Name of the new
+  passkey** and select **Add a passkey**. Keep at least two, for example your phone and a security key, so a lost one does not
   lock you out.
-- **Delete a passkey**: select **Delete** next to it. The account always keeps one. A sign-in
+- **Delete**: select **Delete** next to a passkey under **Your passkeys**, then **Delete passkey**.
+  When the session needs a fresh confirmation, the console asks for another passkey first. The
+  account always keeps one. A sign-in
   passkey that confirms the operator area is listed there but managed under **Sign-in methods**.
 - A passkey is bound to the console's address. It does not work on another site, so a look-alike
   page cannot use it.
