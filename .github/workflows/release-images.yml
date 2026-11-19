@@ -150,6 +150,14 @@ jobs:
       # trivy reads licences from the module cache and node_modules
       - run: pnpm install --frozen-lockfile
       - run: scripts/supply-chain/install-tools.sh "$RUNNER_TEMP/bin" trivy
+      # the java example's maven tree, resolved once per pom and kept in the
+      # actions cache: maven central answers shared runner addresses with
+      # 429 or a false 404 at times, so every run resolving it afresh failed
+      # at random
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ hashFiles('examples/otel-java-spring/pom.xml', 'examples/otel-java-spring/Dockerfile') }}
       - run: PATH="$RUNNER_TEMP/bin:$PATH" scripts/supply-chain/licence-gate.sh licence-report
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
