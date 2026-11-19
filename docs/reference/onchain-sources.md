@@ -58,7 +58,7 @@ operation involving one of the project's verified accounts or contracts that wee
 | Kind | Initiator of an operation | Source |
 |---|---|---|
 | Account | the operation's `source_account`; Horizon fills it with the transaction's source when the operation names none, and gives the base `G` account of a muxed source | the same `/accounts/{id}/operations` pages as the daily counts |
-| Contract | the source of each operation with an event of the contract, or the transaction's source when the operation names none; for a fee bump, the inner transaction's source, never the fee payer | `getTransaction` for every transaction with such an event, 50 calls per JSON-RPC batch request |
+| Contract | the source of each operation with an event of the contract, or the transaction's source when the operation names none; for a fee bump, the inner transaction's source, never the fee payer | `getTransaction` for every transaction with such an event, 10 calls per JSON-RPC batch request, the most public RPC servers accept |
 
 - **Read while the source holds it.** A day's initiators are read with its counts, in the hourly
   run after the day ends. Public RPC servers keep about seven days, so every contract day is read
