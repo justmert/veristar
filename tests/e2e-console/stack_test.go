@@ -1160,5 +1160,6 @@ func appCaddyEnv() map[string]string {
 		"APP_TLS":               "internal",
 		"CONTROLPLANE_UPSTREAM": "controlplane:8081",
 		"CONSOLE_ROOT":          "/srv/console",
+		"SITE_ROOT":             "/srv/site",
 	}
 }
