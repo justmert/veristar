@@ -18,6 +18,7 @@ here, before they take effect, as the processing terms require
 
 ### Fixed
 
+- The Go example and the Collector fan-out example turn on HTTP/2 health checks for their OTLP exporters. Without them, a connection whose network path disappeared without a close (a lost NAT mapping, an outage between the app and the platform) held every export until TCP gave up, about 15 minutes for Go, and a restart was the only quick way out. The API troubleshooting guide lists which SDKs speak HTTP/2 to the platform and how to turn the checks on for each.
 - Contract activity reads send at most 10 `getTransaction` calls per JSON-RPC batch. Public Stellar RPC servers refuse larger batches, so contracts with more than 10 transactions a day failed with `bad_response`.
 
 ## [0.4.1] - 2026-11-19
