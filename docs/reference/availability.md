@@ -37,7 +37,9 @@ member in every zone.
   healthy, 503 unhealthy, `deploy/caddy/assemble.sh`, tier `node`) and answers DNS with every
   healthy address (MultiValue). For `in` and `otlp` it asks `/`, the node's ingestion health,
   every 10 s; for `app` it asks `/core`, the node's dashboard health, every 30 s, so
-  a node whose console path is unhealthy still takes ingestion. A browser that cannot connect
+  a node whose console path is unhealthy still takes ingestion. For the website at the bare
+  domain and `www` it asks `/site` every 30 s, which answers 308 whenever the node's Caddy runs,
+  because the website is static files in the Caddy image. A browser that cannot connect
   to one address tries the next one from the same answer.
 - **Dashboards cannot stop ingestion.** The queue holds web events for 72 hours, so an outage
   of the database or of Umami costs the dashboards only, and the backlog drains when they

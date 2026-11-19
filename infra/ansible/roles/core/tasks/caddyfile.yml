@@ -1,0 +1,20 @@
+---
+# assembles the caddyfile of a core or converged node from deploy/caddy on
+# the controller (deploy/caddy/assemble.sh): app.<domain>, the website at
+# <domain> and www.<domain>, and on a converged node in. and otlp. as well.
+# its own file, so tests/corecaddy renders exactly what a node gets.
+- name: Assemble the core caddyfile on the controller
+  ansible.builtin.command:
+    # a converged node's caddy serves the edge sites too
+    argv: >-
+      {{ ['sh', core_caddy_dir ~ '/assemble.sh', 'node' if core_node else 'core']
+         + ((['edge'] if core_node else []) + ['app']) | map('regex_replace', '^', core_caddy_dir ~ '/')
+           | map('regex_replace', '$', '.Caddyfile') | list }}
+  vars:
+    # from the role, so any playbook that runs it finds the inputs
+    core_caddy_dir: "{{ role_path }}/../../../../deploy/caddy"
+  register: core_caddyfile
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+  become: false

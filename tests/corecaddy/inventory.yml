@@ -1,0 +1,16 @@
+---
+# test-only inventory of tests/corecaddy: "node" is a converged node of the
+# three-node layout (sa_tier node), "core" a core-only node (sa_tier core).
+# render.yml runs one group at a time.
+all:
+  vars:
+    ansible_connection: local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    sa_environment: test
+  children:
+    node:
+      hosts:
+        node-1: {sa_tier: node}
+    core:
+      hosts:
+        core-1: {sa_tier: core}

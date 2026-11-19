@@ -8,12 +8,16 @@
 #   assemble.sh node edge.Caddyfile app.Caddyfile   > node.Caddyfile
 #
 # node is a converged node (the three-node layout,
-# docs/reference/availability.md): one caddy serves in., otlp. and app.
+# docs/reference/availability.md): one caddy serves in., otlp., app. and
+# the website at the bare domain and www.
 # umami has no public site: it stays on the private network for the
 # control plane, the jobs and the replayer. its port 80 answers the edge health at every path except /core,
 # which answers the core health, so traffic manager probes ingestion and
 # dashboards separately (infra/tofu/modules/failover). it reads
 # CORE_HEALTH_UPSTREAM and CORE_HEALTH_PATH beside the NODE_HEALTH_ pair.
+# on core and node, /site is the website's health: the website is static
+# files that caddy serves by itself, so /site answers 308 whenever caddy
+# runs and the node is not draining, whatever the control plane's state.
 #
 # redirect is an old edge node after a handover by permanent redirect
 # (infra/ansible/playbooks/cutover-redirect.yml): the same node-level parts
@@ -150,6 +154,13 @@ EOF
 		health_proxy CORE_HEALTH_UPSTREAM CORE_HEALTH_PATH
 		echo "	}"
 	fi
+	if [ "${1:-}" = node ] || [ "${1:-}" = core ]; then
+		cat <<'EOF'
+	handle /site {
+		redir https://{host}{uri} 308
+	}
+EOF
+	fi
 	echo "	handle {"
 	health_proxy NODE_HEALTH_UPSTREAM NODE_HEALTH_PATH
 	echo "	}"
@@ -198,7 +209,8 @@ core | node)
 		shift
 	fi
 	strip_global "$1" >"$tmp"
-	swap_tls "$tmp" APP_TLS 1 >"$app"
+	# app. and the website (the bare domain with www) carry one tls line each
+	swap_tls "$tmp" APP_TLS 2 >"$app"
 	header
 	cat <<'EOF'
 (core_log_fields) {
