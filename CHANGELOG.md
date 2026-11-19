@@ -16,6 +16,8 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-19
+
 ### Changed
 
 - Terms of use `2026-11-19.1` are the final version of the terms
@@ -24,8 +26,68 @@ here, before they take effect, as the processing terms require
   the effective date change, so `GET /api/terms` answers `"status": "final"`
   and the console no longer labels the terms a draft. Every project accepts
   it at its next sign-in.
+- The documentation at `docs.veristar.app` loads tracker `1.4.0` from
+  `in.veristar.app` (`docs/tracker.js`) and is measured as part of the
+  `veristar.app` site, whose allowed origins include
+  `https://docs.veristar.app`.
+
+### Fixed
+
+- `replayer_partitions_owned` no longer stays short after partition holds
+  that start together. The replayer sets its ownership gauges under the lock
+  that counts its holds, so a call that counted fewer holds can no longer
+  overwrite the count of one that counted more. Before, the sum over the
+  core nodes could read below 32 with every partition held until the next
+  change of ownership, and `ReplayerPartitionsUnowned` could fire for it.
+- The probe bundle mounts the `/tmp` of its read-only containers with mode
+  `1777`. Docker on the probe host created it as root `0755`, so Gatus (uid
+  8080) could not write its SQLite temporary files and the statuses API of
+  the status page answered `disk I/O error (6410)`.
+
+### Security
+
+- etcd 3.7.3 to 3.7.4, a patch release of the same line, and
+  postgres_exporter 0.20.1 to 0.21.1. Both fix Go CVE-2026-97054 (a denial of
+  service in the HTTP/1 server); etcd 3.7.4 also drops CVE-2026-78661, and
+  postgres_exporter 0.21.1 the 19 earlier findings of 0.20.1. Neither image has
+  a fixable critical or high finding. The images that still carry
+  CVE-2026-97054 and why each stays are in
+  [docs/security/supply-chain.md](docs/security/supply-chain.md), section 8.1.
+- postgres_exporter takes the database address from `--datasource.uri`,
+  since 0.21 deprecates `DATA_SOURCE_URI`. The user and password stay in its
+  environment file.
 
 ### Upgrade notes
+
+**Before the deploy**
+
+- This release is signed in key mode on a workstation
+  ([docs/security/supply-chain.md](docs/security/supply-chain.md) section
+  2.1), with the repository variable `RELEASE_BUILDER=workstation`, so
+  pushing its tag starts no build in `release-images.yml`. Add
+  `ANSIBLE_EXTRA='-e sa_signature_mode=key'` to every `make <env>-deploy`;
+  without it `verify-release.yml` refuses the release before any node is
+  touched.
+- No migration and no NATS topology change: the rolling deploy of
+  [docs/deploy/upgrade.md](docs/deploy/upgrade.md) replaces the images, the
+  etcd member of each node and the observability containers.
+- etcd 3.7.3 to 3.7.4 is a patch upgrade within the 3.7 line, which etcd
+  supports member by member. Before the deploy, check
+  `etcdctl endpoint health --cluster` and take a snapshot
+  (`etcdctl snapshot save`) on one member.
+
+**During the rolling deploy**
+
+- The edge play of `deploy.yml` recreates the etcd container of each node
+  with etcd 3.7.4, one member at a time, and waits for it to be healthy
+  before the next node. Do not move it with `site.yml`, whose edge play
+  recreates every member at once. Patroni keeps its leader through the
+  upgrade.
+- The observability play recreates postgres_exporter with 0.21.1 and the
+  address in `--datasource.uri`. A postgres_exporter started from a
+  hand-written Compose file needs the same change: move the value of
+  `DATA_SOURCE_URI` to `--datasource.uri` and keep `DATA_SOURCE_USER` and
+  `DATA_SOURCE_PASS` in the environment.
 
 **After the deploy**
 
@@ -1569,7 +1631,8 @@ How to check a file against its release:
   starts tracking on `umami.start()`, the server-issued proof of work, and a
   byte-identical rebuild of every committed release.
 
-[Unreleased]: https://github.com/justmert/veristar/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/justmert/veristar/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/justmert/veristar/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/justmert/veristar/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/justmert/veristar/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/justmert/veristar/compare/v0.4.1...v0.4.2
