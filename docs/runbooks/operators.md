@@ -71,8 +71,8 @@ To add someone through the settings instead, for the first operator admin of a n
 
 1. If the identity is in `sa_operator_github_ids` or `sa_operator_stellar_addresses`, take it out,
    commit, and converge as above. The row stays; the console can now change it.
-2. An operator admin selects **Remove** (or **Suspend**, to keep the passkeys for a later return) on
-   the person's row and gives the reason. The person's next request is refused, their console
+2. An operator admin selects **Remove from the roster** (or **Suspend**, to keep the passkeys for a
+   later return) in the actions menu of the person's row on the **Operators** page and gives the reason. The person's next request is refused, their console
    sessions end, their operator MCP credentials are revoked, and a removal deletes their operator
    passkeys unless another active row still makes the person an operator.
 3. Revoke the operator API keys that person created, unless another operator takes them over

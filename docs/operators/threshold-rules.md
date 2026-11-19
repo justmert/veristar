@@ -17,7 +17,7 @@ for every operator, and the project sees on its **SCF review** page which rules 
 | Minimum per day | the daily value a day must reach to qualify, at least 1 |
 | Days per month | how many qualifying days each month needs, 1 to 28 |
 | Months | how many complete calendar months the rule looks back, 1 to 12 |
-| Minimum grade | optional: the integrity grade over those months must be this or better (A is best); a project without a graded day does not meet a rule with a grade |
+| Minimum integrity grade | optional: the integrity grade over those months must be this or better (A is best); a project without a graded day does not meet a rule with a grade |
 | Cohort | optional program, round and category: only projects confirmed in it are evaluated |
 
 The months are complete UTC calendar months before the month of the evaluation day. On
@@ -25,14 +25,14 @@ The months are complete UTC calendar months before the month of the evaluation d
 never counts, so a project's result does not change during the month.
 
 Only active and suspended projects are evaluated. API requests follow the same rules as the
-Global API view: application requests only, with infrastructure requests (CORS preflights, health
+API view of **All projects**: application requests only, with infrastructure requests (CORS preflights, health
 and probe routes, known health checkers) left out, and a service's metric data wins over its
 span-derived data.
 
 ## Create, edit and delete
 
-Open **Rules** in the operator area. **New rule** opens the form; a saved rule can be edited or
-deleted from its row. Every creation, change and deletion is in the audit log with the rule's
+Open **Rules** in the operator area. **New rule** opens the form and **Save rule** saves it; a saved rule is edited or deleted
+from the **Actions** menu of its row, and a deletion is confirmed with **Delete rule**. Every creation, change and deletion is in the audit log with the rule's
 fields (old and new values for a change). At most 200 rules are kept.
 
 ## Projects that meet a rule

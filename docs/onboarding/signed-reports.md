@@ -14,7 +14,8 @@ or the file to an SCF submission instead of assembling screenshots.
 
 1. Open your project and choose **SCF review**. The reports are in its **Signed reports**
    section, which also lists what a report contains.
-2. Pick the period: enter the first and the last day as `2026-11-18`. A report covers whole UTC days, at most 366 days, and ends four days before
+2. Pick the period under **Generate a report**: enter the first day in **From** and the last in
+   **To**, as `2026-11-18`. A report covers whole UTC days, at most 366 days, and ends four days before
    today at the latest: Veristar reads today and the three days before it again to count late
    events and grade them, so only older days are final, and a signed number never changes.
 3. Choose **Generate and sign**.
@@ -36,8 +37,9 @@ guess. Anyone with the link sees the report and needs no account. The page check
 in the visitor's browser and shows whether it is valid and which of Veristar's keys signed it,
 and offers the signed file as JSON.
 
-The **Signed reports** section lists your reports with how often each link was opened. **Copy link**
-copies a report's link; its menu opens the report, downloads the JSON or revokes the link. A
+The **Signed reports** section lists your reports under **Your reports** with how often each link
+was opened. **Copy link** copies a report's link and **Download JSON** downloads the signed file;
+its actions menu has **Open the report** and **Revoke link**. A
 report never changes after it is created. To stop sharing one, choose **Revoke link**: the link
 then answers "not available" for everyone, and revoking cannot be undone. Members of your project
 still see the revoked report in the **Signed reports** section. Creating a report, revoking its link and every view

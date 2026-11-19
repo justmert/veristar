@@ -57,7 +57,7 @@ temporality has no first export problem.
 Work through these in order:
 
 1. **The empty request above answers 200.** If not, fix the token first.
-2. **The project is active** and the token is listed as active under **API**, **Connect**.
+2. **The project is active** and the token is listed under **Tokens** on the **Connect API** page.
    Revoked tokens and suspended projects are refused with 401.
 3. **Endpoint URL.** The examples give each exporter the full URL, base plus `/v1/metrics` or
    `/v1/traces`. Some SDK options take only the base and add the path themselves; the standard

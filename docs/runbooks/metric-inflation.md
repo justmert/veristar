@@ -18,8 +18,8 @@ it says `umami`. Replace `<tenant id>`, `<site id>` and the dates.
 
 ## Web traffic
 
-1. **The integrity report.** In the console, open the project in the global web view or its
-   tenant detail and read the Integrity panel: the range grade, the reasons with the number of
+1. **The integrity report.** In the console, open the project from the **All projects** page of
+   the operator area and read its **Integrity report**: the range grade, the reasons with the number of
    days each applied to, and each site's days with their figures. The same report is
    `GET /api/operator/web/integrity?tenant=<tenant id>&from=<YYYY-MM-DD>&to=<YYYY-MM-DD>`, the
    MCP tool `get_tenant_integrity`, and the rows below:
@@ -177,7 +177,8 @@ by sending made-up metrics. There is no proof-of-browser equivalent.
   `make <env>-deploy ROLLING=1 ...`. A higher `PROOF_BITS` costs every visitor's browser CPU;
   measure first (`pnpm --filter tracker bench:proof`). A lower floor quarantines more shared
   addresses on sites without a baseline yet; sites with a baseline keep their scaled threshold.
-- **Tell the project.** The project sees the same grade and reasons on its own overview; point it
+- **Tell the project.** The project sees the same grade and reasons in the **Integrity report**
+  of its **SCF review** page; point it
   at the days and reasons in question.
 - **Record the finding** with dates, the integrity report, the queries' output and the decision, where the operators
   keep their review notes, and mention it when the project's numbers are compared.

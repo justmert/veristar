@@ -20,8 +20,9 @@ revokes its connection. No step below is needed for these.
 
 ## Revoking a credential
 
-1. **Find it.** A project's members see their keys and connections on the project's **AI / MCP**
-   page; operators see operator credentials under **Operator**, **Admin**, **AI / MCP**. A leaked
+1. **Find it.** A project's members see their keys and connections on the project's **AI assistants**
+   page, under **Access keys and connections**; operators see operator credentials on the operator
+   **Access keys** page. A leaked
    key is identified by its prefix (`sa_mcp_` and four more characters). To find a credential by
    prefix across projects, query the database leader as the `postgres` superuser (the
    [runbooks overview](overview.md) shows how to connect):
@@ -31,9 +32,9 @@ revokes its connection. No step below is needed for these.
    from cp.mcp_credentials where prefix = 'sa_mcp_Ab3x';
    ```
 
-2. **Revoke it.** The project's owner, or the member who made it, uses **Revoke** on the AI page
+2. **Revoke it.** The project's owner, or the member who made it, uses **Revoke** on the **AI assistants** page
    (`DELETE /api/tenants/<tenant id>/mcp-credentials/<id>`). An operator credential is revoked
-   under **Operator**, **Admin**, **AI / MCP** (`DELETE /api/operator/mcp-credentials/<id>`). For a project
+   on the operator **Access keys** page with **Revoke** in its row menu (`DELETE /api/operator/mcp-credentials/<id>`). For a project
    credential whose owner cannot be reached, an operator suspends the project
    ([tenant-removal.md](tenant-removal.md) lists the lifecycle actions), which revokes every
    credential of the project; resuming does not bring them back.
