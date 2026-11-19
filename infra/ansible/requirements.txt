@@ -3,7 +3,7 @@
 # (checked 2026-11-12); it ships community.docker 5.4.0, community.sops 2.5.0,
 # ansible.posix 2.2.2 and community.general 13.5.1, so no galaxy install runs.
 ansible==14.6.0
-ansible-core==2.21.6
+ansible-core==2.22.0
 ansible-lint==26.11.0
 yamllint==1.38.0
 # new-secrets.py hashes the nats passwords
