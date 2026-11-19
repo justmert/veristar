@@ -3,41 +3,41 @@
 # passwords and tokens, a public stellar G key, and stripe's published
 # documentation key in the route normalization corpus. a new finding is not
 # covered by these fingerprints and fails ci.
-df501a43a91b7cf1f0cf66bdc8b34d1879e16c35:apps/console/test/fixtures/global.ts:generic-api-key:10
-43d228b0661b784d3e7b73a24282fb2ebe106015:internal/jobs/retainweb/migrations.go:generic-api-key:26
-43d228b0661b784d3e7b73a24282fb2ebe106015:internal/jobs/retainweb/migrations.go:generic-api-key:35
-3a84a0126607859c3ef284e318da7178fc200a18:apps/console/test/fixtures/contract.ts:generic-api-key:389
-272cb70a6de127d85787a602c74f6da0244a6878:apps/console/test/fixtures/contract.ts:generic-api-key:371
-c3d0ea3d831c5c4d47ccf5793f74a8f860f393d7:internal/controlplane/domaincheck/verify_test.go:generic-api-key:13
-c3d0ea3d831c5c4d47ccf5793f74a8f860f393d7:tests/fixtures/stellartoml/valid.toml:generic-api-key:4
-d86b82258562ada0822ec23a6a6b5c22a7777670:apps/console/test/fixtures/contract.ts:generic-api-key:13
-d86b82258562ada0822ec23a6a6b5c22a7777670:apps/console/test/fixtures/contract.ts:generic-api-key:14
-03af3c17bf65556a1672c404885a79cd879692d9:internal/routenorm/testdata/corpus.tsv:stripe-access-token:256
-d86b82258562ada0822ec23a6a6b5c22a7777670:cmd/controlplane/main_test.go:generic-api-key:125
-d86b82258562ada0822ec23a6a6b5c22a7777670:internal/config/controlplane_test.go:generic-api-key:24
+c0399abd15cb7ca77aaae8a8474fbfec04f143e7:apps/console/test/fixtures/global.ts:generic-api-key:10
+a4c4c9ee954d814d76f077aefaf79cb06cc38f04:internal/jobs/retainweb/migrations.go:generic-api-key:26
+a4c4c9ee954d814d76f077aefaf79cb06cc38f04:internal/jobs/retainweb/migrations.go:generic-api-key:35
+b3ef55ee8f7530492e6ada6496932f79954914bb:apps/console/test/fixtures/contract.ts:generic-api-key:389
+4b3c11c922cd74023fe183b9ab585ffc1bb09f02:apps/console/test/fixtures/contract.ts:generic-api-key:371
+7ee392fc00752ea390c83993cc24521e1406f166:internal/controlplane/domaincheck/verify_test.go:generic-api-key:13
+7ee392fc00752ea390c83993cc24521e1406f166:tests/fixtures/stellartoml/valid.toml:generic-api-key:4
+7c50dbf20f605b18b408fabe9f92bd6d73a38d9a:apps/console/test/fixtures/contract.ts:generic-api-key:13
+7c50dbf20f605b18b408fabe9f92bd6d73a38d9a:apps/console/test/fixtures/contract.ts:generic-api-key:14
+81d8765f33f485feeefc004e5f11b67b2207f3eb:internal/routenorm/testdata/corpus.tsv:stripe-access-token:256
+7c50dbf20f605b18b408fabe9f92bd6d73a38d9a:cmd/controlplane/main_test.go:generic-api-key:125
+7c50dbf20f605b18b408fabe9f92bd6d73a38d9a:internal/config/controlplane_test.go:generic-api-key:24
 61d12381e2f6362d1da1553a1a1c6b2e52dc109f:internal/config/config_test.go:generic-api-key:75
 # reviewed 2026-11-13, each read at its commit:
 # a made-up operator key of the sa_op_ shape (sequential digits and letters)
 # that the adoptionreport tests send to their own canned test servers
-a00d0547e47af5096fe2f8bbc5f3c77016510b5f:cmd/adoptionreport/main_test.go:generic-api-key:32
+d4aa118f5f3945754a358f1cc4ddce2cc6e190b8:cmd/adoptionreport/main_test.go:generic-api-key:32
 # not a secret: the value is the sops key name alertmanager_discord_webhook_url
 # in the map from environment variable names to secret file keys
-1feafcef849c73b715f87c29dc2b1e7d4af42168:infra/secrets/new-secrets.py:discord-client-secret:36
-c3c39ba99c69393e5aa21ccf36f9c34c3644e464:infra/secrets/new-secrets.py:discord-client-secret:38
+e9abd695689e1870a3deccf135e96074ba247e33:infra/secrets/new-secrets.py:discord-client-secret:36
+91b79909f56f59bb02c007035319e3d78f201ebd:infra/secrets/new-secrets.py:discord-client-secret:38
 # the literal fixture client secret that the observability test stack hands to
 # the test-only github oauth fixture container; no real oauth app exists
-c7683bfb0ee0ae44ddac2ca78a3e0dab8d8a54e8:tests/observability/up.sh:generic-api-key:75
+20e0dfcd475ddf1a145dae0864220dde34a823ab:tests/observability/up.sh:generic-api-key:75
 # reviewed 2026-11-13, each read at its commit:
 # a fixed made-up token id uuid stamped on a test batch; token ids are
 # public row ids, never credentials
-505854ce8c759c6d0a6ce774c8b00b5c9f706d81:collector/jetstreamexporter/exporter_test.go:generic-api-key:242
+c777175c1e21a1c8987979488d169f0e9fcf475e:collector/jetstreamexporter/exporter_test.go:generic-api-key:242
 # the documentation placeholder <umami user password key> in an env example
-505854ce8c759c6d0a6ce774c8b00b5c9f706d81:docs/handover/rebuild.md:generic-api-key:188
+c777175c1e21a1c8987979488d169f0e9fcf475e:docs/handover/rebuild.md:generic-api-key:188
 # reviewed 2026-11-16: a public muxed account address (an M strkey) that the
 # on-chain routes test sends to prove the ids endpoint refuses it; strkeys
 # are public ledger ids, never credentials
-63fb564b3b932930e5525baace6346dff7884ef5:internal/controlplane/onchain/routes_test.go:generic-api-key:374
+4931e2f79dcf130a7fc6f7edce47b180bf340854:internal/controlplane/onchain/routes_test.go:generic-api-key:374
 # reviewed 2026-11-18: a public account address (a G strkey) in the audit
 # entry detail that the console test shortens to its first and last four
 # characters; strkeys are public ledger ids, never credentials
-b6dc26c5a2a679439e8f08a685ceb92e774507ac:apps/console/test/operator.test.tsx:generic-api-key:478
+a8c7439a8dc5a35803d00f8baefd94642b9fa2bb:apps/console/test/operator.test.tsx:generic-api-key:478

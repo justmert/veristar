@@ -85,7 +85,7 @@ manifest and the registry digests are the same. Production verifies in keyless m
 
 **Release `v0.2.0` (2026-11-14).** Built by
 `scripts/supply-chain/release-workstation.sh v0.2.0 <work dir>` from a clean worktree at the tag
-(commit `72732a9` on `main`, with the MCP server, migration 00030, the Umami theme, the event
+(commit `ca04cb5` on `main`, with the MCP server, migration 00030, the Umami theme, the event
 route without an access log, and `GOGC=200` with adaptive goroutine stacks for Caddy and the
 gateway). The
 script ran every step above in 9 min 36 s: eleven images built and pushed, each gated by `scan-image.sh` (syft 1.57.1,
@@ -109,7 +109,7 @@ transparency log; then `release-images.json` written, every digest verified with
 | `replayer` | `v0.2.0` | `sha256:b89d0ef67613e0dc8914160a5e3b4d13a28678de4aa75fe6af9f87432d1a8a9a` |
 
 **Release `v0.2.1` (2026-11-14).** Built the same way by
-`scripts/supply-chain/release-workstation.sh v0.2.1 <work dir>` from a clean worktree at the tag (commit `b8bcb75` on `main`. Since `v0.2.0` it adds `platformctl probe-tenant
+`scripts/supply-chain/release-workstation.sh v0.2.1 <work dir>` from a clean worktree at the tag (commit `441e223` on `main`. Since `v0.2.0` it adds `platformctl probe-tenant
 rotate-otlp-token`, the HAProxy start fix, the replica's WAL fetch from the pgBackRest repository,
 and the probe scrape and watchdog wiring) in
 8 min 44 s: eleven images gated by `scan-image.sh` (no fixable critical or high finding), signed
@@ -135,7 +135,7 @@ before it touched a node.
 
 **Release `v0.2.2` (2026-11-14).** Built the same way by
 `scripts/supply-chain/release-workstation.sh v0.2.2 <work dir>` from a clean worktree at the tag
-(commit `e58a634` on `main`. Since `v0.2.1` it adds the console redesign with the light theme,
+(commit `efbba67` on `main`. Since `v0.2.1` it adds the console redesign with the light theme,
 account deletion with `DELETE /api/me` and migration 00031, the Umami theme's light mode, and the
 prober's HTTP/2 health check) in 9 min 20 s: eleven images gated by `scan-image.sh` (no fixable
 critical or high finding), signed and SBOM-attested with the release key from the SOPS file,
@@ -160,7 +160,7 @@ touched a node.
 
 **Release `v0.2.3` (2026-11-15).** The first release after the
 repository became public, built by `release-images.yml` on the tag push (tag `v0.2.3` at commit
-`a4f60ae` on `main`) in keyless mode, from 02:14:41 to 02:20:43 UTC: eleven images gated by
+`e1e8543` on `main`) in keyless mode, from 02:14:41 to 02:20:43 UTC: eleven images gated by
 `scan-image.sh` (no fixable critical or high finding), signed with the workflow's Fulcio
 certificate and logged in Rekor, with build provenance and SBOM attestations; the manifest job
 verified every digest with the identity
@@ -186,7 +186,7 @@ byte-identical.
 | `replayer` | `v0.2.3` | `sha256:f2830f57443201b2543a03207ee2ddec08183f366b16bb6c28fb0b416f8cdac4` |
 
 **Release `v0.3.0` (2026-11-16).** Built by `release-images.yml` on
-the tag push (tag `v0.3.0` at commit `cc4df2d` on `main`) in keyless mode, from 19:02:22 to
+the tag push (tag `v0.3.0` at commit `198360a` on `main`) in keyless mode, from 19:02:22 to
 19:08:39 UTC: eleven images gated by `scan-image.sh` (no fixable critical or high finding), signed
 with the workflow's Fulcio certificate and logged in Rekor, with build provenance and SBOM
 attestations; the manifest job verified every digest with the identity
@@ -216,7 +216,7 @@ wallet sign-in, with migrations 00032, 00033 and 00034.
 
 **Release `v0.4.0` (2026-11-18).** Built in key mode by
 `scripts/supply-chain/release-workstation.sh v0.4.0 <work dir>` from a clean worktree at the tag
-(annotated tag `v0.4.0` at commit `8b015d7` on `main`), from 03:30:20 to 03:48:01 UTC, while the
+(annotated tag `v0.4.0` at commit `428dd4f` on `main`), from 03:30:20 to 03:48:01 UTC, while the
 repository's GitHub Actions are off: the licence gate first (`licences.json`, `console-bundle.txt`),
 then eleven images built, pushed and gated by `scan-image.sh` (syft 1.57.1, Trivy 0.76.2; no image
 had a fixable critical or high finding), signed and SBOM-attested with cosign 3.1.4 and the release
@@ -249,7 +249,7 @@ etcd 3.7.3 with compaction and its quota, the 8 MiB NATS `max_payload` and the r
 
 **Release `v0.4.1` (2026-11-19).** Built in key mode by
 `scripts/supply-chain/release-workstation.sh v0.4.1 <work dir>` from a clean worktree at the tag
-(annotated tag `v0.4.1` at commit `4801886` on `main`), from 02:08:03 to 02:21:52 UTC, while the
+(annotated tag `v0.4.1` at commit `c5e2159` on `main`), from 02:08:03 to 02:21:52 UTC, while the
 repository's GitHub Actions are off: the licence gate first (`licences.json`, `console-bundle.txt`;
 509 shipped packages, 0 failing), then eleven images built, pushed and gated by `scan-image.sh`
 (syft 1.57.1, Trivy 0.76.2; no image had a fixable critical or high finding), signed and
@@ -284,7 +284,7 @@ partitions delivered from every core node, the server-side audit log search, and
 
 **Release `v0.4.2` (2026-11-19).** Built in key mode by
 `scripts/supply-chain/release-workstation.sh v0.4.2 <work dir>` from a clean worktree at the tag
-(annotated tag `v0.4.2` at commit `e092408` on `main`), from 05:55:57 to 06:10:27 UTC, while the
+(annotated tag `v0.4.2` at commit `5aff0fc` on `main`), from 05:55:57 to 06:10:27 UTC, while the
 repository's GitHub Actions are off: the licence gate first (`licences.json`, `console-bundle.txt`;
 509 shipped packages, 0 failing), then eleven images built, pushed and gated by `scan-image.sh` (syft 1.57.1,
 Trivy 0.76.2; no image had a fixable critical or high finding), signed and SBOM-attested with
@@ -318,7 +318,7 @@ health checks; there is no migration.
 
 **Release `v0.4.3` (2026-11-19), the release production runs.** Built in key mode by
 `scripts/supply-chain/release-workstation.sh v0.4.3 <work dir>` from a clean worktree at the tag
-(annotated tag `v0.4.3` at commit `a31b132` on `main`), from 06:57:37 to 07:11:38 UTC, while the
+(annotated tag `v0.4.3` at commit `0f869a7` on `main`), from 06:57:37 to 07:11:38 UTC, while the
 repository's GitHub Actions are off: the licence gate first (`licences.json`, `console-bundle.txt`;
 511 shipped packages, 0 failing), then eleven images built, pushed and gated by `scan-image.sh` (syft 1.57.1,
 Trivy 0.76.2; no image had a fixable critical or high finding), signed and SBOM-attested with
