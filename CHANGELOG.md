@@ -16,6 +16,8 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-19
+
 ### Added
 
 - `platformctl tenant create` enrolls a project on behalf of a console user,
@@ -349,29 +351,74 @@ here, before they take effect, as the processing terms require
 
 ### Upgrade notes
 
+In the order of the rollout: before the deploy, during the rolling deploy
+(`deploy.yml`, [docs/deploy/upgrade.md](docs/deploy/upgrade.md)), then after it.
+
+**Before the deploy**
+
+- This release is signed in key mode on a workstation, while the
+  repository's GitHub Actions are off
+  ([docs/security/supply-chain.md](docs/security/supply-chain.md) section
+  2.1). `infra/ansible/vars/signing.yml` verifies keyless releases, so add
+  `ANSIBLE_EXTRA='-e sa_signature_mode=key'` to every `make <env>-deploy`;
+  without it `verify-release.yml` refuses the release before any node is
+  touched.
 - Migration 00052 installs the `pg_trgm` extension, which ships with
   PostgreSQL's contrib modules (the `postgres` images include it). It is a
   trusted extension, so the database owner `platform_owner` installs it
   without a superuser.
-- Web events move from one subject per site to 32 partitions. The rolling
-  deploy carries the queue across without losing or repeating an event:
-  `nats apply` keeps the old subject and its consumer (now filtered to
-  `web.events.*`) next to the partitions, the replayer drains the old
-  consumer under the old `replayer` lock, and while both kinds are queued it
-  keeps each visitor's events in order. After the deploy, once every gateway
-  runs this release, run `platformctl nats retire-legacy-web`. The steps,
-  expected log lines and the rollback are in
-  [docs/deploy/upgrade.md](docs/deploy/upgrade.md), "Upgrading to
-  partitioned web events".
-- The deploy applies migrations 00047 (calls per contract function), 00048
-  (the 20-id cap of the enrollment copy) and 00049 (`api.sum_buckets_read`)
-  with the new release's bootstrap, before the core tier restarts.
+
+**During the rolling deploy**
+
+- `deploy.yml` first installs the NATS permissions of the new release on
+  every NATS server, one server at a time (the play "Install the nats
+  permissions of the new release"). They add the 32 partition consumers to
+  the replayer's permissions and keep everything the running release uses,
+  so its gateways and replayers go on working.
+- The jobs daemon then stops on every core node before the migrations, and
+  each node's core role starts it again with the new image. If a deploy
+  stops before a core node is updated, its jobs daemon stays stopped: run
+  the deploy again.
+- The bootstrap step applies migrations 00047 (calls per contract function),
+  00048 (the 20-id cap of the enrollment copy), 00049
+  (`api.sum_buckets_read`), 00050 (SCF awards), 00051 (`cp_operator` no
+  longer reads the awards) and 00052 (audit search) with the new release's
+  images, before the core tier restarts. Expected log line:
+  `platform database migrated` with `rls_coverage ok`.
+- Web events move from one subject per site to 32 partitions, and the
+  rolling deploy carries the queue across without losing or repeating an
+  event. `nats apply` in the bootstrap step keeps the old subject and its
+  consumer (now filtered to `web.events.*`) next to the partitions and
+  creates the consumers `replayer-p00` to `replayer-p31`. Upgrade the core
+  tier before the edge tier, as the rolling deploy does: each new replayer
+  takes its partitions and drains the old consumer under the old `replayer`
+  lock while gateways of the earlier release still queue on the old
+  subject; then each new gateway queues on the partitions, and while both
+  kinds are queued the replayer keeps each visitor's events in order. The
+  replayer container gets 30 s to stop. The steps, expected log lines and
+  the rollback are in [docs/deploy/upgrade.md](docs/deploy/upgrade.md),
+  "Upgrading to partitioned web events".
+
+**After the deploy**
+
+- Once every gateway runs this release, retire the old web subject on a
+  core node with `platformctl nats retire-legacy-web --wait 10m` (expected
+  log line: `legacy web subject retired`). Until this step a rollback to
+  `0.4.0` stays possible: the events queued on the partitions wait in
+  `WEB_DLQ` until this release is deployed again and `platformctl dlq
+  replay` puts them back. After it, a gateway of an earlier release cannot
+  queue web events. `replayer_partitions_owned` sums to 32 over the core nodes once
+  every partition has an owner.
 - Every project accepts terms of use `2026-11-18-draft.6` at its next
   sign-in; until it does, changes to the project are blocked (403
   `terms_not_accepted`, contract 4.2.6).
-- Tracker 1.3.2 and 1.4.0 are served next to every earlier release; sites move to them
-  by replacing their tag ([docs/onboarding/web/upgrading.md](docs/onboarding/web/upgrading.md)).
-- Development stack: point the dev GitHub OAuth App's callback at
+- Tracker 1.3.2 and 1.4.0 are served next to every earlier release; sites
+  move to them by replacing their tag
+  ([docs/onboarding/web/upgrading.md](docs/onboarding/web/upgrading.md)).
+
+**Development stack**
+
+- Point the dev GitHub OAuth App's callback at
   `http://localhost:5173/api/auth/github/callback`.
 
 ## [0.4.0] - 2026-11-18
@@ -1363,7 +1410,8 @@ How to check a file against its release:
   starts tracking on `umami.start()`, the server-issued proof of work, and a
   byte-identical rebuild of every committed release.
 
-[Unreleased]: https://github.com/justmert/veristar/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/justmert/veristar/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/justmert/veristar/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/justmert/veristar/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/justmert/veristar/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/justmert/veristar/compare/v0.2.2...v0.2.3
