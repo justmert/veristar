@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ThemeChoice, useTheme } from "@veristar/brand/theme";
-import { KeyRound, Trash2, Unlink, Wallet } from "lucide-react";
+import { cn } from "@veristar/brand/cn";
+import { KeyRound, Unlink, Wallet } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
@@ -16,8 +16,8 @@ import { OperatorPasskeys } from "@/components/operator-passkeys";
 import { PageHeader } from "@/components/page-header";
 import { PasskeyDialog } from "@/components/passkey-dialog";
 import { RowMenu } from "@/components/row-menu";
-import { Segmented } from "@/components/segmented";
 import { ErrorState } from "@/components/states";
+import { Pill } from "@/components/status";
 import { steppedUp } from "@/components/step-up";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
@@ -101,40 +101,81 @@ export function AccountPage() {
     );
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader {...HEADER} />
-      <div className="flex max-w-prose flex-col gap-8">
-        <SignInMethods me={me.data} />
-        {me.data.user.is_operator ? (
-          <OperatorPasskeys userName={me.data.user.display_name} />
-        ) : null}
-        <Appearance />
-        <DeleteAccount me={me.data} />
-      </div>
+      <Who me={me.data} />
+      <SignInMethods me={me.data} />
+      {me.data.user.is_operator ? <OperatorPasskeys userName={me.data.user.display_name} /> : null}
+      <DeleteAccount me={me.data} />
     </div>
   );
 }
 
-function MethodRow({
+// who you are: the initial, the name the console shows, the projects you own
+function Who({ me }: { me: Me }) {
+  const owned = me.tenants.filter((t) => t.role === "owner").length;
+  return (
+    <header className="flex items-center gap-4">
+      <span
+        aria-hidden
+        className="flex size-16 shrink-0 items-center justify-center rounded-full bg-series-1/20 text-[26px] font-semibold text-series-1 uppercase"
+      >
+        {me.user.display_name.slice(0, 1)}
+      </span>
+      <div className="flex min-w-0 flex-col gap-1">
+        <h1 className="truncate text-[28px] leading-8.5 font-semibold tracking-[-0.02em] text-fg">
+          {me.user.display_name}
+        </h1>
+        <p className="text-small text-fg-2">
+          {owned === 0
+            ? "Owner of no project"
+            : owned === 1
+              ? "Owner of 1 project"
+              : `Owner of ${owned} projects`}
+        </p>
+      </div>
+    </header>
+  );
+}
+
+// one sign-in method as a card: its icon, Linked and its menu when linked,
+// its name, what identifies it, and its one action when not linked
+function MethodCard({
   icon,
   name,
+  linked,
   detail,
   action,
+  menu,
 }: {
   icon: ReactNode;
   name: string;
+  linked: boolean;
   detail: ReactNode;
-  action: ReactNode;
+  action?: ReactNode;
+  menu?: ReactNode;
 }) {
   return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line-subtle px-4 py-3 last:border-b-0">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-line-strong text-fg-2 [&_svg]:size-4">
-        {icon}
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="text-body font-medium text-fg">{name}</span>
-        <span className="min-w-0 truncate text-small text-fg-2">{detail}</span>
+    <li
+      data-method={name}
+      data-linked={linked ? "" : undefined}
+      className={cn(
+        "flex min-h-44 min-w-0 flex-col gap-1 rounded-2xl border bg-raised px-4.5 pt-4.5 pb-5",
+        linked ? "border-success-line" : "border-line",
+      )}
+    >
+      <div className="mb-2.5 flex items-start justify-between gap-2">
+        <span className="flex size-9.5 shrink-0 items-center justify-center rounded-lg border border-line-2 text-fg-2 [&_svg]:size-4">
+          {icon}
+        </span>
+        {linked ? (
+          <span className="flex items-center gap-1">
+            <Pill tone="success">Linked</Pill>
+            {menu}
+          </span>
+        ) : null}
       </div>
-      {action}
+      <h3 className="text-[15px] leading-5.5 font-semibold text-fg">{name}</h3>
+      <div className="flex min-w-0 flex-col gap-1 text-small text-fg-2">{detail}</div>
+      {action ? <div className="mt-2.5">{action}</div> : null}
     </li>
   );
 }
@@ -223,8 +264,8 @@ function SignInMethods({ me }: { me: Me }) {
   const qc = useQueryClient();
   const { github_login, github_id, stellar_address, passkey_address } = me.user;
   // a method can go while another one remains
-  const alone =
-    [github_login, stellar_address, passkey_address].filter((m) => m !== null).length <= 1;
+  const count = [github_login, stellar_address, passkey_address].filter((m) => m !== null).length;
+  const alone = count <= 1;
 
   // the change that waits for a passkey confirmation, if any
   const [stepUp, setStepUp] = useState<"unlink" | "link" | null>(null);
@@ -247,8 +288,11 @@ function SignInMethods({ me }: { me: Me }) {
 
   return (
     <section aria-labelledby="methods-h" className="flex flex-col gap-4">
-      <h2 id="methods-h" className="text-title text-fg">
+      <h2 id="methods-h" className="flex items-baseline gap-2 text-[15px] font-semibold text-fg">
         Sign-in methods
+        <span className="text-small font-normal text-fg-3 tabular">
+          {count} of 3
+        </span>
       </h2>
       {linkError ? (
         <Notice tone="critical" role="alert" title="GitHub was not linked">
@@ -261,64 +305,66 @@ function SignInMethods({ me }: { me: Me }) {
         </Notice>
       ) : null}
       {me.user.is_operator ? <OperatorStepUp /> : null}
-      <ul
-        className="flex flex-col rounded-lg border border-line bg-raised"
-        aria-label="Sign-in methods"
-      >
-        <MethodRow
+      <ul className="grid grid-cols-1 gap-3 md:grid-cols-3" aria-label="Sign-in methods">
+        <MethodCard
           icon={<GitHubMark className="size-4" />}
           name="GitHub"
+          linked={github_login !== null}
           detail={
             github_login !== null ? (
               <>
-                {github_login} <span className="font-mono">· id {github_id}</span>
+                <span className="truncate">{github_login}</span>
+                <span className="font-mono text-caption text-fg-3">id {github_id}</span>
               </>
             ) : (
-              "Not linked"
+              <span>Not linked</span>
             )
           }
+          menu={
+            <UnlinkMenu
+              method="github"
+              alone={alone}
+              onClick={() => {
+                unlink.reset();
+                setUnlinking("github");
+              }}
+            />
+          }
           action={
-            github_login !== null ? (
-              <UnlinkMenu
-                method="github"
-                alone={alone}
-                onClick={() => {
-                  unlink.reset();
-                  setUnlinking("github");
-                }}
-              />
-            ) : (
+            github_login === null ? (
               <Button asChild variant="outline" size="sm" className="max-lg:h-(--vs-control-touch)">
                 <a href={linkGitHubUrl()} onClick={clearNotice}>
                   Link GitHub
                 </a>
               </Button>
-            )
+            ) : undefined
           }
         />
-        <MethodRow
+        <MethodCard
           icon={<Wallet aria-hidden />}
           name="Stellar wallet"
+          linked={stellar_address !== null}
           detail={
             stellar_address !== null ? (
               <span className="font-mono" title={stellar_address}>
                 {shortAddress(stellar_address)}
               </span>
             ) : (
-              "Not linked"
+              <span>Not linked</span>
             )
           }
+          menu={
+            <UnlinkMenu
+              method="stellar"
+              alone={alone}
+              onClick={() => {
+                unlink.reset();
+                setUnlinking("stellar");
+              }}
+            />
+          }
           action={
-            stellar_address !== null ? (
-              <UnlinkMenu
-                method="stellar"
-                alone={alone}
-                onClick={() => {
-                  unlink.reset();
-                  setUnlinking("stellar");
-                }}
-              />
-            ) : (
+            stellar_address === null ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -330,32 +376,34 @@ function SignInMethods({ me }: { me: Me }) {
               >
                 Link a wallet
               </Button>
-            )
+            ) : undefined
           }
         />
-        <MethodRow
+        <MethodCard
           icon={<KeyRound aria-hidden />}
           name="Passkey"
+          linked={passkey_address !== null}
           detail={
             passkey_address !== null ? (
               <span className="font-mono" title={passkey_address}>
                 {shortAddress(passkey_address)}
               </span>
             ) : (
-              "Not linked"
+              <span>None yet</span>
             )
           }
+          menu={
+            <UnlinkMenu
+              method="passkey"
+              alone={alone}
+              onClick={() => {
+                unlink.reset();
+                setUnlinking("passkey");
+              }}
+            />
+          }
           action={
-            passkey_address !== null ? (
-              <UnlinkMenu
-                method="passkey"
-                alone={alone}
-                onClick={() => {
-                  unlink.reset();
-                  setUnlinking("passkey");
-                }}
-              />
-            ) : (
+            passkey_address === null ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -367,7 +415,7 @@ function SignInMethods({ me }: { me: Me }) {
               >
                 Add a passkey
               </Button>
-            )
+            ) : undefined
           }
         />
       </ul>
@@ -485,20 +533,19 @@ function DeleteAccount({ me }: { me: Me }) {
 
   return (
     <section aria-labelledby="danger-h" className="flex flex-col gap-4">
-      <div className="flex flex-col gap-4 border-t border-line pt-6">
+      <div className="flex flex-col gap-4 border-t border-line-subtle pt-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 id="danger-h" className="text-title text-fg">
+          <h2 id="danger-h" className="text-body font-medium text-fg">
             Delete account
           </h2>
           <Button
             variant="outline"
-            className="max-lg:h-(--vs-control-touch)"
+            className="border-critical-line text-critical hover:text-critical max-lg:h-(--vs-control-touch)"
             onClick={() => {
               del.reset();
               setOpen(true);
             }}
           >
-            <Trash2 aria-hidden />
             Delete account
           </Button>
         </div>
@@ -553,31 +600,6 @@ function DeleteAccount({ me }: { me: Me }) {
         error={blocked.length > 0 ? null : del.error}
         typed={{ value: login, label: `Type ${login} to confirm` }}
         onConfirm={() => del.mutate()}
-      />
-    </section>
-  );
-}
-
-const THEMES: readonly { value: ThemeChoice; label: string }[] = [
-  { value: "system", label: "System" },
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-];
-
-// the theme of this browser; the account menu shows the same choice
-function Appearance() {
-  const theme = useTheme();
-  return (
-    <section aria-labelledby="theme-h" className="flex flex-col gap-4">
-      <h2 id="theme-h" className="text-title text-fg">
-        Theme
-      </h2>
-      <Segmented<ThemeChoice>
-        label="Theme"
-        value={theme.choice}
-        options={THEMES}
-        onChange={theme.setChoice}
-        size="md"
       />
     </section>
   );
