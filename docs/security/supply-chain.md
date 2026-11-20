@@ -775,6 +775,24 @@ and `next.config.ts` turns on no Cache Components. No public host serves Umami e
 ([ADR 0005](../adr/0005-umami-as-engine-only.md)). Umami 3.5.0 is the newest release, so both are
 recorded under `umami_repository_advisories` until the next one, through `make umami-upgrade`.
 
+On 2026-11-20 the hourly run filed five more medium Next.js advisories in Umami 3.5.0 (`next`
+16.4.2, all fixed in 16.4.5). Each needs a Next.js feature that the Umami 3.5.0 source does not use:
+
+| Advisory | Needs | Umami 3.5.0 |
+|---|---|---|
+| GHSA-vvgp-ww4w-46vf | `cacheComponents: true` with fallback shells under `next start` | `next.config.ts` sets only `experimental.useTypeScriptCli`; no `generateStaticParams` |
+| GHSA-rhh4-g77r-r9qj | `'use cache'` functions called with binary arguments | no `'use cache'` anywhere in `src` |
+| GHSA-pc58-hwjq-p385 | a route handler or the fetch cache returning a fetched upstream response unchanged | no route handler calls `fetch()`; `/mcp` dispatches in process and answers 404 with `MCP_ENABLED` unset; `TRACKER_SCRIPT_URL` and `CLOUD_MODE` stay unset |
+| GHSA-f3mh-rxg3-f5g2 | Edge runtime routes setting cookies through `NextResponse` | no Edge runtime, no middleware or proxy, no cookie set; auth is a bearer token and `DISABLE_LOGIN` is on |
+| GHSA-7qx7-33qx-rqx2 | an SVG reaching the `/_next/image` optimizer | no `next/image` and no `images` config, but the standalone server still answers `/_next/image` |
+
+For the last one the protection is reachability. No public host serves Umami
+([ADR 0005](../adr/0005-umami-as-engine-only.md)). It is published only on the core node's
+loopback. The network security group opens only 80 and 443 to Caddy, and
+`make test-caddy-closed` fails when an internet-facing Caddy config refers to Umami. Umami 3.5.0 is
+still the newest release, so all five are recorded under `umami_repository_advisories` until the
+next one, through `make umami-upgrade`.
+
 **Umami repository advisory GHSA-vhf9-rcmp-v5fc (critical, published 2026-11-13).** An SQL
 injection in Umami's legacy reports API: `POST /api/reports/*` copies `filters[*].paramName` from
 the body into the SQL text, and a share token from `GET /api/share/<slug>` is enough to call it.

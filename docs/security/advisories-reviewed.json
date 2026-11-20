@@ -25,6 +25,31 @@
       "id": "GHSA-vc7v-qv4w-wrv8",
       "reviewed": "2026-11-19",
       "decision": "next 16.4.2 in umami 3.5.0 (fixed in 16.4.5). needs cache components with nested 'use cache' functions reading next/root-params. umami 3.5.0 enables neither (next.config.ts sets only experimental.useTypeScriptCli) and uses no 'use cache', and no public host serves umami (adr 0005). umami 3.5.0 is the newest release; revisit at the next one, through make umami-upgrade."
+    },
+    {
+      "id": "GHSA-vvgp-ww4w-46vf",
+      "reviewed": "2026-11-20",
+      "decision": "next 16.4.2 in umami 3.5.0 (fixed in 16.4.5). fallback shell cache poisoning needs cacheComponents: true under next start. umami 3.5.0's next.config.ts sets only experimental.useTypeScriptCli (no cacheComponents) and has no generateStaticParams. no public host serves umami (adr 0005): it is published on the core node's loopback only, the nsg opens only 80/443 to caddy, and make test-caddy-closed fails when an internet-facing caddy config refers to it. umami 3.5.0 is the newest release; revisit at the next one, through make umami-upgrade."
+    },
+    {
+      "id": "GHSA-rhh4-g77r-r9qj",
+      "reviewed": "2026-11-20",
+      "decision": "next 16.4.2 in umami 3.5.0 (fixed in 16.4.5). needs a 'use cache' function called with binary arguments (Uint8Array, Blob). umami 3.5.0 has no 'use cache' anywhere in src. no public host serves umami (adr 0005): it is published on the core node's loopback only, the nsg opens only 80/443 to caddy, and make test-caddy-closed fails when an internet-facing caddy config refers to it. umami 3.5.0 is the newest release; revisit at the next one, through make umami-upgrade."
+    },
+    {
+      "id": "GHSA-pc58-hwjq-p385",
+      "reviewed": "2026-11-20",
+      "decision": "next 16.4.2 in umami 3.5.0 (fixed in 16.4.5). needs a route handler (or the fetch cache) that returns a fetched upstream response unchanged, behind a pipelining http/1.1 proxy. no umami 3.5.0 route handler calls fetch() (the /p and /q routes use redis.client.fetch, a cache lookup; /mcp dispatches in process and answers 404 with MCP_ENABLED unset), and the external rewrites stay off (TRACKER_SCRIPT_URL and CLOUD_MODE unset). no public host serves umami (adr 0005): it is published on the core node's loopback only, the nsg opens only 80/443 to caddy, and make test-caddy-closed fails when an internet-facing caddy config refers to it. umami 3.5.0 is the newest release; revisit at the next one, through make umami-upgrade."
+    },
+    {
+      "id": "GHSA-f3mh-rxg3-f5g2",
+      "reviewed": "2026-11-20",
+      "decision": "next 16.4.2 in umami 3.5.0 (fixed in 16.4.5). needs an edge runtime route that sets cookies through NextResponse. umami 3.5.0 declares no edge runtime, has no middleware or proxy, and sets no cookie in any route (auth is a bearer token, DISABLE_LOGIN is on). no public host serves umami (adr 0005): it is published on the core node's loopback only, the nsg opens only 80/443 to caddy, and make test-caddy-closed fails when an internet-facing caddy config refers to it. umami 3.5.0 is the newest release; revisit at the next one, through make umami-upgrade."
+    },
+    {
+      "id": "GHSA-7qx7-33qx-rqx2",
+      "reviewed": "2026-11-20",
+      "decision": "next 16.4.2 in umami 3.5.0 (fixed in 16.4.5). an svg reaches the /_next/image optimizer although dangerouslyAllowSVG is false. umami 3.5.0 does not use next/image and sets no images config (no remotePatterns), but the standalone server still answers /_next/image, so the exposure rests on reachability: only platform components on the private network and an operator on loopback reach umami. no public host serves umami (adr 0005): it is published on the core node's loopback only, the nsg opens only 80/443 to caddy, and make test-caddy-closed fails when an internet-facing caddy config refers to it. umami 3.5.0 is the newest release; revisit at the next one, through make umami-upgrade."
     }
   ],
   "upstream_image_findings": [
