@@ -23,7 +23,7 @@ here, before they take effect, as the processing terms require
   without signing in. The demo is read only, shows a small banner with a link to enroll, and sets
   no cookie. The control plane serves it under `/api/demo` with the console's own read handlers
   behind an allowlist of GET routes; every other request answers `403 demo_read_only`, and each
-  visitor is limited to 60 requests at once and then 5 a second
+  visitor is limited to 120 requests at once and then 10 a second
   ([docs/reference/control-plane-api.md](docs/reference/control-plane-api.md), section 21).
 - `platformctl tenant demo (-tenant ID | -slug S) (-on | -off) [-dry-run]` marks a project as a
   demo project or takes it out, with a `tenant.demo` audit row

@@ -83,8 +83,11 @@ test("an anonymous tab browses the demo read-only", async ({ browser }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
 
+  // /demo opens the oldest demo project; a retry of this file enrolls and
+  // marks another, so the test then opens its own
   await page.goto(`${APP}/demo`);
-  await page.waitForURL(`${APP}/projects/${demo.id}`);
+  await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+  if (!page.url().endsWith(demo.id)) await page.goto(`${APP}/projects/${demo.id}`);
   const banner = page.locator("[data-demo-banner]");
   await expect(banner).toContainText("Demo with sample data. Read-only.");
   await expect(banner.getByRole("link", { name: "Enroll your project" })).toHaveAttribute(

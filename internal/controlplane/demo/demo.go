@@ -100,15 +100,16 @@ var Allowlist = []string{
 	"/operator/rules/{rule_id}/matches",
 }
 
-// DefaultLimits are the limits of anonymous demo traffic per instance. a console page fires up to
-// about twenty reads at once, so a client may burst 60 and then read 5 per
+// DefaultLimits are the limits of anonymous demo traffic per instance. a
+// console page fires up to about twenty reads at once and a visitor moves
+// between pages quickly, so a client may burst 120 and then read 10 per
 // second; the global ceiling bounds what many clients together cost the
-// database and umami (the web routes keep their own per-user engine limit,
-// which all demo visitors share).
+// database (the web routes keep their own per-user engine limit, which all
+// demo visitors share).
 var DefaultLimits = auth.ClientLimits{
-	ClientRate: 5, ClientBurst: 60,
-	GlobalRate: 100, GlobalBurst: 400,
-	ReserveRate: 10, ReserveBurst: 40,
+	ClientRate: 10, ClientBurst: 120,
+	GlobalRate: 200, GlobalBurst: 800,
+	ReserveRate: 20, ReserveBurst: 80,
 }
 
 // Routes is a group of the console's routes, as the feature packages hand
