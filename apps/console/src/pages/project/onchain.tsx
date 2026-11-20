@@ -177,7 +177,7 @@ export function OnchainPage() {
               maxDays={MAX_DAYS}
               maxDay={lastDays(1, new Date()).to}
               // the range in words is the header's meta item
-              className="[&>div:first-child>span]:hidden"
+              words={false}
             />
             <Button asChild variant="outline">
               <a href={exportPaths.overview(tenant.id, { from: v.from, to: v.to })} download>

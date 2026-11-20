@@ -29,7 +29,7 @@ import { Panel } from "@/components/panel";
 import { RangeControl } from "@/components/range-control";
 import { SetupBar, type SetupStep } from "@/components/setup-progress";
 import { StatCard, type StatChange, StatGrid } from "@/components/stat-card";
-import { EmptyState, ErrorState, Skeleton } from "@/components/states";
+import { ErrorState, Skeleton } from "@/components/states";
 import { StatusDot } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,7 +74,6 @@ import { canAddSites } from "@/pages/project/sites";
 import { useProject } from "@/pages/project-layout";
 import { OverviewSkeleton, PAGE_HEADERS } from "./page-frame";
 import { LiveCount, SiteChips } from "./site-chips";
-import { HEADER_RANGE } from "./web";
 import { METRIC_LABEL, WebTrendChart } from "./web-chart";
 
 const NO_FILTERS: ApiFilters = { service: null, route: null, method: null };
@@ -148,7 +147,7 @@ export function OverviewPage() {
           maxDay={utcDay()}
           maxDays={WEB_MAX_DAYS}
           range={days}
-          className={HEADER_RANGE}
+          words={false}
         />
       }
     />
@@ -472,11 +471,20 @@ function Dashboard({
   );
 }
 
+// the chart's place before the first page view: the empty plot keeps its axis
 function WaitPanel({ title }: { title: string }) {
   return (
-    <Panel title="Page views" className="h-full min-h-80" bodyClassName="flex flex-1 items-center">
-      <EmptyState className="w-full" title={title} />
-    </Panel>
+    <TimeChart
+      title="Page views"
+      description="per day, UTC"
+      buckets={[]}
+      series={[]}
+      state="empty"
+      height={240}
+      emptyTitle={title}
+      emptyAction={null}
+      className="h-full"
+    />
   );
 }
 

@@ -27,3 +27,10 @@
   --color-line-2: var(--vs-line-2);
   --color-line-focus: var(--vs-line-focus);
 }
+
+/* the period that is still running: stripes of the bar's own colour (the
+   text colour) on nothing, at 135 degrees. a texture, the same on every
+   chart; svg bars use components/charts/hatch.tsx */
+@utility hatch-running {
+  background-image: repeating-linear-gradient(135deg, currentColor 0 2px, transparent 2px 4px);
+}

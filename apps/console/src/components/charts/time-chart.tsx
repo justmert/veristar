@@ -15,6 +15,7 @@ import { fade, transition } from "@veristar/brand/motion";
 import { Sheet } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { HatchPattern, RunningKey } from "@/components/charts/hatch";
 import { useRevealOnce } from "@/components/motion";
 import { EmptyState, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -146,6 +147,10 @@ export type TimeChartProps = {
   onRetry?: () => void;
   emptyTitle?: string;
   emptyText?: string;
+  // actions inside the empty plot, such as "Install the tracker" and "Docs":
+  // the axis stays and the title and actions sit in the plot, with no text.
+  // null keeps the axis with the title alone
+  emptyAction?: ReactNode;
   // shown when every bucket is partial: a chart of one running period
   // would read as a drop
   noCompleteTitle?: string;
@@ -216,6 +221,7 @@ export function TimeChart({
   onRetry,
   emptyTitle = "No data in this range",
   emptyText = "Values show here a few minutes after data arrives.",
+  emptyAction,
   noCompleteTitle = "No complete period yet",
   noCompleteText = "The first period is still running. Its value shows here when it ends.",
   marker,
@@ -355,14 +361,8 @@ export function TimeChart({
                   ))
                 : null}
               {hasPartial ? (
-                <li
-                  data-legend="partial"
-                  className="flex items-center gap-1 text-caption text-fg-2"
-                >
-                  <svg aria-hidden width="10" height="10" className="rounded-bar">
-                    <rect width="10" height="10" fill={`url(#${uid}-legend)`} />
-                  </svg>
-                  Partial
+                <li>
+                  <RunningKey />
                 </li>
               ) : null}
             </ul>
@@ -407,21 +407,6 @@ export function TimeChart({
       </header>
 
       <div ref={ref} className="px-4 pb-4 sm:px-5">
-        {/* one pattern for the legend swatch, so the swatch matches the bars */}
-        <svg aria-hidden width="0" height="0" className="absolute">
-          <defs>
-            <pattern
-              id={`${uid}-legend`}
-              width="4"
-              height="4"
-              patternUnits="userSpaceOnUse"
-              patternTransform="rotate(45)"
-            >
-              <rect width="4" height="4" className="fill-series-prev" />
-              <rect width="1.5" height="4" fill="var(--vs-series-partial)" />
-            </pattern>
-          </defs>
-        </svg>
         <AnimatePresence mode="wait" initial={false}>
           {view === "loading" ? (
             <motion.div key="loading" {...fade} role="status" aria-busy="true">
@@ -445,6 +430,10 @@ export function TimeChart({
                 onRetry={onRetry}
                 className="border-0"
               />
+            </motion.div>
+          ) : view === "empty" && emptyAction !== undefined ? (
+            <motion.div key="empty" {...fade}>
+              <EmptyPlot height={H} title={emptyTitle} action={emptyAction} />
             </motion.div>
           ) : view === "empty" ? (
             <motion.div key="empty" {...fade}>
@@ -555,27 +544,9 @@ export function TimeChart({
                   >
                     <defs>
                       {series.map((s) => (
-                        <pattern
-                          key={s.key}
-                          id={`${uid}-${s.key}`}
-                          width="4"
-                          height="4"
-                          patternUnits="userSpaceOnUse"
-                          patternTransform="rotate(45)"
-                        >
-                          <rect width="4" height="4" className={FILL[s.tone]} />
-                          <rect width="1.5" height="4" fill="var(--vs-series-partial)" />
-                        </pattern>
+                        <HatchPattern key={s.key} id={`${uid}-${s.key}`} className={FILL[s.tone]} />
                       ))}
-                      <pattern
-                        id={`${uid}-band`}
-                        width="4"
-                        height="4"
-                        patternUnits="userSpaceOnUse"
-                        patternTransform="rotate(45)"
-                      >
-                        <rect width="1.5" height="4" fill="var(--vs-series-partial)" />
-                      </pattern>
+                      <HatchPattern id={`${uid}-band`} className="fill-fg-3" />
                     </defs>
                     {kind === "line"
                       ? buckets.map((b, i) =>
@@ -590,7 +561,7 @@ export function TimeChart({
                               width={slot}
                               height={H}
                               fill={`url(#${uid}-band)`}
-                              opacity="0.5"
+                              opacity="0.35"
                             />
                           ) : null,
                         )
@@ -877,6 +848,40 @@ function Readout({
           </span>
         </span>
       ) : null}
+    </div>
+  );
+}
+
+// an empty chart that keeps its axis: the zero line and one grid line, with
+// the title and its actions in the middle of the plot
+function EmptyPlot({
+  height,
+  title,
+  action,
+}: {
+  height: number;
+  title: string;
+  action: ReactNode;
+}) {
+  return (
+    <div className="relative" style={{ height }}>
+      <div aria-hidden className="absolute inset-0" style={{ left: AXIS_W }}>
+        <span className="absolute inset-x-0 top-1/2 h-px bg-grid" />
+        <span className="absolute inset-x-0 bottom-0 h-px bg-line-2" />
+      </div>
+      <span
+        aria-hidden
+        className="absolute bottom-0 translate-y-1/2 text-right text-axis text-fg-3 tabular"
+        style={{ width: AXIS_W - 8 }}
+      >
+        0
+      </span>
+      <EmptyState
+        compact
+        title={title}
+        action={action}
+        className="absolute inset-0"
+      />
     </div>
   );
 }

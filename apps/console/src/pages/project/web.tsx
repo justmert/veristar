@@ -24,7 +24,7 @@ import {
   webKeys,
   webSummaryQuery,
 } from "@/api/web";
-import { BreakdownList } from "@/components/charts";
+import { BreakdownList, TimeChart } from "@/components/charts";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
 import { Panel } from "@/components/panel";
@@ -88,10 +88,6 @@ const EMPTY_TITLE: Partial<Record<TenantStatus, string>> = {
 
 const CADENCE = "Totals refresh every hour. Pages, events and hours are read live.";
 
-// the range control sits in the header; the range in words is the header's
-// meta item, so the control's own words are hidden
-export const HEADER_RANGE = "[&>div:first-child>span]:hidden";
-
 export function WebPage() {
   const { tenant } = useProject();
   const [params, setParams] = useSearchParams();
@@ -140,7 +136,7 @@ export function WebPage() {
               range={days}
               maxDays={WEB_MAX_DAYS}
               validate={(r) => validateWebDays(r, new Date())}
-              className={HEADER_RANGE}
+              words={false}
             />
           </>
         ) : null
@@ -300,26 +296,29 @@ function FirstStep({ sites, status }: { sites: Site[]; status: TenantStatus }) {
           />
         ))}
       </FigureRow>
-      <Panel title="Page views" className="min-h-96" bodyClassName="flex flex-1 items-center">
-        <EmptyState
-          className="w-full"
-          title={EMPTY_TITLE[status] ?? (EMPTY_TITLE.active as string)}
-          action={
-            active && next ? (
-              <>
-                <Button asChild>
-                  <Link to={siteSetupPath(next)}>Install the tracker</Link>
+      <TimeChart
+        title="Page views"
+        description="per day, UTC"
+        buckets={[]}
+        series={[]}
+        state="empty"
+        height={300}
+        emptyTitle={EMPTY_TITLE[status] ?? (EMPTY_TITLE.active as string)}
+        emptyAction={
+          active && next ? (
+            <>
+              <Button asChild>
+                <Link to={siteSetupPath(next)}>Install the tracker</Link>
+              </Button>
+              {docs ? (
+                <Button asChild variant="ghost">
+                  <a href={docs}>Docs</a>
                 </Button>
-                {docs ? (
-                  <Button asChild variant="ghost">
-                    <a href={docs}>Docs</a>
-                  </Button>
-                ) : null}
-              </>
-            ) : undefined
-          }
-        />
-      </Panel>
+              ) : null}
+            </>
+          ) : null
+        }
+      />
     </div>
   );
 }

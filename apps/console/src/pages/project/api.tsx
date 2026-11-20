@@ -179,7 +179,7 @@ function rangeItems(
 }
 
 // the range control in the header: the range in words is a meta item, so
-// the words beside the control are hidden (see shared-requests.md)
+// the control draws only its choices
 function RangePicker({ state, set }: { state: DashboardState; set: (s: DashboardState) => void }) {
   return (
     <RangeControl
@@ -200,7 +200,7 @@ function RangePicker({ state, set }: { state: DashboardState; set: (s: Dashboard
         const e = to ? validateCustomEnd(to, new Date()) : null;
         return e ? { to: e } : {};
       }}
-      className="[&>div:first-child>span]:hidden"
+      words={false}
     />
   );
 }

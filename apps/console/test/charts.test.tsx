@@ -113,7 +113,7 @@ describe("time chart", () => {
     const host = await render(
       <TimeChart title="Page views" state="data" buckets={buckets} series={series} />,
     );
-    expect(host.querySelector("[data-legend=partial]")?.textContent).toBe("Partial");
+    expect(host.querySelector("[data-legend=partial]")?.textContent).toBe("Still running");
     expect(host.querySelectorAll("[data-partial]")).toHaveLength(1);
     const whole = await render(
       <TimeChart
@@ -249,7 +249,7 @@ describe("time chart", () => {
     const marks = [...host.querySelectorAll("[data-marker]")].map((m) => m.textContent);
     expect(marks).toEqual(["Lumen Pay awarded", "Orbit Labs awarded"]);
     expect(host.querySelectorAll("rect[data-partial]")).toHaveLength(1);
-    expect(host.querySelector("[data-legend=partial]")?.textContent).toBe("Partial");
+    expect(host.querySelector("[data-legend=partial]")?.textContent).toBe("Still running");
   });
 });
 
