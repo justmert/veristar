@@ -61,7 +61,7 @@
           {
             "group": "Get started",
             "icon": "play",
-            "pages": ["introduction", "how-it-works", "architecture"]
+            "pages": ["introduction", "how-it-works", "architecture", "technical-architecture"]
           },
           {
             "group": "Design decisions",
