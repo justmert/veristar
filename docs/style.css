@@ -51,11 +51,21 @@ html.dark {
   --tone-ai: #c98500;
 }
 
-.tone-web { --tone: var(--tone-web); }
-.tone-api { --tone: var(--tone-api); }
-.tone-chain { --tone: var(--tone-chain); }
-.tone-report { --tone: var(--tone-report); }
-.tone-ai { --tone: var(--tone-ai); }
+.tone-web {
+  --tone: var(--tone-web);
+}
+.tone-api {
+  --tone: var(--tone-api);
+}
+.tone-chain {
+  --tone: var(--tone-chain);
+}
+.tone-report {
+  --tone: var(--tone-report);
+}
+.tone-ai {
+  --tone: var(--tone-ai);
+}
 
 /* every card icon sits on a soft tile; a card about one kind of data tints
    the tile and the icon with that kind's hue */
@@ -90,28 +100,58 @@ html.dark {
 
 /* the sidebar marks the same kinds by page, so a page about web analytics
    carries the web hue in every tab it appears in */
-#navigation-items li:is([id^="/onboarding/web/"], [id="/reference/web-metrics"], [id="/reference/browser-proof"]) > a > div:first-child > svg {
+#navigation-items
+  li:is([id^="/onboarding/web/"], [id="/reference/web-metrics"], [id="/reference/browser-proof"])
+  > a
+  > div:first-child
+  > svg {
   background-color: var(--tone-web) !important;
 }
 
-#navigation-items li:is([id^="/onboarding/api/"], [id="/reference/collector"], [id="/reference/api-storage"]) > a > div:first-child > svg {
+#navigation-items
+  li:is([id^="/onboarding/api/"], [id="/reference/collector"], [id="/reference/api-storage"])
+  > a
+  > div:first-child
+  > svg {
   background-color: var(--tone-api) !important;
 }
 
-#navigation-items li:is([id="/onboarding/onchain"], [id="/operators/onchain-and-exports"], [id="/reference/onchain-sources"]) > a > div:first-child > svg {
+#navigation-items
+  li:is(
+    [id="/onboarding/onchain"],
+    [id="/operators/onchain-and-exports"],
+    [id="/reference/onchain-sources"]
+  )
+  > a
+  > div:first-child
+  > svg {
   background-color: var(--tone-chain) !important;
 }
 
-#navigation-items li:is([id="/onboarding/signed-reports"], [id="/reference/usage-reports"]) > a > div:first-child > svg {
+#navigation-items
+  li:is([id="/onboarding/signed-reports"], [id="/reference/usage-reports"])
+  > a
+  > div:first-child
+  > svg {
   background-color: var(--tone-report) !important;
 }
 
-#navigation-items li:is([id="/onboarding/mcp"], [id="/operators/mcp"], [id="/security/mcp"], [id="/runbooks/mcp-access"]) > a > div:first-child > svg {
+#navigation-items
+  li:is(
+    [id="/onboarding/mcp"],
+    [id="/operators/mcp"],
+    [id="/security/mcp"],
+    [id="/runbooks/mcp-access"]
+  )
+  > a
+  > div:first-child
+  > svg {
   background-color: var(--tone-ai) !important;
 }
 
 /* a group whose pages share one kind carries its hue on the group icon */
-.sidebar-group-header:has(+ .sidebar-group > li[id="/onboarding/web/static-html"]) .sidebar-group-icon {
+.sidebar-group-header:has(+ .sidebar-group > li[id="/onboarding/web/static-html"])
+.sidebar-group-icon {
   background-color: var(--tone-web);
 }
 
@@ -123,7 +163,8 @@ html.dark {
   background-color: var(--tone-chain);
 }
 
-.sidebar-group-header:has(+ .sidebar-group > li[id="/onboarding/signed-reports"]) .sidebar-group-icon {
+.sidebar-group-header:has(+ .sidebar-group > li[id="/onboarding/signed-reports"])
+  .sidebar-group-icon {
   background-color: var(--tone-report);
 }
 
