@@ -117,7 +117,7 @@ export function StatCard({
       onClick={onSelect}
       {...data}
       className={cn(
-        "group/stat @container flex min-h-[92px] min-w-0 flex-col gap-[3px] rounded-xl border px-3 py-[11px] text-left transition duration-(--vs-duration-press) ease-standard",
+        "group/stat @container flex min-h-[108px] min-w-0 flex-col gap-1 rounded-xl border px-4 py-3.5 text-left transition duration-(--vs-duration-press) ease-standard",
         onSelect &&
           "focus-ring hover:border-line-strong active:translate-y-px disabled:pointer-events-none",
         selected ? "border-line-focus bg-hover" : "border-line bg-raised",
@@ -126,7 +126,7 @@ export function StatCard({
     >
       <span
         className={cn(
-          "flex min-w-0 items-center gap-[7px] text-[12px] leading-4",
+          "flex min-w-0 items-center gap-2 text-[13px] leading-[18px]",
           selected ? "text-fg" : "text-fg-2",
         )}
       >
@@ -154,7 +154,7 @@ export function StatCard({
         </span>
       ) : state === "error" ? (
         <span className="flex flex-col gap-1">
-          <Missing reason="The value did not load" className="text-[24px] leading-[30px]" />
+          <Missing reason="The value did not load" className="text-[28px] leading-[34px]" />
           <span className="flex items-center gap-1 text-caption text-critical">
             <CircleAlert aria-hidden className="size-3.5" />
             Did not load
@@ -166,11 +166,11 @@ export function StatCard({
             {lead}
             <span className="flex min-w-0 items-baseline gap-1">
               {value === null ? (
-                <Missing reason={missingReason} className="text-[24px] leading-[30px]" />
+                <Missing reason={missingReason} className="text-[28px] leading-[34px]" />
               ) : (
                 <span
                   className={cn(
-                    "metric-fit font-semibold [--vs-text-metric:22px] [line-height:28px]",
+                    "metric-fit font-semibold [--vs-text-metric:28px] [line-height:34px]",
                     valueTone === "warning"
                       ? "text-warning"
                       : valueTone === "critical"

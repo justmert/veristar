@@ -17,16 +17,18 @@ const COLOUR: Record<NoticeTone, string> = {
   success: "text-success",
 };
 
+// the edge stays neutral: the tone lives in the icon only, never in a
+// coloured border round the band
 const LINE: Record<NoticeTone, string> = {
-  info: "border-info-line",
-  warning: "border-warning-line",
-  critical: "border-critical-line",
-  success: "border-success-line",
+  info: "border-line",
+  warning: "border-line",
+  critical: "border-line",
+  success: "border-line",
 };
 
 // one notice under the header of a page, only the one that applies: it names
-// what is blocked and the next action. as the canvas band: a thin edge all
-// round in the tone, the icon in its colour, the words neutral, no fill
+// what is blocked and the next action. as the canvas band: a neutral edge all
+// round, the icon in the tone's colour, the words neutral, no fill
 export function Notice({
   tone,
   title,
