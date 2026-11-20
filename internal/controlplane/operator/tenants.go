@@ -19,6 +19,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/lifecycle"
+	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/db"
 	"github.com/justmert/veristar/internal/db/operatorq"
 	"github.com/justmert/veristar/internal/db/systemq"
@@ -389,7 +390,16 @@ func (h *Tenants) detail(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("operator: tenant detail: %w", err)
 	}
 
+	// the public demo names no person and shows no audit row: its members,
+	// creator and approver are real accounts (contract 21.4)
+	demo := session.Demo(ctx)
+	if demo {
+		out.Members, out.RecentAudit = []DetailMember{}, []AuditEntry{}
+	}
 	err = h.db.WithSystem(ctx, func(tx pgx.Tx) error {
+		if demo {
+			return nil
+		}
 		q := systemq.New(tx)
 		var err error
 		if out.Tenant.CreatedBy, err = userRef(ctx, q, t.CreatedBy); err != nil {
@@ -454,6 +464,12 @@ func (h *Tenants) detail(w http.ResponseWriter, r *http.Request) error {
 	}
 	out.StellarIDs = recheckIDs(t.EnrollmentAnswers)
 	out.AllowedActions = lifecycle.AllowedActions(t.Status)
+	if demo {
+		out.AllowedActions = []string{}
+		if out.Removal != nil {
+			out.Removal.RequestedBy = nil
+		}
+	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 	return nil
 }

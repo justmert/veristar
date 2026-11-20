@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/hmac"
+	"errors"
 	"crypto/rand"
 	"crypto/sha256"
 	"net"
@@ -262,4 +263,51 @@ func (u *usedStates) use(state string, exp, now time.Time) (fresh, full bool) {
 	}
 	u.seen[h] = exp
 	return true, false
+}
+
+// ClientLimiter is the sign-in limiter's scheme for another public route:
+// a bucket per client (a whole ipv4 address or an ipv6 /48, keyed by the
+// in-memory hash above, so no address is kept), under a global ceiling with
+// a reserve for clients that had been idle. the public demo uses it
+// (contract 21).
+type ClientLimiter struct {
+	hasher *clientHasher
+	lim    *limiter
+	now    func() time.Time
+}
+
+// ClientLimits are the rates of a ClientLimiter, in requests per second,
+// and the bursts. every value must be positive.
+type ClientLimits struct {
+	ClientRate, ClientBurst   float64
+	GlobalRate, GlobalBurst   float64
+	ReserveRate, ReserveBurst float64
+}
+
+// NewClientLimiter returns a limiter with the limits l.
+func NewClientLimiter(l ClientLimits, now func() time.Time) (*ClientLimiter, error) {
+	for _, v := range []float64{l.ClientRate, l.ClientBurst, l.GlobalRate, l.GlobalBurst, l.ReserveRate, l.ReserveBurst} {
+		if v <= 0 {
+			return nil, errors.New("auth: client limiter rates and bursts must be positive")
+		}
+	}
+	if now == nil {
+		return nil, errors.New("auth: client limiter needs a clock")
+	}
+	h, err := newClientHasher()
+	if err != nil {
+		return nil, err
+	}
+	t := now()
+	return &ClientLimiter{
+		hasher: h,
+		lim:    newLimiter(l.ClientRate, l.ClientBurst, l.GlobalRate, l.GlobalBurst, l.ReserveRate, l.ReserveBurst, t),
+		now:    now,
+	}, nil
+}
+
+// Take spends one token for the client of r. when the request is refused
+// it returns false and how long until the client may try again.
+func (c *ClientLimiter) Take(r *http.Request) (bool, time.Duration) {
+	return c.lim.take(c.hasher.of(r), c.now())
 }

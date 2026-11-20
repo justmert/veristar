@@ -48,6 +48,10 @@ const tenantUsage = `  tenant create (-owner-github-id N | -owner-github-login L
   tenant remove (-tenant ID | -slug S) -reason TEXT [-dry-run]
                     remove a project as the operator action does; the
                     reconciler purges it within 10 minutes
+  tenant demo (-tenant ID | -slug S) (-on | -off) [-dry-run]
+                    show the project in the public demo (/demo of the
+                    console) or take it out. the demo reads it without
+                    sign-in, so mark only projects of sample data
 `
 
 // tenantActor marks the audit rows of the tenant commands, named like
@@ -59,7 +63,7 @@ var errDryRun = errors.New("dry run")
 
 func runTenant(ctx context.Context, args []string, env *config.Env, stdout io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: platformctl tenant create | invite | remove (platformctl help lists the flags)")
+		return errors.New("usage: platformctl tenant create | invite | remove | demo (platformctl help lists the flags)")
 	}
 	switch args[0] {
 	case "create":
@@ -117,8 +121,23 @@ func runTenant(ctx context.Context, args []string, env *config.Env, stdout io.Wr
 			return err
 		}
 		return printRemoval(stdout, sum, o.dryRun)
+	case "demo":
+		o, err := parseDemo(args[1:])
+		if err != nil {
+			return err
+		}
+		d, err := openSystem(ctx, env)
+		if err != nil {
+			return err
+		}
+		defer d.Close()
+		row, err := setDemo(ctx, d, o)
+		if err != nil {
+			return err
+		}
+		return printDemo(stdout, row, o)
 	}
-	return errors.New("usage: platformctl tenant create | invite | remove (platformctl help lists the flags)")
+	return errors.New("usage: platformctl tenant create | invite | remove | demo (platformctl help lists the flags)")
 }
 
 // stringList is a flag that may be given more than once
@@ -840,6 +859,84 @@ func printRemoval(w io.Writer, s lifecycle.TenantSummary, dry bool) error {
 	if !dry {
 		b.WriteString("purge=the jobs reconcile task purges the project within 10 minutes\n")
 	}
+	_, err := io.WriteString(w, b.String())
+	return err
+}
+
+// ActionTenantDemo is the audit action of tenant demo
+const ActionTenantDemo = "tenant.demo"
+
+type demoOpts struct {
+	ref    tenantRef
+	on     bool
+	dryRun bool
+}
+
+func parseDemo(args []string) (demoOpts, error) {
+	fs := flag.NewFlagSet("tenant demo", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	id := fs.String("tenant", "", "tenant id")
+	slug := fs.String("slug", "", "tenant slug")
+	on := fs.Bool("on", false, "show the project in the public demo")
+	off := fs.Bool("off", false, "take the project out of the public demo")
+	dry := fs.Bool("dry-run", false, "make the change and roll it back")
+	if err := fs.Parse(args); err != nil {
+		return demoOpts{}, err
+	}
+	if fs.NArg() != 0 {
+		return demoOpts{}, fmt.Errorf("tenant demo takes flags only, not %q", fs.Arg(0))
+	}
+	set := setFlags(fs)
+	ref, err := parseRef(set, *id, *slug)
+	if err != nil {
+		return demoOpts{}, err
+	}
+	if *on == *off {
+		return demoOpts{}, errors.New("give exactly one of -on and -off")
+	}
+	return demoOpts{ref: ref, on: *on, dryRun: *dry}, nil
+}
+
+// setDemo sets cp.tenants.demo with an audit row in the same transaction.
+// internal projects are refused like every tenant command refuses them, and
+// a removed project cannot be marked: the demo never shows one.
+func setDemo(ctx context.Context, d *pdb.DB, o demoOpts) (systemq.SetTenantDemoRow, error) {
+	var row systemq.SetTenantDemoRow
+	err := d.WithSystem(ctx, func(tx pgx.Tx) error {
+		id, err := o.ref.resolve(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if row, err = systemq.New(tx).SetTenantDemo(ctx, systemq.SetTenantDemoParams{ID: id, Demo: o.on}); err != nil {
+			return err
+		}
+		if o.on && row.Status == tenants.StatusRemoved {
+			return fmt.Errorf("project %s is removed; a removed project cannot be in the demo", o.ref)
+		}
+		if err := audit.InSystem(ctx, tx, audit.Entry{
+			Actor: tenantActor, Action: ActionTenantDemo, Target: audit.TenantTarget(id),
+			Detail: map[string]any{"demo": audit.Change(row.WasDemo, o.on)},
+		}); err != nil {
+			return err
+		}
+		if o.dryRun {
+			return errDryRun
+		}
+		return nil
+	})
+	if errors.Is(err, errDryRun) {
+		err = nil
+	}
+	return row, err
+}
+
+func printDemo(w io.Writer, row systemq.SetTenantDemoRow, o demoOpts) error {
+	var b strings.Builder
+	if o.dryRun {
+		b.WriteString("dry_run=true\n")
+	}
+	fmt.Fprintf(&b, "tenant_id=%s\nslug=%s\nname=%s\nstatus=%s\ndemo=%t\nwas_demo=%t\n",
+		row.ID, row.Slug, row.Name, row.Status, o.on, row.WasDemo)
 	_, err := io.WriteString(w, b.String())
 	return err
 }

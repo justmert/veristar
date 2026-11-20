@@ -27,6 +27,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/account"
 	"github.com/justmert/veristar/internal/controlplane/apimetrics"
 	"github.com/justmert/veristar/internal/controlplane/auth"
+	"github.com/justmert/veristar/internal/controlplane/demo"
 	"github.com/justmert/veristar/internal/controlplane/domaincheck"
 	"github.com/justmert/veristar/internal/controlplane/erasure"
 	"github.com/justmert/veristar/internal/controlplane/exports"
@@ -460,6 +461,20 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		return err
 	}
 
+	// the public demo (contract 21): the console's own read handlers,
+	// built with the constructors above, behind the demo's allowlist
+	demoH, err := demo.New(demo.Config{
+		Log: log, DB: d, Now: time.Now,
+		Project: []demo.Routes{
+			tenants.NewRoutes(scope), sites.NewRoutes(scope), ingest.NewRoutes(scope), snippets,
+			metricRoutes, webRoutes, onchainRoutes, scfView, tenantCohort, demo.RoutesFunc(reportRoutes.Private),
+		},
+		Operator: []demo.Routes{review, global, onchainOperator, cohortRoutes, ruleRoutes},
+	})
+	if err != nil {
+		return err
+	}
+
 	api := controlplane.NewHandler(controlplane.Options{
 		Log:           log,
 		ConsoleOrigin: cfg.ConsoleOrigin,
@@ -497,6 +512,8 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		// credential or not at all (contract 12.2)
 		Mounts: []controlplane.Mount{
 			{Path: operator.MachinePath, Handler: machine.Handler()},
+			// anonymous and read only; no session middleware runs there
+			{Path: demo.Path, Handler: demoH},
 			{Path: mcpserver.Path, Handler: mcpSrv.Handler()},
 			{Path: "/oauth", Handler: mcpSrv.OAuthHandler()},
 			// with the stellar.toml of the report keys (contract 20.2)

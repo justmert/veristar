@@ -30,6 +30,11 @@ const (
 	RoleMember = "member"
 )
 
+// RoleViewer is the role of the public demo's anonymous viewer on a demo
+// project (contract 21). it is no row of cp.tenant_members: the scope gives
+// it for a request of the demo, which reads only.
+const RoleViewer = "viewer"
+
 // StatusRemoved tenants answer 404 to every member (contract 1.3).
 const StatusRemoved = "removed"
 
@@ -111,6 +116,10 @@ type Access struct {
 	Role         string
 	TenantStatus string
 	TermsCurrent bool
+	// ReadAs is the user whose umami user reads the tenant's web
+	// analytics: the member itself, or for the demo viewer the project's
+	// first owner (contract 21.3)
+	ReadAs uuid.UUID
 }
 
 // RequireOwner answers 403 owner_required for a member without role owner.
@@ -149,6 +158,9 @@ func (s *Scope) tenantByID(ctx context.Context, tenantID uuid.UUID) (Access, err
 	if err != nil {
 		return Access{}, err
 	}
+	if session.Demo(ctx) {
+		return s.demoTenant(ctx, u, tenantID)
+	}
 	var m systemq.GetMembershipRow
 	err = s.db.WithSystem(ctx, func(tx pgx.Tx) error {
 		var qerr error
@@ -170,7 +182,45 @@ func (s *Scope) tenantByID(ctx context.Context, tenantID uuid.UUID) (Access, err
 		Role:         m.Role,
 		TenantStatus: m.Status,
 		TermsCurrent: m.AcceptedTermsVersion != nil && *m.AcceptedTermsVersion == s.termsVersion,
+		ReadAs:       u.ID,
 	}, nil
+}
+
+// demoTenant is the access of the public demo's viewer: a live tenant
+// flagged demo (cp.tenants.demo, set only by platformctl) answers with role
+// viewer; any other id answers the same 404 as a tenant the caller is not a
+// member of. the flag is read on every request, so clearing it ends the
+// demo's access at once.
+func (s *Scope) demoTenant(ctx context.Context, u session.User, tenantID uuid.UUID) (Access, error) {
+	var status string
+	var accepted *string
+	var owner uuid.NullUUID
+	err := s.db.WithSystem(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			select t.status, t.accepted_terms_version,
+			       (select m.user_id from cp.tenant_members m
+			        where m.tenant_id = t.id and m.role = 'owner'
+			        order by m.created_at, m.user_id limit 1)
+			from cp.tenants t
+			where t.id = $1 and t.demo and t.status <> 'removed'`, tenantID).Scan(&status, &accepted, &owner)
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Access{}, httpx.NotFound()
+	}
+	if err != nil {
+		return Access{}, fmt.Errorf("tenants: demo tenant: %w", err)
+	}
+	a := Access{
+		TenantID:     tenantID,
+		User:         u,
+		Role:         RoleViewer,
+		TenantStatus: status,
+		TermsCurrent: accepted != nil && *accepted == s.termsVersion,
+	}
+	if owner.Valid {
+		a.ReadAs = owner.UUID
+	}
+	return a, nil
 }
 
 // Site resolves the tenant of a site named by the path parameter under
@@ -237,7 +287,17 @@ func LockTenant(ctx context.Context, tx pgx.Tx, a *Access) error {
 const lockTimeout = "5s"
 
 // InTenant runs fn under cp_tenant for the verified tenant.
+// in a demo request the database checks the demo flag once more inside the
+// transaction; a tenant that lost it meanwhile answers 404.
 func (s *Scope) InTenant(ctx context.Context, a Access, fn func(pgx.Tx) error) error {
+	err := s.inTenant(ctx, a, fn)
+	if errors.Is(err, db.ErrNotDemo) {
+		return httpx.NotFound()
+	}
+	return err
+}
+
+func (s *Scope) inTenant(ctx context.Context, a Access, fn func(pgx.Tx) error) error {
 	return s.db.WithTenant(ctx, a.TenantID, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `select set_config('lock_timeout', $1, true)`, lockTimeout); err != nil {
 			return fmt.Errorf("tenants: set lock timeout: %w", err)

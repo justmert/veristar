@@ -90,6 +90,9 @@ const (
 	CodeLastOperatorAdmin     = "last_operator_admin"
 	CodeBootstrapOperator     = "bootstrap_operator"
 	CodeOperatorExists        = "operator_exists"
+
+	// the public demo (contract 21) reads only, and only its allowlist
+	CodeDemoReadOnly = "demo_read_only"
 )
 
 // defaultUnavailableRetryIn is the Retry-After of a 503 when the caller does

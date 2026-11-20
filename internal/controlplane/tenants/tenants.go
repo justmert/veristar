@@ -329,6 +329,9 @@ func (h *Routes) list(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	if session.Demo(ctx) {
+		return h.listDemo(w, r, p)
+	}
 	params := systemq.ListUserTenantsPageParams{UserID: u.ID, RowLimit: int32(p.Limit + 1)} //nolint:gosec // limit is at most 200
 	if p.After != nil {
 		params.AfterCreatedAt = &p.After.At
@@ -356,6 +359,36 @@ func (h *Routes) list(w http.ResponseWriter, r *http.Request) error {
 			CreatedBy: t.CreatedBy, ApprovedBy: t.ApprovedBy, StatusReason: t.StatusReason,
 			CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, StatusChangedAt: t.StatusChangedAt,
 		}, t.Role))
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+	return nil
+}
+
+// listDemo is GET /api/demo/tenants: the projects of the public demo, as
+// the viewer the scope gives them to (contract 21).
+func (h *Routes) listDemo(w http.ResponseWriter, r *http.Request, p httpx.Page) error {
+	ctx := r.Context()
+	params := systemq.ListDemoTenantsPageParams{RowLimit: int32(p.Limit + 1)} //nolint:gosec // limit is at most 200
+	if p.After != nil {
+		params.AfterCreatedAt = &p.After.At
+		params.AfterID = uuid.NullUUID{UUID: p.After.ID, Valid: true}
+	}
+	var rows []systemq.CpTenant
+	if err := h.s.db.WithSystem(ctx, func(tx pgx.Tx) error {
+		var qerr error
+		rows, qerr = systemq.New(tx).ListDemoTenantsPage(ctx, params)
+		return qerr
+	}); err != nil {
+		return err
+	}
+	out := httpx.List[Tenant]{Items: []Tenant{}}
+	for i, t := range rows {
+		if i == p.Limit {
+			last := rows[i-1]
+			out.NextCursor = httpx.NextCursor(listRoute, httpx.Cursor{At: last.CreatedAt, ID: last.ID})
+			break
+		}
+		out.Items = append(out.Items, toTenant(row(t), RoleViewer))
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 	return nil
