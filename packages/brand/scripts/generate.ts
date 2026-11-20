@@ -74,7 +74,11 @@ function roleBlock(name: ThemeName) {
   for (const [k, v] of Object.entries(motion.duration)) out.push(`  --vs-duration-${k}: ${v}ms;`);
   for (const [k, v] of Object.entries(motion.ease)) out.push(`  --vs-ease-${k}: ${bezier(v)};`);
   out.push(`  --vs-motion-distance: ${motion.distance}px;`);
-  for (const [k, v] of Object.entries(space)) out.push(`  --vs-space-${k}: ${v};`);
+  // a dot is not valid in a custom property name: escaped, the half steps
+  // stay one declaration each instead of dropping the whole :root block in
+  // the production css minifier
+  for (const [k, v] of Object.entries(space))
+    out.push(`  --vs-space-${k.replace(".", "\\.")}: ${v};`);
   for (const [k, v] of Object.entries(layer)) out.push(`  --vs-layer-${k}: ${v};`);
   for (const [k, v] of Object.entries(layout)) out.push(`  --vs-${k}: ${v};`);
   out.push("}", "");
