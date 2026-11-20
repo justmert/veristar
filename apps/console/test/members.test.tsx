@@ -74,14 +74,12 @@ describe("members", () => {
     expect(calls[1]?.method).toBe("PATCH");
   });
 
-  it("lists open invites with their count, as a neutral waiting state", async () => {
+  it("lists open invites in the same table, counted in the header", async () => {
     stubFetch([{ status: 200, body: f.membersBody }]);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() =>
-      expect(host.querySelector("[data-invites] h2")?.textContent).toBe(
-        `Open invites${f.membersBody.invites.length}`,
-      ),
-    );
+    const n = f.membersBody.invites.length;
+    await waitFor(() => expect(host.textContent).toContain(n === 1 ? "1 invite" : `${n} invites`));
+    expect(host.textContent).toContain("Invited");
     expect(host.querySelectorAll("[data-invite]").length).toBeGreaterThan(0);
     expect(host.querySelector(".text-warning")).toBeNull();
     // row actions sit in a menu; no red button stands in a row

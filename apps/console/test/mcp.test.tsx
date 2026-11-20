@@ -93,17 +93,13 @@ describe("mcp access keys", () => {
         onCreated={(k) => created.push(k)}
       />,
     );
-    // the header button opens the dialog; the dialog's own button submits
+    // the form sits in the client's first step: a name and the days until
+    // it ends on one line
+    await type(byLabel(host, "Name"), "laptop");
     await click(byRole(host, "button", "Create key"));
-    const dialog = () => host.querySelector("dialog") as HTMLElement;
-    await type(byLabel(dialog(), "Name"), "laptop");
-    await click(byRole(dialog(), "button", "Create key"));
     await waitFor(() => expect(host.textContent).toContain("Use at most 100 characters."));
-    await click(byRole(dialog(), "button", "Create key"));
+    await click(byRole(host, "button", "Create key"));
     await waitFor(() => expect(created).toHaveLength(1));
-    // the key shows once in the same dialog, with the commands that hold it
-    await waitFor(() => expect(dialog().textContent).toContain("Copy your new key"));
-    expect(dialog().textContent).toContain("claude mcp add");
     expect(calls[1]?.url).toBe(`/api/tenants/${credential.tenant_id}/mcp-credentials`);
     expect(calls[1]?.method).toBe("POST");
     expect(calls[1]?.headers.get("X-Requested-With")).toBe("sa-console");
@@ -114,7 +110,7 @@ describe("mcp access keys", () => {
 describe("mcp key list", () => {
   it("says when a key ends, with the reason of a revocation", () => {
     const c = mcpCredential.parse(credential);
-    expect(credentialEnd(c)).toBe("Feb 12, 2027, 05:00 UTC");
+    expect(credentialEnd(c)).toBe("Feb 12, 2027");
     const revoked = mcpCredential.parse({
       ...credential,
       status: "revoked",

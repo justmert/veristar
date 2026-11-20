@@ -11,10 +11,10 @@ import { CreateDialog } from "@/components/create-dialog";
 import { type Column, DataTable } from "@/components/data-table";
 import { TextField } from "@/components/form-field";
 import { Notice } from "@/components/notice";
-import { Segmented } from "@/components/segmented";
-import { type SetupStep, SetupProgress } from "@/components/setup-progress";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/panel";
+import { Segmented } from "@/components/segmented";
+import { SetupProgress, type SetupStep } from "@/components/setup-progress";
 import { Missing } from "@/components/states";
 import { StatusDot } from "@/components/status";
 import { StatusBadge } from "@/components/status-badge";
@@ -201,10 +201,7 @@ export function ConnectApiPage() {
         <Bone className="h-40 w-full rounded-2xl" />
       ) : (
         <div className="flex flex-col gap-4">
-          <SetupProgress
-            steps={steps}
-            currentAside={hasToken && !lastUsed ? stackPicker : null}
-          >
+          <SetupProgress steps={steps} currentAside={hasToken && !lastUsed ? stackPicker : null}>
             {hasToken ? exporter : (blocked ?? create)}
           </SetupProgress>
           {lastUsed && codeShown ? (
@@ -296,11 +293,7 @@ function Exporter({
           </span>
         ) : null}
         {waiting ? (
-          <span
-            className="flex items-center gap-2 text-fg-2"
-            aria-live="polite"
-            data-waiting=""
-          >
+          <span className="flex items-center gap-2 text-fg-2" aria-live="polite" data-waiting="">
             <StatusDot tone="info" live />
             Waiting for the first export
           </span>

@@ -126,11 +126,7 @@ function SitePage({ site }: { site: Site }) {
             <span>{site.verify_method === "dns" ? "DNS record" : "File on the site"}</span>
           ) : null}
           {site.verified_at ? <span>{formatDate(site.verified_at)}</span> : null}
-          <button
-            type="button"
-            aria-expanded={shown === "record"}
-            onClick={() => toggle("record")}
-          >
+          <button type="button" aria-expanded={shown === "record"} onClick={() => toggle("record")}>
             {shown === "record" ? "Hide the record" : "Show the record"}
           </button>
         </>
@@ -395,9 +391,10 @@ function Refused({
   // the month answer is cached longer than the polled day, so a refusal seen
   // in the last 24 hours is named even before the month catches up
   const monthReasons = rejectionRows(month?.totals ?? {});
-  const reasons = (
-    monthReasons.length > 0 ? monthReasons : rejectionRows(day?.totals ?? {})
-  ).slice(0, 3);
+  const reasons = (monthReasons.length > 0 ? monthReasons : rejectionRows(day?.totals ?? {})).slice(
+    0,
+    3,
+  );
   const period = monthReasons.length > 0 ? "30 days" : "24 hours";
   const originRefused = reasons.some((r) => r.key === "rejected_origin");
   return (

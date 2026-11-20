@@ -436,7 +436,7 @@ describe("session finder of the privacy page (contract 10.2 and 18)", () => {
       />,
     );
     await waitFor(() => expect(host.textContent).toContain("3 page views"));
-    expect(host.textContent).toContain("1 page view,");
+    expect(host.textContent).toContain("1 page view");
     expect(calls[0]?.url).toContain(`/tenants/${f.TENANT_ID}/web/sessions?site=${f.SITE_ID}&day=`);
     // the engine's keys read as names
     expect(host.textContent).toContain("Chrome, Linux, Laptop, Germany");

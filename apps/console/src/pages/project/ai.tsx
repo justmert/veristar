@@ -143,7 +143,9 @@ export function AiPage() {
                     const next = CLIENTS[j];
                     if (!next) return;
                     setClient(next.id);
-                    (e.currentTarget.parentElement?.children[j] as HTMLElement | undefined)?.focus();
+                    (
+                      e.currentTarget.parentElement?.children[j] as HTMLElement | undefined
+                    )?.focus();
                   }}
                   className={cn(
                     "flex flex-col gap-1 rounded-xl border px-3.5 py-3 text-left transition-colors duration-(--vs-duration-press) ease-standard focus-ring",
@@ -362,7 +364,10 @@ export function CreateKey({
       {problem ? (
         <p
           role={errors.name || errors.days ? "alert" : undefined}
-          className={cn("text-small", errors.name || errors.days ? "text-critical" : "text-warning")}
+          className={cn(
+            "text-small",
+            errors.name || errors.days ? "text-critical" : "text-warning",
+          )}
         >
           {problem}
         </p>

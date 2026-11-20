@@ -348,9 +348,7 @@ function People({
           />
         ) : (
           <span className="text-fg">
-            {(p.kind === "member" ? p.member.role : p.invite.role) === "owner"
-              ? "Owner"
-              : "Member"}
+            {(p.kind === "member" ? p.member.role : p.invite.role) === "owner" ? "Owner" : "Member"}
           </span>
         ),
     },
@@ -361,7 +359,9 @@ function People({
       minWidth: "min-w-44",
       cell: (p) =>
         p.kind === "member" ? (
-          <span className="whitespace-nowrap text-fg-2">Since {formatDate(p.member.created_at)}</span>
+          <span className="whitespace-nowrap text-fg-2">
+            Since {formatDate(p.member.created_at)}
+          </span>
         ) : (
           <span className="flex flex-wrap items-center gap-2.5">
             <Pill tone="info">Invited</Pill>

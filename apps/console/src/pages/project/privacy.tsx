@@ -266,11 +266,7 @@ function Question({
   children: ReactNode;
 }) {
   return (
-    <div
-      role="group"
-      aria-labelledby={id}
-      className="grid gap-x-6 gap-y-3 border-b border-line px-6 py-5 max-sm:px-4 md:grid-cols-[220px_minmax(0,1fr)]"
-    >
+    <div className="grid gap-x-6 gap-y-3 border-b border-line px-6 py-5 max-sm:px-4 md:grid-cols-[220px_minmax(0,1fr)]">
       <span className="flex items-center gap-3 self-start md:pt-1.5">
         <span
           aria-hidden

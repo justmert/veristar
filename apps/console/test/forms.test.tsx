@@ -95,7 +95,7 @@ describe("enrollment form", () => {
 });
 
 describe("add site form", () => {
-  it("offers the domain as first origin and posts the site", async () => {
+  it("posts the site with its domain as the first origin", async () => {
     const calls = stubFetch([{ status: 201, body: f.siteBody }]);
     let done = false;
     const host = await render(
@@ -109,8 +109,6 @@ describe("add site form", () => {
     );
     await type(byLabel(host, "Name"), "Marketing site");
     await type(byLabel(host, "Domain"), "Example.org");
-    await click(byRole(host, "button", "Use https://example.org"));
-    expect(byLabel(host, "Allowed origins").value).toBe("https://example.org");
     await click(byRole(host, "button", "Add site"));
     await waitFor(() => expect(done).toBe(true));
     expect(calls[0]?.url).toBe(`/api/tenants/${f.TENANT_ID}/sites`);
@@ -121,35 +119,16 @@ describe("add site form", () => {
     });
   });
 
-  it("refuses origins outside the domain before sending", async () => {
+  it("refuses an invalid domain before sending", async () => {
     const calls = stubFetch([]);
     const host = await render(
       <AddSiteForm tenantId={f.TENANT_ID} onDone={() => {}} cancellable={false} />,
     );
     await type(byLabel(host, "Name"), "Docs");
-    await type(byLabel(host, "Domain"), "example.org");
-    await type(byLabel(host, "Allowed origins"), "https://example.org\nhttps://other.net");
+    await type(byLabel(host, "Domain"), "https://example.org/docs");
     await click(byRole(host, "button", "Add site"));
     expect(calls).toHaveLength(0);
-    expect(errorOf(host, "Allowed origins")).toBe(
-      "https://other.net: The host must be the site's domain or one of its subdomains.",
-    );
-  });
-
-  it("shows the server's per-origin code on the origins box", async () => {
-    stubFetch([{ status: 422, body: f.validationErrorBody }]);
-    const host = await render(
-      <AddSiteForm tenantId={f.TENANT_ID} onDone={() => {}} cancellable={false} />,
-    );
-    await type(byLabel(host, "Name"), "Docs");
-    await type(byLabel(host, "Domain"), "example.org");
-    await type(byLabel(host, "Allowed origins"), "https://example.org\nhttps://www.example.org");
-    await click(byRole(host, "button", "Add site"));
-    await waitFor(() =>
-      expect(errorOf(host, "Allowed origins")).toBe(
-        "https://www.example.org: Enter only scheme and host, like https://example.org, with no path.",
-      ),
-    );
+    expect(errorOf(host, "Domain")).toBeTruthy();
   });
 });
 

@@ -32,7 +32,12 @@ type Answer = { status: number; body?: unknown };
 // order react query decides, so answers are looked up by method and url
 // instead of taken from a queue. each key's answers are used in turn and the
 // last one repeats (a poll that has finished keeps answering the same).
-function serve(table: Record<string, Answer[]>): Call[] {
+function serve(given: Record<string, Answer[]>): Call[] {
+  // the history names who asked from the member list
+  const table: Record<string, Answer[]> = {
+    [`GET /api/tenants/${f.TENANT_ID}/members`]: [{ status: 200, body: f.membersBody }],
+    ...given,
+  };
   const calls: Call[] = [];
   const used: Record<string, number> = {};
   vi.stubGlobal(
@@ -61,6 +66,15 @@ function serve(table: Record<string, Answer[]>): Call[] {
 }
 
 const listOf = (...items: unknown[]) => ({ items, next_cursor: null });
+
+// a choice of the form, found by the words it starts with
+function radio(host: HTMLElement, text: string): HTMLElement {
+  const el = [...host.querySelectorAll<HTMLElement>("[role=radio]")].find((r) =>
+    (r.textContent ?? "").trim().startsWith(text),
+  );
+  if (!el) throw new Error(`no choice "${text}"`);
+  return el;
+}
 
 function openDialog(): HTMLElement {
   const d = document.body.querySelector<HTMLElement>("dialog[open]");
@@ -167,8 +181,8 @@ describe("privacy page", () => {
     });
     const host = await renderRoutes(routes(false), path);
     await waitFor(() => expect(host.textContent).toContain("Deleted 2 session(s) with 4 event"));
-    expect(host.textContent).toContain("One visitor, today: example.org");
-    expect(host.textContent).toContain("Erased");
+    expect(host.textContent).toContain("One visitor's visits today");
+    expect(host.textContent).toContain("Done");
     expect(host.textContent).toContain("Daily aggregates are being recomputed.");
     expect(host.textContent).toContain("Only owners of this project can request erasure.");
     expect(host.querySelector("form")).toBeNull();
@@ -193,15 +207,15 @@ describe("privacy page", () => {
     });
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.textContent).toContain("No erasure requested yet"));
-    const ip = byLabel(host, "Visitor's IP address");
-    const ua = byLabel(host, "Visitor's user agent");
+    const ip = byLabel(host, "IP address");
+    const ua = byLabel(host, "User agent");
     // the browser must not offer these values to anyone later
     expect(ip.getAttribute("autocomplete")).toBe("off");
     expect(ua.getAttribute("autocomplete")).toBe("off");
     expect(host.querySelector("form")?.getAttribute("autocomplete")).toBe("off");
     await type(ip, ` ${IP} `);
-    await type(ua, `${UA}\n`);
-    await click(byRole(host, "button", "Request erasure"));
+    await type(ua, `${UA} `);
+    await click(byRole(host, "button", "Review and erase"));
     // nothing is sent before the confirmation
     expect(calls.some((c) => c.method === "POST")).toBe(false);
     expect(openDialog().textContent).toContain("Erase one visitor on example.org?");
@@ -219,8 +233,8 @@ describe("privacy page", () => {
       user_agent: UA,
     });
     // cleared as soon as the request was answered
-    await waitFor(() => expect(byLabel(host, "Visitor's IP address").value).toBe(""));
-    expect(byLabel(host, "Visitor's user agent").value).toBe("");
+    await waitFor(() => expect(byLabel(host, "IP address").value).toBe(""));
+    expect(byLabel(host, "User agent").value).toBe("");
 
     // the request is followed until it finishes, and its message is shown
     await waitFor(
@@ -248,20 +262,20 @@ describe("privacy page", () => {
     });
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.textContent).toContain("No erasure requested yet"));
-    await type(byLabel(host, "Visitor's IP address"), "203.0.113.300");
-    await click(byRole(host, "button", "Request erasure"));
+    await type(byLabel(host, "IP address"), "203.0.113.300");
+    await click(byRole(host, "button", "Review and erase"));
     expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
     expect(host.textContent).toContain("Not in the expected format.");
     expect(host.textContent).toContain("Required.");
 
-    await type(byLabel(host, "Visitor's IP address"), "2001:db8::7");
-    await type(byLabel(host, "Visitor's user agent"), UA);
-    await click(byRole(host, "button", "Request erasure"));
+    await type(byLabel(host, "IP address"), "2001:db8::7");
+    await type(byLabel(host, "User agent"), UA);
+    await click(byRole(host, "button", "Review and erase"));
     await click(byRole(openDialog(), "button", "Erase data"));
     await waitFor(() => expect(host.textContent).toContain("Too long."));
     expect(document.body.querySelector("dialog[open]")).toBeNull();
     // a 422 leaves the values in place so the owner can correct them
-    expect(byLabel(host, "Visitor's IP address").value).toBe("2001:db8::7");
+    expect(byLabel(host, "IP address").value).toBe("2001:db8::7");
   });
 
   it("erases one session by its id", async () => {
@@ -279,9 +293,9 @@ describe("privacy page", () => {
     });
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.textContent).toContain("No erasure requested yet"));
-    await click(byLabel(host, "One session") as unknown as HTMLElement);
+    await click(radio(host, "One session"));
     await type(byLabel(host, "Session id"), ` ${f.SESSION_ID.toUpperCase()} `);
-    await click(byRole(host, "button", "Request erasure"));
+    await click(byRole(host, "button", "Review and erase"));
     await click(byRole(openDialog(), "button", "Erase data"));
     await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({
@@ -305,8 +319,8 @@ describe("privacy page", () => {
     });
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.textContent).toContain("No erasure requested yet"));
-    await click(byLabel(host, "Whole site") as unknown as HTMLElement);
-    await click(byRole(host, "button", "Reset site data"));
+    await click(radio(host, "Everything of this site"));
+    await click(byRole(host, "button", "Review and erase"));
     const dialog = openDialog();
     expect(dialog.textContent).toContain("Reset all web data of example.org?");
     const confirm = byRole(dialog, "button", "Reset site data") as HTMLButtonElement;
@@ -344,9 +358,9 @@ describe("privacy page", () => {
     });
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.textContent).toContain("No erasure requested yet"));
-    await type(byLabel(host, "Visitor's IP address"), IP);
-    await type(byLabel(host, "Visitor's user agent"), UA);
-    await click(byRole(host, "button", "Request erasure"));
+    await type(byLabel(host, "IP address"), IP);
+    await type(byLabel(host, "User agent"), UA);
+    await click(byRole(host, "button", "Review and erase"));
     await click(byRole(openDialog(), "button", "Erase data"));
     await waitFor(() =>
       expect(host.textContent).toContain(
