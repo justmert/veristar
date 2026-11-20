@@ -139,11 +139,13 @@ test("the snippet offers the title opt-in from 1.3.0", async () => {
 test("the project reads the estimate in its scf review", async () => {
   const page = owner.page;
   await page.goto(`${APP}/projects/${tenant.id}/scf`);
-  // the estimate is part of the integrity report, once on the page, which
-  // opens under the verdict
-  await page.locator("details#integrity > summary").click();
-  const scf = page.getByRole("region", { name: "Integrity report" });
-  await expect(scf.getByTestId("coverage")).toContainText("Of 3 loads of the tracker file");
+  // the estimate is part of the traffic integrity evidence, once on the
+  // page, which opens from its check tile
+  await page.getByRole("button", { name: /^Traffic integrity/ }).click();
+  const scf = page.locator('[data-evidence="integrity"]');
+  const coverage = scf.getByTestId("coverage");
+  await expect(coverage).toContainText("Too few loads of the tracker file (3 of");
+  await expect(coverage).toContainText("1 of 3 loads with GPC");
   await expect(page.getByTestId("coverage")).toHaveCount(1);
 });
 
