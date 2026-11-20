@@ -1,22 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { Ban, Lock } from "lucide-react";
-import { type ReactNode, useId, useState } from "react";
+import { useId, useState } from "react";
 import { ApiError } from "@/api/client";
 import {
-  clientSnippets,
   MCP_KEY_DEFAULT_DAYS,
   MCP_KEY_MAX_DAYS,
   type McpCredential,
   type McpCredentialCreated,
   type McpKeyInput,
   mcpApi,
-  mcpEndpoint,
   mcpKeys,
   REVOKED_REASON,
   tenantMcpQuery,
 } from "@/api/mcp";
-import { CodeBlock, CopyField } from "@/components/code-block";
+import { ConnectClient } from "@/components/connect-client";
 import { type Column, DataTable } from "@/components/data-table";
 import { FormMessage } from "@/components/error-panel";
 import { Notice } from "@/components/notice";
@@ -71,21 +69,12 @@ function serverErrors(err: unknown): McpKeyErrors {
   return out;
 }
 
-type Client = "connector" | "claude-code" | "cursor";
-
-const CLIENTS: { id: Client; name: string; how: string }[] = [
-  { id: "connector", name: "Claude and ChatGPT", how: "sign in, no key" },
-  { id: "claude-code", name: "Claude Code", how: "terminal, with a key" },
-  { id: "cursor", name: "Cursor", how: "mcp.json, with a key" },
-];
-
 export function AiPage() {
   const { tenant, me, isOwner } = useProject();
   const list = useQuery(tenantMcpQuery(tenant.id));
   const qc = useQueryClient();
   const canCreate = tenant.status === "active" || tenant.status === "pending";
   const docs = siblingUrl(window.location.hostname, "docs");
-  const [client, setClient] = useState<Client>("connector");
   const [showRevoked, setShowRevoked] = useState(false);
   const revokedId = useId();
   // a key made here is shown once, then only its start
@@ -112,69 +101,36 @@ export function AiPage() {
         }
       />
 
-      <Section title="Connect a client">
-        <div className="grid min-w-0 overflow-hidden rounded-2xl border border-line bg-raised md:grid-cols-[260px_minmax(0,1fr)]">
-          <div
-            role="radiogroup"
-            aria-label="Client"
-            className="flex flex-col gap-1 border-line p-3 max-md:border-b md:border-r"
-          >
-            {CLIENTS.map((c, i) => {
-              const on = c.id === client;
-              return (
-                // biome-ignore lint/a11y/useSemanticElements: a client card keyed like a native radio group
-                <button
-                  key={c.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  tabIndex={on ? 0 : -1}
-                  onClick={() => setClient(c.id)}
-                  onKeyDown={(e) => {
-                    const d =
-                      e.key === "ArrowDown" || e.key === "ArrowRight"
-                        ? 1
-                        : e.key === "ArrowUp" || e.key === "ArrowLeft"
-                          ? -1
-                          : 0;
-                    if (!d) return;
-                    e.preventDefault();
-                    const j = (i + d + CLIENTS.length) % CLIENTS.length;
-                    const next = CLIENTS[j];
-                    if (!next) return;
-                    setClient(next.id);
-                    (
-                      e.currentTarget.parentElement?.children[j] as HTMLElement | undefined
-                    )?.focus();
-                  }}
-                  className={cn(
-                    "flex flex-col gap-1 rounded-xl border px-3.5 py-3 text-left transition-colors duration-(--vs-duration-press) ease-standard focus-ring",
-                    on ? "border-line-focus bg-hover" : "border-transparent hover:bg-hover",
-                  )}
-                >
-                  <span className="text-body font-medium text-fg">{c.name}</span>
-                  <span className="text-small text-fg-3">{c.how}</span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="min-w-0 p-5 max-sm:p-4">
-            <ClientSteps
-              client={client}
-              tenantName={tenant.name}
-              canCreate={canCreate}
-              created={created}
-              takenNames={all.filter((c) => c.status === "active").map((c) => c.name)}
+      <ConnectClient
+        approve={tenant.name}
+        keyName="a key for this client"
+        createdKey={created?.key ?? null}
+        // on screen the commands show the key's start; the copy holds it whole
+        shownKey={created ? `${created.key.slice(0, 11)}...` : null}
+        keyStep={
+          !canCreate ? (
+            <Notice tone="info" title="No new keys while the project is suspended or removed" />
+          ) : created ? (
+            <SecretPanel
+              plain
+              value={created.key}
+              noun="key"
+              name={created.name}
+              copyLabel="Copy key"
+              onDone={() => setCreated(null)}
+            />
+          ) : (
+            <CreateKey
               create={(b) => mcpApi.createTenantKey(tenant.id, b)}
               onCreated={(k) => {
                 setCreated(k);
                 void qc.invalidateQueries({ queryKey: mcpKeys.tenant(tenant.id) });
               }}
-              onDone={() => setCreated(null)}
+              takenNames={all.filter((c) => c.status === "active").map((c) => c.name)}
             />
-          </div>
-        </div>
-      </Section>
+          )
+        }
+      />
 
       <Section
         title="Keys and connections"
@@ -200,93 +156,6 @@ export function AiPage() {
         />
       </Section>
     </div>
-  );
-}
-
-// the numbered steps of one client: the server address and the approval
-// for the connector clients, a key and its command for the others
-function ClientSteps({
-  client,
-  tenantName,
-  canCreate,
-  created,
-  takenNames,
-  create,
-  onCreated,
-  onDone,
-}: {
-  client: Client;
-  tenantName: string;
-  canCreate: boolean;
-  created: McpCredentialCreated | null;
-  takenNames: string[];
-  create: (b: McpKeyInput) => Promise<McpCredentialCreated>;
-  onCreated: (k: McpCredentialCreated) => void;
-  onDone: () => void;
-}) {
-  const origin = window.location.origin;
-  const s = clientSnippets(origin, created?.key ?? null);
-  const shown = clientSnippets(origin, created ? `${created.key.slice(0, 11)}...` : null);
-  if (client === "connector")
-    return (
-      <Steps>
-        <StepItem n={1} title="Copy the server address">
-          <CopyField value={mcpEndpoint(origin)} label="server address" />
-        </StepItem>
-        <StepItem n={2} title="Add it as a custom connector">
-          <span className="text-small text-fg-2">Settings, Connectors, Add custom connector</span>
-        </StepItem>
-        <StepItem n={3} title={`Sign in to Veristar and approve ${tenantName}`} />
-      </Steps>
-    );
-  const keyStep = (
-    <StepItem n={1} title="Create a key for this client">
-      {!canCreate ? (
-        <Notice tone="info" title="No new keys while the project is suspended or removed" />
-      ) : created ? (
-        <SecretPanel
-          plain
-          value={created.key}
-          noun="key"
-          name={created.name}
-          copyLabel="Copy key"
-          onDone={onDone}
-        />
-      ) : (
-        <CreateKey create={create} onCreated={onCreated} takenNames={takenNames} />
-      )}
-    </StepItem>
-  );
-  if (client === "claude-code")
-    return (
-      <Steps>
-        {keyStep}
-        <StepItem n={2} title="Run in the terminal">
-          <CodeBlock
-            code={shown.claudeCode}
-            copyText={s.claudeCode}
-            label="Terminal"
-            copyLabel="Copy command"
-            wrap
-          />
-        </StepItem>
-        <StepItem n={3} title="Or sign in without a key">
-          <CodeBlock code={s.claudeCodeOAuth} label="Terminal" copyLabel="Copy command" wrap />
-        </StepItem>
-      </Steps>
-    );
-  return (
-    <Steps>
-      {keyStep}
-      <StepItem n={2} title="Add to .cursor/mcp.json">
-        <CodeBlock
-          code={shown.cursor}
-          copyText={s.cursor}
-          label="mcp.json"
-          copyLabel="Copy configuration"
-        />
-      </StepItem>
-    </Steps>
   );
 }
 
@@ -498,28 +367,6 @@ export function credentialEnd(c: McpCredential): string {
   // the status column says active or expired; the cell holds the date only
   if (c.expires_at) return formatDate(c.expires_at);
   return "Renewed by the client";
-}
-
-// numbered steps of one client
-function Steps({ children }: { children: ReactNode }) {
-  return <ol className="flex min-w-0 list-none flex-col gap-5">{children}</ol>;
-}
-
-function StepItem({ n, title, children }: { n: number; title: string; children?: ReactNode }) {
-  return (
-    <li className="grid min-w-0 grid-cols-[26px_minmax(0,1fr)] gap-x-3.5">
-      <span
-        aria-hidden
-        className="flex size-[26px] items-center justify-center rounded-full border border-line-strong text-caption text-fg-2 tabular"
-      >
-        {n}
-      </span>
-      <div className="flex min-w-0 flex-col gap-2.5 pt-0.5">
-        <span className="text-body font-medium text-fg">{title}</span>
-        {children}
-      </div>
-    </li>
-  );
 }
 
 // two live credentials with one name can only be told apart by their

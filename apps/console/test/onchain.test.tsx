@@ -647,7 +647,8 @@ describe("scf review figures (contract 16.3)", () => {
     await waitFor(() => expect(host.querySelector("[data-testid=standing-grade]")).not.toBeNull());
     const seal = host.querySelector("[data-testid=standing-grade]");
     expect(seal?.getAttribute("data-grade")).toBe("B");
-    expect(seal?.textContent).toContain("5 A days, 3 B days, 0 C days");
+    // the shared grade ring names its days in its accessible name
+    expect(seal?.getAttribute("aria-label")).toContain("5 A days, 3 B days, 0 C days");
     expect(host.querySelector("[data-check=integrity]")?.textContent).toContain("Grade B");
   });
 
