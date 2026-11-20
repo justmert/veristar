@@ -156,8 +156,11 @@ func (d *DB) inTx(ctx context.Context, r Role, fn func(pgx.Tx) error) error {
 	}
 	if InDemo(ctx) {
 		// read only from the start, so no statement of a demo request can
-		// write, whatever its handler does
-		return pgx.BeginTxFunc(ctx, p, pgx.TxOptions{AccessMode: pgx.ReadOnly}, fn)
+		// write, whatever its handler does. repeatable read is what the
+		// operator views ask for with set transaction after the role
+		// switch, which postgresql accepts only when the level is already
+		// the one asked for
+		return pgx.BeginTxFunc(ctx, p, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, fn)
 	}
 	return pgx.BeginFunc(ctx, p, fn)
 }
