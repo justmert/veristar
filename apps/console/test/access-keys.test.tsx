@@ -154,6 +154,9 @@ describe("access keys", () => {
     );
     if (!confirm) throw new Error("no confirm button");
     await click(confirm);
+    // a revoked key leaves the list until Show revoked is on
+    await waitFor(() => expect(host.querySelector("#show-revoked")).not.toBeNull());
+    await click(host.querySelector("#show-revoked") as HTMLElement);
     await waitFor(() => expect(host.textContent).toContain("Revoked"));
     expect(calls.find((x) => x.method === "DELETE")?.url).toBe(
       `/api/operator/api-keys/${f.KEY_ID}`,

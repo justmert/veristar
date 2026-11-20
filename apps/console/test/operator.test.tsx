@@ -146,33 +146,29 @@ describe("operator area guard", () => {
 });
 
 describe("operator project page", () => {
-  it("shows the decision, the numbers, the evidence once and the record", async () => {
+  it("shows the decision, the scorecard, the answers and the record", async () => {
     routeFetch(detailRoutes(f.operatorDetailBody));
     const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
     await waitFor(() => expect(host.querySelector("h1")?.textContent).toBe("Stellar DEX"));
     expect(host.textContent).toContain("Soroban AMM on mainnet");
-    expect(host.textContent).toContain("Not a valid id");
-    expect(host.textContent).toContain("Reason: Spam traffic");
-    expect(host.querySelectorAll("ul[aria-label=Evidence]")).toHaveLength(1);
-    // the numbers come from the comparison of this one project
+    expect(host.textContent).toContain("Not a valid ID");
+    // the five tiles of the scf scorecard, each one pickable
+    for (const k of ["ownership", "integrity", "web", "api", "onchain"])
+      expect(host.querySelector(`[data-check=${k}]`)).not.toBeNull();
+    // the api figure comes from the comparison of this one project, with
+    // its change: 300 from 200
     await waitFor(() =>
-      expect(host.querySelector("[data-stat=requests]")?.textContent).toContain("300"),
+      expect(host.querySelector("[data-check=api]")?.textContent).toContain("300"),
     );
-    expect(host.querySelector("[data-stat=grade]")?.textContent).toContain("C");
-    // a count with a previous period carries its change: 300 from 200
-    expect(host.querySelector("[data-stat=requests] [data-change=up]")?.textContent).toContain(
-      "+50%",
-    );
-    // the decision is the one panel; remove sits in the actions menu
+    expect(host.querySelector("[data-check=api] [data-change=up]")?.textContent).toContain("50%");
+    // the decision is the one bar; remove sits in the actions menu
     expect(host.querySelector("form[aria-label='Decision on Stellar DEX']")).not.toBeNull();
     expect(byRole(host, "button", "Actions")).toBeTruthy();
-    // the last entries of the audit log read as sentences
-    // the page names the project it knows
-    expect(host.textContent).toContain("sa-operator suspended the project Stellar DEX");
+    // the audit log is one click away, filtered to the project
     expect(host.querySelector("a[href*='/operator/audit?tenant_id=']")).not.toBeNull();
   });
 
-  it("leaves the figures out when the project has no data, and keeps the events fact", async () => {
+  it("shows no figure in a tile when the project has no data", async () => {
     const emptyWeb = { ...webCompareBody, projects: [webCompareBody.projects[1]] };
     const emptyApi = { ...apiCompareBody, projects: [apiCompareBody.projects[1]] };
     const calls = routeFetch([
@@ -186,8 +182,8 @@ describe("operator project page", () => {
       expect(calls.filter((c) => c.url.includes("/compare")).length).toBeGreaterThanOrEqual(2),
     );
     await act(async () => {});
-    expect(host.querySelector("[data-numbers]")).toBeNull();
-    expect(host.querySelector("[data-evidence=events]")).not.toBeNull();
+    expect(host.querySelector("[data-check=api] [data-change]")).toBeNull();
+    expect(host.querySelector("[data-check=onchain]")?.textContent).toContain("no proven ID yet");
   });
 
   it("lists many sites in a paged table with their checks in words", async () => {
@@ -202,15 +198,18 @@ describe("operator project page", () => {
     }));
     routeFetch(detailRoutes({ ...f.operatorDetailBody, sites }));
     const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
+    await waitFor(() => expect(host.querySelector("h1")?.textContent).toBe("Stellar DEX"));
+    // the ownership tile opens the sites
+    await click(host.querySelector("[data-check=ownership]") as HTMLElement);
     await waitFor(() => expect(host.querySelectorAll("table tr[data-site]")).toHaveLength(10));
     const second = host.querySelector(
       "table [data-site='0193a6f6-5555-7e66-bf77-000000000001']",
     ) as HTMLElement;
-    expect(second.textContent).toContain("Domain not verified");
-    expect(second.querySelector("[data-fact=missing]")).not.toBeNull();
-    const evidence = host.querySelector("[data-evidence=domain]") as HTMLElement;
-    expect(evidence.dataset.signal).toBe("partial");
-    expect(evidence.textContent).toContain("1 of 30 sites verified");
+    expect(second.textContent).toContain("Not verified");
+    const first = host.querySelector(
+      "table [data-site='0193a6f6-5555-7e66-bf77-000000000000']",
+    ) as HTMLElement;
+    expect(first.textContent).toContain("Verified");
     expect(host.textContent).toContain("1 to 10 of 30");
     const trigger = host.querySelector('button[aria-label="Actions for Site 1"]') as HTMLElement;
     await act(async () => {
@@ -388,10 +387,11 @@ describe("operator project list, status view", () => {
 });
 
 describe("enrollment mode switch", () => {
+  // each option is a native radio named by its card's title
   const radio = (host: HTMLElement, name: string) =>
-    [...host.querySelectorAll<HTMLElement>("[aria-labelledby=mode-h] [role=radio]")].find(
-      (r) => r.textContent === name,
-    ) as HTMLElement;
+    [...host.querySelectorAll<HTMLInputElement>("[aria-labelledby=mode-h] input[type=radio]")].find(
+      (r) => document.getElementById(r.getAttribute("aria-labelledby") ?? "")?.textContent === name,
+    ) as HTMLInputElement;
 
   it("asks for confirmation and puts the new mode", async () => {
     const calls = stubFetch([
@@ -402,7 +402,7 @@ describe("enrollment mode switch", () => {
     const host = await renderRoutes([{ path: "/", element: <SettingsPage /> }], "/");
     await waitFor(() => expect(radio(host, "Approval required")).toBeTruthy());
     // the control shows the mode in force, once
-    expect(radio(host, "Open").getAttribute("aria-checked")).toBe("true");
+    expect(radio(host, "Open").checked).toBe(true);
     expect(host.textContent).not.toContain("Current");
     // choosing the other mode opens its confirmation at once
     await click(radio(host, "Approval required"));
@@ -428,7 +428,7 @@ describe("enrollment mode switch", () => {
     await click(byRole(dialogOpen(host) as HTMLElement, "button", "Cancel"));
     expect(dialogOpen(host)).toBeUndefined();
     expect(calls).toHaveLength(2);
-    expect(radio(host, "Approval required").getAttribute("aria-checked")).toBe("true");
+    expect(radio(host, "Approval required").checked).toBe(true);
   });
 });
 
@@ -672,7 +672,7 @@ describe("review workspace", () => {
     allowed_actions: ["approve", "reject", "remove"],
   };
 
-  it("shows the queue, the numbers and the evidence, and rejects with a required reason", async () => {
+  it("shows the queue and the case with its checks, and rejects with a required reason", async () => {
     const calls = routeFetch(
       detailRoutes(pendingDetail, [
         {
@@ -700,42 +700,31 @@ describe("review workspace", () => {
     expect(host.querySelector("h1")?.textContent).toBe("Review");
     // no alerts here: the alerts have their own page
     expect(calls.some((c) => c.url.includes("/alerts"))).toBe(false);
-    expect(host.querySelector("ul[aria-label=Evidence]")?.textContent).toContain(
-      "1 of 2 not a valid ID",
-    );
-    // the figures follow the evidence, and only the ones with data show
-    await waitFor(() =>
-      expect(host.querySelector("[data-stat=pageviews]")?.textContent).toContain("45"),
-    );
+    // the checks read as sentences, one icon each
+    expect(host.querySelector("ul[aria-label=Checks]")?.textContent).toContain("1 not a valid ID");
 
-    const radios = [...host.querySelectorAll<HTMLElement>("[role=radio]")];
-    const reject = radios.find((r) => r.textContent?.includes("Reject")) as HTMLElement;
-    const approve = radios.find((r) => r.textContent?.includes("Approve")) as HTMLElement;
-    // nothing is chosen on open, so the send waits for a choice
-    expect(approve.getAttribute("aria-checked")).toBe("false");
-    expect(reject.getAttribute("aria-checked")).toBe("false");
-    expect((byRole(host, "button", "Choose Approve or Reject") as HTMLButtonElement).disabled).toBe(
-      true,
-    );
-    // one tab stop; the arrow keys move the choice and the focus
-    expect(approve.tabIndex).toBe(0);
-    expect(reject.tabIndex).toBe(-1);
-    approve.focus();
+    // the bar holds Reject and Approve; nothing is sent from it
+    const reject = byRole(host, "button", "RejectR");
+    expect(byRole(host, "button", "Approve Stellar DEXA")).toBeTruthy();
+    expect(host.querySelector("button[type=submit]")).toBeNull();
+    // r anywhere on the page swaps the bar for the reason
     await act(async () => {
-      approve.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "r", bubbles: true }));
     });
-    expect(reject.getAttribute("aria-checked")).toBe("true");
-    expect(document.activeElement).toBe(reject);
+    expect(host.textContent).toContain("Why reject");
+    // escape drops it, Reject opens it again
     await act(async () => {
-      reject.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+      host
+        .querySelector("form[aria-label='Decision on Stellar DEX']")
+        ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     });
-    expect(approve.getAttribute("aria-checked")).toBe("true");
-    await click(reject);
-    await click(byRole(host, "button", "Reject projectCtrl Enter"));
+    expect(host.textContent).not.toContain("Why reject");
+    await click(byRole(host, "button", "RejectR") ?? reject);
+    await click(byRole(host, "button", "Reject Stellar DEXCtrl Enter"));
     expect(calls.some((c) => c.method === "POST")).toBe(false);
     expect(host.textContent).toContain("Required.");
-    await type(byLabel(host, "Reason"), " Not on Stellar ");
-    await click(byRole(host, "button", "Reject projectCtrl Enter"));
+    await type(byLabel(host, "Why reject"), " Not on Stellar ");
+    await click(byRole(host, "button", "Reject Stellar DEXCtrl Enter"));
     await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
     const post = calls.find((c) => c.method === "POST");
     expect(post?.url).toBe(`${TENANT}/reject`);
@@ -753,7 +742,7 @@ describe("review workspace", () => {
       [{ path: "/operator", element: <ReviewQueuePage /> }],
       "/operator",
     );
-    await waitFor(() => expect(host.textContent).toContain("Nothing to review"));
+    await waitFor(() => expect(host.textContent).toContain("Nothing waits for a decision"));
   });
 });
 

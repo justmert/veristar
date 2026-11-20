@@ -68,7 +68,7 @@ export function ReviewQueuePage() {
   useEffect(() => {
     function onKey(e: globalThis.KeyboardEvent) {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const el = e.target as HTMLElement | null;
+      const el = e.target instanceof Element ? e.target : null;
       if (el?.closest("input, textarea, select, [contenteditable=true]")) return;
       if (e.key !== "j" && e.key !== "k") return;
       const i = selected ? items.findIndex((t) => t.id === selected.id) : -1;

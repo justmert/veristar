@@ -345,7 +345,7 @@ function RuleCard({
           <p className="flex items-baseline gap-1.5 text-small text-fg-3">
             <span className="text-[19px] font-semibold text-fg tabular">
               {formatCount(r.match_count)}
-            </span>
+            </span>{" "}
             of {formatCount(r.evaluated)} meet it
           </p>
           <span aria-hidden className="flex h-1.5 w-full overflow-hidden rounded-full bg-selected">
