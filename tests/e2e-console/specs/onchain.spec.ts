@@ -350,7 +350,10 @@ test("an unverified contract shows no calls per function, and the routes keep to
     );
     expect(file.status()).toBe(200);
     await opPage.goto(`${APP}/operator/projects/${tenant.id}`);
-    await opPage.getByText("On-chain IDs", { exact: true }).click();
+    // the on-chain check opens its ids under the scorecard; the contract is
+    // listed before the absence of its calls per function is checked
+    await opPage.locator('[data-check="onchain"]').click();
+    await expect(opPage.locator('[data-detail="onchain"]')).toContainText(CONTRACT);
     await expect(
       opPage.getByRole("region", { name: `Calls per function of ${CONTRACT}` }),
     ).toHaveCount(0);
