@@ -182,7 +182,7 @@ const DEFAULT_RANGE = { from: "", to: "" };
 const GRADE_RANK: Record<IntegrityGrade, number> = { A: 0, B: 1, C: 2 };
 
 // the grade of the project on each day: the lowest grade of its sites
-function dailyGrades(report: IntegrityReport | undefined, days: string[]): (IntegrityGrade | null)[] {
+export function dailyGrades(report: IntegrityReport | undefined, days: string[]): (IntegrityGrade | null)[] {
   return days.map((d) => {
     let worst: IntegrityGrade | null = null;
     for (const s of report?.sites ?? []) {
@@ -193,12 +193,12 @@ function dailyGrades(report: IntegrityReport | undefined, days: string[]): (Inte
   });
 }
 
-type Proof = CheckItem & { done: boolean; label: string };
+export type Proof = CheckItem & { done: boolean; label: string };
 
 // every proof of ownership the project holds or lacks, as the scf review
 // counts them: each live site's domain, a stellar.toml, and each on-chain
 // id's control (and an account's home domain)
-function proofsOf(sites: OperatorSite[], chain: OnchainView | undefined): Proof[] {
+export function proofsOf(sites: OperatorSite[], chain: OnchainView | undefined): Proof[] {
   const out: Proof[] = [];
   const live = sites.filter((x) => x.status !== "removed");
   const mono = (t: string) => <span className="font-mono text-caption text-fg-3">{t}</span>;
