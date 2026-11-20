@@ -203,7 +203,7 @@ test("a new project waits in the review queue and the operator approves it", asy
   const approve = decision.getByRole("button", { name: `Approve ${tenant.name}` });
   await expect(decision.getByRole("button", { name: "Reject" })).toBeVisible();
   await expect(approve).toBeVisible();
-  expect(await menuActions()).toEqual(["Remove project"]);
+  await expect.poll(menuActions).toEqual(["Remove project"]);
 
   // nothing is chosen on open, so there is nothing to send yet: the note
   // opens with the choice
@@ -213,7 +213,7 @@ test("a new project waits in the review queue and the operator approves it", asy
   await decision.getByRole("button", { name: `Approve ${tenant.name}` }).click();
   await expect(page.getByText(`${tenant.name} approved.`)).toBeVisible();
   await expect(decision).toHaveCount(0);
-  expect(await menuActions()).toEqual(["Suspend project", "Remove project"]);
+  await expect.poll(menuActions).toEqual(["Suspend project", "Remove project"]);
 
   await waitProvisioned(owner.ctx, tenant.id);
   expect((await ownerStatus()).body.status).toBe("active");
@@ -232,7 +232,7 @@ test("suspend needs a reason, which the tenant owner then sees", async () => {
   await dialog.getByRole("button", { name: "Suspend project", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByText(`${tenant.name} is suspended.`)).toBeVisible();
-  expect(await menuActions()).toEqual(["Resume project", "Remove project"]);
+  await expect.poll(menuActions).toEqual(["Resume project", "Remove project"]);
 
   const t = await ownerStatus();
   expect(t.body.status).toBe("suspended");
@@ -244,7 +244,9 @@ test("suspend needs a reason, which the tenant owner then sees", async () => {
 
 test("resume returns the project to active", async () => {
   await act("Resume", null);
-  expect(await menuActions()).toEqual(["Suspend project", "Remove project"]);
+  // the dialog closes before the project is read again: wait for the menu
+  // to follow the new status
+  await expect.poll(menuActions).toEqual(["Suspend project", "Remove project"]);
   const t = await ownerStatus();
   expect(t.body.status).toBe("active");
   expect(t.body.status_reason).toBeNull();
@@ -257,7 +259,7 @@ test("resume returns the project to active", async () => {
 test("remove takes the project away from its members and keeps the audit trail", async () => {
   await act("Remove", "Not a Stellar project");
   await expect(op.page.getByRole("region", { name: "Removal" })).toBeVisible();
-  expect(await menuActions()).toEqual([]);
+  await expect.poll(menuActions).toEqual([]);
 
   const t = await ownerStatus();
   expect(t.status).toBe(404);
