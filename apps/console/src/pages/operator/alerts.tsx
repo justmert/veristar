@@ -287,7 +287,11 @@ function SourcesDown({ down, total }: { down: AlertSource[]; total: number }) {
 function SeverityList({ group, now }: { group: SeverityGroup; now: number }) {
   const headingId = `severity-${group.key || "none"}`;
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-2.5" data-severity={group.key}>
+    <section
+      aria-labelledby={headingId}
+      className="flex flex-col gap-2.5"
+      data-severity={group.key}
+    >
       <h2 id={headingId} className="flex items-baseline gap-2 text-[15px] font-semibold text-fg">
         {groupTitle(group.key)}
         <span className="text-small font-normal text-fg-3 tabular">{group.alerts.length}</span>
@@ -354,7 +358,12 @@ function AlertItem({ alert, now }: { alert: FiringAlert; now: number }) {
         held && "opacity-70",
       )}
     >
-      <span className={cn("flex items-center self-start pt-0.5 md:self-center", TONE_TEXT[urgency.tone])}>
+      <span
+        className={cn(
+          "flex items-center self-start pt-0.5 md:self-center",
+          TONE_TEXT[urgency.tone],
+        )}
+      >
         <Icon aria-hidden className="size-4" />
         <span className="sr-only">{urgency.word}</span>
       </span>
@@ -390,7 +399,10 @@ function AlertItem({ alert, now }: { alert: FiringAlert; now: number }) {
         <span className="sr-only">Fires for</span>
         <b className="font-semibold text-fg">{firingFor(alert.starts_at, now)}</b>
         <span className="text-fg-3">
-          since <time dateTime={alert.starts_at}>{formatTimeUtc(alert.starts_at).replace(" UTC", "")}</time>
+          since{" "}
+          <time dateTime={alert.starts_at}>
+            {formatTimeUtc(alert.starts_at).replace(" UTC", "")}
+          </time>
         </span>
       </p>
       {runbook ? (

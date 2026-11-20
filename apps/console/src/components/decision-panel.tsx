@@ -235,7 +235,6 @@ export function DecisionPanel({
             rows={2}
             maxLength={MAX}
             value={reason}
-            // biome-ignore lint/a11y/noAutofocus: the reason is the next thing to type once Reject or Approve is pressed
             autoFocus
             aria-invalid={fieldError ? true : undefined}
             aria-describedby={`${ids}-h`}
@@ -270,7 +269,10 @@ export function DecisionPanel({
           <div className="flex flex-wrap items-center gap-3">
             <span
               id={`${ids}-h`}
-              className={cn("min-w-0 flex-1 text-small", fieldError ? "text-critical" : "text-fg-3")}
+              className={cn(
+                "min-w-0 flex-1 text-small",
+                fieldError ? "text-critical" : "text-fg-3",
+              )}
             >
               {fieldError ??
                 (choice === "reject"

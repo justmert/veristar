@@ -242,7 +242,12 @@ function Picker({
     return () => clearTimeout(t);
   }, [q]);
   const list = useInfiniteQuery(
-    webProjectsQuery({ range, filters: { ...EMPTY_FILTERS, q: search }, sort: "name", order: "asc" }),
+    webProjectsQuery({
+      range,
+      filters: { ...EMPTY_FILTERS, q: search },
+      sort: "name",
+      order: "asc",
+    }),
   );
   const rows = list.data?.pages.flatMap((p) => p.items) ?? [];
   const total = list.data?.pages[0]?.total ?? null;
@@ -255,7 +260,8 @@ function Picker({
       aria-labelledby="picker-h"
       className={cn(
         "flex min-w-0 flex-col",
-        !bare && "mx-auto w-full max-w-[38.5rem] overflow-hidden rounded-2xl border border-line bg-raised",
+        !bare &&
+          "mx-auto w-full max-w-[38.5rem] overflow-hidden rounded-2xl border border-line bg-raised",
       )}
     >
       <div className={cn("flex flex-col gap-4", bare ? "pb-3" : "px-6 pt-6 pb-4")}>
@@ -269,7 +275,11 @@ function Picker({
           />
           <Input
             aria-label="Search projects"
-            placeholder={total !== null && search === "" ? `Search ${formatCount(total)} projects` : "Search projects"}
+            placeholder={
+              total !== null && search === ""
+                ? `Search ${formatCount(total)} projects`
+                : "Search projects"
+            }
             value={q}
             onChange={(e) => setQ(e.target.value)}
             className="pl-9"
@@ -284,7 +294,12 @@ function Picker({
         </div>
       ) : list.error ? (
         <div className="px-6 pb-4">
-          <ErrorState compact title="The projects did not load" error={list.error} onRetry={() => list.refetch()} />
+          <ErrorState
+            compact
+            title="The projects did not load"
+            error={list.error}
+            onRetry={() => list.refetch()}
+          />
         </div>
       ) : rows.length === 0 ? (
         <p className="px-6 pb-6 text-small text-fg-3">No project matches.</p>
@@ -325,7 +340,12 @@ function Picker({
           })}
           {list.hasNextPage ? (
             <li className="px-5 py-3">
-              <Button variant="outline" size="sm" onClick={() => list.fetchNextPage()} pending={list.isFetchingNextPage}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => list.fetchNextPage()}
+                pending={list.isFetchingNextPage}
+              >
                 {list.isFetchingNextPage ? "Loading" : "Load more"}
               </Button>
             </li>
@@ -342,9 +362,7 @@ function Picker({
           {picked.length} of {MAX_COMPARE} picked
         </span>
         <Button disabled={picked.length === 0} onClick={() => onPick(picked)}>
-          {picked.length === 0
-            ? "Compare"
-            : `Compare ${countOf(picked.length, "project")}`}
+          {picked.length === 0 ? "Compare" : `Compare ${countOf(picked.length, "project")}`}
         </Button>
       </div>
     </section>
@@ -576,7 +594,14 @@ type RowDef = {
   // a big row: the value large, its shape under it
   big?: boolean;
   // the row draws a chart above the table, or opens a detail
-  chart?: { values: (i: number) => (number | null)[]; format: (n: number) => string; axis: (v: (number | null)[][]) => (n: number) => string; higherIsBetter?: boolean; rate?: boolean; ceiling?: boolean };
+  chart?: {
+    values: (i: number) => (number | null)[];
+    format: (n: number) => string;
+    axis: (v: (number | null)[][]) => (n: number) => string;
+    higherIsBetter?: boolean;
+    rate?: boolean;
+    ceiling?: boolean;
+  };
   detail?: ReactNode;
 };
 
@@ -636,7 +661,11 @@ function Scorecards({
   const running = days.at(-1) === utcDay();
   const labels = days.map((d) => formatDate(d));
   const buckets = bucketsOf(days);
-  const markers = markersOf(cols.flatMap((c) => (c.tenant && c.cohort ? [{ tenant: c.tenant as TenantRef, cohort: c.cohort }] : [])));
+  const markers = markersOf(
+    cols.flatMap((c) =>
+      c.tenant && c.cohort ? [{ tenant: c.tenant as TenantRef, cohort: c.cohort }] : [],
+    ),
+  );
   const series = (i: number) => SLOT_SERIES[cols[i]?.slot ?? 0] ?? 1;
 
   const proofs = cols.map((_, i) => {
@@ -747,7 +776,11 @@ function Scorecards({
                   change: change(w.totals.visitors, w.previous_totals.visitors),
                   spark: w.series.map((x) => x.visitors ?? 0),
                 })),
-              chart: { values: (i) => cols[i]?.w?.series.map((x) => x.visitors) ?? [], format: formatCount, axis: countAxis },
+              chart: {
+                values: (i) => cols[i]?.w?.series.map((x) => x.visitors) ?? [],
+                format: formatCount,
+                axis: countAxis,
+              },
             },
             {
               key: "pageviews",
@@ -759,7 +792,11 @@ function Scorecards({
                   text: formatCount(w.totals.pageviews),
                   change: change(w.totals.pageviews, w.previous_totals.pageviews),
                 })),
-              chart: { values: (i) => cols[i]?.w?.series.map((x) => x.pageviews) ?? [], format: formatCount, axis: countAxis },
+              chart: {
+                values: (i) => cols[i]?.w?.series.map((x) => x.pageviews) ?? [],
+                format: formatCount,
+                axis: countAxis,
+              },
             },
             {
               key: "visits",
@@ -771,14 +808,24 @@ function Scorecards({
                   text: formatCount(w.totals.visits),
                   change: change(w.totals.visits, w.previous_totals.visits),
                 })),
-              chart: { values: (i) => cols[i]?.w?.series.map((x) => x.visits) ?? [], format: formatCount, axis: countAxis },
+              chart: {
+                values: (i) => cols[i]?.w?.series.map((x) => x.visits) ?? [],
+                format: formatCount,
+                axis: countAxis,
+              },
             },
             {
               key: "bounce_rate",
               label: "Bounce rate",
               better: "low",
               cell: (i) => webCell(i, (w) => rate(w.totals.bounce_rate)),
-              chart: { values: (i) => cols[i]?.w?.series.map((x) => x.bounce_rate) ?? [], format: formatPercent, axis: percentAxis, higherIsBetter: false, rate: true },
+              chart: {
+                values: (i) => cols[i]?.w?.series.map((x) => x.bounce_rate) ?? [],
+                format: formatPercent,
+                axis: percentAxis,
+                higherIsBetter: false,
+                rate: true,
+              },
             },
             {
               key: "avg_visit",
@@ -788,9 +835,16 @@ function Scorecards({
                 webCell(i, (w) =>
                   w.totals.avg_visit_duration === null
                     ? none
-                    : { n: w.totals.avg_visit_duration, text: formatDuration(w.totals.avg_visit_duration) },
+                    : {
+                        n: w.totals.avg_visit_duration,
+                        text: formatDuration(w.totals.avg_visit_duration),
+                      },
                 ),
-              chart: { values: (i) => cols[i]?.w?.series.map((x) => x.avg_visit_duration) ?? [], format: formatDuration, axis: () => formatDuration },
+              chart: {
+                values: (i) => cols[i]?.w?.series.map((x) => x.avg_visit_duration) ?? [],
+                format: formatDuration,
+                axis: () => formatDuration,
+              },
             },
             {
               key: "held",
@@ -843,39 +897,87 @@ function Scorecards({
                   change: change(a.totals.requests, a.previous_totals.requests),
                   spark: a.series.map((x) => x.requests),
                 })),
-              chart: { values: (i) => cols[i]?.a?.series.map((x) => x.requests) ?? [], format: formatCount, axis: countAxis },
+              chart: {
+                values: (i) => cols[i]?.a?.series.map((x) => x.requests) ?? [],
+                format: formatCount,
+                axis: countAxis,
+              },
             },
             {
               key: "rate_5xx",
               label: "5xx rate",
               better: "low",
               cell: (i) => apiCell(i, (a) => rate(a.totals.rate_5xx)),
-              chart: { values: (i) => cols[i]?.a?.series.map((x) => x.rate_5xx) ?? [], format: formatPercent, axis: percentAxis, higherIsBetter: false, rate: true },
+              chart: {
+                values: (i) => cols[i]?.a?.series.map((x) => x.rate_5xx) ?? [],
+                format: formatPercent,
+                axis: percentAxis,
+                higherIsBetter: false,
+                rate: true,
+              },
             },
             {
               key: "rate_4xx",
               label: "4xx rate",
               better: "low",
               cell: (i) => apiCell(i, (a) => rate(a.totals.rate_4xx)),
-              chart: { values: (i) => cols[i]?.a?.series.map((x) => x.rate_4xx) ?? [], format: formatPercent, axis: percentAxis, higherIsBetter: false, rate: true },
+              chart: {
+                values: (i) => cols[i]?.a?.series.map((x) => x.rate_4xx) ?? [],
+                format: formatPercent,
+                axis: percentAxis,
+                higherIsBetter: false,
+                rate: true,
+              },
             },
             {
               key: "p95",
               label: "p95 latency",
               better: "low",
               cell: (i) => apiCell(i, (a) => latency(a.totals, "p95")),
-              chart: { values: (i) => cols[i]?.a?.series.map((x) => pct(x, "p95")) ?? [], format: formatLatency, axis: latencyAxis, higherIsBetter: false, ceiling: true },
+              chart: {
+                values: (i) => cols[i]?.a?.series.map((x) => pct(x, "p95")) ?? [],
+                format: formatLatency,
+                axis: latencyAxis,
+                higherIsBetter: false,
+                ceiling: true,
+              },
             },
-            { key: "p50", label: "p50 latency", better: "low", cell: (i) => apiCell(i, (a) => latency(a.totals, "p50")) },
-            { key: "p99", label: "p99 latency", better: "low", cell: (i) => apiCell(i, (a) => latency(a.totals, "p99")) },
+            {
+              key: "p50",
+              label: "p50 latency",
+              better: "low",
+              cell: (i) => apiCell(i, (a) => latency(a.totals, "p50")),
+            },
+            {
+              key: "p99",
+              label: "p99 latency",
+              better: "low",
+              cell: (i) => apiCell(i, (a) => latency(a.totals, "p99")),
+            },
             {
               key: "infra",
               label: "Infrastructure requests",
               better: null,
-              cell: (i) => apiCell(i, (a) => ({ n: a.totals.infrastructure_requests, text: formatCount(a.totals.infrastructure_requests) })),
+              cell: (i) =>
+                apiCell(i, (a) => ({
+                  n: a.totals.infrastructure_requests,
+                  text: formatCount(a.totals.infrastructure_requests),
+                })),
             },
-            { key: "services", label: "Services", better: null, cell: (i) => apiCell(i, (a) => ({ n: a.totals.services, text: formatCount(a.totals.services) })) },
-            { key: "routes", label: "Routes", better: null, cell: (i) => apiCell(i, (a) => ({ n: a.totals.routes, text: formatCount(a.totals.routes) })) },
+            {
+              key: "services",
+              label: "Services",
+              better: null,
+              cell: (i) =>
+                apiCell(i, (a) => ({ n: a.totals.services, text: formatCount(a.totals.services) })),
+            },
+            {
+              key: "routes",
+              label: "Routes",
+              better: null,
+              cell: (i) =>
+                apiCell(i, (a) => ({ n: a.totals.routes, text: formatCount(a.totals.routes) })),
+            },
           ],
     },
     {
@@ -898,13 +1000,21 @@ function Scorecards({
               text: compactCount(c.totals.operations),
               spark: c.series.map((x) => x.operations ?? 0),
             })),
-          chart: { values: (i) => chainOf(i)?.series.map((x) => x.operations) ?? [], format: formatCount, axis: countAxis },
+          chart: {
+            values: (i) => chainOf(i)?.series.map((x) => x.operations) ?? [],
+            format: formatCount,
+            axis: countAxis,
+          },
         },
         {
           key: "transactions",
           label: "Transactions",
           better: "high",
-          cell: (i) => chainCell(i, (c) => ({ n: c.totals.transactions, text: formatCount(c.totals.transactions) })),
+          cell: (i) =>
+            chainCell(i, (c) => ({
+              n: c.totals.transactions,
+              text: formatCount(c.totals.transactions),
+            })),
         },
         {
           key: "ids",
@@ -912,7 +1022,9 @@ function Scorecards({
           better: null,
           cell: (i) => {
             const c = chainOf(i);
-            return c && c.totals.ids > 0 ? { n: c.totals.ids_verified, text: `${c.totals.ids_verified} of ${c.totals.ids}` } : none;
+            return c && c.totals.ids > 0
+              ? { n: c.totals.ids_verified, text: `${c.totals.ids_verified} of ${c.totals.ids}` }
+              : none;
           },
         },
         {
@@ -930,8 +1042,11 @@ function Scorecards({
   ];
 
   const all = groups.flatMap((g) => g.rows);
-  const open = row ? all.find((r) => r.key === row) ?? null : null;
-  const slotted = cols.map((c) => ({ tenant: (c.tenant ?? { id: c.id, name: c.id }) as TenantRef, slot: c.slot }));
+  const open = row ? (all.find((r) => r.key === row) ?? null) : null;
+  const slotted = cols.map((c) => ({
+    tenant: (c.tenant ?? { id: c.id, name: c.id }) as TenantRef,
+    slot: c.slot,
+  }));
   const periodDays = days.length;
 
   return (
@@ -1000,7 +1115,10 @@ function Scorecards({
           </colgroup>
           <thead>
             <tr>
-              <th scope="col" className="border-b border-line bg-sunken px-4 py-3 text-left text-small font-normal text-fg-3">
+              <th
+                scope="col"
+                className="border-b border-line bg-sunken px-4 py-3 text-left text-small font-normal text-fg-3"
+              >
                 {periodDays > 0 ? `Last ${countOf(periodDays, "day")}` : "Range"}
               </th>
               {cols.map((c) => (
@@ -1050,7 +1168,9 @@ function Scorecards({
                   <span className="flex flex-wrap items-center gap-x-5 gap-y-1">
                     <span className="text-small font-semibold text-fg">{g.label}</span>
                     {g.actions ? (
-                      <span className="ml-auto flex flex-wrap items-center gap-x-5">{g.actions}</span>
+                      <span className="ml-auto flex flex-wrap items-center gap-x-5">
+                        {g.actions}
+                      </span>
                     ) : null}
                   </span>
                 </th>
@@ -1064,7 +1184,9 @@ function Scorecards({
                   running={running}
                   labels={labels}
                   open={row === r.key}
-                  onOpen={r.chart || r.detail ? () => onRow(row === r.key ? null : r.key) : undefined}
+                  onOpen={
+                    r.chart || r.detail ? () => onRow(row === r.key ? null : r.key) : undefined
+                  }
                 />
               ))}
             </tbody>
@@ -1092,7 +1214,9 @@ function Scorecards({
           ) : dialog === "services" && api ? (
             <div className="grid gap-4 md:grid-cols-2">
               {cols.flatMap((c) =>
-                c.a && c.a.totals.requests > 0 ? [<ServicesCard key={c.id} project={c.a} slot={c.slot} />] : [],
+                c.a && c.a.totals.requests > 0
+                  ? [<ServicesCard key={c.id} project={c.a} slot={c.slot} />]
+                  : [],
               )}
             </div>
           ) : dialog === "onchain" && web ? (
@@ -1161,7 +1285,6 @@ function ScoreRow({
         const isBest = best !== null && c.n === best;
         return (
           <td
-            // biome-ignore lint/suspicious/noArrayIndexKey: one cell per compared project, in column order
             key={i}
             data-best={isBest ? "" : undefined}
             className="border-b border-l border-line px-4 py-3 align-middle"
@@ -1182,7 +1305,7 @@ function ScoreRow({
                   {c.change ? <ChangeLine change={c.change} className="text-caption" /> : null}
                   {isBest ? <span className="sr-only">, the best</span> : null}
                 </span>
-                {c.spark && c.spark.some((v) => v > 0) ? (
+                {c.spark?.some((v) => v > 0) ? (
                   <MiniBars values={c.spark} series={series(i)} running={running} labels={labels} />
                 ) : null}
                 {c.visual ?? null}

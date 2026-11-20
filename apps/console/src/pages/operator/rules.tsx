@@ -26,7 +26,14 @@ import { EmptyState, ErrorState, LoadingState, Skeleton } from "@/components/sta
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { countOf, formatCount, formatDate, formatDateRange } from "@/lib/format";
 import { isDay } from "@/lib/global";
 import { fieldMessage } from "@/lib/validate";
@@ -75,11 +82,20 @@ export function ruleParts(
     },
   ];
   if (r.min_grade)
-    parts.push({ text: r.min_grade === "A" ? "grade A" : `grade ${r.min_grade} or better`, value: true });
+    parts.push({
+      text: r.min_grade === "A" ? "grade A" : `grade ${r.min_grade} or better`,
+      value: true,
+    });
   return parts;
 }
 
-function RuleSentence({ rule, size = "lg" }: { rule: Parameters<typeof ruleParts>[0]; size?: "lg" | "sm" }) {
+function RuleSentence({
+  rule,
+  size = "lg",
+}: {
+  rule: Parameters<typeof ruleParts>[0];
+  size?: "lg" | "sm";
+}) {
   const parts = ruleParts(rule);
   return (
     <p
@@ -89,7 +105,6 @@ function RuleSentence({ rule, size = "lg" }: { rule: Parameters<typeof ruleParts
       )}
     >
       {parts.map((p, i) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: the parts are a fixed sentence, in order
         <span key={i}>
           {i > 0 ? (parts[i - 1]?.value && p.value ? ", " : " ") : null}
           {p.value ? (
@@ -274,9 +289,7 @@ export function RulesPage() {
               <RuleCard
                 rule={r}
                 open={r.id === selected}
-                onToggle={() =>
-                  r.id === selected ? setParams({}, { replace: true }) : open(r.id)
-                }
+                onToggle={() => (r.id === selected ? setParams({}, { replace: true }) : open(r.id))}
                 onEdit={() => setEditing({ id: r.id, form: formOf(r) })}
                 onDelete={() => remove(r)}
                 asOf={r.id === selected ? asOf : ""}
@@ -335,10 +348,7 @@ function RuleCard({
             </span>
             of {formatCount(r.evaluated)} meet it
           </p>
-          <span
-            aria-hidden
-            className="flex h-1.5 w-full overflow-hidden rounded-full bg-selected"
-          >
+          <span aria-hidden className="flex h-1.5 w-full overflow-hidden rounded-full bg-selected">
             <i className="block h-full rounded-full bg-fg-3" style={{ width: `${share}%` }} />
           </span>
         </div>
@@ -348,7 +358,11 @@ function RuleCard({
             size="icon-sm"
             aria-expanded={open}
             aria-controls={bodyId}
-            aria-label={open ? `Hide the projects that meet ${r.name}` : `Show the projects that meet ${r.name}`}
+            aria-label={
+              open
+                ? `Hide the projects that meet ${r.name}`
+                : `Show the projects that meet ${r.name}`
+            }
             onClick={onToggle}
           >
             <ChevronDown
@@ -474,21 +488,20 @@ function FormRow({
 }) {
   const shown = (errors ?? []).filter((e): e is string => Boolean(e));
   return (
-    <div
-      role="group"
-      aria-label={label}
-      className="grid min-w-0 gap-x-4 gap-y-1.5 border-b border-line py-3 first:pt-0 sm:grid-cols-[6.5rem_minmax(0,1fr)] sm:items-center"
-    >
+    <fieldset className="grid min-w-0 gap-x-4 gap-y-1.5 border-b border-line py-3 first:pt-0 sm:grid-cols-[6.5rem_minmax(0,1fr)] sm:items-center">
+      <legend className="sr-only">{label}</legend>
       <span aria-hidden className="text-small text-fg-2">
         {label}
       </span>
-      <div className="flex min-w-0 flex-wrap items-center gap-2 text-small text-fg-2">{children}</div>
+      <div className="flex min-w-0 flex-wrap items-center gap-2 text-small text-fg-2">
+        {children}
+      </div>
       {shown.length ? (
         <p role="alert" className="text-small text-critical sm:col-start-2">
           {shown.join(" ")}
         </p>
       ) : null}
-    </div>
+    </fieldset>
   );
 }
 
@@ -686,7 +699,10 @@ function Matches({
           Evaluated on
         </span>
         {q.data ? (
-          <span className="text-small text-fg-3" title={`${formatDateRange(q.data.from, q.data.to)}, UTC`}>
+          <span
+            className="text-small text-fg-3"
+            title={`${formatDateRange(q.data.from, q.data.to)}, UTC`}
+          >
             {monthsText(q.data.months)}, UTC
           </span>
         ) : null}
@@ -707,7 +723,11 @@ function Matches({
         </div>
       ) : q.error ? (
         <div className="p-5">
-          <ErrorState title="The rule did not evaluate" error={q.error} onRetry={() => q.refetch()} />
+          <ErrorState
+            title="The rule did not evaluate"
+            error={q.error}
+            onRetry={() => q.refetch()}
+          />
         </div>
       ) : (
         <MatchList data={q.data} />
@@ -716,7 +736,11 @@ function Matches({
   );
 }
 
-const monthFmt = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+const monthFmt = new Intl.DateTimeFormat("en-US", {
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
 
 // "October 2026", or "August 2026 to October 2026"
 function monthsText(months: string[]): string {
