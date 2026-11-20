@@ -218,7 +218,6 @@ export function countChange(
 // to assistive technology
 export function ChangeLine({ change, className }: { change: StatChange; className?: string }) {
   const flat = change.direction === "flat";
-  const mark = change.direction === "up" ? "\u25B2" : change.direction === "down" ? "\u25BC" : "";
   const tone =
     change.good === null || flat ? "text-fg-3" : change.good ? "text-success" : "text-critical";
   return (
@@ -226,11 +225,12 @@ export function ChangeLine({ change, className }: { change: StatChange; classNam
       data-change={change.direction}
       className={cn("flex items-center gap-1 text-[12.5px] leading-4 tabular", tone, className)}
     >
-      {mark ? (
-        <span aria-hidden className="text-[10px]">
-          {mark}
-        </span>
-      ) : null}
+      {flat ? null : (
+        // a drawn triangle, not a glyph, so the text of the change stays the change
+        <svg aria-hidden="true" viewBox="0 0 10 10" className="size-2 fill-current">
+          <path d={change.direction === "up" ? "M5 1 9.5 9h-9z" : "M5 9 .5 1h9z"} />
+        </svg>
+      )}
       {flat ? <span className="sr-only">{change.text}</span> : change.text}
       <span className="sr-only"> vs {change.period}</span>
     </span>
