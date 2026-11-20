@@ -491,9 +491,7 @@ function ProveHead({ id, until, menu }: { id: ChainId; until?: string | null; me
           <StrKey strkey={id.strkey} className="[&_code]:text-[15px]" />
           <KindLabel kind={id.kind} />
           {until ? (
-            <span className="text-caption text-fg-2">
-              Proof open until {formatTimeUtc(until)}
-            </span>
+            <span className="text-caption text-fg-2">Proof open until {formatTimeUtc(until)}</span>
           ) : null}
         </div>
         {menu}
