@@ -273,12 +273,14 @@ test("the pasted snippet loads, verifies and sends traffic through the gateway",
 test("the console's web dashboard shows the site's seven metrics for a selected range", async () => {
   const context = owner;
   const page = await owner.newPage();
-  // the console overview carries the db-ip attribution
-  await page.goto(`${APP}/projects/${tenant.id}`);
-  await expect(page.getByRole("link", { name: "IP Geolocation by DB-IP" })).toHaveAttribute(
+  // the db-ip attribution lives in the terms, which every page links to
+  await page.goto(`${APP}/terms`);
+  await expect(page.getByText('"IP Geolocation by DB-IP"')).toBeVisible();
+  await expect(page.getByRole("link", { name: "https://db-ip.com" })).toHaveAttribute(
     "href",
-    "https://db-ip.com",
+    /^https:\/\/db-ip\.com\/?$/,
   );
+  await page.goto(`${APP}/projects/${tenant.id}`);
   await shot(page, "05-overview");
 
   // the hours of the run's days come from the engine as soon as the replayer
@@ -384,8 +386,11 @@ test("the console's web dashboard shows the site's seven metrics for a selected 
     await expect(totals.getByText(value, { exact: true }).first()).toBeVisible();
   }
   await expect(totals.getByText("Visit duration", { exact: true })).toBeVisible();
-  await expect(page.getByText(oneDay ? "Page views per hour" : "Page views per day")).toBeVisible();
-  await expect(page.getByLabel("Right now")).toBeVisible();
+  // the chart is titled by its metric, with its step under the title
+  const chart = page.getByRole("region", { name: "Page views", exact: true });
+  await expect(chart.getByText(oneDay ? "per hour, UTC" : "per day, UTC")).toBeVisible();
+  // the visitors right now beside the site chips
+  await expect(page.getByTestId("web-active")).toBeVisible();
   await shot(page, "06-dashboard-top");
 
   for (const [heading, value] of [
@@ -416,10 +421,9 @@ test("the console's web dashboard shows the site's seven metrics for a selected 
     .getByRole("radio", { name: "7 days" })
     .click();
   await expect(page).toHaveURL(/range=7/);
+  // narrowed to one day, the chart's step names that day instead of utc
   await expect(
-    oneDay
-      ? page.getByRole("heading", { level: 2, name: /^Page views per hour, / })
-      : page.getByText("Page views per day"),
+    chart.getByText(oneDay ? /^per hour, (?!UTC$)/ : "per day, UTC", { exact: !oneDay }),
   ).toBeVisible();
   // a custom range is checked before it is asked for
   await page
@@ -435,15 +439,16 @@ test("the console's web dashboard shows the site's seven metrics for a selected 
   await page.getByLabel("From (UTC day)").fill(today);
   await page.getByRole("button", { name: "Apply range" }).click();
   await expect(page).toHaveURL(new RegExp(`from=${today}&to=${today}`));
-  // the quarantined traffic of the site is its own view, opened from what
-  // the totals leave out
-  const notCounted = page.getByRole("region", { name: "Not counted" });
-  await expect(notCounted.getByText("Every event, by outcome")).toBeVisible();
-  await notCounted.getByRole("button", { name: "Show quarantined traffic" }).click();
+  // every event by outcome, under the dashboard
+  const went = page.getByRole("region", { name: "Where events went" });
+  await expect(went).toBeVisible();
+  await expect(went).toContainText("Counted");
+  // the quarantined traffic of the site is its own view, a switch in the header
+  await page
+    .getByRole("radiogroup", { name: "Traffic" })
+    .getByRole("radio", { name: "Quarantined" })
+    .click();
   await expect(page).toHaveURL(/band=quarantine/);
-  await expect(page.getByLabel("Right now")).toHaveCount(0);
-
-  // the dashboard carries the db-ip link, once
-  await expect(page.getByRole("link", { name: "IP Geolocation by DB-IP" })).toHaveCount(1);
+  await expect(page.getByTestId("web-active")).toHaveCount(0);
   writeFileSync(join(shots, "stats.json"), `${JSON.stringify(s, null, 2)}\n`);
 });
