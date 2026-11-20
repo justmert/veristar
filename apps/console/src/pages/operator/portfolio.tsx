@@ -1,18 +1,16 @@
 // the portfolio line above the project list: how many projects are in each
-// status, how many have web or api data in the range, and how many wait for
-// a review. each count is a filter of the list, one click away. the counts
+// status and how many have web or api data in the range. each count is a filter of the list, one click away. the counts
 // are the totals the list endpoint answers for the same filters, so a count
 // and the rows it filters to always agree.
 
-import { useInfiniteQuery, useQueries } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { globalApi } from "@/api/endpoints";
-import { keys, operatorTenantsQuery } from "@/api/queries";
+import { keys } from "@/api/queries";
 import { type TenantStatus, tenantStatus, type WebSort } from "@/api/schemas";
-import { statusText } from "@/components/status";
+import { statusEntry, statusText, type Tone } from "@/components/status";
 import { formatCount } from "@/lib/format";
 import { type DayRange, EMPTY_FILTERS, type ListState, type ProjectFilters } from "@/lib/global";
-import { REVIEW_QUEUE } from "./review";
 
 // a segment of the portfolio: what it counts and the filter it applies
 export type Segment =
@@ -68,15 +66,12 @@ export function usePortfolio(range: DayRange) {
       };
     }),
   });
-  const review = useInfiniteQuery(operatorTenantsQuery(REVIEW_QUEUE));
   const byKey = new Map<string, number | null>(
     COUNTED.map((s, i) => [segmentKey(s), counts[i]?.data ?? null]),
   );
-  const reviewItems = review.data?.pages.flatMap((p) => p.items).length;
-  byKey.set("review", reviewItems === undefined ? null : reviewItems);
   return {
     count: (s: Segment) => byKey.get(segmentKey(s)) ?? null,
-    more: (s: Segment) => s.kind === "review" && review.hasNextPage,
+    more: (_s: Segment) => false,
     error: counts.every((c) => c.error) ? counts[0]?.error : null,
   };
 }
@@ -93,9 +88,26 @@ function labelOf(s: Segment): string {
   return s.kind === "status" ? statusText(s.status) : LABEL[s.kind];
 }
 
-// the counts in three groups: status, data, attention. a status nobody
-// holds is left out; the data and attention groups always show, a zero
-// there is a fact
+const DOT: Record<Tone, string> = {
+  success: "bg-success",
+  warning: "bg-warning",
+  critical: "bg-critical",
+  info: "bg-info",
+  neutral: "bg-fg-3",
+};
+
+// the dot of a status, the series colour of a data group
+function dotOf(s: Segment): string | null {
+  if (s.kind === "status")
+    return DOT[statusEntry({ kind: "project", status: s.status, operator: true }).tone];
+  if (s.kind === "web") return "bg-series-1";
+  if (s.kind === "api") return "bg-series-3";
+  return null;
+}
+
+// one status bar: a stacked line of the statuses, then the counts, which
+// are the filter buttons. the data coverage is a second group. a zero shows
+// quiet; a count still loading shows a quiet mark.
 export function PortfolioBar({
   portfolio,
   current,
@@ -107,64 +119,78 @@ export function PortfolioBar({
   onPick: (s: Segment) => void;
 }) {
   if (portfolio.error) return null;
+  const statuses = COUNTED.filter((s) => s.kind === "status");
+  const total = statuses.reduce((a, s) => a + (portfolio.count(s) ?? 0), 0);
   const groups: { label: string; segments: Segment[] }[] = [
-    {
-      label: "Status",
-      segments: COUNTED.filter(
-        (s) => s.kind === "all" || (s.kind === "status" && portfolio.count(s) !== 0),
-      ),
-    },
+    { label: "Status", segments: [{ kind: "all" }, ...statuses] },
     { label: "Data", segments: [{ kind: "web" }, { kind: "api" }, { kind: "none" }] },
-    { label: "Attention", segments: [{ kind: "review" }] },
   ];
   return (
-    <nav
-      aria-label="Portfolio"
-      className="flex min-w-0 flex-wrap items-stretch gap-x-6 gap-y-3"
-      data-portfolio=""
-    >
-      {groups.map((g) => (
-        <ul
-          key={g.label}
-          aria-label={g.label}
-          className="flex min-w-0 flex-wrap items-stretch gap-1 border-line not-first:border-l not-first:pl-6"
-        >
-          {g.segments.map((s) => {
-            const n = portfolio.count(s);
-            const key = segmentKey(s);
-            const on = current === key;
-            const attention = s.kind === "review" && (n ?? 0) > 0;
+    <nav aria-label="Portfolio" className="flex min-w-0 flex-col gap-3" data-portfolio="">
+      {total > 0 ? (
+        <span aria-hidden className="flex h-2 w-full gap-[3px] overflow-hidden rounded-full">
+          {statuses.map((s) => {
+            const n = portfolio.count(s) ?? 0;
+            if (n === 0) return null;
             return (
-              <li key={key}>
-                <button
-                  type="button"
-                  aria-pressed={on}
-                  data-segment={key}
-                  onClick={() => onPick(on ? { kind: "all" } : s)}
-                  className={cn(
-                    "flex min-w-16 flex-col items-start rounded-md px-3 py-2 text-left transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:min-h-(--vs-control-touch)",
-                    on ? "bg-selected" : "hover:bg-hover",
-                  )}
-                >
-                  <span
-                    className={cn("text-title tabular", attention ? "text-warning" : "text-fg")}
-                    data-count={n ?? ""}
-                  >
-                    {n === null ? (
-                      <span aria-hidden className="text-fg-3">
-                        ·
-                      </span>
-                    ) : (
-                      `${formatCount(n)}${portfolio.more(s) ? "+" : ""}`
-                    )}
-                  </span>
-                  <span className="text-caption whitespace-nowrap text-fg-2">{labelOf(s)}</span>
-                </button>
-              </li>
+              <i
+                key={segmentKey(s)}
+                className={cn("block h-full rounded-full opacity-80", dotOf(s))}
+                style={{ flexGrow: n, flexBasis: 0 }}
+              />
             );
           })}
-        </ul>
-      ))}
+        </span>
+      ) : null}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+        {groups.map((g) => (
+          <ul
+            key={g.label}
+            aria-label={g.label}
+            className="flex min-w-0 flex-wrap items-center gap-1 border-line not-first:border-l not-first:pl-4"
+          >
+            {g.segments.map((s) => {
+              const n = portfolio.count(s);
+              const key = segmentKey(s);
+              const on = current === key;
+              const zero = n === 0;
+              const dot = dotOf(s);
+              return (
+                <li key={key}>
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    data-segment={key}
+                    onClick={() => onPick(on ? { kind: "all" } : s)}
+                    className={cn(
+                      "flex h-8 items-center gap-2 rounded-lg px-3 text-body whitespace-nowrap transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:min-h-(--vs-control-touch)",
+                      on ? "bg-selected text-fg" : "hover:bg-hover",
+                      zero ? "text-fg-3" : "text-fg",
+                    )}
+                  >
+                    {dot ? (
+                      <span
+                        aria-hidden
+                        className={cn("size-[7px] rounded-full", dot, zero && "opacity-40")}
+                      />
+                    ) : null}
+                    <span className="font-semibold tabular" data-count={n ?? ""}>
+                      {n === null ? (
+                        <span aria-hidden className="text-fg-3">
+                          ·
+                        </span>
+                      ) : (
+                        `${formatCount(n)}${portfolio.more(s) ? "+" : ""}`
+                      )}
+                    </span>
+                    <span className={zero ? "text-fg-3" : "text-fg-2"}>{labelOf(s)}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ))}
+      </div>
     </nav>
   );
 }

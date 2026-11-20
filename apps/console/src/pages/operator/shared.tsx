@@ -156,7 +156,6 @@ export function ListRange({
       onPreset={(v) => onRange(lastDays(Number(v), new Date()))}
       custom={preset === null ? shown : null}
       onCustom={(r) => onRange(r)}
-      range={shown}
       maxDays={366}
       maxDay={utcDay()}
     />
