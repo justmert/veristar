@@ -114,7 +114,8 @@ test("a wallet member joins a project by address and opens its dashboard", async
   // and the shared project's web dashboard opens in the console
   await page.goto(`${APP}/projects/${shared.id}/web?site=${site.id}`);
   await expect(page.getByRole("heading", { name: "Web", exact: true })).toBeVisible();
-  await expect(page.getByLabel("Right now")).toBeVisible();
+  // the live count reads umami as this account: the count, not its error
+  await expect(page.getByTestId("web-active")).toBeVisible();
 
   // the owner's member list shows the short address
   const op2 = await owner.newPage();

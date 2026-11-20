@@ -173,7 +173,8 @@ test("a passkey member joins a project by its address and opens its dashboard", 
   await waitWebReady(device, shared.id, site.id);
   await page.goto(`${APP}/projects/${shared.id}/web?site=${site.id}`);
   await expect(page.getByRole("heading", { name: "Web", exact: true })).toBeVisible();
-  await expect(page.getByLabel("Right now")).toBeVisible();
+  // the live count reads umami as this account: the count, not its error
+  await expect(page.getByTestId("web-active")).toBeVisible();
   await page.close();
 });
 
