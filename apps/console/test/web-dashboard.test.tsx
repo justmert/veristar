@@ -439,7 +439,8 @@ describe("session finder of the privacy page (contract 10.2 and 18)", () => {
     expect(host.textContent).toContain("1 page view");
     expect(calls[0]?.url).toContain(`/tenants/${f.TENANT_ID}/web/sessions?site=${f.SITE_ID}&day=`);
     // the engine's keys read as names
-    expect(host.textContent).toContain("Chrome, Linux, Laptop, Germany");
+    expect(host.textContent).toContain("Chrome, Linux, Laptop");
+    expect(host.textContent).toContain("Germany");
     expect(host.textContent).toContain("Safari, iOS, Mobile");
     const first = [...host.querySelectorAll("button")].find((b) =>
       (b.textContent ?? "").includes("Chrome"),

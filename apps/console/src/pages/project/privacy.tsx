@@ -825,10 +825,12 @@ export function SessionFinder({
                         x.browser && keyLabel("browser", x.browser),
                         x.os,
                         x.device && keyLabel("device", x.device),
-                        x.country && keyLabel("country", x.country),
                       ]
                         .filter(Boolean)
                         .join(", ")}
+                    </span>
+                    <span className="w-28 shrink-0 truncate text-small text-fg-2">
+                      {x.country ? keyLabel("country", x.country) : null}
                     </span>
                     <span className="shrink-0 text-small text-fg-2 tabular">
                       {formatCount(x.views)} {x.views === 1 ? "page view" : "page views"}
