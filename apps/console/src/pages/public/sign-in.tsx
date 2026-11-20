@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { FileText, KeyRound, LoaderCircle, Shield, Wallet } from "lucide-react";
-import { useState } from "react";
+import { KeyRound, LoaderCircle, Lock, ShieldCheck, Wallet } from "lucide-react";
+import { Fragment, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { api, signInUrl } from "@/api/endpoints";
 import { GitHubMark } from "@/components/github-mark";
@@ -61,115 +61,185 @@ export function SignInPage() {
   const deleted = !message && params.get("deleted") === "1";
 
   return (
-    <PublicFrame>
-      <div className="flex w-full max-w-[24rem] flex-col gap-6">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-heading text-fg">Sign in to Veristar</h1>
-          <p className="text-body text-fg-2">
-            Web, API and on-chain analytics for projects that build on Stellar. Free for every
-            project.
-          </p>
-        </div>
+    // the frame's footer spans both halves until the frame can end at the
+    // right half (shared-requests.md)
+    <PublicFrame center={false} className="p-0 pt-0 pb-0 sm:pt-0 lg:flex-row">
+      <SignedProof />
+      <div className="flex flex-1 flex-col">
+        <div className="flex flex-1 px-4 py-10 sm:px-8">
+          <section aria-labelledby="sign-in-h" className="m-auto flex w-full max-w-90 flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <h1 id="sign-in-h" className="text-heading text-fg">
+                Sign in
+              </h1>
+              <p className="text-body text-fg-2">Free for every Stellar project</p>
+            </div>
 
-        {message ? (
-          <Notice tone="critical" role="alert">
-            {message}
-          </Notice>
-        ) : null}
-        {deleted ? (
-          <Notice tone="success">
-            Your account is deleted. A new sign-in makes a new, empty account.
-          </Notice>
-        ) : null}
+            {message ? (
+              <Notice tone="critical" role="alert">
+                {message}
+              </Notice>
+            ) : null}
+            {deleted ? (
+              <Notice tone="success">
+                Your account is deleted. A new sign-in makes a new, empty account.
+              </Notice>
+            ) : null}
 
-        <div className="flex flex-col gap-2">
-          <Button asChild size="lg" className="w-full" pending={leaving}>
-            <a href={signInUrl(returnTo)} onClick={() => setLeaving(true)}>
-              {leaving ? <LoaderCircle aria-hidden className="animate-spin" /> : <GitHubMark />}
-              Continue with GitHub
-            </a>
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="lg"
-            className="w-full"
-            onClick={() => setPicker(true)}
-          >
-            <Wallet aria-hidden className="size-4.5" />
-            Continue with a Stellar wallet
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="lg"
-            className="w-full"
-            onClick={() => setPasskey(true)}
-          >
-            <KeyRound aria-hidden className="size-4.5" />
-            Continue with a passkey
-          </Button>
-        </div>
+            <div className="flex flex-col gap-2.5">
+              <Button asChild size="lg" className="h-11.5 w-full" pending={leaving}>
+                <a href={signInUrl(returnTo)} onClick={() => setLeaving(true)}>
+                  {leaving ? <LoaderCircle aria-hidden className="animate-spin" /> : <GitHubMark />}
+                  Continue with GitHub
+                </a>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="h-11.5 w-full"
+                onClick={() => setPicker(true)}
+              >
+                <Wallet aria-hidden className="size-4.5" />
+                Continue with a Stellar wallet
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="h-11.5 w-full"
+                onClick={() => setPasskey(true)}
+              >
+                <KeyRound aria-hidden className="size-4.5" />
+                Continue with a passkey
+              </Button>
+            </div>
 
-        <WalletPicker
-          open={picker}
-          onOpenChange={setPicker}
-          title="Continue with a Stellar wallet"
-          description="Your wallet signs a sign-in challenge for this console on the public network. It moves no funds and sends nothing to the network."
-          purpose="transaction"
-          onPick={async (wallet) => {
-            const dest = await walletSignIn(wallet.id, returnTo);
-            // the session changed; nothing cached before it applies
-            qc.clear();
-            setPicker(false);
-            navigate(dest, { replace: true });
-          }}
-        />
+            <WalletPicker
+              open={picker}
+              onOpenChange={setPicker}
+              title="Continue with a Stellar wallet"
+              description="Your wallet signs a sign-in challenge for this console on the public network. It moves no funds and sends nothing to the network."
+              purpose="transaction"
+              onPick={async (wallet) => {
+                const dest = await walletSignIn(wallet.id, returnTo);
+                // the session changed; nothing cached before it applies
+                qc.clear();
+                setPicker(false);
+                navigate(dest, { replace: true });
+              }}
+            />
 
-        <PasskeyDialog
-          open={passkey}
-          onOpenChange={setPasskey}
-          mode="sign_in"
-          title="Continue with a passkey"
-          description="A passkey signs you in with Face ID, Touch ID, Windows Hello or a security key. The passkey also controls a Stellar smart account. Its address is the name of your account."
-          userName="Veristar account"
-          challenge={() => api.passkeyChallenge(returnTo)}
-          verify={async (answer) => {
-            const v = await api.passkeyVerify(answer);
-            qc.clear();
-            setPasskey(false);
-            navigate(safeReturnTo(v.return_to), { replace: true });
-          }}
-        />
+            <PasskeyDialog
+              open={passkey}
+              onOpenChange={setPasskey}
+              mode="sign_in"
+              title="Continue with a passkey"
+              description="A passkey signs you in with Face ID, Touch ID, Windows Hello or a security key. The passkey also controls a Stellar smart account. Its address is the name of your account."
+              userName="Veristar account"
+              challenge={() => api.passkeyChallenge(returnTo)}
+              verify={async (answer) => {
+                const v = await api.passkeyVerify(answer);
+                qc.clear();
+                setPasskey(false);
+                navigate(safeReturnTo(v.return_to), { replace: true });
+              }}
+            />
 
-        <ul className="flex flex-col gap-2 text-small text-fg-2">
-          <li className="flex gap-2">
-            <Shield aria-hidden className="mt-1 size-3.5 shrink-0 text-fg-3" />
-            GitHub shares your public username and id. No email, no repositories.
-          </li>
-          <li className="flex gap-2">
-            <Wallet aria-hidden className="mt-1 size-3.5 shrink-0 text-fg-3" />A wallet shares your
-            public address and moves no funds.
-          </li>
-          <li className="flex gap-2">
-            <KeyRound aria-hidden className="mt-1 size-3.5 shrink-0 text-fg-3" />A passkey shares a
-            public key. Your face or fingerprint stays on the device.
-          </li>
-          <li className="flex gap-2">
-            <FileText aria-hidden className="mt-1 size-3.5 shrink-0 text-fg-3" />
-            <span>
-              Enrolling a project means accepting the{" "}
+            <p className="text-small text-fg-2">
+              GitHub shares your username and id, a wallet its public address, a passkey a public
+              key. Nothing else. Enrolling a project means accepting the{" "}
               <Link
                 to="/terms"
-                className="rounded-sm text-fg underline decoration-line-strong underline-offset-2 transition-colors duration-(--vs-duration-press) hover:decoration-fg focus-ring"
+                className="rounded-sm text-fg-2 underline decoration-line-strong underline-offset-3 transition-colors duration-(--vs-duration-press) hover:text-fg hover:decoration-fg focus-ring"
               >
                 terms
               </Link>
               .
-            </span>
-          </li>
-        </ul>
+            </p>
+          </section>
+        </div>
       </div>
     </PublicFrame>
+  );
+}
+
+// the left half: the promise and the product itself, a signed report file
+// with a stamp across it. an illustration of the file format, so it is
+// hidden from assistive technology except for its label
+function SignedProof() {
+  const lines: [string, string, "s" | "n"][] = [
+    ["project", '"Lumen Pay"', "s"],
+    ["period", '"2026-10-01 to 2026-10-31"', "s"],
+    ["verified_visitors", "1284", "n"],
+    ["api_requests", "2410000", "n"],
+    ["onchain_operations", "12450", "n"],
+    ["integrity_grade", '"B"', "s"],
+  ];
+  return (
+    <aside
+      aria-label="What a signed report looks like"
+      className="relative flex flex-col overflow-hidden bg-sunken px-4 pt-0 pb-10 shadow-[1px_0_0_var(--color-line-subtle)] sm:px-14 lg:w-[54%] lg:pb-11"
+    >
+      <div className="my-auto flex flex-col gap-8 pt-10 lg:gap-9 lg:pt-0">
+        <p className="max-w-120 text-[clamp(1.75rem,3vw,2.25rem)] leading-[1.17] font-semibold tracking-[-0.03em] text-fg">
+          Proof of real usage, signed and checkable
+        </p>
+        <figure
+          aria-hidden
+          className="relative w-full max-w-125 overflow-hidden rounded-xl border border-line bg-raised shadow-[0_30px_80px_var(--color-shadow-strong)]"
+        >
+          <div className="flex items-center gap-2 px-3.5 py-2.5 font-mono text-[11.5px] text-fg-2 shadow-[0_1px_0_var(--color-line-subtle)]">
+            <Lock className="size-3" />
+            lumen-pay-2026-10.json
+          </div>
+          <div className="grid grid-cols-[28px_minmax(0,1fr)] pt-3.5 pb-4.5 font-mono text-[12.5px] leading-5.25">
+            <span className="pr-3 text-right text-fg-3 select-none">1</span>
+            <span className="text-fg-3">{"{"}</span>
+            {lines.map(([k, v, kind], i) => (
+              <Fragment key={k}>
+                <span className="pr-3 text-right text-fg-3 select-none">{i + 2}</span>
+                <span className="truncate whitespace-pre">
+                  {"  "}
+                  <span className="text-fg-2">"{k}"</span>
+                  <span className="text-fg-3">: </span>
+                  <span className={kind === "s" ? "text-success" : "text-info"}>{v}</span>
+                  {i < lines.length - 1 ? <span className="text-fg-3">,</span> : null}
+                </span>
+              </Fragment>
+            ))}
+            <span className="pr-3 text-right text-fg-3 select-none">{lines.length + 2}</span>
+            <span className="text-fg-3">{"}"}</span>
+          </div>
+          <div className="flex items-center gap-2.5 px-4 py-3 text-[12.5px] text-fg-2 shadow-[0_-1px_0_var(--color-line-subtle)]">
+            <ShieldCheck className="size-4 text-success" />
+            <span>Signature valid</span>
+            <span className="ml-auto font-mono text-[11.5px] text-fg-3">sig 3f9a51…c07e</span>
+          </div>
+          <Stamp />
+        </figure>
+      </div>
+    </aside>
+  );
+}
+
+function Stamp() {
+  return (
+    <svg
+      viewBox="0 0 160 160"
+      className="absolute -right-7 bottom-14.5 size-39 -rotate-12 text-success max-sm:hidden"
+    >
+      <defs>
+        <path id="stamp-arc" d="M80,80 m-58,0 a58,58 0 1,1 116,0 a58,58 0 1,1 -116,0" />
+      </defs>
+      <circle cx="80" cy="80" r="74" fill="none" stroke="currentColor" strokeOpacity=".55" strokeWidth="2" />
+      <circle cx="80" cy="80" r="44" fill="none" stroke="currentColor" strokeOpacity=".45" strokeWidth="1.5" />
+      <text fontSize="11.5" fontWeight="600" letterSpacing="3" fill="currentColor" fillOpacity=".75">
+        <textPath href="#stamp-arc">SIGNED BY VERISTAR AND CHECKABLE ANYWHERE</textPath>
+      </text>
+      <text x="80" y="88" textAnchor="middle" fontSize="26" fontWeight="700" fill="currentColor" fillOpacity=".85">
+        B
+      </text>
+    </svg>
   );
 }
