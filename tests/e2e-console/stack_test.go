@@ -869,6 +869,24 @@ func (s *Stack) verifySite(id string) error {
 	return nil
 }
 
+// markDemo puts a project in the public demo (cp.tenants.demo), which no
+// route of the console or the control plane sets: the demo is chosen by the
+// deployment, not by a person.
+func (s *Stack) markDemo(id string) error {
+	if !siteID.MatchString(id) {
+		return fmt.Errorf("bad tenant id %q", id)
+	}
+	out, err := docker("exec", s.Postgres, "psql", "-q", "-h", "127.0.0.1", "-U", "postgres", "-d", "platform", "-tAc",
+		"update cp.tenants set demo = true where id = '"+id+"' returning id")
+	if err != nil {
+		return err
+	}
+	if out != id {
+		return fmt.Errorf("tenant %s not updated: %q", id, out)
+	}
+	return nil
+}
+
 // restartJobs restarts the jobs daemon. a daemon runs every periodic task
 // once as soon as it leads, so this is how a spec gets the hourly
 // aggregate-web task (and the 5 minute api rollup) to read new data now
@@ -896,8 +914,8 @@ func (s *Stack) restartJobs() error {
 
 // AppsControl serves POST /apps on loopback for the specs: the token comes
 // from the console, so the app can only start once a spec has created it.
-// POST /sites/verify and POST /jobs/restart are the two fixtures above;
-// /alertmanager/* serves the alerts spec (alertmanager_test.go).
+// POST /sites/verify, POST /tenants/demo and POST /jobs/restart are the
+// fixtures above; /alertmanager/* serves the alerts spec (alertmanager_test.go).
 func (s *Stack) AppsControl(t testing.TB) string {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -911,6 +929,20 @@ func (s *Stack) AppsControl(t testing.TB) string {
 			return
 		}
 		if err := s.verifySite(body.SiteID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /tenants/demo", func(w http.ResponseWriter, req *http.Request) {
+		var body struct {
+			TenantID string `json:"tenant_id"`
+		}
+		if err := json.NewDecoder(io.LimitReader(req.Body, 4096)).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := s.markDemo(body.TenantID); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

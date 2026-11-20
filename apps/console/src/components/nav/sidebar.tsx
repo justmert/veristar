@@ -37,12 +37,14 @@ import {
   MenuTrigger,
 } from "@/components/ui/menu";
 import { criticalCount } from "@/lib/alerts";
+import { useDemo } from "@/lib/demo";
 import { isNotFound } from "@/lib/errors";
 import { formatCount } from "@/lib/format";
 import { siblingUrl } from "@/lib/hosts";
 import { GoToButton } from "./go-to";
 import {
   areaOf,
+  demoNav,
   HOME_NAV,
   type NavGroup,
   type NavItem,
@@ -99,6 +101,8 @@ export function Sidebar({
       ? lastProject
       : null;
   const navProject = projectId ?? kept;
+  // the demo lists the pages it can draw and has no account to open
+  const demo = useDemo();
   return (
     <LayoutGroup id={group}>
       {/* the brand and the switcher stay at the top and the account at the
@@ -133,7 +137,7 @@ export function Sidebar({
           ) : navProject ? (
             <Groups
               label="Project"
-              groups={projectNav(navProject)}
+              groups={demo ? demoNav(projectNav(navProject), "project") : projectNav(navProject)}
               rest={projectId ? area.rest : null}
               onNavigate={onNavigate}
             />
@@ -167,12 +171,14 @@ export function Sidebar({
           {/* one way to Account: the account menu, which also holds the
               theme and sign out. it is marked current on the account page */}
           <ThemeToggle />
-          <AccountMenu
-            me={me}
-            onSignOut={onSignOut}
-            onNavigate={onNavigate}
-            current={area.kind === "home" && area.rest === "account"}
-          />
+          {demo ? null : (
+            <AccountMenu
+              me={me}
+              onSignOut={onSignOut}
+              onNavigate={onNavigate}
+              current={area.kind === "home" && area.rest === "account"}
+            />
+          )}
         </div>
       </div>
     </LayoutGroup>
@@ -258,6 +264,7 @@ function ContextSwitcher({
 }) {
   const tenant = useQuery({ ...tenantQuery(id ?? ""), enabled: id !== null });
   const navigate = useNavigate();
+  const demo = useDemo();
   const [q, setQ] = useState("");
   const listed = id ? me.tenants.find((t) => t.id === id) : undefined;
   const name = operatorArea
@@ -353,10 +360,12 @@ function ContextSwitcher({
           <Folder aria-hidden />
           My projects
         </MenuItem>
-        <MenuItem onSelect={() => go("/projects/new")}>
-          <Plus aria-hidden />
-          Enroll a project
-        </MenuItem>
+        {demo ? null : (
+          <MenuItem onSelect={() => go("/projects/new")}>
+            <Plus aria-hidden />
+            Enroll a project
+          </MenuItem>
+        )}
       </MenuContent>
     </Menu>
   );
@@ -402,8 +411,10 @@ function Groups({
 // route answers step_up_required. alerts are platform operations: the item
 // and its badge are for operator admins only
 function OperatorGroups({ rest, onNavigate }: { rest: string; onNavigate?: () => void }) {
-  const stepUp = useQuery(stepUpQuery);
-  const live = stepUp.data?.stepped_up === true;
+  // the demo has no step-up, no review queue and no alerts to count
+  const demo = useDemo();
+  const stepUp = useQuery({ ...stepUpQuery, enabled: !demo });
+  const live = !demo && stepUp.data?.stepped_up === true;
   const admin = useOperatorAdmin() === true;
   const alerts = useQuery({ ...operatorAlertsQuery, enabled: live && admin });
   const queue = useInfiniteQuery({ ...operatorTenantsQuery(REVIEW_QUEUE), enabled: live });
@@ -412,9 +423,11 @@ function OperatorGroups({ rest, onNavigate }: { rest: string; onNavigate?: () =>
   const first = queue.data?.pages[0];
   const waiting = first ? first.items.length : 0;
   const more = first ? first.next_cursor !== null : false;
-  const groups = admin
-    ? OPERATOR_NAV
-    : OPERATOR_NAV.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== "alerts") }));
+  const groups = demo
+    ? demoNav(OPERATOR_NAV, "operator")
+    : admin
+      ? OPERATOR_NAV
+      : OPERATOR_NAV.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== "alerts") }));
   return (
     <Groups
       label="Operator"

@@ -18,6 +18,7 @@ import { EmptyState, ErrorState } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDemo } from "@/lib/demo";
 import { formatChange, formatCompact } from "@/lib/format";
 import { queryClient } from "@/query-client";
 
@@ -74,11 +75,13 @@ export function ProjectsPage() {
   }, []);
   const retries = Object.values(failed);
   const tenants = me.data?.tenants ?? [];
+  // the demo's projects are samples; enrolling starts from the banner
+  const demo = useDemo();
   const header = (
     <PageHeader
       title="My projects"
       items={tenants.length > 0 ? [<span key="range">Last 30 days</span>] : undefined}
-      primary={me.data && tenants.length > 0 ? <EnrollButton /> : null}
+      primary={me.data && tenants.length > 0 && !demo ? <EnrollButton /> : null}
     />
   );
 
@@ -132,7 +135,7 @@ export function ProjectsPage() {
       ) : null}
 
       {tenants.length === 0 ? (
-        <EmptyState title="No project yet" action={<EnrollButton />} />
+        <EmptyState title="No project yet" action={demo ? null : <EnrollButton />} />
       ) : (
         <div className="flex flex-col gap-4">
           {tenants.length >= SEARCH_FROM ? (
@@ -259,7 +262,9 @@ function ProjectCard({
   tenant: MeTenant;
   onFailed: (id: string, retry: (() => void) | null) => void;
 }) {
-  const next = nextStep(t);
+  const demo = useDemo();
+  // a reader has no next step to take
+  const next = demo ? null : nextStep(t);
   // a project in review or rejected has no data pages yet
   const live = t.status === "active" || t.status === "suspended";
   const view = useQuery({ ...scfViewQuery(t.id, RANGE), enabled: live, retry: false });
@@ -306,7 +311,7 @@ function ProjectCard({
       ? [
           { to: base, label: "Overview" },
           { to: `${base}/sites`, label: "Sites" },
-          { to: `${base}/connect-api`, label: "Connect API" },
+          ...(demo ? [] : [{ to: `${base}/connect-api`, label: "Connect API" }]),
           { to: `${base}/onchain`, label: "On-chain" },
         ]
       : [

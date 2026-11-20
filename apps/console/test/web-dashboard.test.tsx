@@ -200,6 +200,7 @@ const ctx: ProjectContext = {
   me: f.meBody as ProjectContext["me"],
   isOwner: true,
   termsCurrent: true,
+  readOnly: false,
 };
 
 // a fetch double that answers by route, since the dashboard asks for its

@@ -8,6 +8,7 @@ import { FormMessage } from "@/components/error-panel";
 import { Notice as ToneNotice } from "@/components/notice";
 import { ErrorState, MessagePage } from "@/components/states";
 import { Button } from "@/components/ui/button";
+import { useDemo } from "@/lib/demo";
 import { isNotFound } from "@/lib/errors";
 import { siblingUrl } from "@/lib/hosts";
 import { termsVersionLabel } from "@/lib/terms";
@@ -16,7 +17,15 @@ import { NotFoundPage, ProjectsButton } from "@/pages/public/not-found";
 import { ResubmitForm } from "@/pages/resubmit";
 import { queryClient } from "@/query-client";
 
-export type ProjectContext = { tenant: Tenant; me: Me; isOwner: boolean; termsCurrent: boolean };
+// readOnly: the person can read the project and change nothing in it, as in
+// the demo (role viewer). pages draw no control that writes when it is set.
+export type ProjectContext = {
+  tenant: Tenant;
+  me: Me;
+  isOwner: boolean;
+  termsCurrent: boolean;
+  readOnly: boolean;
+};
 
 export function useProject(): ProjectContext {
   return useOutletContext<ProjectContext>();
@@ -27,6 +36,7 @@ export function ProjectLayout() {
   const { pathname } = useLocation();
   const me = useQuery(meQuery);
   const tenant = useQuery(tenantQuery(tenantId));
+  const demo = useDemo();
 
   // the shell and the sidebar are drawn already; the page keeps its own
   // title line and the shape of its content until the project lands
@@ -62,13 +72,16 @@ export function ProjectLayout() {
     me: me.data,
     isOwner: t.role === "owner",
     termsCurrent: t.accepted_terms_version === current,
+    readOnly: demo || t.role === "viewer",
   };
 
   // the shell's sidebar names the project and navigates it; this frame only
-  // puts the notice that applies above the page
-  const terms = ctx.termsCurrent ? null : (
-    <TermsNotice tenant={t} version={current} isOwner={ctx.isOwner} />
-  );
+  // puts the notice that applies above the page. terms are a matter for the
+  // project's owners, which a reader is not
+  const terms =
+    ctx.termsCurrent || ctx.readOnly ? null : (
+      <TermsNotice tenant={t} version={current} isOwner={ctx.isOwner} />
+    );
   const status = <StatusNotice tenant={t} isOwner={ctx.isOwner} />;
 
   return (

@@ -218,6 +218,7 @@ const ctx: ProjectContext = {
   me: f.meBody as ProjectContext["me"],
   isOwner: true,
   termsCurrent: true,
+  readOnly: false,
 };
 
 function stub(opts: { pageviews: number; ingest: Record<string, number>; api: "used" | "none" }) {

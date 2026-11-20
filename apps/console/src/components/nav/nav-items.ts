@@ -257,3 +257,43 @@ export function pageTitle(pathname: string): string {
   if (a.kind === "home" && a.rest === "projects/new") return "Enroll a project";
   return currentItem(pathname)?.label ?? "Veristar";
 }
+
+// the pages of a project and of the operator area that read only routes the
+// demo serves. the rest (members, privacy, tokens, assistants, site
+// settings, alerts, audit, the roster, settings, access keys, the review
+// queue) need a session or exist to change something.
+const PROJECT_PAGES: ReadonlySet<string> = new Set([
+  "overview",
+  "web",
+  "api",
+  "onchain",
+  "scf",
+  "sites",
+]);
+const OPERATOR_PAGES: ReadonlySet<string> = new Set(["projects", "compare", "rules"]);
+
+export function demoNav(groups: NavGroup[], area: "project" | "operator"): NavGroup[] {
+  const shown = area === "project" ? PROJECT_PAGES : OPERATOR_PAGES;
+  return groups
+    .map((g) => ({ ...g, items: g.items.filter((i) => shown.has(i.key)) }))
+    .filter((g) => g.items.length > 0);
+}
+
+// whether a console path is a page the demo can draw. a site's page is one
+// (its settings read as text there), and the old settings address leads to it
+export function demoAllows(pathname: string): boolean {
+  const a = areaOf(pathname);
+  if (a.kind === "project") {
+    if (a.rest === "") return true;
+    const [first = "", ...more] = a.rest.split("/");
+    if (first === "sites") return more.length <= 1 || (more.length === 2 && more[1] === "settings");
+    return more.length === 0 && PROJECT_PAGES.has(first);
+  }
+  if (a.kind === "operator") {
+    const [first = "", ...more] = a.rest.split("/");
+    if (first === "projects") return more.length <= 1;
+    return more.length === 0 && OPERATOR_PAGES.has(first);
+  }
+  // the project list; enrolling and the account need a person
+  return a.rest === "";
+}

@@ -100,9 +100,9 @@ function noSiteTitle(status: TenantStatus, termsCurrent: boolean): string {
 type Figure = WebMetric | "requests" | "5xx" | "p95" | "operations";
 
 export function OverviewPage() {
-  const { tenant, termsCurrent } = useProject();
+  const { tenant, termsCurrent, readOnly } = useProject();
   const stopped = STOPPED.has(tenant.status);
-  const canAdd = canAddSites(tenant.status, termsCurrent);
+  const canAdd = canAddSites(tenant.status, termsCurrent) && !readOnly;
   const sites = useQuery(sitesQuery(tenant.id));
   const [params, setParams] = useSearchParams();
   const { preset, days } = readOverviewRange(params, new Date());
@@ -199,7 +199,8 @@ export function OverviewPage() {
           }
           summaryError={summary.error}
           onRetry={() => summary.refetch()}
-          stopped={stopped}
+          // a reader has no setup step to take: the dashboard offers none
+          stopped={stopped || readOnly}
           canAdd={canAdd}
           noSite={noSiteTitle(tenant.status, termsCurrent)}
         />

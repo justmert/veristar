@@ -620,11 +620,11 @@ export function SitesTable({
 // ------------------------------------------------------------ the page
 
 export function SitesPage() {
-  const { tenant, isOwner, termsCurrent } = useProject();
+  const { tenant, isOwner, termsCurrent, readOnly } = useProject();
   // the control plane's rule: a suspended project's sites cannot be created
   // or changed (contract 5.11); a project that is not approved takes sites,
   // and they wait for review with it
-  const canChange = canAddSites(tenant.status, termsCurrent);
+  const canChange = canAddSites(tenant.status, termsCurrent) && !readOnly;
   const suspended = tenant.status === "suspended";
   const sites = useQuery(sitesQuery(tenant.id));
   const [adding, setAdding] = useState(false);
@@ -662,6 +662,8 @@ export function SitesPage() {
       ) : live.length === 0 ? (
         canChange ? (
           <FirstSiteCard tenantId={tenant.id} />
+        ) : readOnly ? (
+          <EmptyState title="No site yet" />
         ) : (
           <EmptyState title="No site yet">
             {suspended
@@ -670,9 +672,15 @@ export function SitesPage() {
           </EmptyState>
         )
       ) : (
-        <SitesTable sites={live} nextStep={!suspended} canRemove={isOwner && termsCurrent} />
+        <SitesTable
+          sites={live}
+          nextStep={!suspended && !readOnly}
+          canRemove={isOwner && termsCurrent}
+        />
       )}
-      <AddSiteDialog tenantId={tenant.id} open={adding} onOpenChange={setAdding} />
+      {canChange ? (
+        <AddSiteDialog tenantId={tenant.id} open={adding} onOpenChange={setAdding} />
+      ) : null}
     </div>
   );
 }

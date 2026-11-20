@@ -621,6 +621,7 @@ const ctx = {
   me: c.meBody,
   isOwner: true,
   termsCurrent: true,
+  readOnly: false,
 } as unknown as ProjectContext;
 
 function projectRoutes(page: React.ReactNode, path: string) {

@@ -277,7 +277,13 @@ const full = {
 const path = `/projects/${f.TENANT_ID}/api`;
 
 function routes() {
-  const ctx = { tenant: f.tenantBody as Tenant, me: f.meBody, isOwner: true, termsCurrent: true };
+  const ctx = {
+    tenant: f.tenantBody as Tenant,
+    me: f.meBody,
+    isOwner: true,
+    termsCurrent: true,
+    readOnly: false,
+  };
   return [
     {
       path: "/projects/:tenantId",

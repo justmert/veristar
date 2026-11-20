@@ -72,6 +72,9 @@ export function errorText(err: unknown): string {
         return "Some fields need attention.";
       case "period_not_final":
         return "End the report at least four days before today (UTC). The most recent days are still being counted and could change after signing.";
+      case "demo_read_only":
+        // the demo's refusal says itself what the demo cannot do
+        return `${err.message}${ref}`;
       case "rate_limited":
         return `Too many requests. Try again in ${waitText(err.retryAfter)}.`;
       case "unavailable":

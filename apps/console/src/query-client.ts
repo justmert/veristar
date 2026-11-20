@@ -1,13 +1,16 @@
 import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/api/client";
+import { isDemo } from "@/lib/demo";
 
 // a 401 anywhere means the session is gone (expired, signed out in another
 // tab, removed by the server). the browser goes to sign-in and comes back
 // to the page it was on. two 401s keep the session: the operator area asks
 // for a fresh passkey step-up (step_up_required), and a first passkey needs
 // a newer sign-in (enrollment_closed). the step-up status is read again
-// and the operator layout shows its prompt.
+// and the operator layout shows its prompt. a demo tab has no session, so
+// nothing there sends it to sign-in or asks for a step-up.
 function onError(err: unknown) {
+  if (isDemo()) return;
   if (
     err instanceof ApiError &&
     err.status === 401 &&

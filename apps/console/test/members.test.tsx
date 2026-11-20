@@ -10,7 +10,13 @@ const owner = f.membersBody.members[0] as Member;
 const path = `/projects/${f.TENANT_ID}/members`;
 
 function routes() {
-  const ctx = { tenant: f.tenantBody as Tenant, me: f.meBody, isOwner: true, termsCurrent: true };
+  const ctx = {
+    tenant: f.tenantBody as Tenant,
+    me: f.meBody,
+    isOwner: true,
+    termsCurrent: true,
+    readOnly: false,
+  };
   return [
     {
       path: "/projects/:tenantId",

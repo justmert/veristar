@@ -54,6 +54,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip } from "@/components/ui/tooltip";
+import { useDemo } from "@/lib/demo";
 import { isNotFound } from "@/lib/errors";
 import {
   countOf,
@@ -312,7 +313,10 @@ const gradeTone = (x: IntegrityGrade | null | undefined): Tone =>
 export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
   const t = detail.tenant;
   const removed = t.status === "removed";
-  const decides = detail.allowed_actions.some((a) => a === "approve" || a === "reject");
+  // the demo reads a project: no decision, no action, no audit log, and no
+  // member list (the demo answers none)
+  const demo = useDemo();
+  const decides = !demo && detail.allowed_actions.some((a) => a === "approve" || a === "reject");
   const web = useQuery({ ...webCompareQuery([t.id], DEFAULT_RANGE), enabled: !removed });
   const api = useQuery({ ...apiCompareQuery([t.id], DEFAULT_RANGE), enabled: !removed });
   const chain = useQuery({ ...operatorOnchainQuery(t.id, {}), enabled: !removed });
@@ -466,16 +470,20 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
                 Open in Compare
               </Link>
             )}
-            <Link
-              to={`/operator/audit?tenant_id=${t.id}`}
-              // the sidebar has an "audit log" link too; this one names the
-              // project so the two read differently to a screen reader
-              aria-label={`Audit log of ${t.name}`}
-              className="rounded-sm px-2 text-small text-fg-2 hover:text-fg focus-ring"
-            >
-              Audit log
-            </Link>
-            <MoreActions detail={detail} />
+            {demo ? null : (
+              <>
+                <Link
+                  to={`/operator/audit?tenant_id=${t.id}`}
+                  // the sidebar has an "audit log" link too; this one names the
+                  // project so the two read differently to a screen reader
+                  aria-label={`Audit log of ${t.name}`}
+                  className="rounded-sm px-2 text-small text-fg-2 hover:text-fg focus-ring"
+                >
+                  Audit log
+                </Link>
+                <MoreActions detail={detail} />
+              </>
+            )}
           </>
         }
       />
@@ -541,24 +549,26 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
         </div>
         <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-4">
           <Answers detail={detail} />
-          <OperatorCohortPanel tenantId={t.id} readOnly={removed} />
-          <Box id="members-h" title="Members" count={detail.members.length}>
-            <ul className="flex flex-col gap-2.5">
-              {detail.members.map((m) => (
-                <li
-                  key={m.github_id ?? m.stellar_address ?? m.passkey_address ?? m.display_name}
-                  className="flex min-w-0 items-center gap-2.5 text-body"
-                  title={`${m.role === "owner" ? "Owner" : "Member"} since ${formatDate(m.created_at)}`}
-                >
-                  <Avatar name={m.display_name} className="size-6" />
-                  <span className="min-w-0 flex-1 truncate text-fg">{m.display_name}</span>
-                  <span className="text-small text-fg-3">
-                    {m.role === "owner" ? "Owner" : "Member"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </Box>
+          <OperatorCohortPanel tenantId={t.id} readOnly={removed || demo} />
+          {demo ? null : (
+            <Box id="members-h" title="Members" count={detail.members.length}>
+              <ul className="flex flex-col gap-2.5">
+                {detail.members.map((m) => (
+                  <li
+                    key={m.github_id ?? m.stellar_address ?? m.passkey_address ?? m.display_name}
+                    className="flex min-w-0 items-center gap-2.5 text-body"
+                    title={`${m.role === "owner" ? "Owner" : "Member"} since ${formatDate(m.created_at)}`}
+                  >
+                    <Avatar name={m.display_name} className="size-6" />
+                    <span className="min-w-0 flex-1 truncate text-fg">{m.display_name}</span>
+                    <span className="text-small text-fg-3">
+                      {m.role === "owner" ? "Owner" : "Member"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Box>
+          )}
         </aside>
       </div>
     </div>
@@ -996,10 +1006,11 @@ function Sites({
   project: TenantStatus;
 }) {
   const [open, setOpen] = useState<OperatorSite | null>(null);
+  const demo = useDemo();
   // sites that wait for a decision come first, and each gets its decision
-  // above the table
+  // above the table. the demo decides nothing
   const ordered = [...sites].sort((a, b) => Number(b.in_review) - Number(a.in_review));
-  const waiting = decides ? ordered.filter((s) => s.in_review) : [];
+  const waiting = decides && !demo ? ordered.filter((s) => s.in_review) : [];
   const paged = useRowPages(ordered, SITES_SHOWN);
   const columns: Column<OperatorSite>[] = [
     {

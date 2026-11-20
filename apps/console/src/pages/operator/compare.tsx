@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { useDemo } from "@/lib/demo";
 import {
   countOf,
   countryName,
@@ -640,6 +641,8 @@ function Scorecards({
   const range = resolved ?? { from: "", to: "" };
   const navigate = useNavigate();
   const [dialog, setDialog] = useState<"breakdowns" | "services" | "onchain" | null>(null);
+  // the demo serves no csv
+  const demo = useDemo();
   const details = useQueries({ queries: tenants.map((id) => operatorTenantQuery(id)) });
   const chains = useQueries({
     queries: tenants.map((id) => operatorOnchainQuery(id, range)),
@@ -753,7 +756,7 @@ function Scorecards({
           <button type="button" onClick={() => setDialog("breakdowns")} className={LINK}>
             Referrers, countries, devices
           </button>
-          {resolved ? (
+          {resolved && !demo ? (
             <a href={exportPaths.compare("web", tenants, resolved)} download className={LINK}>
               <Download aria-hidden className="size-3.5" />
               CSV<span className="sr-only"> of the web numbers</span>
@@ -874,7 +877,7 @@ function Scorecards({
           <button type="button" onClick={() => setDialog("services")} className={LINK}>
             Services of each project
           </button>
-          {resolved ? (
+          {resolved && !demo ? (
             <a href={exportPaths.compare("api", tenants, resolved)} download className={LINK}>
               <Download aria-hidden className="size-3.5" />
               CSV<span className="sr-only"> of the API numbers</span>

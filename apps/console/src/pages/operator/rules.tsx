@@ -34,6 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useDemo } from "@/lib/demo";
 import { countOf, formatCount, formatDate, formatDateRange } from "@/lib/format";
 import { isDay } from "@/lib/global";
 import { fieldMessage } from "@/lib/validate";
@@ -239,6 +240,8 @@ export function RulesPage() {
   const items = rules.data?.items ?? [];
   const qc = useQueryClient();
   const [editing, setEditing] = useState<{ id: string | null; form: RuleForm } | null>(null);
+  // the demo reads the rules and their matches; it saves none
+  const demo = useDemo();
   async function remove(r: Rule) {
     await ruleApi.remove(r.id);
     if (r.id === selected) setParams({}, { replace: true });
@@ -253,20 +256,22 @@ export function RulesPage() {
         title="Rules"
         count={rules.data ? items.length : null}
         primary={
-          <RuleDialog
-            key={editing?.id ?? (editing ? "new" : "closed")}
-            id={editing?.id ?? null}
-            initial={editing?.form ?? EMPTY_RULE}
-            open={editing !== null}
-            onOpenChange={(o) => {
-              if (o) setEditing((e) => e ?? { id: null, form: EMPTY_RULE });
-              else setEditing(null);
-            }}
-            onDone={(saved) => {
-              setEditing(null);
-              if (saved) open(saved.id);
-            }}
-          />
+          demo ? null : (
+            <RuleDialog
+              key={editing?.id ?? (editing ? "new" : "closed")}
+              id={editing?.id ?? null}
+              initial={editing?.form ?? EMPTY_RULE}
+              open={editing !== null}
+              onOpenChange={(o) => {
+                if (o) setEditing((e) => e ?? { id: null, form: EMPTY_RULE });
+                else setEditing(null);
+              }}
+              onDone={(saved) => {
+                setEditing(null);
+                if (saved) open(saved.id);
+              }}
+            />
+          )
         }
       />
 
@@ -409,6 +414,8 @@ function RuleMenu({
   onEdit: () => void;
   onDelete: () => Promise<void>;
 }) {
+  const demo = useDemo();
+  if (demo) return null;
   return (
     <RowMenu
       name={r.name}
@@ -678,6 +685,8 @@ function Matches({
   onAsOf: (d: string) => void;
 }) {
   const q = useQuery(ruleMatchesQuery(rule.id, asOf));
+  // the demo serves no csv
+  const demo = useDemo();
   const [draft, setDraft] = useState(asOf);
   useEffect(() => setDraft(asOf), [asOf]);
   return (
@@ -706,14 +715,16 @@ function Matches({
             {monthsText(q.data.months)}, UTC
           </span>
         ) : null}
-        <a
-          href={ruleMatchesCsv(rule.id, asOf)}
-          download
-          className="ml-auto inline-flex items-center gap-1.5 rounded-sm text-small text-fg-2 hover:text-fg focus-ring max-lg:min-h-(--vs-control-touch)"
-        >
-          <Download aria-hidden className="size-3.5" />
-          Matches CSV
-        </a>
+        {demo ? null : (
+          <a
+            href={ruleMatchesCsv(rule.id, asOf)}
+            download
+            className="ml-auto inline-flex items-center gap-1.5 rounded-sm text-small text-fg-2 hover:text-fg focus-ring max-lg:min-h-(--vs-control-touch)"
+          >
+            <Download aria-hidden className="size-3.5" />
+            Matches CSV
+          </a>
+        )}
       </div>
       {q.isPending ? (
         <div className="p-5">
