@@ -56,9 +56,10 @@ export function AppShell() {
     document.getElementById("main")?.focus({ preventScroll: true });
   }, [pathname]);
 
-  // the tab names the page
+  // the tab names the page; the favicon already says veristar, so the title
+  // joins nothing to it
   useEffect(() => {
-    document.title = `${pageTitle(pathname)} · Veristar`;
+    document.title = pageTitle(pathname);
   }, [pathname]);
 
   useEffect(() => {
