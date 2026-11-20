@@ -200,7 +200,7 @@ function Standing({ v, onSign }: { v: SCFView; onSign: () => void }) {
         className="justify-self-center"
       />
       <div className="flex min-w-0 flex-col gap-3">
-        <h2 className="text-[30px] leading-9 font-semibold tracking-[-0.02em] break-words text-fg">
+        <h2 className="text-h1 leading-9 font-semibold tracking-tight break-words text-fg">
           {v.tenant?.name ?? tenant.name}
         </h2>
         {facts.length ? <LabeledFacts items={facts} /> : null}
@@ -234,7 +234,7 @@ function Standing({ v, onSign }: { v: SCFView; onSign: () => void }) {
         aria-labelledby="proof-h"
         className="flex min-w-0 flex-col gap-2 rounded-xl border border-line bg-sunken p-5 md:col-span-2 xl:col-span-1"
       >
-        <h3 id="proof-h" className="text-caption font-medium tracking-[0.08em] text-fg-3 uppercase">
+        <h3 id="proof-h" className="text-caption font-medium tracking-widest text-fg-3 uppercase">
           Proof for your application
         </h3>
         {reports.isPending ? (
@@ -680,7 +680,10 @@ function Evidence({
       className="flex min-w-0 flex-col gap-4 rounded-2xl border border-line bg-raised px-6 py-5"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <h3 id="evidence-h" className="flex items-center gap-2.5 text-[17px] font-semibold text-fg">
+        <h3
+          id="evidence-h"
+          className="flex items-center gap-2.5 text-title font-semibold text-fg leading-5"
+        >
           <span aria-hidden className={cn("size-2 rounded-full", TONE_DOT[tone])} />
           {EVIDENCE_TITLE[open]}
           {note ? <span className="text-small font-normal text-fg-3">{note}</span> : null}
@@ -781,15 +784,14 @@ function IntegrityEvidence({
             );
           })}
         </div>
-        <span
-          aria-hidden
-          className="flex flex-wrap items-center gap-4 pl-[15rem] text-caption text-fg-3"
-        >
-          <Legend cls="bg-success/55" label="A" />
-          <Legend cls="bg-warning" label="B" />
-          <Legend cls="bg-critical" label="C" />
-          <Legend cls="border border-line-2" label="Too little traffic to grade" />
-        </span>
+        <div aria-hidden className="grid grid-cols-[14rem_minmax(0,1fr)] gap-x-4">
+          <span className="col-start-2 flex flex-wrap items-center gap-4 text-caption text-fg-3">
+            <Legend cls="bg-success/55" label="A" />
+            <Legend cls="bg-warning" label="B" />
+            <Legend cls="bg-critical" label="C" />
+            <Legend cls="border border-line-2" label="Too little traffic to grade" />
+          </span>
+        </div>
       </div>
       {openSite ? (
         <SiteList sites={r.sites.filter((s) => s.site_id === openSite)} siteNames={names} />
@@ -803,7 +805,7 @@ function IntegrityEvidence({
           >
             <span
               className={cn(
-                "flex items-center gap-2 text-caption font-semibold tracking-[0.08em] uppercase",
+                "flex items-center gap-2 text-caption font-semibold tracking-widest uppercase",
                 x.level === "C" ? "text-critical" : "text-warning",
               )}
             >
@@ -824,12 +826,12 @@ function IntegrityEvidence({
           data-testid="coverage"
           className="flex min-w-0 flex-col gap-2 rounded-xl border border-line px-4 py-3.5"
         >
-          <span className="text-caption font-semibold tracking-[0.08em] text-fg-3 uppercase">
+          <span className="text-caption font-semibold tracking-widest text-fg-3 uppercase">
             Not measured
           </span>
           {r.coverage.unmeasured_share !== null ? (
             <span className="flex items-baseline gap-2">
-              <span className="text-[24px] leading-7 font-semibold text-fg tabular">
+              <span className="text-heading leading-7 font-semibold text-fg tabular tracking-normal">
                 {formatPercent(r.coverage.unmeasured_share)}
               </span>
               <span className="text-small text-fg-2">of visits</span>
@@ -853,7 +855,7 @@ function IntegrityEvidence({
 function Legend({ cls, label }: { cls: string; label: string }) {
   return (
     <span className="flex items-center gap-1.5">
-      <i className={cn("block size-3 rounded-[3px]", cls)} />
+      <i className={cn("block size-3 rounded-sm", cls)} />
       {label}
     </span>
   );
@@ -1206,7 +1208,7 @@ export function SignedReports({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2
           id="signed-reports-h"
-          className="flex items-baseline gap-2 text-[15px] leading-5 font-semibold text-fg"
+          className="flex items-baseline gap-2 text-title leading-5 font-semibold text-fg"
         >
           Signed reports
           {items.length > 0 ? (

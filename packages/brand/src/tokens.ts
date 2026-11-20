@@ -388,6 +388,8 @@ export const radius = {
 export const shadow = {
   overlay: "0 8px 24px var(--vs-shadow-soft)",
   dialog: "0 16px 48px var(--vs-shadow-strong)",
+  // a sample held up on a page (the signed report beside sign-in)
+  showcase: "0 30px 80px var(--vs-shadow-strong)",
 } as const;
 
 // motion. every motion carries a meaning (system v2):

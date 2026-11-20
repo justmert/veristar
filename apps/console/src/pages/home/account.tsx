@@ -115,12 +115,12 @@ function Who({ me }: { me: Me }) {
     <header className="flex items-center gap-4">
       <span
         aria-hidden
-        className="flex size-16 shrink-0 items-center justify-center rounded-full bg-series-1/20 text-[26px] font-semibold text-series-1 uppercase"
+        className="flex size-16 shrink-0 items-center justify-center rounded-full bg-series-1/20 text-page font-semibold text-series-1 uppercase leading-5 tracking-normal"
       >
         {me.user.display_name.slice(0, 1)}
       </span>
       <div className="flex min-w-0 flex-col gap-1">
-        <h1 className="truncate text-[28px] leading-8.5 font-semibold tracking-[-0.02em] text-fg">
+        <h1 className="truncate text-page leading-8.5 font-semibold tracking-tight text-fg">
           {me.user.display_name}
         </h1>
         <p className="text-small text-fg-2">
@@ -157,7 +157,7 @@ function MethodCard({
       data-method={name}
       data-linked={linked ? "" : undefined}
       // the edge stays neutral; Linked is the pill
-      className="flex min-h-44 min-w-0 flex-col gap-1 rounded-2xl border border-line bg-raised px-4.5 pt-4.5 pb-5"
+      className="flex min-h-44 min-w-0 flex-col gap-1 rounded-2xl border border-line bg-raised px-4 pt-4 pb-5"
     >
       <div className="mb-2.5 flex items-start justify-between gap-2">
         <span className="flex size-9.5 shrink-0 items-center justify-center rounded-lg border border-line-2 text-fg-2 [&_svg]:size-4">
@@ -170,7 +170,7 @@ function MethodCard({
           </span>
         ) : null}
       </div>
-      <h3 className="text-[15px] leading-5.5 font-semibold text-fg">{name}</h3>
+      <h3 className="text-title leading-5.5 font-semibold text-fg">{name}</h3>
       <div className="flex min-w-0 flex-col gap-1 text-small text-fg-2">{detail}</div>
       {action ? <div className="mt-2.5">{action}</div> : null}
     </li>
@@ -285,7 +285,10 @@ function SignInMethods({ me }: { me: Me }) {
 
   return (
     <section aria-labelledby="methods-h" className="flex flex-col gap-4">
-      <h2 id="methods-h" className="flex items-baseline gap-2 text-[15px] font-semibold text-fg">
+      <h2
+        id="methods-h"
+        className="flex items-baseline gap-2 text-title font-semibold text-fg leading-5"
+      >
         Sign-in methods
         <span className="text-small font-normal text-fg-3 tabular">{count} of 3</span>
       </h2>

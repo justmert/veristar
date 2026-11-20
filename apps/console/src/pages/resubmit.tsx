@@ -228,7 +228,7 @@ export function ResubmitForm({ tenant }: { tenant: Tenant }) {
           hint={changed("scfRoundUrl")}
         />
       </NumberedSection>
-      <div className="flex flex-col gap-3 sm:pl-10.5">
+      <div className="flex flex-col gap-3 sm:pl-10">
         <FormMessage
           error={
             send.error && Object.keys(serverErrors(send.error)).length === 0 ? send.error : null

@@ -474,7 +474,7 @@ function SegmentedField<T extends string>({
 // apart from the status pills: no dot, no tint
 function RoleTag({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex h-5 items-center gap-1 rounded-[5px] border border-line-2 px-1.5 text-caption text-fg-3">
+    <span className="inline-flex h-5 items-center gap-1 rounded-sm border border-line-2 px-1.5 text-caption text-fg-3">
       {children}
     </span>
   );

@@ -128,7 +128,7 @@ export function PortfolioBar({
   return (
     <nav aria-label="Portfolio" className="flex min-w-0 flex-col gap-3" data-portfolio="">
       {total > 0 ? (
-        <span aria-hidden className="flex h-2 w-full gap-[3px] overflow-hidden rounded-full">
+        <span aria-hidden className="flex h-2 w-full gap-1 overflow-hidden rounded-full">
           {statuses.map((s) => {
             const n = portfolio.count(s) ?? 0;
             if (n === 0) return null;

@@ -185,7 +185,8 @@ function roleBlock(name: ThemeName) {
 {
   const d: Roles = themes.dark;
   const l: Roles = themes.light;
-  const points = "24.00,40.00 20.47,33.35 13.06,32.05 18.29,26.65 9.01,7.87 24.00,22.50 38.99,7.87 29.71,26.65 34.94,32.05 27.53,33.35";
+  const points =
+    "24.00,40.00 20.47,33.35 13.06,32.05 18.29,26.65 9.01,7.87 24.00,22.50 38.99,7.87 29.71,26.65 34.94,32.05 27.53,33.35";
   const up = (v: string) => v.toUpperCase();
   const mark = (ink: string, id: string) =>
     `  <defs><mask id="${id}" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">` +

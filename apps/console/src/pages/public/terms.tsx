@@ -30,7 +30,7 @@ export function TermsPage() {
         {sections.length > 0 ? (
           <nav
             aria-label="Sections"
-            className="sticky top-6 hidden flex-col gap-0.5 self-start pt-2 text-[13px] lg:flex"
+            className="sticky top-6 hidden flex-col gap-0.5 self-start pt-2 text-small lg:flex"
           >
             <span className="mb-2 px-2.5 text-caption text-fg-2">On this page</span>
             {sections.map((s) => {
@@ -103,7 +103,7 @@ export function TermsPage() {
               <Markdown
                 source={terms.data.markdown}
                 afterTitle={
-                  <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13.5px] text-fg-2">
+                  <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-small text-fg-2">
                     <span title={terms.data.version}>{termsVersionLabel(terms.data.version)}</span>
                     {isDraftTerms(terms.data.version, terms.data.status) ? (
                       <Pill tone="warning">Draft, not yet final</Pill>

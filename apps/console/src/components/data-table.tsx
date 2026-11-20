@@ -229,9 +229,9 @@ export function DataTable<Row>({
     >
       {title ? (
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 px-5 py-3.5">
-          <h2 className="text-[14px] leading-5 font-semibold text-fg">{title.text}</h2>
+          <h2 className="text-body leading-5 font-semibold text-fg">{title.text}</h2>
           {title.count !== undefined && title.count !== null ? (
-            <span className="text-[12.5px] text-fg-3 tabular">{title.count}</span>
+            <span className="text-small text-fg-3 tabular">{title.count}</span>
           ) : null}
           {title.aside ? (
             <div className="ml-auto flex flex-wrap items-center gap-3.5 text-caption text-fg-3">

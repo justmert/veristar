@@ -203,7 +203,7 @@ function Consent({
     >
       <Ends client={info.client_name} />
       <div className="flex flex-col gap-2 text-center">
-        <h1 className="text-[26px] leading-8 font-semibold tracking-[-0.02em] text-fg">
+        <h1 className="text-page leading-8 font-semibold tracking-tight text-fg">
           {operator
             ? `Let ${info.client_name} read every project`
             : `Let ${info.client_name} read one project`}
@@ -227,7 +227,7 @@ function Consent({
               checked={choice === t.id}
               onChange={() => setChoice(t.id)}
               title={t.name}
-              className="px-4 py-3.25 has-checked:border-line-focus has-checked:bg-selected"
+              className="px-4 py-3 has-checked:border-line-focus has-checked:bg-selected"
               badge={
                 <>
                   {t.status === "pending" ? (
@@ -246,7 +246,7 @@ function Consent({
               onChange={() => setChoice("operator")}
               title="The operator view of every project"
               description="Daily totals, search and compare"
-              className="px-4 py-3.25 has-checked:border-line-focus has-checked:bg-selected [&>span:last-child]:pl-5.5"
+              className="px-4 py-3 has-checked:border-line-focus has-checked:bg-selected [&>span:last-child]:pl-5"
             />
           ) : null}
         </fieldset>
@@ -275,7 +275,7 @@ function Consent({
             {approve.isPending || approve.isSuccess ? "Approving" : "Approve"}
           </Button>
         </div>
-        <p className="flex flex-wrap items-baseline justify-center gap-x-2 text-[12.5px] text-fg-2">
+        <p className="flex flex-wrap items-baseline justify-center gap-x-2 text-small text-fg-2">
           <span>Then your browser goes back to</span>
           <code className="font-mono break-all text-fg">{info.redirect_origin}</code>
         </p>
@@ -291,9 +291,9 @@ function roleWord(role: string): string {
 
 // the two ends of the connection and what passes between them
 function Ends({ client }: { client: string }) {
-  const end = "flex w-30 flex-col items-center gap-2 text-[13px] text-fg-2";
+  const end = "flex w-30 flex-col items-center gap-2 text-small text-fg-2";
   const icon =
-    "flex size-14 items-center justify-center rounded-2xl border border-line-2 bg-raised text-[20px] font-semibold text-fg";
+    "flex size-14 items-center justify-center rounded-2xl border border-line-2 bg-raised text-section font-semibold text-fg leading-5";
   return (
     <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start">
       <span className={end}>
@@ -305,9 +305,9 @@ function Ends({ client }: { client: string }) {
       <span className="relative flex h-14 items-center justify-center">
         <span
           aria-hidden
-          className="absolute inset-x-0 top-1/2 border-t-[1.5px] border-dashed border-line-strong"
+          className="absolute inset-x-0 top-1/2 border-t-2 border-dashed border-line-strong"
         />
-        <span className="relative inline-flex h-7 items-center gap-1.5 rounded-full border border-line-2 bg-ground px-3 text-[12.5px] text-fg">
+        <span className="relative inline-flex h-7 items-center gap-1.5 rounded-full border border-line-2 bg-ground px-3 text-small text-fg">
           <Lock aria-hidden className="size-3" />
           Read-only
         </span>
@@ -329,12 +329,12 @@ function Scope({ operator }: { operator: boolean }) {
   return (
     <div
       data-scope={operator ? "operator" : "tenant"}
-      className="grid grid-cols-1 divide-line-subtle overflow-hidden rounded-xl border border-line text-[13px] leading-5 max-sm:divide-y sm:grid-cols-3 sm:divide-x"
+      className="grid grid-cols-1 divide-line-subtle overflow-hidden rounded-xl border border-line text-small leading-5 max-sm:divide-y sm:grid-cols-3 sm:divide-x"
     >
       <div className={col}>
         <h2 className={head}>It can read</h2>
         <p className="flex items-start gap-2 text-fg">
-          <Check aria-hidden className="mt-0.75 size-3.5 shrink-0 text-success" />
+          <Check aria-hidden className="mt-1 size-3.5 shrink-0 text-success" />
           {operator
             ? "Daily totals of every project, search and compare"
             : "Page views, events and visits; API request counts, errors and latency"}
@@ -343,7 +343,7 @@ function Scope({ operator }: { operator: boolean }) {
       <div className={col}>
         <h2 className={head}>It cannot</h2>
         <p className="flex items-start gap-2 text-fg">
-          <X aria-hidden className="mt-0.75 size-3.5 shrink-0 text-fg-3" />
+          <X aria-hidden className="mt-1 size-3.5 shrink-0 text-fg-3" />
           {operator ? "Change anything" : "Change anything, or read your other projects"}
         </p>
       </div>

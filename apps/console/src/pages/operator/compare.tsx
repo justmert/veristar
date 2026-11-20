@@ -265,7 +265,10 @@ function Picker({
       )}
     >
       <div className={cn("flex flex-col gap-4", bare ? "pb-3" : "px-6 pt-6 pb-4")}>
-        <h2 id="picker-h" className={cn("text-[19px] font-semibold text-fg", bare && "sr-only")}>
+        <h2
+          id="picker-h"
+          className={cn("text-section font-semibold text-fg leading-5", bare && "sr-only")}
+        >
           Pick up to {MAX_COMPARE} projects
         </h2>
         <div className="relative">
@@ -1299,7 +1302,7 @@ function ScoreRow({
                 <span className="flex flex-wrap items-baseline gap-x-2">
                   <span
                     className={cn(
-                      row.big ? "text-[22px] leading-7 tracking-[-0.01em]" : "text-[15px]",
+                      row.big ? "text-heading leading-7 tracking-normal font-normal" : "text-body",
                       isBest ? "font-semibold text-fg" : "text-fg-2",
                     )}
                   >

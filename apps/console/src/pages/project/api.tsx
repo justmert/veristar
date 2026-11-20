@@ -320,7 +320,7 @@ function Filters({
             data-service-chip={n}
             onClick={() => setFilter("service", f.service === n ? null : n)}
           >
-            <span className="truncate font-mono text-[12.5px]">{serviceName(n)}</span>
+            <span className="truncate font-mono text-small">{serviceName(n)}</span>
             {byName.get(n)?.span_data_ignored ? (
               <span className="text-caption text-fg-3">metrics only</span>
             ) : null}
@@ -408,7 +408,7 @@ function RouteField({
         title="The exact route, with its placeholders"
         spellCheck={false}
         autoComplete="off"
-        className="h-8 w-full rounded-lg border border-line bg-raised pr-2.5 pl-8 font-mono text-[12.5px] text-fg placeholder:text-fg-3 focus-ring max-lg:h-(--vs-control-touch)"
+        className="h-8 w-full rounded-lg border border-line bg-raised pr-2.5 pl-8 font-mono text-small text-fg placeholder:text-fg-3 focus-ring max-lg:h-(--vs-control-touch)"
       />
     </div>
   );
@@ -534,7 +534,7 @@ function ApproxBadge() {
 // a quiet outlined tag, not a status, so it carries no dot and no colour
 function NoteTag({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-full border border-line-strong px-2 text-[11.5px] text-fg-2">
+    <span className="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-full border border-line-strong px-2 text-axis text-fg-2 leading-5">
       {children}
     </span>
   );
@@ -770,7 +770,7 @@ function Summary({
             onSelect={() => onMetric(k)}
             hideWhenEmpty
             footer={
-              <span className="text-[12.5px] text-fg-3 tabular">
+              <span className="text-small text-fg-3 tabular">
                 {formatCount(n)} {k === "4xx" ? "client errors" : "server errors"}
               </span>
             }
@@ -788,7 +788,7 @@ function Summary({
         onSelect={() => onMetric("p95")}
         hideWhenEmpty
         footer={
-          <span className="flex flex-wrap items-baseline gap-x-1 text-[12.5px] text-fg-3 tabular">
+          <span className="flex flex-wrap items-baseline gap-x-1 text-small text-fg-3 tabular">
             {percent("p50")}
             <span>to</span>
             {percent("p99")}
@@ -984,11 +984,11 @@ function LatencyRange({ r }: { r: ApiRouteItem }) {
       {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the exact values open on focus too */}
       <span tabIndex={0} className="relative block h-[18px] w-full min-w-24 rounded-sm focus-ring">
         <span className="sr-only">{words}</span>
-        <span aria-hidden className="absolute inset-x-0 top-2 h-0.5 rounded-[1px] bg-line" />
+        <span aria-hidden className="absolute inset-x-0 top-2 h-0.5 rounded-bar bg-line" />
         {lo !== null && hi !== null ? (
           <span
             aria-hidden
-            className="absolute top-1.5 h-1.5 rounded-[3px] bg-line-strong"
+            className="absolute top-1.5 h-1.5 rounded-sm bg-line-strong"
             // positions are data, so they cannot be classes
             style={{ left: `${lo * 100}%`, width: `${Math.max(1, (hi - lo) * 100)}%` }}
           />
@@ -996,7 +996,7 @@ function LatencyRange({ r }: { r: ApiRouteItem }) {
         {mid !== null ? (
           <span
             aria-hidden
-            className="absolute top-0.5 -ml-[1.5px] h-3.5 w-[3px] rounded-[2px] bg-fg"
+            className="absolute top-0.5 -ml-0.5 h-3.5 w-[3px] rounded-bar bg-fg"
             style={{ left: `${mid * 100}%` }}
           />
         ) : null}
@@ -1057,7 +1057,7 @@ function RoutesSection({
       header: "Method",
       className: "w-16",
       cell: (r) => (
-        <span className="inline-flex w-fit rounded-[5px] border border-line-strong px-[7px] py-0.5 font-mono text-[11.5px] font-medium text-fg-2">
+        <span className="inline-flex w-fit rounded-sm border border-line-strong px-1.5 py-0.5 font-mono text-axis font-medium text-fg-2 leading-5">
           {methodName(r.method)}
         </span>
       ),
@@ -1071,7 +1071,7 @@ function RoutesSection({
       cell: (r) => (
         <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 py-2">
           <span className="min-w-0 font-mono break-all text-fg">{r.route}</span>
-          <span className="rounded-full border border-line-strong px-[7px] py-px font-mono text-[11.5px] whitespace-nowrap text-fg-2">
+          <span className="rounded-full border border-line-strong px-1.5 py-px font-mono text-axis whitespace-nowrap text-fg-2 leading-5">
             {serviceName(r.service)}
           </span>
           {r.source === "span" ? <TracesBadge /> : null}
@@ -1094,10 +1094,10 @@ function RoutesSection({
         <span className="flex items-center gap-2.5">
           <span
             aria-hidden
-            className="h-1.5 flex-1 overflow-hidden rounded-[3px] bg-line max-sm:hidden"
+            className="h-1.5 flex-1 overflow-hidden rounded-sm bg-line max-sm:hidden"
           >
             <i
-              className="block h-full rounded-[3px] bg-series-3"
+              className="block h-full rounded-sm bg-series-3"
               // the width is data
               style={{ width: `${Math.max(1, (r.requests / max) * 100)}%` }}
             />
@@ -1170,11 +1170,11 @@ function RoutesSection({
                   any 5xx
                 </li>
                 <li className="flex items-center gap-1.5">
-                  <span aria-hidden className="h-1.5 w-3.5 rounded-[3px] bg-line-strong" />
+                  <span aria-hidden className="h-1.5 w-3.5 rounded-sm bg-line-strong" />
                   p50 to p99
                 </li>
                 <li className="flex items-center gap-1.5">
-                  <span aria-hidden className="h-3 w-[3px] rounded-[2px] bg-fg" />
+                  <span aria-hidden className="h-3 w-[3px] rounded-bar bg-fg" />
                   p95
                 </li>
               </ul>

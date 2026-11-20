@@ -51,7 +51,7 @@ export function SetupBar({
       style={{ gridTemplateColumns: `repeat(${Math.max(1, steps.length)}, minmax(0, 1fr))` }}
     >
       {steps.map((s) => (
-        <i key={s.key} title={s.label} className={cn("block h-1.5 rounded-[3px]", PART[s.state])} />
+        <i key={s.key} title={s.label} className={cn("block h-1.5 rounded-sm", PART[s.state])} />
       ))}
     </span>
   );
@@ -79,14 +79,14 @@ export function SetupNext({
       {status ? (
         <span className="flex items-center">{status}</span>
       ) : ready ? (
-        <span className="flex items-center gap-2 text-[13.5px] text-fg-2">
+        <span className="flex items-center gap-2 text-small text-fg-2">
           <Check aria-hidden strokeWidth={2.6} className="size-3.5 text-success" />
           {readyLabel}
         </span>
       ) : (
-        <span className="flex flex-wrap items-baseline gap-x-2.5 text-[13.5px]">
+        <span className="flex flex-wrap items-baseline gap-x-2.5 text-small">
           <span className="font-medium text-fg">{steps[next]?.label}</span>
-          <span className="text-[12.5px] text-fg-3 tabular">
+          <span className="text-small text-fg-3 tabular">
             {next + 1} of {steps.length}
           </span>
         </span>
@@ -128,7 +128,7 @@ export function SetupProgress({
   return (
     <section aria-labelledby={id} className={cn("flex min-w-0 flex-col gap-3", className)}>
       <div className="flex flex-wrap items-baseline gap-2">
-        <h2 id={id} className="text-[15px] leading-5 font-semibold text-fg">
+        <h2 id={id} className="text-title leading-5 font-semibold text-fg">
           {title}
         </h2>
         <span className="text-small text-fg-3 tabular">
@@ -156,7 +156,7 @@ export function SetupProgress({
       ) : null}
 
       {current ? (
-        <div className="flex flex-col gap-4 rounded-2xl border border-line bg-raised px-6 py-[22px]">
+        <div className="flex flex-col gap-4 rounded-2xl border border-line bg-raised px-6 py-5">
           <div className="flex flex-wrap items-center gap-3">
             <span
               aria-hidden
@@ -180,13 +180,13 @@ export function SetupProgress({
       ) : null}
 
       {current && (later.length || optional) ? (
-        <div className="flex flex-wrap items-center gap-x-[18px] gap-y-2 text-small text-fg-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-small text-fg-3">
           {later.length ? <span>Then</span> : null}
           {later.map((s) => (
             <span key={s.key} className="flex items-center">
               <span
                 aria-hidden
-                className="mr-2 inline-flex size-5 items-center justify-center rounded-full border-[1.5px] border-line-strong text-[11px]"
+                className="mr-2 inline-flex size-5 items-center justify-center rounded-full border border-line-strong text-axis leading-5"
               >
                 {steps.indexOf(s) + 1}
               </span>
@@ -219,7 +219,7 @@ function DoneRow({
   return (
     <li
       className={cn(
-        "grid grid-cols-[20px_minmax(0,1fr)] items-center gap-x-3 gap-y-1 border-b border-line-subtle py-[11px] text-body sm:grid-cols-[20px_220px_minmax(0,1fr)]",
+        "grid grid-cols-[20px_minmax(0,1fr)] items-center gap-x-3 gap-y-1 border-b border-line-subtle py-2.5 text-body sm:grid-cols-[20px_220px_minmax(0,1fr)]",
         className,
       )}
     >
@@ -233,7 +233,7 @@ function DoneRow({
         <span className="sr-only">{optional ? ", optional" : ", done"}</span>
       </span>
       {result ? (
-        <span className="col-start-2 flex flex-wrap items-center gap-x-3.5 text-[13.5px] text-fg-3 sm:col-start-3 [&_a]:text-small [&_a]:text-fg [&_a]:underline [&_a]:decoration-line-strong [&_a]:underline-offset-[3px] [&_button]:text-small [&_button]:text-fg [&_button]:underline [&_button]:decoration-line-strong [&_button]:underline-offset-[3px]">
+        <span className="col-start-2 flex flex-wrap items-center gap-x-3.5 text-small text-fg-3 sm:col-start-3 [&_a]:text-small [&_a]:text-fg [&_a]:underline [&_a]:decoration-line-strong [&_a]:underline-offset-[3px] [&_button]:text-small [&_button]:text-fg [&_button]:underline [&_button]:decoration-line-strong [&_button]:underline-offset-[3px]">
           {result}
         </span>
       ) : null}
