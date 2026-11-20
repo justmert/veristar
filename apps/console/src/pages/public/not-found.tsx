@@ -1,10 +1,9 @@
 import { useMutation } from "@tanstack/react-query";
-import { LockKeyhole, LogOut, RotateCcw, TriangleAlert } from "lucide-react";
+import { LogOut, RotateCcw } from "lucide-react";
 import { isRouteErrorResponse, Link, useNavigate, useRouteError } from "react-router";
 import { api } from "@/api/endpoints";
 import { CopyButton } from "@/components/copy-button";
 import { FormMessage } from "@/components/error-panel";
-import { GoToButton } from "@/components/nav/go-to";
 import { GoToButton } from "@/components/nav/go-to";
 import { PublicFrame } from "@/components/public-frame";
 import { MessagePage } from "@/components/states";
