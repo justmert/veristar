@@ -23,13 +23,13 @@ const BOX: Record<GradeRingSize, string> = {
 };
 const INSET: Record<Exclude<GradeRingSize, "xs">, string> = {
   sm: "inset-1.5",
-  lg: "inset-[11px] shadow-[inset_0_0_0_1px_var(--color-line-2)]",
-  xl: "inset-3 shadow-[inset_0_0_0_1px_var(--color-line-2)]",
+  lg: "inset-[11px] inset-ring inset-ring-line-2",
+  xl: "inset-3 inset-ring inset-ring-line-2",
 };
 const LETTER: Record<Exclude<GradeRingSize, "xs">, string> = {
-  sm: "text-[18px] leading-none",
-  lg: "text-[56px] leading-none tracking-[-0.03em]",
-  xl: "text-[64px] leading-none tracking-[-0.03em]",
+  sm: "text-section leading-none",
+  lg: "text-grade-lg",
+  xl: "text-grade-xl",
 };
 
 export function GradeRing({

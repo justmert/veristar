@@ -36,7 +36,7 @@ function MenuContent({
         sideOffset={sideOffset}
         collisionPadding={8}
         className={cn(
-          "z-(--vs-layer-overlay) min-w-52 overflow-hidden rounded-[10px] border border-line-2 bg-overlay p-1 text-fg shadow-overlay data-[state=closed]:animate-reveal-out data-[state=open]:animate-reveal-in",
+          "z-(--vs-layer-overlay) min-w-52 overflow-hidden rounded-lg border border-line-2 bg-overlay p-1 text-fg shadow-overlay data-[state=closed]:animate-reveal-out data-[state=open]:animate-reveal-in",
           className,
         )}
         {...props}
@@ -53,7 +53,7 @@ function MenuItem({
   return (
     <M.Item
       className={cn(
-        "flex h-8 cursor-pointer select-none items-center gap-2.5 rounded-[6px] px-2 text-body outline-none max-lg:h-(--vs-control-touch) transition-colors duration-(--vs-duration-press) data-[disabled]:pointer-events-none data-[highlighted]:bg-hover data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-3",
+        "flex h-8 cursor-pointer select-none items-center gap-2.5 rounded-md px-2 text-body outline-none max-lg:h-(--vs-control-touch) transition-colors duration-(--vs-duration-press) data-[disabled]:pointer-events-none data-[highlighted]:bg-hover data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-3",
         tone === "critical" && "text-critical [&_svg]:text-critical",
         className,
       )}
@@ -81,7 +81,7 @@ function MenuRadioItem({
   return (
     <M.RadioItem
       className={cn(
-        "flex h-8 cursor-pointer select-none items-center gap-2.5 rounded-[6px] px-2 text-body outline-none max-lg:h-(--vs-control-touch) transition-colors duration-(--vs-duration-press) data-[highlighted]:bg-hover [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-3",
+        "flex h-8 cursor-pointer select-none items-center gap-2.5 rounded-md px-2 text-body outline-none max-lg:h-(--vs-control-touch) transition-colors duration-(--vs-duration-press) data-[highlighted]:bg-hover [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-3",
         className,
       )}
       {...props}
@@ -105,7 +105,7 @@ function MenuCheckboxItem({
     <M.CheckboxItem
       onSelect={(e) => e.preventDefault()}
       className={cn(
-        "flex h-8 cursor-pointer select-none items-center gap-2.5 rounded-[6px] px-2 text-body outline-none max-lg:h-(--vs-control-touch) transition-colors duration-(--vs-duration-press) data-[disabled]:pointer-events-none data-[highlighted]:bg-hover data-[disabled]:text-disabled-fg [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-2",
+        "flex h-8 cursor-pointer select-none items-center gap-2.5 rounded-md px-2 text-body outline-none max-lg:h-(--vs-control-touch) transition-colors duration-(--vs-duration-press) data-[disabled]:pointer-events-none data-[highlighted]:bg-hover data-[disabled]:text-disabled-fg [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-2",
         className,
       )}
       {...props}

@@ -443,7 +443,7 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
         }
         meta={<StatusBadge kind="project" status={t.status} operator />}
         items={[
-          <span key="slug" className="font-mono text-[12.5px]" title={t.slug}>
+          <span key="slug" className="font-mono text-small" title={t.slug}>
             {truncateMiddle(t.slug, 40)}
           </span>,
           <span key="enrolled" title={formatDateTimeUtc(t.created_at)}>
@@ -640,7 +640,7 @@ function CheckDetail({
     >
       <div className="flex items-center gap-2.5 px-5 py-3.5">
         <span aria-hidden className={cn("size-2 rounded-full", DOT[tone])} />
-        <h2 id="check-detail-h" className="text-[15px] font-semibold text-fg">
+        <h2 id="check-detail-h" className="text-title font-semibold text-fg leading-5">
           {DETAIL_TITLE[open]}
         </h2>
         {open === "web" ? (
@@ -760,7 +760,7 @@ function Outcomes({ ingest }: { ingest: OperatorTenantDetail["ingest"] }) {
             className={cn("flex flex-col gap-0.5 px-5 py-3", i > 0 && "border-l border-line")}
           >
             <dt className="text-small text-fg-3">{k}</dt>
-            <dd className="text-[17px] font-semibold text-fg tabular">
+            <dd className="text-title font-semibold text-fg tabular leading-5">
               {formatCount(v as number)}
             </dd>
           </div>
@@ -818,7 +818,7 @@ export function Answers({ detail }: { detail: OperatorTenantDetail }) {
   const t = detail.tenant;
   const a = t.enrollment_answers;
   const rows: [string, ReactNode][] = [
-    ["Website", <span className="font-mono text-[12.5px] break-all">{a.website}</span>],
+    ["Website", <span className="font-mono text-small break-all">{a.website}</span>],
     ["How it uses Stellar", <Clamped text={a.stellar_usage} />],
     ...(t.description
       ? [["Description", <Clamped text={t.description} />] as [string, ReactNode]]

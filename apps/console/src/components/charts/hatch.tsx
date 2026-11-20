@@ -45,7 +45,7 @@ export function RunningKey({
       data-legend="partial"
       className={cn("flex items-center gap-1.5 text-caption text-fg-2", className)}
     >
-      <i aria-hidden className="hatch-running block size-2.5 rounded-[2px] text-fg-3" />
+      <i aria-hidden className="hatch-running block size-2.5 rounded-bar text-fg-3" />
       {label}
     </span>
   );

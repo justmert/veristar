@@ -200,7 +200,7 @@ export function Markdown({ source, afterTitle }: { source: string; afterTitle?: 
   const blocks = parseBlocks(source);
   const titled = blocks.some((b) => b.kind === "h" && b.level === 1);
   return (
-    <div className="flex flex-col gap-4.5 text-[15px] leading-[25px] text-fg-2">
+    <div className="flex flex-col gap-4 text-body leading-6.25 text-fg-2">
       {titled ? null : afterTitle}
       {blocks.map((b, n) => {
         // blocks have no identity beyond their position in a static document
@@ -210,7 +210,7 @@ export function Markdown({ source, afterTitle }: { source: string; afterTitle?: 
             if (b.level === 1)
               return (
                 <div key={key} className="flex flex-col gap-3">
-                  <h1 className="text-[34px] leading-10 font-semibold tracking-[-0.03em] text-fg">
+                  <h1 className="text-h1 leading-10 font-semibold tracking-tight text-fg">
                     {inline(b.text)}
                   </h1>
                   {afterTitle}
@@ -222,7 +222,7 @@ export function Markdown({ source, afterTitle }: { source: string; afterTitle?: 
                 <h2
                   key={key}
                   id={headingId(b.text.replace(/[*`]/g, ""))}
-                  className="mt-3.5 flex scroll-mt-6 gap-3 text-[20px] leading-7 font-semibold tracking-[-0.015em] text-fg"
+                  className="mt-3.5 flex scroll-mt-6 gap-3 text-section leading-7 font-semibold tracking-tight text-fg"
                 >
                   {n ? <span className="text-fg-3 tabular">{n}</span> : null}
                   <span>{inline(title)}</span>
@@ -231,7 +231,7 @@ export function Markdown({ source, afterTitle }: { source: string; afterTitle?: 
             return (
               <h3
                 key={key}
-                className="mt-1 flex gap-2.5 text-[16px] leading-6 font-semibold text-fg"
+                className="mt-1 flex gap-2.5 text-title leading-6 font-semibold text-fg"
               >
                 {n ? <span className="text-fg-3 tabular">{n}</span> : null}
                 <span>{inline(title)}</span>
@@ -243,11 +243,11 @@ export function Markdown({ source, afterTitle }: { source: string; afterTitle?: 
           case "table":
             return (
               <div key={key} className="overflow-x-auto rounded-xl border border-line">
-                <table className="w-full border-collapse text-left text-[13.5px] leading-5">
+                <table className="w-full border-collapse text-left text-small leading-5">
                   <thead className="bg-sunken text-caption text-fg-2">
                     <tr>
                       {b.head.map((h, j) => (
-                        <th key={`${key}-h${j}`} scope="col" className="px-4.5 py-2.5 font-normal">
+                        <th key={`${key}-h${j}`} scope="col" className="px-4 py-2.5 font-normal">
                           {inline(h)}
                         </th>
                       ))}
@@ -259,9 +259,7 @@ export function Markdown({ source, afterTitle }: { source: string; afterTitle?: 
                         {r.map((c, k) => (
                           <td
                             key={`${key}-r${j}-${k}`}
-                            className={
-                              k === 0 ? "px-4.5 py-2.5 text-fg-2" : "px-4.5 py-2.5 text-fg"
-                            }
+                            className={k === 0 ? "px-4 py-2.5 text-fg-2" : "px-4 py-2.5 text-fg"}
                           >
                             {inline(c)}
                           </td>

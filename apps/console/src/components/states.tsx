@@ -42,7 +42,7 @@ function StateFrame({
       )}
     >
       <span className="flex max-w-prose flex-col gap-1">
-        <span className="text-[17px] leading-6 font-semibold text-fg">{title}</span>
+        <span className="text-title leading-6 font-semibold text-fg">{title}</span>
         {children ? <span className="text-small text-fg-2">{children}</span> : null}
       </span>
       {actions ? (
@@ -80,7 +80,7 @@ export function EmptyState({
         className,
       )}
     >
-      <span className="text-[17px] leading-6 font-semibold text-fg">{title}</span>
+      <span className="text-title leading-6 font-semibold text-fg">{title}</span>
       {children ? <span className="max-w-prose text-small text-fg-2">{children}</span> : null}
       {action ? (
         <span className="mt-1.5 flex flex-wrap items-center justify-center gap-2">{action}</span>
@@ -130,9 +130,9 @@ export function MessagePage({
           {code}
         </span>
       ) : null}
-      <h1 className="text-[26px] leading-8 font-semibold tracking-[-0.02em] text-fg">{title}</h1>
+      <h1 className="text-page leading-8 font-semibold tracking-tight text-fg">{title}</h1>
       {children ? (
-        <div className="flex flex-col gap-1 text-[14.5px] leading-[22px] text-fg-2">{children}</div>
+        <div className="flex flex-col gap-1 text-body leading-5.5 text-fg-2">{children}</div>
       ) : null}
       {actions ? (
         <div className="mt-1.5 flex flex-wrap gap-2 [&>*]:h-[38px] [&>*]:px-4">{actions}</div>

@@ -530,7 +530,7 @@ function AuditRow({
             ) : null}
             {run ? (
               <span
-                className="ml-2 inline-flex rounded-[5px] bg-selected px-1.5 align-[1px] font-mono text-[11.5px] text-fg-2"
+                className="ml-2 inline-flex rounded-sm bg-selected px-1.5 align-[1px] font-mono text-axis text-fg-2 leading-5"
                 data-run-count=""
               >
                 <span aria-hidden>×</span>
@@ -550,7 +550,7 @@ function AuditRow({
               {changes.map((c) => (
                 <span
                   key={c.key}
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-line-2 px-2 py-0.5 font-mono text-[11.5px]"
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-line-2 px-2 py-0.5 font-mono text-axis leading-5"
                 >
                   <span className="text-fg-3">{c.key}</span>
                   <span className="sr-only">changed from</span>
@@ -606,18 +606,18 @@ function AuditRow({
           <div className="min-w-0">
             <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
               <dt className="text-fg-3">Action</dt>
-              <dd className="font-mono text-[12.5px] break-all text-fg">{e.action}</dd>
+              <dd className="font-mono text-small break-all text-fg">{e.action}</dd>
               <dt className="text-fg-3">Actor</dt>
-              <dd className="font-mono text-[12.5px] break-all text-fg">{e.actor}</dd>
+              <dd className="font-mono text-small break-all text-fg">{e.actor}</dd>
               {e.target ? (
                 <>
                   <dt className="text-fg-3">Target</dt>
-                  <dd className="font-mono text-[12.5px] break-all text-fg">{e.target}</dd>
+                  <dd className="font-mono text-small break-all text-fg">{e.target}</dd>
                 </>
               ) : null}
             </dl>
             {e.detail && Object.keys(e.detail).length > 0 ? (
-              <pre className="mt-3 overflow-x-auto rounded-lg border border-line bg-sunken p-3 font-mono text-[12.5px] text-fg-2">
+              <pre className="mt-3 overflow-x-auto rounded-lg border border-line bg-sunken p-3 font-mono text-small text-fg-2">
                 {JSON.stringify(e.detail, null, 2)}
               </pre>
             ) : null}

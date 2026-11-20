@@ -32,7 +32,7 @@ export function GoToButton({
         onClick={open}
         aria-keyshortcuts="Control+K Meta+K"
         className={cn(
-          "flex h-8 w-full items-center gap-2 rounded-[8px] border border-line px-2.5 text-small text-fg-3 transition-colors duration-(--vs-duration-press) hover:border-line-strong hover:text-fg-2 focus-ring max-lg:h-(--vs-control-touch)",
+          "flex h-8 w-full items-center gap-2 rounded-md border border-line px-2.5 text-small text-fg-3 transition-colors duration-(--vs-duration-press) hover:border-line-strong hover:text-fg-2 focus-ring max-lg:h-(--vs-control-touch)",
           className,
         )}
       >

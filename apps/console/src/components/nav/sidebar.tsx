@@ -113,7 +113,7 @@ export function Sidebar({
             to="/"
             onClick={onNavigate}
             aria-label="Veristar, your projects"
-            className="mb-2 flex items-center gap-2 self-start rounded-md px-2 py-1 text-[15px] font-semibold text-fg focus-ring"
+            className="mb-2 flex items-center gap-2 self-start rounded-md px-2 py-1 text-title font-semibold text-fg focus-ring leading-5"
           >
             <Mark className="size-[18px]" />
             Veristar
@@ -221,7 +221,7 @@ function AccountMenu({
         <button
           type="button"
           aria-current={current ? "page" : undefined}
-          className="flex items-center gap-2.5 rounded-[8px] px-2 py-1.5 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-hover aria-[current=page]:bg-hover max-lg:min-h-(--vs-control-touch)"
+          className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-hover aria-[current=page]:bg-hover max-lg:min-h-(--vs-control-touch)"
         >
           <Avatar name={me.user.display_name} className="size-6 border-0 text-axis" />
           <span className="min-w-0 flex-1 truncate text-body">{me.user.display_name}</span>
@@ -300,11 +300,11 @@ function ContextSwitcher({
             )}
           </span>
           <span className="flex min-w-0 flex-col">
-            <span className="truncate text-body leading-[18px] font-semibold" title={name}>
+            <span className="truncate text-body leading-4.5 font-semibold" title={name}>
               {name}
             </span>
             {word ? (
-              <span className="flex items-center gap-[5px] text-caption font-normal text-fg-2">
+              <span className="flex items-center gap-1 text-caption font-normal text-fg-2">
                 <StatusDot tone={word.tone} className="size-1.5" />
                 {word.word}
               </span>
@@ -527,7 +527,7 @@ function Item({
       onClick={onNavigate}
       aria-current={current ? "page" : undefined}
       className={cn(
-        "group/item relative flex h-8 items-center gap-2.5 rounded-[8px] px-2 text-body transition-colors duration-(--vs-duration-press) ease-standard focus-ring active:bg-selected max-lg:h-(--vs-control-touch)",
+        "group/item relative flex h-8 items-center gap-2.5 rounded-md px-2 text-body transition-colors duration-(--vs-duration-press) ease-standard focus-ring active:bg-selected max-lg:h-(--vs-control-touch)",
         current ? "font-medium text-fg" : "text-fg-2 hover:bg-hover hover:text-fg",
       )}
     >
@@ -536,7 +536,7 @@ function Item({
           layoutId="sidebar-current"
           transition={transition.layout}
           aria-hidden
-          className="absolute inset-0 rounded-[8px] bg-hover"
+          className="absolute inset-0 rounded-md bg-hover"
         />
       ) : null}
       <Icon
@@ -566,7 +566,7 @@ function FooterLink({
   children: ReactNode;
 }) {
   const cls = cn(
-    "flex h-[30px] items-center gap-2.5 rounded-[8px] px-2 text-small transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring [&_svg]:size-4 [&_svg]:text-fg-3 [&_svg]:stroke-[1.8] max-lg:h-(--vs-control-touch)",
+    "flex h-[30px] items-center gap-2.5 rounded-md px-2 text-small transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring [&_svg]:size-4 [&_svg]:text-fg-3 max-lg:h-(--vs-control-touch)",
     current ? "bg-hover text-fg" : "text-fg-2",
   );
   return to ? (

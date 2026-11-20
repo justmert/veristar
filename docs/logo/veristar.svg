@@ -1,7 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="152" height="32" viewBox="0 0 152 32" role="img" aria-label="Veristar">
   <title>Veristar</title>
-  <circle cx="16" cy="17" r="11" fill="none" stroke="#EEEEEE" stroke-width="2.4"/>
-  <path d="M16 6v22" fill="none" stroke="#EEEEEE" stroke-width="2.4"/>
-  <path d="M16 1.5 L17.3 4.7 L20.5 6 L17.3 7.3 L16 10.5 L14.7 7.3 L11.5 6 L14.7 4.7 Z" fill="#EEEEEE"/>
-  <text x="36" y="23.5" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="21" font-weight="600" letter-spacing="-0.6" fill="#EEEEEE">Veristar</text>
+  <g transform="scale(0.6667)">
+  <defs><mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48"><rect width="48" height="48" fill="#FFFFFF"/><circle cx="24" cy="16.5" r="7.5" fill="#000000"/></mask></defs>
+  <polygon points="24.00,40.00 20.47,33.35 13.06,32.05 18.29,26.65 9.01,7.87 24.00,22.50 38.99,7.87 29.71,26.65 34.94,32.05 27.53,33.35" mask="url(#cut)" fill="#EEEEEE" stroke="#EEEEEE" stroke-width="4" stroke-linejoin="round"/>
+  <circle cx="24" cy="16.5" r="3.4" fill="#EEEEEE"/>
+  </g>
+  <text x="38" y="23.5" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="21" font-weight="600" letter-spacing="-0.6" fill="#EEEEEE">Veristar</text>
 </svg>

@@ -259,7 +259,7 @@ export function NumberedSection({
         {done ? <Check className="size-3.5" strokeWidth={2.4} /> : n}
       </span>
       <div className="flex min-w-0 flex-col gap-4">
-        <h2 id={id} className="pt-1 text-[14.5px] leading-5 font-semibold text-fg">
+        <h2 id={id} className="pt-1 text-body leading-5 font-semibold text-fg">
           {title}
           {done ? <span className="sr-only">, complete</span> : null}
         </h2>
@@ -293,11 +293,8 @@ export function Optional({
       onToggle={onToggle}
       variant="row"
       className="bg-transparent"
-      summaryClassName={cn(
-        "min-h-12 text-[14.5px] font-normal",
-        nested ? "gap-2" : "gap-4.5 pl-1.25",
-      )}
-      bodyClassName={cn("flex flex-col gap-4 pt-1 pb-5", nested ? "pl-6" : "pl-10.5")}
+      summaryClassName={cn("min-h-12 text-body font-normal", nested ? "gap-2" : "gap-4 pl-1")}
+      bodyClassName={cn("flex flex-col gap-4 pt-1 pb-5", nested ? "pl-6" : "pl-10")}
       summary={
         <span className="flex items-baseline gap-2">
           <span className="font-semibold text-fg">{title}</span>
@@ -416,7 +413,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
           {award ? (
             <div
               data-award-picked={award.id}
-              className="flex min-w-0 items-center gap-3 rounded-xl border border-line bg-raised px-4 py-3.5 sm:pl-10.5 sm:relative"
+              className="flex min-w-0 items-center gap-3 rounded-xl border border-line bg-raised px-4 py-3.5 sm:pl-10 sm:relative"
             >
               <Check
                 aria-hidden
@@ -424,7 +421,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 strokeWidth={2.4}
               />
               <div className="flex min-w-0 flex-1 flex-col gap-2">
-                <span className="truncate text-[14.5px] font-medium text-fg">{award.project}</span>
+                <span className="truncate text-body font-medium text-fg">{award.project}</span>
                 <LabeledFacts items={pickedFacts} />
               </div>
               <Button
@@ -553,7 +550,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
           </Optional>
         </div>
 
-        <div className="flex flex-col gap-5 sm:pl-10.5">
+        <div className="flex flex-col gap-5 sm:pl-10">
           <div className="flex flex-col gap-2">
             <div className="flex items-start gap-3">
               <Checkbox
@@ -562,7 +559,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 onCheckedChange={(c) => setValues((s) => ({ ...s, termsAccepted: c === true }))}
                 aria-invalid={errors.termsAccepted ? true : undefined}
                 aria-describedby={errors.termsAccepted ? `${termsId}-e` : undefined}
-                className="mt-0.75"
+                className="mt-1"
               />
               <label
                 htmlFor={termsId}

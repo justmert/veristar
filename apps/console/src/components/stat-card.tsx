@@ -126,7 +126,7 @@ export function StatCard({
     >
       <span
         className={cn(
-          "flex min-w-0 items-center gap-2 text-[13px] leading-[18px]",
+          "flex min-w-0 items-center gap-2 text-small leading-4.5",
           selected ? "text-fg" : "text-fg-2",
         )}
       >
@@ -154,7 +154,10 @@ export function StatCard({
         </span>
       ) : state === "error" ? (
         <span className="flex flex-col gap-1">
-          <Missing reason="The value did not load" className="text-[28px] leading-[34px]" />
+          <Missing
+            reason="The value did not load"
+            className="text-page leading-8.5 font-normal tracking-normal"
+          />
           <span className="flex items-center gap-1 text-caption text-critical">
             <CircleAlert aria-hidden className="size-3.5" />
             Did not load
@@ -166,7 +169,10 @@ export function StatCard({
             {lead}
             <span className="flex min-w-0 items-baseline gap-1">
               {value === null ? (
-                <Missing reason={missingReason} className="text-[28px] leading-[34px]" />
+                <Missing
+                  reason={missingReason}
+                  className="text-page leading-8.5 font-normal tracking-normal"
+                />
               ) : (
                 <span
                   className={cn(
@@ -235,7 +241,11 @@ export function ChangeLine({ change, className }: { change: StatChange; classNam
   return (
     <span
       data-change={change.direction}
-      className={cn("flex items-center gap-1 text-[12px] leading-4 tabular", tone, className)}
+      className={cn(
+        "flex items-center gap-1 text-caption leading-4 tabular font-normal",
+        tone,
+        className,
+      )}
     >
       {flat ? null : (
         // a drawn triangle, not a glyph, so the text of the change stays the change
