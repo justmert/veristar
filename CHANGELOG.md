@@ -16,6 +16,16 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-11-20
+
+### Fixed
+
+- The landing page still drew the old Veristar mark from its own copy, so its header, footer and signed-report seal showed the previous logo while the console, docs and favicons had the new one. It now uses the brand mark component, the one shape every surface takes.
+
+### Upgrade notes
+
+- Key-mode release and a rolling deploy as for 0.4.7. No migration, no NATS change; only the console image (which carries the landing site) changes.
+
 ## [0.4.7] - 2026-11-20
 
 ### Fixed
@@ -1698,7 +1708,8 @@ How to check a file against its release:
   starts tracking on `umami.start()`, the server-issued proof of work, and a
   byte-identical rebuild of every committed release.
 
-[Unreleased]: https://github.com/justmert/veristar/compare/v0.4.7...HEAD
+[Unreleased]: https://github.com/justmert/veristar/compare/v0.4.8...HEAD
+[0.4.8]: https://github.com/justmert/veristar/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/justmert/veristar/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/justmert/veristar/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/justmert/veristar/compare/v0.4.4...v0.4.5
