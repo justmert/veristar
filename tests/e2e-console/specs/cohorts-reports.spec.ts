@@ -129,14 +129,16 @@ test("an operator saves a threshold rule and opens its matches", async () => {
   // the cohort is chosen from the confirmed values
   await form.getByLabel("SCF program").selectOption(PROGRAM);
   await form.getByRole("button", { name: "Save rule" }).click();
-  const matches = o.getByRole("region", { name: "Rule matches" });
+  // the saved rule opens with the projects that meet it
+  const matches = o.getByRole("region", { name: `Projects that meet Steady web ${run}` });
   // the project has no traffic, so it is evaluated and does not qualify
-  await expect(matches).toContainText("0 of 1 project meet the rule");
+  await expect(matches).toContainText("No project of 1 project meets the rule.");
   // the list of rules says how many projects meet each one
-  await expect(
-    o.getByRole("table", { name: "Rules" }).locator("tr", { hasText: `Steady web ${run}` }),
-  ).toContainText("0 of 1");
-  const csv = matches.getByRole("link", { name: "Export CSV" });
+  const card = o
+    .getByRole("list", { name: "Rules" })
+    .getByRole("article", { name: `Steady web ${run}` });
+  await expect(card.locator("[data-matches]")).toContainText("0 of 1 meet it");
+  const csv = matches.getByRole("link", { name: "Matches CSV" });
   await expect(csv).toHaveAttribute("href", /\/api\/operator\/rules\/[0-9a-f-]{36}\/matches\.csv$/);
 
   // the rule reaches the machine-readable list too
