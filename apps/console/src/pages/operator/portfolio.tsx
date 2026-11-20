@@ -9,7 +9,7 @@ import { globalApi } from "@/api/endpoints";
 import { keys } from "@/api/queries";
 import { type TenantStatus, tenantStatus, type WebSort } from "@/api/schemas";
 import { statusEntry, statusText, type Tone } from "@/components/status";
-import { formatCount } from "@/lib/format";
+import { formatCount, MISSING } from "@/lib/format";
 import { type DayRange, EMPTY_FILTERS, type ListState, type ProjectFilters } from "@/lib/global";
 
 // a segment of the portfolio: what it counts and the filter it applies
@@ -177,7 +177,7 @@ export function PortfolioBar({
                     <span className="font-semibold tabular" data-count={n ?? ""}>
                       {n === null ? (
                         <span aria-hidden className="text-fg-3">
-                          ·
+                          {MISSING}
                         </span>
                       ) : (
                         `${formatCount(n)}${portfolio.more(s) ? "+" : ""}`

@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cn } from "@veristar/brand/cn";
 import { KeyRound, Unlink, Wallet } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
@@ -157,10 +156,8 @@ function MethodCard({
     <li
       data-method={name}
       data-linked={linked ? "" : undefined}
-      className={cn(
-        "flex min-h-44 min-w-0 flex-col gap-1 rounded-2xl border bg-raised px-4.5 pt-4.5 pb-5",
-        linked ? "border-success-line" : "border-line",
-      )}
+      // the edge stays neutral; Linked is the pill
+      className="flex min-h-44 min-w-0 flex-col gap-1 rounded-2xl border border-line bg-raised px-4.5 pt-4.5 pb-5"
     >
       <div className="mb-2.5 flex items-start justify-between gap-2">
         <span className="flex size-9.5 shrink-0 items-center justify-center rounded-lg border border-line-2 text-fg-2 [&_svg]:size-4">

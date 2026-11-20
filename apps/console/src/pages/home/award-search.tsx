@@ -110,8 +110,9 @@ export function AwardSearch({ onPick }: { onPick: (a: ScfAward) => void }) {
                   <span className="min-w-0 truncate text-body font-medium text-fg">
                     {a.project}
                   </span>
-                  <span className="text-small text-fg-2">
-                    {[a.round, a.category].filter(Boolean).join(" · ")}
+                  <span className="flex gap-3 text-small text-fg-2">
+                    {a.round ? <span>{a.round}</span> : null}
+                    {a.category ? <span>{a.category}</span> : null}
                   </span>
                 </button>
               </li>
