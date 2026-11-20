@@ -31,6 +31,7 @@ import { coverageText } from "@/components/coverage";
 import { type Column, DataTable } from "@/components/data-table";
 import { FormMessage } from "@/components/error-panel";
 import { AppealLink, SiteList } from "@/components/integrity";
+import { GradeRing } from "@/components/grade-ring";
 import { LabeledFacts } from "@/components/labeled-facts";
 import { FunctionsTable, functionsDaysText } from "@/components/onchain-functions";
 import { PageHeader } from "@/components/page-header";
@@ -192,7 +193,12 @@ function Standing({ v, onSign }: { v: SCFView; onSign: () => void }) {
       data-testid="verdict"
       className="grid min-w-0 items-center gap-6 rounded-2xl border border-line bg-raised p-6 md:grid-cols-[auto_minmax(0,1fr)] xl:grid-cols-[auto_minmax(0,1fr)_minmax(0,20rem)]"
     >
-      <Seal grade={graded?.grade ?? null} days={graded} />
+      <GradeRing
+        row={graded}
+        size="xl"
+        data-testid="standing-grade"
+        className="justify-self-center"
+      />
       <div className="flex min-w-0 flex-col gap-3">
         <h2 className="text-[30px] leading-9 font-semibold tracking-[-0.02em] break-words text-fg">
           {v.tenant?.name ?? tenant.name}
@@ -269,76 +275,6 @@ function Standing({ v, onSign }: { v: SCFView; onSign: () => void }) {
         </span>
       </section>
     </section>
-  );
-}
-
-const SEAL_TONE: Record<IntegrityGrade, string> = {
-  A: "text-success",
-  B: "text-warning",
-  C: "text-critical",
-};
-
-// the integrity seal: the grade in a ring whose arcs are the share of A, B
-// and C site days
-function Seal({
-  grade,
-  days,
-}: {
-  grade: IntegrityGrade | null;
-  days: { days_a: number; days_b: number; days_c: number; graded_days: number } | null;
-}) {
-  const R = 80;
-  const C = 2 * Math.PI * R;
-  const parts = days
-    ? ([
-        ["A", days.days_a],
-        ["B", days.days_b],
-        ["C", days.days_c],
-      ] as const)
-    : [];
-  const total = parts.reduce((a, [, n]) => a + n, 0);
-  let offset = 0;
-  return (
-    <div
-      className="relative size-44 shrink-0 justify-self-center"
-      data-testid="standing-grade"
-      data-grade={grade ?? "none"}
-    >
-      <svg viewBox="0 0 180 180" className="size-full -rotate-90" aria-hidden>
-        <circle cx="90" cy="90" r={R} fill="none" strokeWidth="12" className="stroke-line" />
-        {total > 0
-          ? parts.map(([g, n]) => {
-              const len = (n / total) * C;
-              const el = (
-                <circle
-                  key={g}
-                  cx="90"
-                  cy="90"
-                  r={R}
-                  fill="none"
-                  strokeWidth="12"
-                  stroke="currentColor"
-                  className={SEAL_TONE[g]}
-                  strokeDasharray={`${len} ${C - len}`}
-                  strokeDashoffset={-offset}
-                />
-              );
-              offset += len;
-              return n > 0 ? el : null;
-            })
-          : null}
-      </svg>
-      <span className="absolute inset-0 flex flex-col items-center justify-center gap-1">
-        <span className="text-[64px] leading-none font-semibold text-fg">{grade ?? "–"}</span>
-        <span className="text-caption text-fg-2">Integrity grade</span>
-        {days ? (
-          <span className="sr-only">
-            {formatCount(days.days_a)} A days, {formatCount(days.days_b)} B days,{" "}
-            {formatCount(days.days_c)} C days
-          </span>
-        ) : null}
-      </span>
-    </div>
   );
 }
 

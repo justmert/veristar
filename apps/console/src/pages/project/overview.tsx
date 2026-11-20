@@ -24,6 +24,7 @@ import {
 import type { ApiOverview, IntegrityGrade, Site, TenantStatus } from "@/api/schemas";
 import { type WebDimension, type WebSummary, webBreakdownQuery, webSummaryQuery } from "@/api/web";
 import { BreakdownList, type TimeBucket, TimeChart } from "@/components/charts";
+import { GradeRing } from "@/components/grade-ring";
 import { PageHeader } from "@/components/page-header";
 import { Panel } from "@/components/panel";
 import { RangeControl } from "@/components/range-control";
@@ -414,7 +415,7 @@ function Dashboard({
           value={graded?.grade ?? null}
           missingReason="Not graded"
           state={grade.isPending && hasSite ? "loading" : "data"}
-          lead={<GradeRing grade={graded?.grade ?? null} />}
+          lead={<GradeRing row={graded} size="xs" />}
           footer={
             <Link
               to={`/projects/${tenantId}/scf`}
@@ -484,25 +485,6 @@ function WaitPanel({ title }: { title: string }) {
       emptyTitle={title}
       emptyAction={null}
       className="h-full"
-    />
-  );
-}
-
-const RING: Record<IntegrityGrade, string> = {
-  A: "border-success",
-  B: "border-warning",
-  C: "border-critical",
-};
-
-// the grade's ring before its letter: its colour is the grade
-function GradeRing({ grade }: { grade: IntegrityGrade | null }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "inline-block size-5 shrink-0 rounded-full border-[3px]",
-        grade ? RING[grade] : "border-line-strong",
-      )}
     />
   );
 }

@@ -46,7 +46,7 @@ import { siblingUrl } from "@/lib/hosts";
 import { chainGap, DAYS_WITHOUT_DATA, shortKey, weeklyActiveText } from "@/lib/onchain";
 import { type Verdict, verifyReport } from "@/lib/report-verify";
 import { downloadFile } from "@/lib/reports";
-import { GradeRing } from "./grade-ring";
+import { GradeRing } from "@/components/grade-ring";
 
 export function PublicReportPage() {
   const { reportId = "" } = useParams();
