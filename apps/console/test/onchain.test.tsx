@@ -16,6 +16,7 @@ import {
   byLabel,
   byRole,
   click,
+  pickRowAction,
   render,
   renderRoutes,
   routeFetch,
@@ -198,17 +199,30 @@ function routes(page: React.ReactNode, path: string) {
   ];
 }
 
+// the view of every on-chain read: the range asked for, and the previous
+// range of the same length that the changes are read against
+function chainFetch(body: unknown = viewBody, more?: (method: string, url: string) => unknown) {
+  return routeFetch((method, url) => {
+    const extra = more?.(method, url);
+    if (extra) return extra as { status: number; body?: unknown };
+    return { status: 200, body };
+  });
+}
+
 describe("on-chain page activity (contract 15.3)", () => {
   const path = `/projects/${f.TENANT_ID}/onchain`;
 
   it("counts verified ids only and shows why days are missing", async () => {
-    const calls = stubFetch([{ status: 200, body: viewBody }]);
+    const calls = chainFetch();
     const host = await renderRoutes(routes(<OnchainPage />, "onchain"), path);
-    await waitFor(() => expect(host.textContent).toContain("Activity"));
-    // the default range is the control plane's own
+    await waitFor(() => expect(host.querySelector("[data-stat=operations]")).not.toBeNull());
+    // the default range is the control plane's own; the previous range of
+    // the same length is read for the changes
     expect(calls[0]?.url).toBe(`/api/tenants/${f.TENANT_ID}/onchain`);
-    expect(host.querySelector("[data-testid=activity-scope]")?.textContent).toContain(
-      "1 of 2 accounts and contracts verified",
+    await waitFor(() =>
+      expect(calls.map((c) => c.url)).toContain(
+        `/api/tenants/${f.TENANT_ID}/onchain?from=2026-11-09&to=2026-11-12`,
+      ),
     );
     // the unverified contract's failed reads are not part of the totals
     expect(host.querySelector("[data-stat=operations]")?.textContent).toContain("12");
@@ -217,17 +231,13 @@ describe("on-chain page activity (contract 15.3)", () => {
     expect(host.querySelector("[data-stat=days-missing]")?.textContent).toContain("1");
     expect(host.textContent).toContain("Verified");
     expect(host.textContent).toContain("Unverified");
-    expect(host.textContent).toContain("stellar.toml linked both ways");
-    // an unverified id draws no strip and no reasons: nothing of it counts
-    expect(host.textContent).not.toContain("3 days without data");
-    expect(host.querySelector(`[aria-label="Daily operations of ${f.C_KEY}"]`)).toBeNull();
     expect(host.textContent).toContain(
       "1 day without data. Before the first day read for this account",
     );
-    // a stored zero is drawn as a bar, a missing day as a dashed cell
-    const strip = host.querySelector(`[aria-label="Daily operations of ${f.G_KEY}"]`);
-    expect(strip?.querySelectorAll(".bg-series-1")).toHaveLength(2);
-    expect(strip?.querySelectorAll(".border-dashed")).toHaveLength(2);
+    // an unverified id draws no daily bars: nothing of it counts
+    expect(host.querySelector(`[aria-label="Daily operations of ${f.C_KEY}"]`)).toBeNull();
+    expect(host.querySelector(`[aria-label="Daily operations of ${f.G_KEY}"]`)).not.toBeNull();
+    expect(byRole(host, "button", "Prove control")).not.toBeNull();
     const link = [...host.querySelectorAll("a")].find((a) => a.textContent?.includes("Export CSV"));
     expect(link?.getAttribute("href")).toBe(
       `/api/tenants/${f.TENANT_ID}/overview.csv?from=${days[0]}&to=${days[3]}`,
@@ -235,17 +245,17 @@ describe("on-chain page activity (contract 15.3)", () => {
   });
 
   it("reads a chosen range from the address", async () => {
-    const calls = stubFetch([{ status: 200, body: viewBody }]);
+    const calls = chainFetch();
     await renderRoutes(
       routes(<OnchainPage />, "onchain"),
       `${path}?range=custom&from=2026-10-01&to=2026-10-31`,
     );
-    await waitFor(() => expect(calls).toHaveLength(1));
+    await waitFor(() => expect(calls.length).toBeGreaterThan(0));
     expect(calls[0]?.url).toBe(`/api/tenants/${f.TENANT_ID}/onchain?from=2026-10-01&to=2026-10-31`);
   });
 
   it("shows weekly active accounts per iso week, a missing week with its reason", async () => {
-    stubFetch([{ status: 200, body: viewBody }]);
+    chainFetch();
     const host = await renderRoutes(routes(<OnchainPage />, "onchain"), path);
     await waitFor(() => expect(host.querySelector("[data-testid=waa-summary]")).not.toBeNull());
     expect(host.querySelector("[data-testid=waa-summary]")?.textContent).toBe(
@@ -259,9 +269,12 @@ describe("on-chain page activity (contract 15.3)", () => {
     expect(missing?.querySelector("[data-missing]")).not.toBeNull();
     expect(missing?.textContent).toContain("More activity than one run reads");
     expect(missing?.textContent).not.toMatch(/\b0\b/);
+    // selecting the figure draws the weeks in the chart
+    await click(host.querySelector<HTMLElement>("[data-stat=waa]") as HTMLElement);
+    expect(host.textContent).toContain("Weekly active accounts per ISO week");
   });
 
-  it("checks the stellar.toml link line by line, with one action per open line", async () => {
+  it("names the next step of the stellar.toml link, with one action for it", async () => {
     const body = {
       ...viewBody,
       link: {
@@ -285,65 +298,72 @@ describe("on-chain page activity (contract 15.3)", () => {
         ],
       },
     };
-    stubFetch([{ status: 200, body }]);
+    chainFetch(body);
     const host = await renderRoutes(routes(<OnchainPage />, "onchain"), path);
-    await waitFor(() => expect(host.textContent).toContain("stellar.toml link not complete"));
-    const card = host.querySelector('[aria-label="stellar.toml link of example.org"]');
-    expect(card?.querySelectorAll('[data-check="done"]')).toHaveLength(2);
-    const open = [...(card?.querySelectorAll('[data-check="open"]') ?? [])];
-    expect(open).toHaveLength(3);
-    // the main text is plain words; the file's keys are only in what to copy
-    expect(open[0]?.textContent).toContain("names this domain as your organization website");
-    expect(open[0]?.textContent).toContain("It names https://other.org now.");
-    expect(open[0]?.textContent).not.toContain("ORG_URL");
-    for (const line of open) expect(line.querySelectorAll("button")).toHaveLength(1);
+    await waitFor(() => expect(host.querySelector("[data-testid=link-count]")).not.toBeNull());
+    expect(host.querySelector("[data-testid=link-count]")?.textContent).toBe(
+      "0 of 1 account linked both ways",
+    );
+    const row = host.querySelector(`[data-link-row="${f.SITE_ID}|${f.G_KEY}"]`);
+    // the domain is verified; the file does not name it yet
+    expect(row?.querySelector("[data-link-state]")?.getAttribute("data-link-state")).toBe("toml");
+    expect(row?.textContent).toContain("Name the domain in stellar.toml");
+    expect(row?.textContent).toContain("1 of 4");
+    expect(row?.textContent).not.toContain("ORG_URL");
+    expect(
+      row?.querySelector('[aria-label^="Copy the lines that name example.org"]'),
+    ).not.toBeNull();
   });
 
-  it("is one first step until an id is proven", async () => {
-    stubFetch([
-      {
-        status: 200,
-        body: {
-          ...viewBody,
-          ids: [],
-          totals: { ...viewBody.totals, ids: 0, ids_verified: 0, accounts: 0, contracts: 0 },
-          link: { two_way: false, sites: [] },
-        },
-      },
-    ]);
+  it("is one card to add an id until one is added", async () => {
+    chainFetch({
+      ...viewBody,
+      ids: [],
+      totals: { ...viewBody.totals, ids: 0, ids_verified: 0, accounts: 0, contracts: 0 },
+      link: { two_way: false, sites: [] },
+    });
     const host = await renderRoutes(routes(<OnchainPage />, "onchain"), path);
     await waitFor(() => expect(host.querySelector("[data-first-step]")).not.toBeNull());
-    const steps = host.querySelectorAll("[data-first-step] [data-check]");
-    expect([...steps].map((e) => e.getAttribute("data-state"))).toEqual(["current", "todo"]);
+    expect(host.querySelector('[data-step="add"]')).not.toBeNull();
     expect(byLabel(host, "Account or contract")).not.toBeNull();
-    // no range, no empty numbers, no link checklist and no export before a proof
-    expect(host.textContent).not.toContain("Activity");
+    // no range, no empty numbers, no link and no export before a proof
+    expect(host.querySelector("[data-stat]")).toBeNull();
     expect(host.textContent).not.toContain("stellar.toml");
     expect(host.textContent).not.toContain("Export CSV");
   });
 });
 
+const challengeBody = {
+  id: ACCOUNT_ID,
+  account: f.G_KEY,
+  message: `Veristar ownership proof\nConsole: app.veristar.app\nProject: "Project" (${f.TENANT_ID})\nAccount: ${f.G_KEY}\nNonce: 00112233445566778899aabbccddeeff\nExpires: 2026-11-16T10:00:00Z`,
+  manage_data: { name: "veristar", value: "00112233445566778899aabbccddeeff" },
+  expires_at: "2026-11-16T10:00:00Z",
+};
+
 describe("on-chain first step", () => {
-  it("marks the add step done and asks for the proof of each declared id", async () => {
-    stubFetch([
+  it("shows one proof card per declared id until one is proven", async () => {
+    chainFetch(
       {
-        status: 200,
-        body: {
-          ...viewBody,
-          ids: viewBody.ids.map((id) => ({ ...id, verification: none })),
-          totals: { ...viewBody.totals, ids_verified: 0 },
-        },
+        ...viewBody,
+        ids: viewBody.ids.map((id) => ({ ...id, verification: none })),
+        totals: { ...viewBody.totals, ids_verified: 0 },
       },
-    ]);
+      (method, url) =>
+        method === "POST" && url.endsWith("/challenge")
+          ? { status: 200, body: challengeBody }
+          : null,
+    );
     const host = await renderRoutes(
       routes(<OnchainPage />, "onchain"),
       `/projects/${f.TENANT_ID}/onchain`,
     );
     await waitFor(() => expect(host.querySelector("[data-first-step]")).not.toBeNull());
-    const steps = host.querySelectorAll("[data-first-step] [data-check]");
-    expect([...steps].map((e) => e.getAttribute("data-state"))).toEqual(["done", "current"]);
-    expect(host.textContent).toContain("Prove control");
-    expect(host.querySelectorAll("[data-first-step] [data-id]")).toHaveLength(2);
+    expect(host.querySelectorAll('[data-first-step] [data-step="prove"]')).toHaveLength(2);
+    // the account's message is asked for when its card opens
+    await waitFor(() => expect(host.textContent).toContain("Veristar ownership proof"));
+    expect(host.textContent).toContain("Connect a wallet and sign");
+    expect(host.textContent).toContain("Check the admin");
     expect(host.querySelector('[aria-label^="Daily operations"]')).toBeNull();
   });
 });
@@ -359,107 +379,100 @@ describe("accounts and contracts page (contract 15.4)", () => {
   const path = `/projects/${f.TENANT_ID}/onchain`;
 
   it("adds an id and refuses a malformed one before sending", async () => {
-    const calls = stubFetch([
-      { status: 200, body: viewBody },
-      {
-        status: 201,
-        body: {
-          id: "0193a6f8-8888-7caa-bdbb-eccddeeff001",
-          strkey: f.G_KEY,
-          kind: "account",
-          added_by: "console",
-          created_at: "2026-11-16T09:00:00Z",
-          verification: none,
-        },
-      },
-      { status: 200, body: viewBody },
-    ]);
+    const calls = chainFetch(viewBody, (method) =>
+      method === "POST"
+        ? {
+            status: 201,
+            body: {
+              id: "0193a6f8-8888-7caa-bdbb-eccddeeff001",
+              strkey: f.G_KEY,
+              kind: "account",
+              added_by: "console",
+              created_at: "2026-11-16T09:00:00Z",
+              verification: none,
+            },
+          }
+        : null,
+    );
     const host = await renderRoutes(routes(<OnchainPage />, "onchain"), path);
     await waitFor(() => expect(host.textContent).toContain("Accounts and contracts"));
-    await click(byRole(host, "button", "Add account"));
+    await click(byRole(host, "button", "Add account or contract"));
     await type(byLabel(host, "Account or contract"), "not-a-key");
     await click(byRole(host, "button", "Add"));
     expect(host.textContent).toContain("Enter a Stellar account (G…) or a Soroban contract (C…)");
-    expect(calls).toHaveLength(1);
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
     await type(byLabel(host, "Account or contract"), f.G_KEY);
     await click(byRole(host, "button", "Add"));
-    await waitFor(() => expect(calls).toHaveLength(3));
-    expect(calls[1]?.method).toBe("POST");
-    expect(calls[1]?.url).toBe(`/api/tenants/${f.TENANT_ID}/onchain/ids`);
-    expect(calls[1]?.headers.get("X-Requested-With")).toBe("sa-console");
-    expect(calls[1]?.body).toEqual({ strkey: f.G_KEY });
+    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
+    const post = calls.find((c) => c.method === "POST");
+    expect(post?.url).toBe(`/api/tenants/${f.TENANT_ID}/onchain/ids`);
+    expect(post?.headers.get("X-Requested-With")).toBe("sa-console");
+    expect(post?.body).toEqual({ strkey: f.G_KEY });
   });
 
-  it("proves an account with a data entry", async () => {
-    const calls = stubFetch([
-      { status: 200, body: viewBody },
-      {
-        status: 200,
-        body: {
-          id: ACCOUNT_ID,
-          account: f.G_KEY,
-          message: `Veristar ownership proof\nConsole: app.veristar.app\nProject: "Project" (${f.TENANT_ID})\nAccount: ${f.G_KEY}\nNonce: 00112233445566778899aabbccddeeff\nExpires: 2026-11-16T10:00:00Z`,
-          manage_data: { name: "veristar", value: "00112233445566778899aabbccddeeff" },
-          expires_at: "2026-11-16T10:00:00Z",
-        },
-      },
-      {
-        status: 200,
-        body: {
-          id: ACCOUNT_ID,
-          strkey: f.G_KEY,
-          kind: "account",
-          added_by: "enrollment",
-          created_at: "2026-11-12T09:00:00Z",
-          verification: {
-            ...none,
-            status: "verified",
-            method: "manage_data",
-            verified_at: "2026-11-16T09:30:00Z",
-          },
-        },
-      },
-      { status: 200, body: viewBody },
-    ]);
+  it("proves an account again with a data entry", async () => {
+    const calls = chainFetch(viewBody, (method, url) =>
+      method !== "POST"
+        ? null
+        : url.endsWith("/challenge")
+          ? { status: 200, body: challengeBody }
+          : {
+              status: 200,
+              body: {
+                id: ACCOUNT_ID,
+                strkey: f.G_KEY,
+                kind: "account",
+                added_by: "enrollment",
+                created_at: "2026-11-12T09:00:00Z",
+                verification: {
+                  ...none,
+                  status: "verified",
+                  method: "manage_data",
+                  verified_at: "2026-11-16T09:30:00Z",
+                },
+              },
+            },
+    );
     const host = await renderRoutes(routes(<OnchainPage />, "onchain"), path);
-    await waitFor(() => expect(host.textContent).toContain("Prove again"));
-    await click(byRole(host, "button", "Prove again"));
-    await waitFor(() => expect(host.textContent).toContain("Publish a data entry"));
+    await waitFor(() => expect(host.querySelector("[data-stat=operations]")).not.toBeNull());
+    await pickRowAction(host, f.G_KEY, "Prove again");
+    await waitFor(() => expect(host.textContent).toContain("Veristar ownership proof"));
+    await click(byRole(host, "radio", "Publish a data entry"));
     expect(host.textContent).toContain("00112233445566778899aabbccddeeff");
-    expect(host.textContent).toContain("Veristar ownership proof");
     await click(byRole(host, "button", "Check the data entry"));
-    await waitFor(() => expect(calls).toHaveLength(4));
-    expect(calls[1]?.url).toBe(`/api/tenants/${f.TENANT_ID}/onchain/ids/${ACCOUNT_ID}/challenge`);
-    expect(calls[2]?.url).toBe(`/api/tenants/${f.TENANT_ID}/onchain/ids/${ACCOUNT_ID}/verify`);
-    expect(calls[2]?.body).toEqual({ method: "manage_data" });
+    await waitFor(() => expect(calls.filter((c) => c.method === "POST")).toHaveLength(2));
+    const posts = calls.filter((c) => c.method === "POST");
+    expect(posts[0]?.url).toBe(`/api/tenants/${f.TENANT_ID}/onchain/ids/${ACCOUNT_ID}/challenge`);
+    expect(posts[1]?.url).toBe(`/api/tenants/${f.TENANT_ID}/onchain/ids/${ACCOUNT_ID}/verify`);
+    expect(posts[1]?.body).toEqual({ method: "manage_data" });
   });
 
   it("checks a contract's admin and shows the last error in words", async () => {
-    const calls = stubFetch([
-      { status: 200, body: viewBody },
-      {
-        status: 200,
-        body: {
-          id: CONTRACT_ID,
-          strkey: f.C_KEY,
-          kind: "contract",
-          added_by: "console",
-          created_at: "2026-11-13T09:00:00Z",
-          verification: none,
-        },
-      },
-      { status: 200, body: viewBody },
-    ]);
+    const calls = chainFetch(viewBody, (method) =>
+      method === "POST"
+        ? {
+            status: 200,
+            body: {
+              id: CONTRACT_ID,
+              strkey: f.C_KEY,
+              kind: "contract",
+              added_by: "console",
+              created_at: "2026-11-13T09:00:00Z",
+              verification: none,
+            },
+          }
+        : null,
+    );
     const host = await renderRoutes(routes(<OnchainPage />, "onchain"), path);
-    await waitFor(() => expect(host.textContent).toContain("Check the admin"));
-    expect(host.textContent).toContain(
+    await waitFor(() => expect(host.querySelector("[data-stat=operations]")).not.toBeNull());
+    expect(host.querySelector('[data-last-error="no_admin_entry"]')?.textContent).toContain(
       "Last check: The contract stores no Admin or Owner entry that can be read.",
     );
-    // the two-way link of the verified domain holds on every line
-    expect(host.querySelectorAll('[data-check="open"]')).toHaveLength(0);
+    await click(byRole(host, "button", "Prove control"));
+    await waitFor(() => expect(host.textContent).toContain("Check the admin"));
     await click(byRole(host, "button", "Check the admin"));
-    await waitFor(() => expect(calls).toHaveLength(3));
-    expect(calls[1]?.body).toEqual({ method: "contract_admin" });
+    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ method: "contract_admin" });
   });
 });
 
