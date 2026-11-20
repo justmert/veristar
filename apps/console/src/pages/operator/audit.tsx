@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { ArrowRight, Bot, ChevronDown, Cog, ScrollText, User } from "lucide-react";
+import { Bot, CalendarDays, ChevronDown, Cog, User } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import type { AuditQuery } from "@/api/endpoints";
@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/page-header";
 import { DateField, isIsoDay } from "@/components/range-control";
 import { EmptyState, ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import {
   ACTION_FAMILIES,
   type AuditItem,
@@ -102,27 +103,6 @@ export function AuditPage() {
     textFilter("tenant_id", "Project id", "The id from the address of a project page.", q, setOne),
     textFilter("actor", "Actor", "As user:<id>, or system:<job> for the system.", q, setOne),
     textFilter("target", "Target", "As tenant:<id>, site:<id> or rule:<id>.", q, setOne),
-    {
-      key: "from",
-      label: "From",
-      control: (
-        <DayFilter label="From" value={from} onChange={(d) => setOne("from", dayToUtc(d, false))} />
-      ),
-      active: q.from ? { label: formatDate(from), onClear: () => setOne("from", "") } : null,
-    },
-    {
-      key: "to",
-      label: "To",
-      control: (
-        <DayFilter
-          label="To, included"
-          value={to}
-          error={daysError}
-          onChange={(d) => setOne("to", dayToUtc(d, true))}
-        />
-      ),
-      active: q.to ? { label: formatDate(to), onClear: () => setOne("to", "") } : null,
-    },
   ];
 
   return (
@@ -133,6 +113,21 @@ export function AuditPage() {
       />
       <FilterBar
         collapsed
+        actions={
+          <DayRange
+            from={from}
+            to={to}
+            error={daysError}
+            onFrom={(d) => setOne("from", dayToUtc(d, false))}
+            onTo={(d) => setOne("to", dayToUtc(d, true))}
+            onClear={() => {
+              const next = new URLSearchParams(params);
+              next.delete("from");
+              next.delete("to");
+              setParams(next, { replace: true });
+            }}
+          />
+        }
         search={search}
         onSearch={setSearch}
         searchLabel="Search the log"
@@ -247,6 +242,72 @@ function TextFilter({
   );
 }
 
+// the day range is one button next to Filters: it names the range, and
+// opens the two utc days, each applied as soon as it is a whole day
+function DayRange({
+  from,
+  to,
+  error,
+  onFrom,
+  onTo,
+  onClear,
+}: {
+  from: string;
+  to: string;
+  error: string | null;
+  onFrom: (d: string) => void;
+  onTo: (d: string) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const label =
+    from && to
+      ? `${formatDate(from)} to ${formatDate(to)}`
+      : from
+        ? `From ${formatDate(from)}`
+        : to
+          ? `To ${formatDate(to)}`
+          : "Any day";
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        aria-haspopup="dialog"
+        onClick={() => setOpen(true)}
+        className="max-lg:h-(--vs-control-touch)"
+        data-day-range=""
+      >
+        <CalendarDays aria-hidden />
+        {label}
+      </Button>
+      <Dialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Days"
+        size="sm"
+        footer={
+          <>
+            {from || to ? (
+              <Button type="button" variant="ghost" onClick={onClear}>
+                Any day
+              </Button>
+            ) : null}
+            <Button type="button" onClick={() => setOpen(false)}>
+              Done
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <DayFilter label="From" value={from} onChange={onFrom} />
+          <DayFilter label="To, included" value={to} error={error} onChange={onTo} />
+        </div>
+      </Dialog>
+    </>
+  );
+}
+
 // a day applies once the field holds a whole day, or nothing
 function DayFilter({
   label,
@@ -279,7 +340,7 @@ function DayFilter({
 // ---- entries
 
 function dayLabel(day: string, today: string): string {
-  return day === today ? "Today" : formatDate(day);
+  return day === today ? `Today, ${formatDate(day)}` : formatDate(day);
 }
 
 // the log in utc days, newest first; a run of the same system event folds
@@ -296,7 +357,6 @@ export function AuditEntries({
   if (entries.length === 0)
     return (
       <EmptyState
-        icon={<ScrollText aria-hidden strokeWidth={1.75} />}
         title={onClear ? "No entry matches these filters" : "No entry yet"}
         action={
           onClear ? (
@@ -305,7 +365,7 @@ export function AuditEntries({
             </Button>
           ) : null
         }
-      ></EmptyState>
+      />
     );
   const shown = limit ? entries.slice(0, limit) : entries;
   const today = new Date().toISOString().slice(0, 10);
@@ -319,12 +379,12 @@ export function AuditEntries({
   return (
     <ol
       aria-label="Audit entries"
-      className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-raised"
+      className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-raised"
     >
       {groups.map((g) => (
         <li key={g.day} className="flex flex-col">
-          <h3 className="border-b border-line-subtle px-4 pt-3 pb-1 text-caption text-fg-2">
-            {dayLabel(g.day, today)}
+          <h3 className="border-b border-line bg-sunken px-5 py-2 text-caption font-semibold text-fg-3">
+            {dayLabel(g.day, today)}, UTC
           </h3>
           <ol className="flex flex-col">
             {foldRuns(g.items).map((item) => (
@@ -339,37 +399,17 @@ export function AuditEntries({
   );
 }
 
+// a run of the same system event is one row with its count as a badge;
+// the row opens to every entry of the run
 function ItemRow({ item }: { item: AuditItem }) {
   if (item.kind === "one") return <AuditRow e={item.entry} />;
   const first = item.entries[0] as AuditEntry;
   const last = item.entries.at(-1) as AuditEntry;
-  const s = auditSentence(first);
-  // a run inside one minute shows that minute once
-  const from = formatTimeUtc(last.at);
-  const to = formatTimeUtc(first.at);
   return (
-    <details className="group border-b border-line-subtle" data-run={item.entries.length}>
-      <summary className="grid cursor-pointer list-none grid-cols-[1.75rem_minmax(0,1fr)_auto] items-start gap-x-3 px-4 py-3 [&::-webkit-details-marker]:hidden transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring">
-        <ActorMark e={first} />
-        <span className="min-w-0 text-body text-fg-2">
-          <span className="font-medium text-fg">{s.actor}</span>{" "}
-          {s.verb.replace(/ (on|of|for|from|to)$/, "")},{" "}
-          <span className="font-medium text-fg">{countOf(item.entries.length, "time")}</span>
-          <span className="block text-caption">{from === to ? to : `${from} to ${to}`}</span>
-        </span>
-        <ChevronDown
-          aria-hidden
-          className="mt-1 size-4 text-fg-2 transition-transform duration-(--vs-duration-change) ease-standard group-open:rotate-180"
-        />
-      </summary>
-      <ol className="border-t border-line-subtle bg-sunken">
-        {item.entries.map((e) => (
-          <li key={e.id}>
-            <AuditRow e={e} nested />
-          </li>
-        ))}
-      </ol>
-    </details>
+    <AuditRow
+      e={first}
+      run={{ count: item.entries.length, from: last.at, entries: item.entries }}
+    />
   );
 }
 
@@ -383,30 +423,46 @@ function ActorMark({ e }: { e: AuditEntry }) {
     <span
       aria-hidden
       data-actor={s.kind}
-      className="flex size-7 items-center justify-center rounded-md border border-dashed border-line-strong text-fg-2"
+      className="flex size-6 items-center justify-center rounded-full border border-dashed border-line-strong text-fg-3"
     >
-      <Icon className="size-4" strokeWidth={1.75} />
+      <Icon className="size-3.5" strokeWidth={1.75} />
     </span>
   );
 }
 
-// one entry as a sentence with its changes and reason. the row itself
-// opens to the codes and the raw detail, so no row carries a second line
-// for them
-function AuditRow({ e, nested }: { e: AuditEntry; nested?: boolean }) {
+const GRID =
+  "grid grid-cols-[3.25rem_1.5rem_minmax(0,1fr)_auto] gap-x-3 px-4 sm:grid-cols-[5rem_1.5rem_minmax(0,1fr)_auto] sm:px-5";
+
+// one entry: the time first, the actor, then the sentence. a reason given
+// with the action is a quoted line; a setting change is an old to new chip.
+// the row opens in place to the codes and the raw detail; a run opens to
+// each of its entries.
+function AuditRow({
+  e,
+  nested,
+  run,
+}: {
+  e: AuditEntry;
+  nested?: boolean;
+  run?: { count: number; from: string; entries: AuditEntry[] };
+}) {
   const s = auditSentence(e);
-  const changes = auditChanges(e);
-  const reason = auditReason(e);
+  const changes = run ? [] : auditChanges(e);
+  const reason = run ? null : auditReason(e);
   const [open, setOpen] = useState(false);
   const id = useId();
+  const verb = run ? s.verb.replace(/ (on|of|for|from|to)$/, "") : s.verb;
+  const at = formatTimeUtc(e.at).replace(" UTC", "");
+  const runFrom = run ? formatTimeUtc(run.from).replace(" UTC", "") : null;
   return (
     <article
       data-action={e.action}
+      data-run={run ? run.count : undefined}
       data-open={open ? "" : undefined}
       className={cn(
         "flex flex-col",
-        !nested && "border-b border-line-subtle",
-        open && !nested && "bg-sunken",
+        !nested && "border-b border-line last:border-b-0",
+        open && !nested && "bg-hover",
       )}
     >
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: the chevron button is the keyboard way to open the row */}
@@ -417,110 +473,143 @@ function AuditRow({ e, nested }: { e: AuditEntry; nested?: boolean }) {
           setOpen((o) => !o);
         }}
         className={cn(
-          "grid cursor-pointer grid-cols-[1.75rem_minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-4 py-3",
+          GRID,
+          "cursor-pointer items-start py-3",
           !open && "transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover",
         )}
       >
+        <time
+          dateTime={e.at}
+          title={
+            run
+              ? `${formatDateTimeUtc(run.from)} to ${formatDateTimeUtc(e.at)}`
+              : formatDateTimeUtc(e.at)
+          }
+          className="pt-0.5 text-small text-fg-3 tabular"
+        >
+          {run && runFrom !== at ? (
+            <>
+              <span className="sr-only">{runFrom} to </span>
+              {at}
+            </>
+          ) : (
+            at
+          )}
+        </time>
         <ActorMark e={e} />
-        <div className="flex min-w-0 flex-col gap-1">
+        <div className="flex min-w-0 flex-col gap-1.5">
           <p className="text-body break-words text-fg-2">
-            <span className={cn("font-medium", s.kind === "person" ? "text-fg" : "text-fg-2")}>
-              {s.actor}
-            </span>{" "}
-            {s.verb}
-            {s.object ? (
+            <span className="font-semibold text-fg">{s.actor}</span> {verb}
+            {s.object && !run ? (
               <>
                 {" "}
                 {s.href ? (
                   <Link
                     to={s.href}
-                    className="rounded-sm font-medium text-fg underline-offset-4 hover:underline focus-ring"
+                    className="rounded-sm font-semibold text-fg underline-offset-4 hover:underline focus-ring"
                   >
                     {s.object}
                   </Link>
                 ) : (
-                  <span className="font-medium text-fg">{s.object}</span>
+                  <span className="font-semibold text-fg">{s.object}</span>
                 )}
               </>
             ) : null}
-            .
+            {run ? (
+              <span
+                className="ml-2 inline-flex rounded-[5px] bg-selected px-1.5 align-[1px] font-mono text-[11.5px] text-fg-2"
+                data-run-count=""
+              >
+                <span aria-hidden>×</span>
+                {run.count}
+                <span className="sr-only"> times</span>
+              </span>
+            ) : null}
           </p>
-          {changes.length > 0 || reason ? (
-            <div className="flex flex-wrap items-center gap-1">
+          {reason ? (
+            <q className="text-small break-words text-fg-2" data-reason="">
+              <span className="sr-only">Reason: </span>
+              {reason}
+            </q>
+          ) : null}
+          {changes.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
               {changes.map((c) => (
                 <span
                   key={c.key}
-                  className="inline-flex max-w-full items-center gap-1 rounded-sm border border-line px-1 text-caption"
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-line-2 px-2 py-0.5 font-mono text-[11.5px]"
                 >
-                  <span className="text-fg-2">{c.key}</span>
+                  <span className="text-fg-3">{c.key}</span>
                   <span className="sr-only">changed from</span>
-                  <span className="text-fg-2 line-through">{c.from}</span>
-                  <ArrowRight aria-hidden className="size-3 shrink-0 text-fg-3" />
+                  <span className="text-fg-3 line-through">{c.from}</span>
+                  <span aria-hidden className="text-fg-3">
+                    →
+                  </span>
                   <span className="sr-only">to</span>
                   <span className="text-fg">{c.to}</span>
                 </span>
               ))}
-              {reason ? (
-                <span className="text-caption break-words text-fg-2" data-reason="">
-                  <span className="sr-only">Reason: </span>
-                  {reason}
-                </span>
-              ) : null}
             </div>
           ) : null}
         </div>
-        <span className="flex items-start gap-1">
-          <time
-            dateTime={e.at}
-            title={formatDateTimeUtc(e.at)}
-            className="pt-1 text-caption text-fg-2 tabular"
-          >
-            {formatTimeUtc(e.at)}
-          </time>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-expanded={open}
-            aria-controls={id}
-            aria-label={open ? "Hide the details" : "Show the details"}
-            onClick={() => setOpen((o) => !o)}
-            className="-mt-1 max-lg:size-(--vs-control-touch)"
-          >
-            <ChevronDown
-              aria-hidden
-              className={cn(
-                "transition-transform duration-(--vs-duration-change) ease-standard",
-                open && "rotate-180",
-              )}
-            />
-          </Button>
-        </span>
-      </div>
-      {open ? (
-        <div
-          id={id}
-          className="grid animate-fade-in grid-cols-[1.75rem_minmax(0,1fr)] gap-x-3 px-4 pb-3 text-caption"
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-expanded={open}
+          aria-controls={id}
+          aria-label={
+            run
+              ? open
+                ? "Hide the entries"
+                : "Show the entries"
+              : open
+                ? "Hide the details"
+                : "Show the details"
+          }
+          onClick={() => setOpen((o) => !o)}
+          className={cn("-mt-0.5 max-lg:size-(--vs-control-touch)", open && "bg-selected")}
         >
+          <ChevronDown
+            aria-hidden
+            className={cn(
+              "transition-transform duration-(--vs-duration-change) ease-standard",
+              open && "rotate-180",
+            )}
+          />
+        </Button>
+      </div>
+      {open && run ? (
+        <ol id={id} className="animate-fade-in border-t border-line bg-sunken">
+          {run.entries.map((x) => (
+            <li key={x.id} className="border-b border-line last:border-b-0">
+              <AuditRow e={x} nested />
+            </li>
+          ))}
+        </ol>
+      ) : open ? (
+        <div id={id} className={cn(GRID, "animate-fade-in pb-4 text-small")}>
+          <span aria-hidden />
           <span aria-hidden />
           <div className="min-w-0">
-            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
-              <dt className="text-fg-2">Action</dt>
-              <dd className="font-mono break-all text-fg">{e.action}</dd>
-              <dt className="text-fg-2">Actor</dt>
-              <dd className="font-mono break-all text-fg">{e.actor}</dd>
+            <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
+              <dt className="text-fg-3">Action</dt>
+              <dd className="font-mono text-[12.5px] break-all text-fg">{e.action}</dd>
+              <dt className="text-fg-3">Actor</dt>
+              <dd className="font-mono text-[12.5px] break-all text-fg">{e.actor}</dd>
               {e.target ? (
                 <>
-                  <dt className="text-fg-2">Target</dt>
-                  <dd className="font-mono break-all text-fg">{e.target}</dd>
+                  <dt className="text-fg-3">Target</dt>
+                  <dd className="font-mono text-[12.5px] break-all text-fg">{e.target}</dd>
                 </>
               ) : null}
             </dl>
             {e.detail && Object.keys(e.detail).length > 0 ? (
-              <pre className="mt-2 overflow-x-auto rounded-md border border-line bg-sunken p-2 font-mono text-caption text-fg-2">
+              <pre className="mt-3 overflow-x-auto rounded-lg border border-line bg-sunken p-3 font-mono text-[12.5px] text-fg-2">
                 {JSON.stringify(e.detail, null, 2)}
               </pre>
             ) : null}
           </div>
+          <span aria-hidden />
         </div>
       ) : (
         <span id={id} hidden />
