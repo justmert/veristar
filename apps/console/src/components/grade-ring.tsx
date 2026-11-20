@@ -65,9 +65,10 @@ export function GradeRing({
   return (
     <span
       ref={ref}
-      role={size === "xs" ? undefined : "img"}
+      role="img"
+      // the xs ring sits beside its letter, which already names the grade
       aria-hidden={size === "xs" ? true : undefined}
-      aria-label={size === "xs" ? undefined : label}
+      aria-label={label}
       title={size === "xs" ? undefined : label}
       data-grade={letter ?? "none"}
       {...data}

@@ -21,6 +21,7 @@ import {
 import { percentileHiddenReason } from "@/components/cohort";
 import { CopyButton } from "@/components/copy-button";
 import { Disclosure } from "@/components/disclosure";
+import { GradeRing } from "@/components/grade-ring";
 import { LabeledFacts } from "@/components/labeled-facts";
 import { FunctionsTable, functionsDaysText } from "@/components/onchain-functions";
 import { PublicFrame } from "@/components/public-frame";
@@ -46,7 +47,6 @@ import { siblingUrl } from "@/lib/hosts";
 import { chainGap, DAYS_WITHOUT_DATA, shortKey, weeklyActiveText } from "@/lib/onchain";
 import { type Verdict, verifyReport } from "@/lib/report-verify";
 import { downloadFile } from "@/lib/reports";
-import { GradeRing } from "@/components/grade-ring";
 
 export function PublicReportPage() {
   const { reportId = "" } = useParams();
