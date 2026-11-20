@@ -179,22 +179,26 @@ function roleBlock(name: ThemeName) {
 }
 
 // the mark as svg files: the favicons (one dark tile everywhere), the status
-// page's mark and the docs logo for each theme
+// page's mark and the docs logo for each theme. the geometry is the one in
+// src/mark.tsx: a soft star turned over, a round cut between its upper arms
+// and a point held in the cut
 {
   const d: Roles = themes.dark;
   const l: Roles = themes.light;
-  const star = "M16 1.5 L17.3 4.7 L20.5 6 L17.3 7.3 L16 10.5 L14.7 7.3 L11.5 6 L14.7 4.7 Z";
+  const points = "24.00,40.00 20.47,33.35 13.06,32.05 18.29,26.65 9.01,7.87 24.00,22.50 38.99,7.87 29.71,26.65 34.94,32.05 27.53,33.35";
   const up = (v: string) => v.toUpperCase();
-  const mark = (ink: string, accent: string) =>
-    `  <circle cx="16" cy="17" r="11" fill="none" stroke="${up(ink)}" stroke-width="2.4"/>\n` +
-    `  <path d="M16 6v22" fill="none" stroke="${up(ink)}" stroke-width="2.4"/>\n` +
-    `  <path d="${star}" fill="${up(accent)}"/>\n`;
+  const mark = (ink: string, id: string) =>
+    `  <defs><mask id="${id}" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">` +
+    `<rect width="48" height="48" fill="#FFFFFF"/><circle cx="24" cy="16.5" r="7.5" fill="#000000"/></mask></defs>\n` +
+    `  <polygon points="${points}" mask="url(#${id})" fill="${up(ink)}" stroke="${up(ink)}" stroke-width="4" stroke-linejoin="round"/>\n` +
+    `  <circle cx="24" cy="16.5" r="3.4" fill="${up(ink)}"/>\n`;
   const head =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">\n';
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="32" height="32">\n';
+  // the tile keeps the mark a little inside its edge
   const favicon =
     `${head}  <title>Veristar</title>\n` +
-    `  <rect width="32" height="32" rx="8" fill="${up(d.ground)}"/>\n` +
-    `${mark(d.fg, d["accent-text"])}</svg>\n`;
+    `  <rect width="48" height="48" rx="12" fill="${up(d.ground)}"/>\n` +
+    `  <g transform="translate(6 6) scale(0.75)">\n${mark(d.fg, "cut")}  </g>\n</svg>\n`;
   for (const f of [
     "apps/console/public/favicon.svg",
     "apps/site/public/favicon.svg",
@@ -206,13 +210,15 @@ function roleBlock(name: ThemeName) {
   // the public status page shows the mark on its dark header
   want(
     join(repo, "packages/brand/assets/mark.svg"),
-    `${head}  <title>Veristar</title>\n${mark(d.fg, d["accent-text"])}</svg>\n`,
+    `${head}  <title>Veristar</title>\n${mark(d.fg, "cut")}</svg>\n`,
   );
   const logo = (t: Roles) =>
     '<svg xmlns="http://www.w3.org/2000/svg" width="152" height="32" viewBox="0 0 152 32" role="img" aria-label="Veristar">\n' +
     "  <title>Veristar</title>\n" +
-    mark(t.fg, t["accent-text"]) +
-    `  <text x="36" y="23.5" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="21" font-weight="600" letter-spacing="-0.6" fill="${up(t.fg)}">Veristar</text>\n` +
+    '  <g transform="scale(0.6667)">\n' +
+    mark(t.fg, "cut") +
+    "  </g>\n" +
+    `  <text x="38" y="23.5" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="21" font-weight="600" letter-spacing="-0.6" fill="${up(t.fg)}">Veristar</text>\n` +
     "</svg>\n";
   want(join(repo, "docs/logo/veristar.svg"), logo(d));
   want(join(repo, "docs/logo/veristar-light.svg"), logo(l));

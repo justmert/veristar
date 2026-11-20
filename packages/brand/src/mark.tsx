@@ -1,28 +1,45 @@
-import type { SVGProps } from "react";
+import { type SVGProps, useId } from "react";
 
-// the veristar mark: an orbit circle crossed by a meridian, with the accent
-// star at its top. drawn in the current text colour; the star takes the
-// accent. the same geometry as docs/logo/veristar.svg and the umami favicon.
-export const MARK_STAR =
-  "M16 1.5 L17.3 4.7 L20.5 6 L17.3 7.3 L16 10.5 L14.7 7.3 L11.5 6 L14.7 4.7 Z";
+// the veristar mark: a soft five point star turned over, its two upper arms
+// run long into the v of the name, and a measured point held in a round cut
+// between them. one colour, the current text colour. the same geometry as
+// the svg files that scripts/generate.ts writes (favicons, docs logos).
+export const MARK_POINTS = "24.00,40.00 20.47,33.35 13.06,32.05 18.29,26.65 9.01,7.87 24.00,22.50 38.99,7.87 29.71,26.65 34.94,32.05 27.53,33.35";
+export const MARK_CUT = { cx: 24, cy: 16.5, r: 7.5 } as const;
+export const MARK_DOT = { cx: 24, cy: 16.5, r: 3.4 } as const;
 
 export function Mark({
   title,
-  mono = false,
+  // kept for callers that ask for a one colour mark: the mark is one colour
+  mono: _mono = false,
   ...props
 }: SVGProps<SVGSVGElement> & { title?: string; mono?: boolean }) {
+  // a mask id per instance: two marks on one page must not share one
+  const cut = `vs-mark-cut-${useId().replace(/:/g, "")}`;
   return (
     <svg
-      viewBox="0 0 32 32"
+      viewBox="0 0 48 48"
       fill="none"
       role={title ? "img" : undefined}
       aria-hidden={title ? undefined : true}
       aria-label={title}
       {...props}
     >
-      <circle cx="16" cy="17" r="11" stroke="currentColor" strokeWidth="2.4" />
-      <path d="M16 6v22" stroke="currentColor" strokeWidth="2.4" />
-      <path d={MARK_STAR} className={mono ? "fill-current" : "fill-accent-text"} />
+      <defs>
+        <mask id={cut} maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">
+          <rect width="48" height="48" fill="#fff" />
+          <circle cx={MARK_CUT.cx} cy={MARK_CUT.cy} r={MARK_CUT.r} fill="#000" />
+        </mask>
+      </defs>
+      <polygon
+        points={MARK_POINTS}
+        mask={`url(#${cut})`}
+        fill="currentColor"
+        stroke="currentColor"
+        strokeWidth="4"
+        strokeLinejoin="round"
+      />
+      <circle cx={MARK_DOT.cx} cy={MARK_DOT.cy} r={MARK_DOT.r} fill="currentColor" />
     </svg>
   );
 }
