@@ -70,7 +70,7 @@ export function PageHeader({
         <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
           {/* a long title stops at two lines; the full title is its tooltip */}
           <h1
-            className="line-clamp-2 min-w-0 text-[22px] leading-7 font-semibold tracking-[-0.01em] break-words text-fg"
+            className="line-clamp-2 min-w-0 text-heading break-words text-fg"
             title={typeof title === "string" ? title : undefined}
           >
             {title}

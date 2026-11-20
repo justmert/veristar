@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { act, useState } from "react";
 import { describe, expect, it } from "vitest";
 import { CreateDialog, type CreatedSecret } from "@/components/create-dialog";
 import { byRole, click, render } from "./helpers";
@@ -34,7 +34,10 @@ describe("create dialog", () => {
     expect(dialog.querySelector("input[aria-label=Name]")).toBeNull();
     const done = byRole(dialog, "button", "Done") as HTMLButtonElement;
     expect(done.disabled).toBe(true);
-    await click(dialog.querySelector('button[aria-label="Close"]') as HTMLElement);
+    // escape asks to close; the dialog has no corner close button
+    await act(async () => {
+      dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+    });
     expect(dialog.hasAttribute("open")).toBe(true);
     await click(dialog.querySelector('button[role="checkbox"]') as HTMLElement);
     expect(done.disabled).toBe(false);
