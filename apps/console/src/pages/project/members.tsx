@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Ban, LogOut, UserMinus, UserPlus } from "lucide-react";
+import { Ban, ChevronDown, LogOut, Plus, UserCog, UserMinus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useNavigate } from "react-router";
 import { ApiError } from "@/api/client";
@@ -11,16 +11,17 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { type Column, DataTable, useRowPages } from "@/components/data-table";
 import { FormMessage } from "@/components/error-panel";
 import { FilterBar } from "@/components/filter-bar";
-import { NativeSelect, SelectField, TextField } from "@/components/form-field";
+import { TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
-import { Section } from "@/components/panel";
 import type { RowAction } from "@/components/row-menu";
+import { Segmented } from "@/components/segmented";
 import { ErrorState } from "@/components/states";
+import { Pill } from "@/components/status";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Tooltip } from "@/components/ui/tooltip";
-import { formatDate } from "@/lib/format";
+import { countOf, formatDate } from "@/lib/format";
 import * as v from "@/lib/validate";
 import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
@@ -125,24 +126,33 @@ function PersonName({
   );
 }
 
-function Initial({ login, dashed }: { login: string; dashed?: boolean }) {
-  return <Avatar name={login} dashed={dashed} />;
-}
-
 export function MembersPage() {
   const { tenant, me, isOwner, termsCurrent } = useProject();
   const list = useQuery(membersQuery(tenant.id));
   const canManage = isOwner && termsCurrent;
   const [adding, setAdding] = useState(false);
+  const data = list.data;
+  const owners = data?.members.filter((m) => m.role === "owner").length ?? 0;
+  const members = (data?.members.length ?? 0) - owners;
+  const invites = data?.invites.length ?? 0;
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       <PageHeader
         {...PAGE_HEADERS.members}
+        items={
+          data
+            ? [
+                <span key="o">{countOf(owners, "owner")}</span>,
+                members > 0 ? <span key="m">{countOf(members, "member")}</span> : null,
+                invites > 0 ? <span key="i">{countOf(invites, "invite")}</span> : null,
+              ]
+            : undefined
+        }
         primary={
           canManage ? (
             <Button onClick={() => setAdding(true)} className="max-lg:h-(--vs-control-touch)">
-              <UserPlus aria-hidden />
+              <Plus aria-hidden />
               Add a person
             </Button>
           ) : null
@@ -157,7 +167,7 @@ export function MembersPage() {
           onRetry={() => list.refetch()}
         />
       ) : (
-        <MembersBody
+        <People
           tenantId={tenant.id}
           tenantName={tenant.name}
           selfId={me.user.id}
@@ -167,18 +177,26 @@ export function MembersPage() {
       )}
       <Dialog open={adding} onOpenChange={setAdding} title="Add a person">
         {adding ? (
-          <div className="pb-4">
-            <AddMemberForm tenantId={tenant.id} onDone={() => setAdding(false)} />
-          </div>
+          <AddMemberForm
+            tenantId={tenant.id}
+            onDone={() => setAdding(false)}
+            onCancel={() => setAdding(false)}
+          />
         ) : null}
       </Dialog>
     </div>
   );
 }
 
-type Pending = { kind: "role"; member: Member; role: Role };
+// one row per person: a member of the project, or an invite waiting for an
+// account
+type Person = { kind: "member"; member: Member } | { kind: "invite"; invite: Invite };
 
-function MembersBody({
+const personKey = (p: Person) => (p.kind === "member" ? p.member.user_id : `invite-${p.invite.id}`);
+
+type Pending = { member: Member; role: Role };
+
+function People({
   tenantId,
   tenantName,
   selfId,
@@ -196,12 +214,15 @@ function MembersBody({
   const [pending, setPending] = useState<Pending | null>(null);
   const ownerCount = data.members.filter((m) => m.role === "owner").length;
   const lastOwner = (m: Member) => m.role === "owner" && ownerCount === 1;
-  const shown = matchMembers(data.members, q);
-  const paged = useRowPages(shown, MEMBER_PAGE, q);
+  const people: Person[] = [
+    ...matchMembers(data.members, q).map((member) => ({ kind: "member" as const, member })),
+    ...matchInvites(data.invites, q).map((invite) => ({ kind: "invite" as const, invite })),
+  ];
+  const total = data.members.length + data.invites.length;
+  const paged = useRowPages(people, MEMBER_PAGE, q);
 
   const setRole = useMutation({
-    mutationFn: (p: { member: Member; role: Role }) =>
-      api.setMemberRole(tenantId, p.member.user_id, p.role),
+    mutationFn: (p: Pending) => api.setMemberRole(tenantId, p.member.user_id, p.role),
     onSuccess: async (_, p) => {
       setPending(null);
       toast.success(
@@ -228,11 +249,46 @@ function MembersBody({
     toast.success(`${m.display_name} is removed.`);
     await queryClient.invalidateQueries({ queryKey: keys.members(tenantId) });
   }
-  const rowActions = (m: Member): RowAction[] => {
+  const askRole = (m: Member, role: Role) => {
+    setRole.reset();
+    setPending({ member: m, role });
+  };
+
+  const rowActions = (p: Person): RowAction[] => {
+    if (p.kind === "invite") {
+      const i = p.invite;
+      return canManage
+        ? [
+            {
+              label: "Revoke invite",
+              icon: <Ban aria-hidden />,
+              destructive: true,
+              confirm: {
+                title: `Revoke the invite for ${i.display_name}?`,
+                description: "They cannot join with this invite. You can invite them again.",
+                confirmLabel: "Revoke invite",
+                pendingLabel: "Revoking",
+                run: async () => {
+                  await api.revokeInvite(tenantId, i.id);
+                  toast.success(`The invite for ${i.display_name} is revoked.`);
+                  await queryClient.invalidateQueries({ queryKey: keys.members(tenantId) });
+                },
+              },
+            },
+          ]
+        : [];
+    }
+    const m = p.member;
     const self = m.user_id === selfId;
-    if (!(canManage || self) || lastOwner(m)) return [];
-    return [
-      {
+    const out: RowAction[] = [];
+    if (canManage && !lastOwner(m))
+      out.push({
+        label: m.role === "owner" ? "Make member" : "Make owner",
+        icon: <UserCog aria-hidden />,
+        onSelect: () => askRole(m, m.role === "owner" ? "member" : "owner"),
+      });
+    if ((canManage || self) && !lastOwner(m))
+      out.push({
         label: self ? "Leave project" : "Remove",
         icon: self ? <LogOut aria-hidden /> : <UserMinus aria-hidden />,
         destructive: true,
@@ -245,86 +301,103 @@ function MembersBody({
           pendingLabel: self ? "Leaving" : "Removing",
           run: () => remove(m),
         },
-      },
-    ];
+      });
+    return out;
   };
 
-  const columns: Column<Member>[] = [
+  const columns: Column<Person>[] = [
     {
-      key: "member",
-      header: "Member",
+      key: "person",
+      header: "Person",
       primary: true,
       minWidth: "min-w-56",
-      cell: (m) => (
-        <span className="flex min-w-0 items-center gap-2 py-1">
-          <Initial login={m.display_name} />
-          <span className="min-w-0 truncate font-medium text-fg">
-            <PersonName
-              githubLogin={m.github_login}
-              address={m.stellar_address ?? m.passkey_address}
-              name={m.display_name}
-            />
-            {m.user_id === selfId ? <span className="font-normal text-fg-2"> (you)</span> : null}
+      className: "w-[48%]",
+      cell: (p) => {
+        const name = p.kind === "member" ? p.member.display_name : p.invite.display_name;
+        const login = p.kind === "member" ? p.member.github_login : p.invite.github_login;
+        const address =
+          p.kind === "member"
+            ? (p.member.stellar_address ?? p.member.passkey_address)
+            : p.invite.stellar_address;
+        return (
+          <span className="flex min-w-0 items-center gap-3 py-1">
+            <Avatar name={name} dashed={p.kind === "invite"} />
+            <span className="min-w-0 truncate font-medium text-fg">
+              <PersonName githubLogin={login} address={address} name={name} />
+            </span>
+            {p.kind === "member" && p.member.user_id === selfId ? (
+              <span className="shrink-0 rounded-md border border-line-strong px-1.5 text-caption text-fg-2">
+                You
+              </span>
+            ) : null}
           </span>
-        </span>
-      ),
+        );
+      },
     },
     {
       key: "role",
       header: "Role",
       mobile: true,
-      minWidth: "min-w-36",
-      cell: (m) =>
-        canManage ? (
+      minWidth: "min-w-32",
+      cell: (p) =>
+        p.kind === "member" && canManage ? (
           <RoleSelect
-            member={m}
-            locked={lastOwner(m)}
-            onChange={(role) => {
-              setRole.reset();
-              setPending({ kind: "role", member: m, role });
-            }}
+            member={p.member}
+            locked={lastOwner(p.member)}
+            onChange={(role) => askRole(p.member, role)}
           />
         ) : (
-          <span className="text-fg-2">{m.role === "owner" ? "Owner" : "Member"}</span>
+          <span className="text-fg">
+            {(p.kind === "member" ? p.member.role : p.invite.role) === "owner"
+              ? "Owner"
+              : "Member"}
+          </span>
         ),
     },
     {
-      key: "added",
-      header: "Added",
+      key: "status",
+      header: "Status",
       mobile: true,
-      cell: (m) => <span className="whitespace-nowrap text-fg-2">{formatDate(m.created_at)}</span>,
+      minWidth: "min-w-44",
+      cell: (p) =>
+        p.kind === "member" ? (
+          <span className="whitespace-nowrap text-fg-2">Since {formatDate(p.member.created_at)}</span>
+        ) : (
+          <span className="flex flex-wrap items-center gap-2.5">
+            <Pill tone="info">Invited</Pill>
+            <span className="whitespace-nowrap text-small text-fg-2">
+              until {formatDate(p.invite.expires_at)}
+            </span>
+          </span>
+        ),
     },
   ];
 
   const p = pending;
   return (
-    <div className="flex flex-col gap-8">
-      <Section title="Members" count={data.members.length} className="gap-4">
-        {data.members.length >= MEMBER_SEARCH_FROM ? (
-          <FilterBar
-            search={q}
-            onSearch={setQ}
-            searchLabel="Search members"
-            placeholder="Search by name or address"
-            onClearAll={() => setQ("")}
-          />
-        ) : null}
-        <DataTable<Member>
-          label="Members"
-          columns={columns}
-          rows={paged.rows}
-          getRowKey={(m) => m.user_id}
-          rowLabel={(m) => m.display_name}
-          rowProps={(m) => ({ "data-member": m.user_id })}
-          empty={{ title: "No member matches", text: "Search by another name or address." }}
-          footer={paged.footer}
-          rowActions={rowActions}
+    <div className="flex flex-col gap-4">
+      {total >= MEMBER_SEARCH_FROM ? (
+        <FilterBar
+          search={q}
+          onSearch={setQ}
+          searchLabel="Search people"
+          placeholder="Search by name or address"
+          onClearAll={() => setQ("")}
         />
-      </Section>
-
-      {data.invites.length > 0 ? (
-        <InvitesSection tenantId={tenantId} invites={data.invites} canManage={canManage} />
       ) : null}
+      <DataTable<Person>
+        label="People"
+        columns={columns}
+        rows={paged.rows}
+        getRowKey={personKey}
+        rowLabel={(x) => (x.kind === "member" ? x.member.display_name : x.invite.display_name)}
+        rowProps={(x): Record<`data-${string}`, string> =>
+          x.kind === "member" ? { "data-member": x.member.user_id } : { "data-invite": x.invite.id }
+        }
+        empty={{ title: "No person matches" }}
+        footer={paged.footer}
+        rowActions={rowActions}
+      />
 
       <ConfirmDialog
         open={p !== null}
@@ -345,15 +418,16 @@ function MembersBody({
         pending={setRole.isPending}
         error={setRole.error}
         onConfirm={() => {
-          if (p) setRole.mutate({ member: p.member, role: p.role });
+          if (p) setRole.mutate(p);
         }}
       />
     </div>
   );
 }
 
-// the role of a member as a select; the change waits for a confirmation.
-// the last owner cannot become a member, and the tooltip says why.
+// the role of a member as a quiet select in the row; the change waits for a
+// confirmation. the last owner cannot become a member, and the tooltip says
+// why.
 function RoleSelect({
   member,
   locked,
@@ -364,16 +438,22 @@ function RoleSelect({
   onChange: (role: Role) => void;
 }) {
   const select = (
-    <NativeSelect
-      aria-label={`Role of ${member.display_name}`}
-      value={member.role}
-      disabled={locked}
-      className="relative z-(--vs-layer-raised) max-lg:h-(--vs-control-touch)"
-      onChange={(e) => onChange(e.target.value as Role)}
-    >
-      <option value="member">Member</option>
-      <option value="owner">Owner</option>
-    </NativeSelect>
+    <span className="relative inline-flex items-center">
+      <select
+        aria-label={`Role of ${member.display_name}`}
+        value={member.role}
+        disabled={locked}
+        onChange={(e) => onChange(e.target.value as Role)}
+        className="relative z-(--vs-layer-raised) h-8 cursor-pointer appearance-none rounded-md bg-transparent pr-6 pl-1.5 text-body text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring disabled:cursor-not-allowed disabled:text-fg-2 max-lg:h-(--vs-control-touch)"
+      >
+        <option value="member">Member</option>
+        <option value="owner">Owner</option>
+      </select>
+      <ChevronDown
+        aria-hidden
+        className="pointer-events-none absolute right-1.5 z-(--vs-layer-raised) size-3.5 text-fg-3"
+      />
+    </span>
   );
   if (!locked) return select;
   return (
@@ -383,7 +463,15 @@ function RoleSelect({
   );
 }
 
-export function AddMemberForm({ tenantId, onDone }: { tenantId: string; onDone?: () => void }) {
+export function AddMemberForm({
+  tenantId,
+  onDone,
+  onCancel,
+}: {
+  tenantId: string;
+  onDone?: () => void;
+  onCancel?: () => void;
+}) {
   const [values, setValues] = useState<AddMemberValues>({ login: "", role: "member" });
   const [errors, setErrors] = useState<AddMemberErrors>({});
   const add = useMutation({
@@ -406,7 +494,7 @@ export function AddMemberForm({ tenantId, onDone }: { tenantId: string; onDone?:
   }
 
   return (
-    <form noValidate onSubmit={submit} aria-label="Add a member" className="flex flex-col gap-4">
+    <form noValidate onSubmit={submit} aria-label="Add a member" className="flex flex-col gap-5">
       <TextField
         label="GitHub username or Stellar address"
         name="github_login"
@@ -415,30 +503,44 @@ export function AddMemberForm({ tenantId, onDone }: { tenantId: string; onDone?:
         spellCheck={false}
         maxLength={56}
         placeholder="octocat, G… or C…"
-        hint="A G address is a wallet. A C address is a passkey account."
         className="max-lg:h-(--vs-control-touch)"
         value={values.login}
         onChange={(e) => setValues((s) => ({ ...s, login: e.target.value }))}
         error={errors.login}
       />
-      <SelectField
-        label="Role"
-        name="role"
-        hint={ROLE_HELP}
-        className="max-lg:h-(--vs-control-touch)"
-        value={values.role}
-        onChange={(e) => setValues((s) => ({ ...s, role: e.target.value as Role }))}
-        error={errors.role}
-      >
-        <option value="member">Member</option>
-        <option value="owner">Owner</option>
-      </SelectField>
+      <div className="flex flex-col gap-2">
+        <span className="text-small font-medium text-fg">Role</span>
+        <Tooltip content={ROLE_HELP}>
+          <span className="w-fit">
+            <Segmented<Role>
+              label="Role"
+              value={values.role}
+              options={[
+                { value: "member", label: "Member" },
+                { value: "owner", label: "Owner" },
+              ]}
+              onChange={(role) => setValues((s) => ({ ...s, role }))}
+            />
+          </span>
+        </Tooltip>
+        {errors.role ? <p className="text-small text-critical">{errors.role}</p> : null}
+      </div>
       <FormMessage
         error={
           add.error && Object.keys(serverMemberErrors(add.error)).length === 0 ? add.error : null
         }
       />
-      <div className="flex justify-end border-t border-line pt-4">
+      <div className="-mx-5 flex justify-end gap-2 border-t border-line px-5 pt-3.5 pb-2.5">
+        {onCancel ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="max-lg:h-(--vs-control-touch)"
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+        ) : null}
         <Button type="submit" className="max-lg:h-(--vs-control-touch)" pending={add.isPending}>
           {add.isPending ? "Adding" : "Add"}
         </Button>
@@ -452,98 +554,5 @@ export function matchInvites(list: Invite[], q: string): Invite[] {
   if (!t) return list;
   return list.filter((i) =>
     [i.display_name, i.github_login, i.stellar_address].some((x) => x?.toLowerCase().includes(t)),
-  );
-}
-
-// open invites in the members table form: a count in the title, search from
-// the same size on, and pages, so a long list stays short
-function InvitesSection({
-  tenantId,
-  invites,
-  canManage,
-}: {
-  tenantId: string;
-  invites: Invite[];
-  canManage: boolean;
-}) {
-  const [q, setQ] = useState("");
-  const shown = matchInvites(invites, q);
-  const paged = useRowPages(shown, MEMBER_PAGE, q);
-  const columns: Column<Invite>[] = [
-    {
-      key: "person",
-      header: "Person",
-      primary: true,
-      minWidth: "min-w-56",
-      cell: (i) => (
-        <span className="flex min-w-0 items-center gap-2 py-1">
-          <Initial login={i.display_name} dashed />
-          <span className="min-w-0 truncate font-medium text-fg">
-            <PersonName
-              githubLogin={i.github_login}
-              address={i.stellar_address}
-              name={i.display_name}
-            />
-          </span>
-        </span>
-      ),
-    },
-    {
-      key: "role",
-      header: "Joins as",
-      mobile: true,
-      cell: (i) => <span className="text-fg-2">{i.role === "owner" ? "Owner" : "Member"}</span>,
-    },
-    {
-      key: "until",
-      header: "Open until",
-      mobile: true,
-      cell: (i) => <span className="whitespace-nowrap text-fg-2">{formatDate(i.expires_at)}</span>,
-    },
-  ];
-  const rowActions = (i: Invite): RowAction[] =>
-    canManage
-      ? [
-          {
-            label: "Revoke invite",
-            icon: <Ban aria-hidden />,
-            destructive: true,
-            confirm: {
-              title: `Revoke the invite for ${i.display_name}?`,
-              description: "They cannot join with this invite. You can invite them again.",
-              confirmLabel: "Revoke invite",
-              pendingLabel: "Revoking",
-              run: async () => {
-                await api.revokeInvite(tenantId, i.id);
-                toast.success(`The invite for ${i.display_name} is revoked.`);
-                await queryClient.invalidateQueries({ queryKey: keys.members(tenantId) });
-              },
-            },
-          },
-        ]
-      : [];
-  return (
-    <Section title="Open invites" count={invites.length} className="gap-4" data-invites="">
-      {invites.length >= MEMBER_SEARCH_FROM ? (
-        <FilterBar
-          search={q}
-          onSearch={setQ}
-          searchLabel="Search invites"
-          placeholder="Search by name or address"
-          onClearAll={() => setQ("")}
-        />
-      ) : null}
-      <DataTable<Invite>
-        label="Open invites"
-        columns={columns}
-        rows={paged.rows}
-        getRowKey={(i) => i.id}
-        rowLabel={(i) => i.display_name}
-        rowProps={(i) => ({ "data-invite": i.id })}
-        empty={{ title: "No invite matches", text: "Search by another name or address." }}
-        footer={paged.footer}
-        rowActions={rowActions}
-      />
-    </Section>
   );
 }
