@@ -107,7 +107,10 @@ test("the admin adds an operator who registers a first passkey", async ({ browse
   // the closed action dialog has a reason field too, so the form is scoped
   const add = p.getByRole("dialog", { name: "Add an operator" });
   await add.getByLabel("GitHub login").fill(secondUser.login);
-  await add.getByLabel("Role").selectOption("operator");
+  // the role is a switch in the form; operator is the default
+  const role = add.getByRole("radiogroup", { name: "Role" });
+  await role.getByRole("radio", { name: "Operator", exact: true }).click();
+  await expect(role.getByRole("radio", { name: "Operator", exact: true })).toBeChecked();
   await add.getByLabel("Reason").fill("joins the review team");
   await add.getByRole("button", { name: "Add operator" }).click();
   const row = p.locator("tr", { hasText: secondUser.login });
