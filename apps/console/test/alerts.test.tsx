@@ -156,9 +156,10 @@ describe("operator alerts page", () => {
     const down = host.querySelector("[data-alert=ServiceDown]") as HTMLElement;
     // the title in sentence case, the labels as a secondary line
     expect(down.textContent).toContain("Controlplane on core-1 does not answer scrapes");
-    expect(down.querySelector("[data-labels]")?.textContent).toBe(
-      "ServiceDown · node core-1 · service controlplane",
-    );
+    // each label is its own quiet tag, never joined with a separator
+    expect(
+      [...(down.querySelectorAll("[data-labels] li") ?? [])].map((l) => l.textContent),
+    ).toEqual(["ServiceDown", "node core-1", "service controlplane"]);
     expect(down.textContent).toMatch(/Fires for \d+ (d|h|min)/);
     expect(down.querySelector("a")?.getAttribute("href")).toBe(
       "https://github.com/justmert/veristar/blob/main/docs/runbooks/alerts.md#servicedown",

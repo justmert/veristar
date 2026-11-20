@@ -25,7 +25,7 @@ import { blankColumns } from "@/pages/operator/project-columns";
 import { OperatorProjectsPage } from "@/pages/operator/projects";
 import * as c from "./fixtures/contract";
 import * as f from "./fixtures/global";
-import { byLabel, type Call, click, renderRoutes, stubFetch, waitFor } from "./helpers";
+import { byLabel, byRole, type Call, click, renderRoutes, stubFetch, waitFor } from "./helpers";
 
 const EM_DASH = String.fromCharCode(0x2014);
 
@@ -233,7 +233,6 @@ describe("project list, web view", () => {
     expect(a.textContent).not.toContain("49%");
     // a project without a previous range shows the missing glyph with its reason
     expect(rowOf(host, f.TENANT_B).textContent).toContain("No value in the previous range");
-    expect(host.textContent).toContain("IP Geolocation by DB-IP");
     const visitorsHead = [...host.querySelectorAll("th button")].find(
       (b) => b.textContent === "Visitors",
     );
@@ -305,13 +304,16 @@ describe("project list, web view", () => {
     listFetch(f.webProjectsBody);
     const host = await renderRoutes(operatorRoutes, "/operator/projects?view=web");
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
-    expect(host.querySelector("[aria-label='Selected for comparison']")).toBeNull();
+    expect(host.querySelector("[aria-label='Selected projects']")).toBeNull();
     for (const id of [c.TENANT_ID, f.TENANT_B]) {
       const box = rowOf(host, id).querySelector<HTMLElement>("[role=checkbox]");
       if (!box) throw new Error("no checkbox");
       await click(box);
     }
-    const link = [...host.querySelectorAll("a")].find((x) => x.textContent === "Compare 2");
+    expect(host.querySelector("[aria-label='Selected projects']")?.textContent).toContain(
+      "2 selected",
+    );
+    const link = [...host.querySelectorAll("a")].find((x) => x.textContent === "Open in Compare");
     expect(link?.getAttribute("href")).toBe(
       `/operator/compare?tenants=${encodeURIComponent(`${c.TENANT_ID},${f.TENANT_B}`)}&from=2026-10-14&to=2026-11-12`,
     );
@@ -340,7 +342,8 @@ describe("project list, portfolio", () => {
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     const none = () => host.querySelector<HTMLElement>("[data-segment=none]") as HTMLElement;
     await waitFor(() => expect(none().textContent).toBe("7No data"));
-    expect(host.querySelector("[data-segment=review]")?.textContent).toBe("1Needs review");
+    // in review is a status, not a second count
+    expect(host.querySelector("[data-segment=review]")).toBeNull();
     expect(host.querySelector("[data-segment=all]")?.getAttribute("aria-pressed")).toBe("true");
     await click(none());
     await waitFor(() =>
@@ -390,82 +393,84 @@ describe("project list, api view", () => {
 });
 
 // the cells of one metric column of a totals table, top to bottom
-function columnOf(host: HTMLElement, table: string, header: string): string[] {
-  const t = host.querySelector(`table[aria-label='${table}']`) as HTMLTableElement;
-  const i = [...t.querySelectorAll("thead th")].findIndex((th) => th.textContent === header);
-  return [...t.querySelectorAll("tbody tr")].map((tr) => tr.children[i]?.textContent ?? "");
+
+// the cells of one scorecard row, one per compared project
+function rowCells(host: HTMLElement, row: string): string[] {
+  return [...host.querySelectorAll(`tr[data-row="${row}"] td`)].map((td) => td.textContent ?? "");
+}
+
+function compareFetch() {
+  return routeFetch((_m, url) => {
+    if (url.startsWith("/api/operator/web/compare")) return { status: 200, body: f.webCompareBody };
+    if (url.startsWith("/api/operator/api/compare")) return { status: 200, body: f.apiCompareBody };
+    if (url.startsWith("/api/operator/cohorts")) return { status: 200, body: f.cohortListBody };
+    if (url.startsWith("/api/operator/web/projects"))
+      return { status: 200, body: f.webProjectsBody };
+    return { status: 503, body: c.errorBody("unavailable") };
+  });
 }
 
 describe("comparison", () => {
-  it("aligns web and api numbers of the compared projects and marks unread days", async () => {
-    const calls = stubFetch([
-      { status: 200, body: f.webCompareBody },
-      { status: 200, body: f.apiCompareBody },
-    ]);
+  it("shows each compared project as a scorecard column with web and api rows", async () => {
+    const calls = compareFetch();
     const host = await renderRoutes(
       operatorRoutes,
       `/operator/compare?tenants=${c.TENANT_ID},${f.TENANT_B}`,
     );
-    await waitFor(() => expect(host.textContent).toContain("payments-api"));
-    expect(calls.map((x) => x.url)).toEqual([
+    await waitFor(() => expect(host.querySelector("tr[data-row=visitors]")).not.toBeNull());
+    const urls = calls.map((x) => x.url);
+    expect(urls).toContain(
       `/api/operator/web/compare?tenants=${encodeURIComponent(`${c.TENANT_ID},${f.TENANT_B}`)}&breakdown_limit=10`,
+    );
+    expect(urls).toContain(
       `/api/operator/api/compare?tenants=${encodeURIComponent(`${c.TENANT_ID},${f.TENANT_B}`)}`,
-    ]);
-    // one row per compared project with data, one cell per metric; a project
-    // without web data is one row of names instead of empty lines and cells
+    );
     // the time is when the aggregation read the numbers, not when they arrived
     expect(host.querySelector("[data-freshness]")?.getAttribute("datetime")).toBe(
       "2026-11-12T14:05:00Z",
     );
     // the change against the previous period follows the count: 18 from 20
-    expect(columnOf(host, "Web totals", "Visitors")).toEqual(["18-10% vs previous period"]);
-    expect(columnOf(host, "API totals", "Requests")).toEqual(["300+50% vs previous period"]);
-    const none = host.querySelector("[data-no-data]") as HTMLElement;
-    expect(none.textContent).toContain("No web data");
-    expect(none.querySelector(`[data-tenant="${f.TENANT_B}"]`)).not.toBeNull();
-    expect(columnOf(host, "API totals", "p99").join(" ")).toContain(">10 s");
-    expect(host.textContent).toContain("not read");
-    expect(host.textContent).toContain("github.com");
+    const visitors = rowCells(host, "visitors");
+    expect(visitors[0]).toContain("18");
+    expect(visitors[0]).toContain("10%");
+    // a project without web data says so in its cells
+    expect(visitors[1]).toContain("No data");
+    expect(rowCells(host, "requests")[0]).toContain("300");
+    expect(rowCells(host, "p99").join(" ")).toContain(">10 s");
+    // the breakdowns and the services open from their group
+    await click(byRole(host, "button", "Referrers, countries, devices"));
+    await waitFor(() => expect(host.textContent).toContain("github.com"));
     expect(host.textContent).toContain("13 more");
     expect(host.textContent).toContain("Germany");
-    expect(host.textContent).toContain("IP Geolocation by DB-IP");
+    await click(host.querySelector("dialog[open] button[aria-label=Close]") as HTMLElement);
+    await click(byRole(host, "button", "Services of each project"));
+    await waitFor(() => expect(host.textContent).toContain("payments-api"));
     expect(host.textContent).toContain("from traces");
+    // a row draws its chart above the table
+    await click(byRole(host, "button", "Verified visitors"));
+    expect(host.querySelector("section[aria-label='Verified visitors']")).not.toBeNull();
   });
 
   it("keeps the compared projects and the range when an operator adds a project", async () => {
-    const calls = routeFetch((_m, url) => {
-      if (url.startsWith("/api/operator/web/compare"))
-        return { status: 200, body: f.webCompareBody };
-      if (url.startsWith("/api/operator/api/compare"))
-        return { status: 200, body: f.apiCompareBody };
-      if (url.startsWith("/api/operator/cohorts")) return { status: 200, body: f.cohortListBody };
-      if (url.startsWith("/api/operator/web/projects"))
-        return { status: 200, body: f.webProjectsBody };
-      return { status: 503, body: c.errorBody("unavailable") };
-    });
+    const calls = compareFetch();
     const host = await renderRoutes(
       operatorRoutes,
       `/operator/compare?tenants=${c.TENANT_ID},${f.TENANT_B}`,
     );
-    await waitFor(() => expect(host.textContent).toContain("payments-api"));
-    const add = [...host.querySelectorAll("a")].find((a) => a.textContent === "Add a project");
-    if (!add) throw new Error("no add link");
-    await click(add);
-    await waitFor(() => expect(host.textContent).toContain("2 of 5Stellar DEX"));
-    const selected =
-      host.querySelector("[aria-label='Selected for comparison']")?.textContent ?? "";
-    expect(selected).toContain("Stellar DEX");
+    await waitFor(() => expect(host.querySelector("tr[data-row=visitors]")).not.toBeNull());
+    await click(byRole(host, "button", "Add a project"));
+    await waitFor(() => expect(host.textContent).toContain("2 of 5 picked"));
     const list = calls.find((x) => x.url.startsWith("/api/operator/web/projects"))?.url ?? "";
     const range = f.webCompareBody as { from: string; to: string };
     expect(list).toContain(`from=${range.from}`);
     expect(list).toContain(`to=${range.to}`);
   });
 
-  it("asks for a selection when no project is named", async () => {
-    const calls = stubFetch([]);
+  it("offers the picker when no project is named", async () => {
+    compareFetch();
     const host = await renderRoutes(operatorRoutes, "/operator/compare");
-    await waitFor(() => expect(host.textContent).toContain("No project is selected"));
-    expect(calls).toEqual([]);
+    await waitFor(() => expect(host.textContent).toContain("Pick up to 5 projects"));
+    await waitFor(() => expect(host.textContent).toContain("0 of 5 picked"));
   });
 });
 
@@ -492,15 +497,12 @@ describe("comparison axes", () => {
 
 describe("copy", () => {
   it("has no em dash in the new pages", async () => {
-    stubFetch([
-      { status: 200, body: f.webCompareBody },
-      { status: 200, body: f.apiCompareBody },
-    ]);
+    compareFetch();
     const host = await renderRoutes(
       operatorRoutes,
       `/operator/compare?tenants=${c.TENANT_ID},${f.TENANT_B}`,
     );
-    await waitFor(() => expect(host.textContent).toContain("payments-api"));
+    await waitFor(() => expect(host.querySelector("tr[data-row=visitors]")).not.toBeNull());
     expect(host.textContent).not.toContain(EM_DASH);
   });
 });

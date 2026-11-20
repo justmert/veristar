@@ -81,7 +81,7 @@ export function AlertsPage() {
                 data ? (
                   <time
                     key="checked"
-                    dateTime={new Date(data.checked_at).toISOString()}
+                    dateTime={data.checked_at}
                     title={`The page checks again every ${EVERY}.`}
                     data-freshness=""
                   >
@@ -293,7 +293,7 @@ function SeverityList({ group, now }: { group: SeverityGroup; now: number }) {
       data-severity={group.key}
     >
       <h2 id={headingId} className="flex items-baseline gap-2 text-[15px] font-semibold text-fg">
-        {groupTitle(group.key)}
+        {groupTitle(group.key)}{" "}
         <span className="text-small font-normal text-fg-3 tabular">{group.alerts.length}</span>
       </h2>
       <ul className="flex flex-col overflow-hidden rounded-2xl border border-line bg-raised">
@@ -396,7 +396,7 @@ function AlertItem({ alert, now }: { alert: FiringAlert; now: number }) {
         className="col-start-2 flex items-baseline gap-2 text-[13.5px] tabular md:col-start-3"
         title={formatDateTimeUtc(alert.starts_at)}
       >
-        <span className="sr-only">Fires for</span>
+        <span className="sr-only">Fires for </span>
         <b className="font-semibold text-fg">{firingFor(alert.starts_at, now)}</b>
         <span className="text-fg-3">
           since{" "}

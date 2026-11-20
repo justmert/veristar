@@ -339,13 +339,9 @@ describe("decision panel", () => {
         <Toaster />
       </>,
     );
-    // nothing is chosen on open: the submit waits for a choice, and ctrl
-    // enter sends nothing
-    expect(byRole(host, "radio", "ApproveA").getAttribute("aria-checked")).toBe("false");
-    expect(byRole(host, "radio", "RejectR").getAttribute("aria-checked")).toBe("false");
-    const send = host.querySelector("button[type=submit]") as HTMLButtonElement;
-    expect(send.disabled).toBe(true);
-    expect(send.textContent).toBe("Choose Approve or Reject");
+    // nothing is chosen on open: the bar holds Reject and Approve, no
+    // submit, and ctrl enter sends nothing
+    expect(host.querySelector("button[type=submit]")).toBeNull();
     await act(async () => {
       host
         .querySelector("form")
@@ -354,15 +350,17 @@ describe("decision panel", () => {
         );
     });
     expect(calls).toHaveLength(0);
+    // r swaps the bar for the reason, with the presets
     await act(async () => {
       host
         .querySelector("form")
         ?.dispatchEvent(new KeyboardEvent("keydown", { key: "r", bubbles: true }));
     });
-    expect(byRole(host, "radio", "RejectR").getAttribute("aria-checked")).toBe("true");
+    expect(host.textContent).toContain("Why reject");
+    expect(host.textContent).toContain("Not built on Stellar.");
     await click(host.querySelector("button[type=submit]") as HTMLElement);
     expect(host.textContent).toContain("Required.");
-    await type(byLabel(host, "Reason"), "Not our domain.");
+    await type(byLabel(host, "Why reject"), "Not our domain.");
     await click(host.querySelector("button[type=submit]") as HTMLElement);
     await waitFor(() => expect(host.textContent).toContain("example.org rejected."));
     expect(calls[0]?.url).toBe(`/api/operator/sites/${f.SITE_ID}/reject`);

@@ -97,7 +97,7 @@ export function DecisionPanel({
     if (!globalKeys || choice !== null) return;
     function onKey(e: globalThis.KeyboardEvent) {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const el = e.target as HTMLElement | null;
+      const el = e.target instanceof Element ? e.target : null;
       if (el?.closest("input, textarea, select, [contenteditable=true], dialog")) return;
       if (e.key === "a" || e.key === "r") {
         e.preventDefault();
