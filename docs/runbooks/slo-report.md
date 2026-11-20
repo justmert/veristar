@@ -1,6 +1,7 @@
 ---
 title: "Monthly SLO report"
 description: "Produce the monthly SLO report from the probe's measurements."
+icon: "chart-simple"
 ---
 
 The platform's targets are 99.99% ingestion and 99.90% dashboards ([service targets](../sla.md)).

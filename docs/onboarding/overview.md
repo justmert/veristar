@@ -2,6 +2,7 @@
 title: "Tenant onboarding"
 sidebarTitle: "Overview"
 description: "Guides for adding web analytics to a site and API analytics to a backend, with code taken from tested examples."
+icon: "compass"
 ---
 
 These guides show you how to add web analytics to a site, API analytics to a backend, or both.
@@ -20,48 +21,106 @@ To sign in with GitHub, a Stellar wallet or a passkey, and to link them to one a
 
 ## Web analytics
 
-| Guide | For |
-|---|---|
-| [Quickstart](web/quickstart.md) | every site: register it, paste one tag, see the data |
-| [Static HTML](web/static-html.md) | hand-written pages and static site generators |
-| [Vite and React](web/vite-react.md) | a client-routed React app |
-| [Vue](web/vue.md) | a Vue app with Vue Router |
-| [Astro](web/astro.md) | Astro, static or server rendered |
-| [SvelteKit](web/sveltekit.md) | SvelteKit |
-| [React Router with server rendering](web/react-router.md) | React Router in framework mode |
-| [Next.js](web/nextjs.md) | Next.js with the App Router |
-| [Docusaurus](web/docusaurus.md) | a Docusaurus documentation site |
-| [VitePress](web/vitepress.md) | a VitePress documentation site |
-| [Mintlify](web/mintlify.md) | a documentation site hosted by Mintlify |
-| [npm package](web/npm.md) | bundling the tracker into your app instead of a script tag |
-| [Self-hosting sdk.js](web/self-hosting.md) | serving the tracker file from your own domain |
-| [Content security policy](web/content-security-policy.md) | sites that send a CSP header |
-| [Upgrading the tracker](web/upgrading.md) | moving to a newer pinned version |
-| [Consent](web/consent.md) | starting the tracker only after the visitor agrees |
-| [Custom events](web/custom-events.md) | counting clicks and actions of your own |
-| [Wallets Kit](web/wallets-kit.md) | wallet connect events from the Stellar Wallets Kit |
+<CardGroup cols={2}>
+  <Card horizontal title="Quickstart" icon="globe" className="tone-web" href="/onboarding/web/quickstart">
+    Every site: register it, paste one tag, see the data
+  </Card>
+  <Card horizontal title="Static HTML" icon="html5" iconType="brands" className="tone-web" href="/onboarding/web/static-html">
+    Hand-written pages and static site generators
+  </Card>
+  <Card horizontal title="Vite and React" icon="react" iconType="brands" className="tone-web" href="/onboarding/web/vite-react">
+    A client-routed React app
+  </Card>
+  <Card horizontal title="Vue" icon="vuejs" iconType="brands" className="tone-web" href="/onboarding/web/vue">
+    A Vue app with Vue Router
+  </Card>
+  <Card horizontal title="Astro" icon="meteor" className="tone-web" href="/onboarding/web/astro">
+    Astro, static or server rendered
+  </Card>
+  <Card horizontal title="SvelteKit" icon="fire" className="tone-web" href="/onboarding/web/sveltekit" />
+  <Card horizontal title="React Router with server rendering" icon="route" className="tone-web" href="/onboarding/web/react-router">
+    React Router in framework mode
+  </Card>
+  <Card horizontal title="Next.js" icon="n" className="tone-web" href="/onboarding/web/nextjs">
+    Next.js with the App Router
+  </Card>
+  <Card horizontal title="Docusaurus" icon="book-open" className="tone-web" href="/onboarding/web/docusaurus">
+    A Docusaurus documentation site
+  </Card>
+  <Card horizontal title="VitePress" icon="book" className="tone-web" href="/onboarding/web/vitepress">
+    A VitePress documentation site
+  </Card>
+  <Card horizontal title="Mintlify" icon="leaf" className="tone-web" href="/onboarding/web/mintlify">
+    A documentation site hosted by Mintlify
+  </Card>
+  <Card horizontal title="npm package" icon="npm" iconType="brands" className="tone-web" href="/onboarding/web/npm">
+    Bundling the tracker into your app instead of a script tag
+  </Card>
+  <Card horizontal title="Self-hosting sdk.js" icon="hard-drive" className="tone-web" href="/onboarding/web/self-hosting">
+    Serving the tracker file from your own domain
+  </Card>
+  <Card horizontal title="Content security policy" icon="shield-halved" className="tone-web" href="/onboarding/web/content-security-policy">
+    Sites that send a CSP header
+  </Card>
+  <Card horizontal title="Upgrading the tracker" icon="circle-up" className="tone-web" href="/onboarding/web/upgrading">
+    Moving to a newer pinned version
+  </Card>
+  <Card horizontal title="Consent" icon="user-check" className="tone-web" href="/onboarding/web/consent">
+    Starting the tracker only after the visitor agrees
+  </Card>
+  <Card horizontal title="Custom events" icon="hand-pointer" className="tone-web" href="/onboarding/web/custom-events">
+    Counting clicks and actions of your own
+  </Card>
+  <Card horizontal title="Wallets Kit" icon="wallet" className="tone-web" href="/onboarding/web/wallets-kit">
+    Wallet connect events from the Stellar Wallets Kit
+  </Card>
+</CardGroup>
 
 ## API analytics
 
-| Guide | For |
-|---|---|
-| [Quickstart](api/quickstart.md) | every backend: create a token, add a second exporter, see the data |
-| [Node.js](api/node.md) | Express and other Node HTTP servers |
-| [Go](api/go.md) | `net/http` |
-| [Python](api/python.md) | FastAPI, including `OTEL_SEMCONV_STABILITY_OPT_IN` |
-| [Rust](api/rust.md) | actix-web |
-| [Java](api/java.md) | Spring Boot and other JVM services, with the OpenTelemetry Java agent |
-| [Stellar Anchor Platform](api/anchor-platform.md) | the Anchor Platform's SEP server and platform server |
-| [Setting http.route](api/http-route.md) | making requests group by route instead of by raw path |
-| [Fan-out from your own Collector](api/collector-fanout.md) | apps that already export to an OpenTelemetry Collector |
-| [What gets dropped](api/what-gets-dropped.md) | which of your data the platform keeps and which it discards |
-| [Troubleshooting](api/troubleshooting.md) | no data, refused requests, odd numbers |
+<CardGroup cols={2}>
+  <Card horizontal title="Quickstart" icon="server" className="tone-api" href="/onboarding/api/quickstart">
+    Every backend: create a token, add a second exporter, see the data
+  </Card>
+  <Card horizontal title="Node.js" icon="node-js" iconType="brands" className="tone-api" href="/onboarding/api/node">
+    Express and other Node HTTP servers
+  </Card>
+  <Card horizontal title="Go" icon="golang" iconType="brands" className="tone-api" href="/onboarding/api/go">
+    `net/http`
+  </Card>
+  <Card horizontal title="Python" icon="python" iconType="brands" className="tone-api" href="/onboarding/api/python">
+    FastAPI, including `OTEL_SEMCONV_STABILITY_OPT_IN`
+  </Card>
+  <Card horizontal title="Rust" icon="rust" iconType="brands" className="tone-api" href="/onboarding/api/rust">
+    actix-web
+  </Card>
+  <Card horizontal title="Java" icon="java" iconType="brands" className="tone-api" href="/onboarding/api/java">
+    Spring Boot and other JVM services, with the OpenTelemetry Java agent
+  </Card>
+  <Card horizontal title="Stellar Anchor Platform" icon="anchor" className="tone-api" href="/onboarding/api/anchor-platform">
+    The Anchor Platform's SEP server and platform server
+  </Card>
+  <Card horizontal title="Setting http.route" icon="signs-post" className="tone-api" href="/onboarding/api/http-route">
+    Making requests group by route instead of by raw path
+  </Card>
+  <Card horizontal title="Fan-out from your own Collector" icon="share-nodes" className="tone-api" href="/onboarding/api/collector-fanout">
+    Apps that already export to an OpenTelemetry Collector
+  </Card>
+  <Card horizontal title="What gets dropped" icon="filter" className="tone-api" href="/onboarding/api/what-gets-dropped">
+    Which of your data the platform keeps and which it discards
+  </Card>
+  <Card horizontal title="Troubleshooting" icon="screwdriver-wrench" className="tone-api" href="/onboarding/api/troubleshooting">
+    No data, refused requests, odd numbers
+  </Card>
+</CardGroup>
 
 ## Reports
 
-| Guide | For |
-|---|---|
-| [Share a signed report](signed-reports.md) | a signed, shareable report of your usage for a grant program, an investor or a partner, verifiable by anyone |
+<CardGroup cols={1}>
+  <Card horizontal title="Share a signed report" icon="file-signature" className="tone-report" href="/onboarding/signed-reports">
+    A signed, shareable report of your usage for a grant program, an investor or a partner, verifiable by anyone
+  </Card>
+</CardGroup>
 
 ## How the guides are tested
 

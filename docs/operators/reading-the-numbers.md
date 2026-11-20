@@ -1,6 +1,7 @@
 ---
 title: "What the numbers mean"
 description: "Bands, daily-unique visitors and span-derived API data, and how they shape cross-project comparisons."
+icon: "magnifying-glass-chart"
 ---
 
 Start with the **integrity grade**: every project carries an A, B or C grade over the range you

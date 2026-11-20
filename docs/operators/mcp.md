@@ -2,6 +2,7 @@
 title: "AI assistants for operators (MCP)"
 sidebarTitle: "AI assistants (MCP)"
 description: "Give an AI client the global view: search projects, rank them and compare them, read-only."
+icon: "robot"
 ---
 
 The MCP server at `https://app.<BASE_DOMAIN>/mcp` (production: `https://app.veristar.app/mcp`)

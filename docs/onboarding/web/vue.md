@@ -1,6 +1,8 @@
 ---
 title: "Vue"
 description: "Add the tracker to a Vue app built with Vite and Vue Router."
+icon: "vuejs"
+iconType: "brands"
 ---
 
 For a Vue app built with Vite, with Vue Router. Tested by the example

@@ -1,6 +1,7 @@
 ---
 title: "Astro"
 description: "Add the tracker to an Astro site, static or server rendered."
+icon: "meteor"
 ---
 
 For Astro sites, static or server rendered. Tested by the example

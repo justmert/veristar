@@ -1,6 +1,8 @@
 ---
 title: "Static HTML"
 description: "Add the tracker to hand-written pages and sites built by a static site generator."
+icon: "html5"
+iconType: "brands"
 ---
 
 For hand-written pages and for sites built by a static site generator. Tested by the example site

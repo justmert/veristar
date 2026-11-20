@@ -1,6 +1,7 @@
 ---
 title: "Secret rotation"
 description: "Replace each secret of an environment, and what users notice while you do."
+icon: "rotate"
 ---
 
 How to replace each secret of an environment, what changes for users while you do, and what

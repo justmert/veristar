@@ -2,6 +2,7 @@
 title: "Wallet events from the Stellar Wallets Kit"
 sidebarTitle: "Wallets Kit"
 description: "Count wallet connections and other wallet activity from the Stellar Wallets Kit."
+icon: "wallet"
 ---
 
 If your dapp uses [`@creit.tech/stellar-wallets-kit`](https://github.com/Creit-Tech/Stellar-Wallets-Kit)

@@ -1,6 +1,7 @@
 ---
 title: "Security policy"
 description: "How to report a vulnerability privately, the response targets and the scope of the policy."
+icon: "shield"
 ---
 
 ## Reporting a vulnerability

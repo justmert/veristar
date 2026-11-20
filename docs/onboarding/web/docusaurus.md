@@ -1,6 +1,7 @@
 ---
 title: "Docusaurus"
 description: "Add the tracker to a Docusaurus documentation site with the scripts option."
+icon: "book-open"
 ---
 
 For a Docusaurus 3 site. Tested by the example

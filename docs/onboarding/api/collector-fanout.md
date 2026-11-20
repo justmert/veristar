@@ -2,6 +2,7 @@
 title: "Fan-out from your own Collector"
 sidebarTitle: "Collector fan-out"
 description: "Forward metrics from an OpenTelemetry Collector you already run, without changing your apps."
+icon: "share-nodes"
 ---
 
 If your apps already send their telemetry to an OpenTelemetry Collector of your own, you do not

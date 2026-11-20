@@ -1,6 +1,7 @@
 ---
 title: "Supply chain"
 description: "How images and the tracker are built, gated, signed, verified and kept up to date."
+icon: "boxes-stacked"
 ---
 
 This page describes how the platform's images and the tracker are built, gated, signed, verified
@@ -31,7 +32,7 @@ The console image carries the public website, and its build gets the website's c
 from the repository variable `SITE_ORIGIN` (unset, the site's default `https://veristar.app`
 applies) and its repository links from the repository's own URL
 (`<server url>/<owner>/<repo>`), as the build arguments `SITE_ORIGIN` and `REPO_URL`
-([../../apps/site/README.md](../../apps/site/README.md)).
+([`apps/site/README.md`](https://github.com/justmert/veristar/blob/main/apps/site/README.md)).
 
 For each image, in `.github/actions/release-image/action.yml`:
 

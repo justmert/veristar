@@ -1,6 +1,7 @@
 ---
 title: "Erasure requests"
 description: "What an operator does when a data subject or a tenant asks for data to be erased."
+icon: "eraser"
 ---
 
 What an operator does when a data subject or a tenant asks for data to be erased. What can be

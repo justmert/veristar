@@ -2,6 +2,7 @@
 title: "Queue backlog and dead-letter queues"
 sidebarTitle: "Queue backlog and DLQ"
 description: "Handle a growing queue and inspect or replay dead-lettered messages."
+icon: "inbox"
 ---
 
 Web events wait in `WEB_EVENTS` until the replayer has stored them in Umami. API metric batches

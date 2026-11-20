@@ -2,6 +2,7 @@
 title: "Certificate problems"
 sidebarTitle: "Certificates"
 description: "Diagnose and fix certificate issuance and renewal on edge and core nodes."
+icon: "certificate"
 ---
 
 Every node's Caddy gets its own certificates from Let's Encrypt with the ACME DNS-01 challenge

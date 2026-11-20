@@ -2,6 +2,7 @@
 title: "Share a signed report"
 sidebarTitle: "Signed reports"
 description: "Create a signed usage report of your project for a period, share it by link, and let anyone verify it."
+icon: "file-signature"
 ---
 
 A signed usage report states your project's usage for a period: web traffic, API requests,

@@ -1,6 +1,7 @@
 ---
 title: "Signing in"
 description: "Sign in to the console with GitHub, a Stellar wallet or a passkey, and link them to one account."
+icon: "right-to-bracket"
 ---
 
 You sign in to the console with a GitHub account, a Stellar wallet or a

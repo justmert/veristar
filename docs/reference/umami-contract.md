@@ -1,6 +1,7 @@
 ---
 title: "Umami contract"
 description: "What the platform relies on in Umami, checked automatically against the pinned image."
+icon: "file-contract"
 ---
 
 What the platform relies on in Umami, confirmed by running the pinned image. Umami is the

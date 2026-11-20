@@ -2,6 +2,7 @@
 title: "Verifying an environment"
 sidebarTitle: "Verification"
 description: "Checks that prove a converged environment works, from the outside in."
+icon: "circle-check"
 ---
 
 These checks prove that a converged environment works, from the outside in. Run them after

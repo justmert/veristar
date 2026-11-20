@@ -2,6 +2,7 @@
 title: "Rebuild and data migration"
 sidebarTitle: "Rebuild and data migration"
 description: "How a new operator builds its own environment, moves every tenant's data, takes over the domain and rotates credentials."
+icon: "hammer"
 ---
 
 This page shows a new operator how to build its own environment from this repository, move

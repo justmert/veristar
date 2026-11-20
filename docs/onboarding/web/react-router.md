@@ -1,6 +1,7 @@
 ---
 title: "React Router with server rendering"
 description: "Add the tracker to a React Router app in framework mode with server rendering."
+icon: "route"
 ---
 
 For React Router in framework mode (the successor of Remix), rendered on the server. Tested by the

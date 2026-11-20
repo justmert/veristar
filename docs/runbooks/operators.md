@@ -1,6 +1,7 @@
 ---
 title: "Adding and removing operators"
 description: "Manage the operator roster, keep the deploy settings as the bootstrap, and recover from a lockout."
+icon: "users-gear"
 ---
 
 Operators are the SCF people who review projects, suspend or remove them, read the global views

@@ -2,6 +2,7 @@
 title: "Upgrading an environment"
 sidebarTitle: "Upgrade"
 description: "Release a new version and roll it out one node at a time, with signatures checked first."
+icon: "circle-up"
 ---
 
 A new version of the platform is a release tag. You roll it out with `deploy.yml`, one node at a

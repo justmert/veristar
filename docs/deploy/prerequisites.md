@@ -2,6 +2,7 @@
 title: "Prerequisites and accounts"
 sidebarTitle: "Prerequisites"
 description: "The accounts, values and controller tools an environment needs before the first command."
+icon: "list-check"
 ---
 
 This page lists what you need before the first deployment command: the accounts and values you

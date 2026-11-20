@@ -1,6 +1,7 @@
 ---
 title: "Threat model"
 description: "What the platform protects, its trust boundaries, and the mitigation and test for each threat."
+icon: "crosshairs"
 ---
 
 This page lists what the platform protects and where its trust boundaries are. For each threat it

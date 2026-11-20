@@ -2,6 +2,7 @@
 title: "Operator runbooks"
 sidebarTitle: "Overview"
 description: "One runbook per operational task, and the conventions every runbook shares."
+icon: "book"
 ---
 
 One runbook per operational task. Each runbook states when to use it, the numbered steps, how

@@ -2,6 +2,7 @@
 title: "0001: Umami as the base platform"
 sidebarTitle: "0001: Umami as the base"
 description: "Why Veristar builds its web analytics on Umami."
+icon: "cube"
 ---
 
 - Status: accepted

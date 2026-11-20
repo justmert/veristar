@@ -1,6 +1,7 @@
 ---
 title: "API metrics storage"
 description: "The tables, functions, rights and queries that hold API latency metrics."
+icon: "database"
 ---
 
 Reference for the tables, functions, rights and queries that hold

@@ -1,6 +1,7 @@
 ---
 title: "Point-in-time restore"
 description: "Restore the PostgreSQL cluster to a past moment on a fresh node, without touching the running cluster."
+icon: "clock-rotate-left"
 ---
 
 Restores the whole PostgreSQL cluster (both databases, `umami` and `platform`) to a moment in

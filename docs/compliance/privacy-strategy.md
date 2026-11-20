@@ -1,6 +1,7 @@
 ---
 title: "Privacy strategy"
 description: "How the platform minimises personal data: what is held in memory, queued and stored, and for how long."
+icon: "eye-slash"
 ---
 
 How the service keeps personal data to a minimum: what it holds in memory,

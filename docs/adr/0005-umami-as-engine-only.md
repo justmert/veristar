@@ -2,6 +2,7 @@
 title: "0005: Umami as the engine, the dashboard in the console"
 sidebarTitle: "0005: Umami as the engine"
 description: "Umami stays the ingestion target, the store and the metric computation; its interface is closed to projects and the web dashboard is a console page."
+icon: "gears"
 ---
 
 - Status: accepted

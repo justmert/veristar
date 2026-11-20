@@ -1,6 +1,7 @@
 ---
 title: "Operators and passkeys"
 description: "Manage the operator roster in the console and confirm the operator area with a passkey."
+icon: "users"
 ---
 
 The operator roster lists the people who hold the operator view. Operator admins manage it on the

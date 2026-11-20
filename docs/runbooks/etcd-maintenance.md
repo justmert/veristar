@@ -2,6 +2,7 @@
 title: "etcd compaction and defragmentation"
 sidebarTitle: "etcd maintenance"
 description: "Compact and defragment the etcd cluster by hand, and clear a NOSPACE alarm."
+icon: "broom"
 ---
 
 etcd holds Patroni's leader key and the cluster state. It keeps every revision of every key until

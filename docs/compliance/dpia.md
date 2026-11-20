@@ -2,6 +2,7 @@
 title: "Data protection impact assessment"
 sidebarTitle: "DPIA"
 description: "The data protection impact assessment for cookieless web analytics and API request metrics."
+icon: "clipboard-list"
 ---
 
 The service, as processor, prepares this assessment to help tenants

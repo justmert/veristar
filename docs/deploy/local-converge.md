@@ -2,6 +2,7 @@
 title: "Local converge: the Ansible roles against real Debian 13 systems"
 sidebarTitle: "Local converge"
 description: "Run the same Ansible roles against Debian 13 containers on one machine."
+icon: "laptop-code"
 ---
 
 The local converge runs the production Ansible playbooks against Debian 13 systemd containers on

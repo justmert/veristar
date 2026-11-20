@@ -1,6 +1,7 @@
 ---
 title: "Availability statement"
 description: "The availability targets, the failover behaviour they rest on, and what has been measured."
+icon: "signal"
 ---
 
 Veristar targets 99.99% availability for ingestion and 99.90% for the dashboards

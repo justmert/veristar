@@ -2,6 +2,7 @@
 title: "MCP access: revoke and investigate"
 sidebarTitle: "MCP access"
 description: "Find and revoke an MCP access key or connector, review what it did, and investigate failing tool calls."
+icon: "robot"
 ---
 
 AI clients read analytics through the MCP server at `/mcp` with an access key (`sa_mcp_` plus 40
