@@ -1,5 +1,4 @@
 import { useMutation } from "@tanstack/react-query";
-import { cn } from "@veristar/brand/cn";
 import { X } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, type ReactNode, useId, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
@@ -10,6 +9,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { FormMessage } from "@/components/error-panel";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useProject } from "@/pages/project-layout";
@@ -260,27 +260,13 @@ export function CampaignParams({
   const disabled = !canEdit || !isOwner || save.isPending;
   const control = (
     <span className="flex items-center gap-3 sm:min-h-9">
-      <button
+      <Switch
         id={id}
-        type="button"
-        role="switch"
-        aria-checked={checked}
+        checked={checked}
         aria-labelledby={`${id}-l`}
         disabled={disabled}
-        onClick={() => save.mutate(!checked)}
-        className={cn(
-          "relative inline-flex h-5 w-[34px] shrink-0 items-center rounded-full transition-colors duration-(--vs-duration-press) ease-standard focus-ring disabled:cursor-not-allowed disabled:opacity-60",
-          checked ? "bg-success" : "bg-line-strong",
-        )}
-      >
-        <span
-          aria-hidden
-          className={cn(
-            "absolute top-[3px] left-[3px] size-3.5 rounded-full transition-transform duration-(--vs-duration-press) ease-standard motion-reduce:transition-none",
-            checked ? "translate-x-[14px] bg-on-accent" : "bg-fg-2",
-          )}
-        />
-      </button>
+        onCheckedChange={(on) => save.mutate(on)}
+      />
       <span id={`${id}-l`} className="text-small text-fg-2">
         Keep <code className="font-mono text-caption">utm_*</code> and{" "}
         <code className="font-mono text-caption">ref</code> in page addresses
