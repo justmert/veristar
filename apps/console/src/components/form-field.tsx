@@ -13,7 +13,8 @@ type Common = {
 };
 
 // label, control, hint and error wired together with ids, so a screen reader
-// reads the hint and the error with the control
+// reads the hint and the error with the control. the error sits right under
+// the control, above a hint such as a character count
 function useIds() {
   const base = useId();
   return { control: `${base}-c`, hint: `${base}-h`, error: `${base}-e` };
@@ -52,8 +53,8 @@ export function TextField({
         aria-describedby={describedBy(ids, hint, error)}
         {...input}
       />
-      {hint ? <FieldDescription id={ids.hint}>{hint}</FieldDescription> : null}
       {error ? <FieldError id={ids.error}>{error}</FieldError> : null}
+      {hint ? <FieldDescription id={ids.hint}>{hint}</FieldDescription> : null}
     </Field>
   );
 }
@@ -75,8 +76,8 @@ export function TextAreaField({
         aria-describedby={describedBy(ids, hint, error)}
         {...input}
       />
-      {hint ? <FieldDescription id={ids.hint}>{hint}</FieldDescription> : null}
       {error ? <FieldError id={ids.error}>{error}</FieldError> : null}
+      {hint ? <FieldDescription id={ids.hint}>{hint}</FieldDescription> : null}
     </Field>
   );
 }
@@ -102,8 +103,8 @@ export function SelectField({
       >
         {children}
       </NativeSelect>
-      {hint ? <FieldDescription id={ids.hint}>{hint}</FieldDescription> : null}
       {error ? <FieldError id={ids.error}>{error}</FieldError> : null}
+      {hint ? <FieldDescription id={ids.hint}>{hint}</FieldDescription> : null}
     </Field>
   );
 }
