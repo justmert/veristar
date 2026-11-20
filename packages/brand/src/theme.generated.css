@@ -24,6 +24,8 @@
   --color-line: var(--vs-line);
   --color-line-strong: var(--vs-line-strong);
   --color-line-subtle: var(--vs-line-subtle);
+  --color-line-2: var(--vs-line-2);
+  --color-line-focus: var(--vs-line-focus);
   --color-line-input: var(--vs-line-input);
   --color-fg: var(--vs-fg);
   --color-fg-2: var(--vs-fg-2);
@@ -113,6 +115,14 @@
   --text-display--line-height: var(--vs-text-display-line);
   --text-display--font-weight: var(--vs-text-display-weight);
   --text-display--letter-spacing: var(--vs-text-display-tracking);
+  --text-grade-lg: var(--vs-text-grade-lg);
+  --text-grade-lg--line-height: var(--vs-text-grade-lg-line);
+  --text-grade-lg--font-weight: var(--vs-text-grade-lg-weight);
+  --text-grade-lg--letter-spacing: var(--vs-text-grade-lg-tracking);
+  --text-grade-xl: var(--vs-text-grade-xl);
+  --text-grade-xl--line-height: var(--vs-text-grade-xl-line);
+  --text-grade-xl--font-weight: var(--vs-text-grade-xl-weight);
+  --text-grade-xl--letter-spacing: var(--vs-text-grade-xl-tracking);
   --radius-bar: var(--vs-radius-bar);
   --radius-sm: var(--vs-radius-sm);
   --radius-md: var(--vs-radius-md);

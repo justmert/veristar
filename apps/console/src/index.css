@@ -5,29 +5,6 @@
 /* the mark and the motion presets carry classes too */
 @source "../../../packages/brand/src";
 
-/* console tokens on top of the brand, for both themes. line-2 sits between
-   line and line-strong: the edge of inputs, segmented controls and dialogs.
-   line-focus is the edge of a selected tile */
-:root,
-[data-theme="dark"] {
-  --vs-line-2: #3d3d3d;
-  --vs-line-focus: #6a6a6a;
-}
-[data-theme="light"] {
-  --vs-line-2: #cacaca;
-  --vs-line-focus: #8c8c8c;
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) {
-    --vs-line-2: #cacaca;
-    --vs-line-focus: #8c8c8c;
-  }
-}
-@theme inline {
-  --color-line-2: var(--vs-line-2);
-  --color-line-focus: var(--vs-line-focus);
-}
-
 /* the period that is still running: stripes of the bar's own colour (the
    text colour) on nothing, at 135 degrees. a texture, the same on every
    chart; svg bars use components/charts/hatch.tsx */

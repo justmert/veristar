@@ -25,7 +25,9 @@ export const palette = {
     310: "#303030",
     315: "#313131",
     335: "#373737",
+    360: "#3d3d3d",
     400: "#484848",
+    524: "#6a6a6a",
     550: "#717171",
     560: "#747474",
     680: "#989898",
@@ -45,6 +47,7 @@ export const palette = {
     630: "#898989",
     640: "#8c8c8c",
     790: "#bababa",
+    839: "#cacaca",
     880: "#d7d7d7",
     885: "#d9d9d9",
     915: "#e3e3e3",
@@ -114,6 +117,11 @@ export type Roles = {
   line: string; // every border by default
   "line-strong": string; // control borders, the chart baseline
   "line-subtle": string; // table row rules, chart grid
+  // between line and line-strong: the edge of inputs, segmented controls
+  // and dialogs in the console
+  "line-2": string;
+  // the edge of a selected tile
+  "line-focus": string;
   // the edge of a form control (input, select, checkbox): at least 3:1
   // against the control's fill and every surface it sits on (wcag 1.4.11)
   "line-input": string;
@@ -194,6 +202,8 @@ export const themes = {
     line: p.neutral[315],
     "line-strong": p.neutral[400],
     "line-subtle": p.neutral[285],
+    "line-2": p.neutral[360],
+    "line-focus": p.neutral[524],
     // 3.94 on sunken, 3.53 on raised, 3.32 on overlay
     "line-input": p.neutral[560],
     fg: p.neutral[949],
@@ -253,6 +263,8 @@ export const themes = {
     line: p.paper[885],
     "line-strong": p.paper[790],
     "line-subtle": p.paper[915],
+    "line-2": p.paper[839],
+    "line-focus": p.paper[640],
     // 3.19 on sunken, 3.40 on ground, 3.64 on raised and overlay
     "line-input": p.paper[620],
     fg: p.paper[205],
@@ -328,6 +340,9 @@ export const type = {
   metric: { size: "28px", line: "36px", weight: 500, tracking: "-0.02em" },
   h1: { size: "32px", line: "40px", weight: 600, tracking: "-0.03em" },
   display: { size: "48px", line: "52px", weight: 600, tracking: "-0.035em" },
+  // the letter inside the large integrity grade rings, set on one line
+  "grade-lg": { size: "56px", line: "56px", weight: 600, tracking: "-0.03em" },
+  "grade-xl": { size: "64px", line: "64px", weight: 600, tracking: "-0.03em" },
 } as const;
 
 // the spacing scale, 4 px base. the console's tailwind spacing is generated
@@ -335,18 +350,28 @@ export const type = {
 // outside it. rhythm: page gutter 6 (4 on a phone), gap between page
 // sections 8, card padding 5 (4 on a phone), gap inside a card 3, form
 // field gap 4.
+// the half steps are for the tight insides of controls, chips and rows;
+// 7, 9, 14 and 24 are the console's page and panel rhythm.
 export const space = {
   0: "0px",
+  0.5: "2px",
   1: "4px",
+  1.5: "6px",
   2: "8px",
+  2.5: "10px",
   3: "12px",
+  3.5: "14px",
   4: "16px",
   5: "20px",
   6: "24px",
+  7: "28px",
   8: "32px",
+  9: "36px",
   10: "40px",
   12: "48px",
+  14: "56px",
   16: "64px",
+  24: "96px",
 } as const;
 
 export const radius = {
