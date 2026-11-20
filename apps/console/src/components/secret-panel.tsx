@@ -56,12 +56,12 @@ export function SecretPanel({
       className={
         plain
           ? "flex flex-col gap-3"
-          : "flex animate-rise-in flex-col gap-3 rounded-lg border border-success-line bg-raised p-4"
+          : "flex animate-rise-in flex-col gap-3 rounded-lg border border-line-2 bg-raised p-4"
       }
     >
       {plain ? null : (
         <div className="flex items-start gap-3">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-line-strong text-success">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-line-strong text-fg-2">
             <KeyRound aria-hidden className="size-4" />
           </span>
           <div className="flex min-w-0 flex-col gap-1">

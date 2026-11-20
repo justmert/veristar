@@ -380,7 +380,7 @@ export function DataTable<Row>({
               data-fade="start"
               className={cn(
                 FADE,
-                "left-0 rounded-tl-lg bg-linear-to-r",
+                "left-0",
                 frame.start && "opacity-100",
               )}
             />
@@ -389,7 +389,7 @@ export function DataTable<Row>({
               data-fade="end"
               className={cn(
                 FADE,
-                "right-0 rounded-tr-lg bg-linear-to-l",
+                "right-0",
                 frame.end && "opacity-100",
               )}
             />
@@ -457,9 +457,10 @@ const HEAD =
 // the header sticks to the top of the window, under the shell header where
 // the shell has one (below lg)
 const STICKY = "sticky top-(--vs-header) z-(--vs-layer-sticky) lg:top-0";
-// the edge of a table that scrolls sideways: a fade where more columns are
+// the edge of a table that scrolls sideways: a quiet line where more columns
+// lie beyond it, never a gradient
 const FADE =
-  "pointer-events-none absolute inset-y-0 z-(--vs-layer-sticky) w-6 from-raised to-transparent opacity-0 transition-opacity duration-(--vs-duration-press) ease-standard";
+  "pointer-events-none absolute inset-y-0 z-(--vs-layer-sticky) w-px bg-line-strong opacity-0 transition-opacity duration-(--vs-duration-press) ease-standard";
 // a cell keeps 8 px above and below, so a two-line cell (name and slug)
 // makes a row of 48 px or more and its lines never touch the rules
 const CELL =

@@ -191,7 +191,7 @@ export function CommandPalette({
           id={listId}
           role="listbox"
           aria-label="Results"
-          className="scroll-fade min-h-0 overflow-y-auto p-2"
+          className="min-h-0 overflow-y-auto p-2"
         >
           {entries.length === 0 ? (
             <p role="status" className="px-2 py-6 text-center text-small text-fg-2">

@@ -58,7 +58,7 @@ export function CodeBlock({
       <pre
         className={cn(
           "px-3 py-3 text-small text-fg",
-          wrap ? "whitespace-pre-wrap break-all" : "scroll-fade-x overflow-x-auto whitespace-pre",
+          wrap ? "whitespace-pre-wrap break-all" : "overflow-x-auto whitespace-pre",
         )}
       >
         <code>{code}</code>
