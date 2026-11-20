@@ -238,7 +238,9 @@ test("the privacy page resets the whole site after the domain is typed and confi
   );
   await dialog.getByRole("button", { name: "Reset site data" }).click();
   expect((await sent).status()).toBe(202);
-  await expect(page.getByText(`Everything of this site on ${host}: erased`)).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByText(`Everything of this site on ${host}: erased`)).toBeVisible({
+    timeout: 120_000,
+  });
   await page.screenshot({ path: join(shots, "04-reset-done.png"), fullPage: true });
 
   const row = await latest();
