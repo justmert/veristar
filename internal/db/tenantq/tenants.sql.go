@@ -16,7 +16,7 @@ const acceptTenantTerms = `-- name: AcceptTenantTerms :one
 update cp.tenants
 set accepted_terms_version = $1, updated_at = now()
 where id = cp.current_tenant_id()
-returning id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at
+returning id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at, demo
 `
 
 func (q *Queries) AcceptTenantTerms(ctx context.Context, version *string) (CpTenant, error) {
@@ -38,6 +38,7 @@ func (q *Queries) AcceptTenantTerms(ctx context.Context, version *string) (CpTen
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.StatusChangedAt,
+		&i.Demo,
 	)
 	return i, err
 }
@@ -411,7 +412,7 @@ set name = coalesce($1::text, name),
     description = coalesce($2::text, description),
     updated_at = now()
 where id = cp.current_tenant_id()
-returning id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at
+returning id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at, demo
 `
 
 type UpdateTenantProfileParams struct {
@@ -438,6 +439,7 @@ func (q *Queries) UpdateTenantProfile(ctx context.Context, arg UpdateTenantProfi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.StatusChangedAt,
+		&i.Demo,
 	)
 	return i, err
 }

@@ -15,7 +15,7 @@ import (
 const enrollTenant = `-- name: EnrollTenant :one
 insert into cp.tenants (slug, name, description, status, enrollment_answers, accepted_terms_version, created_by)
 values ($1, $2, $3, $4, $5, $6, $7)
-returning id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at
+returning id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at, demo
 `
 
 type EnrollTenantParams struct {
@@ -55,6 +55,7 @@ func (q *Queries) EnrollTenant(ctx context.Context, arg EnrollTenantParams) (CpT
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.StatusChangedAt,
+		&i.Demo,
 	)
 	return i, err
 }
@@ -193,8 +194,64 @@ func (q *Queries) GetSiteTenantID(ctx context.Context, id uuid.UUID) (uuid.UUID,
 	return tenant_id, err
 }
 
+const listDemoTenantsPage = `-- name: ListDemoTenantsPage :many
+select t.id, t.slug, t.name, t.description, t.status, t.is_internal, t.enrollment_answers, t.accepted_terms_version, t.umami_team_id, t.created_by, t.approved_by, t.status_reason, t.created_at, t.updated_at, t.status_changed_at, t.demo
+from cp.tenants t
+where t.demo
+  and t.status <> 'removed'
+  and ($1::timestamptz is null
+       or (t.created_at, t.id) > ($1::timestamptz, $2::uuid))
+order by t.created_at, t.id
+limit $3
+`
+
+type ListDemoTenantsPageParams struct {
+	AfterCreatedAt *time.Time
+	AfterID        uuid.NullUUID
+	RowLimit       int32
+}
+
+// the projects of the public demo for GET /api/demo/tenants (contract 21),
+// keyset over (created_at, id) like ListUserTenantsPage
+func (q *Queries) ListDemoTenantsPage(ctx context.Context, arg ListDemoTenantsPageParams) ([]CpTenant, error) {
+	rows, err := q.db.Query(ctx, listDemoTenantsPage, arg.AfterCreatedAt, arg.AfterID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CpTenant{}
+	for rows.Next() {
+		var i CpTenant
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.Description,
+			&i.Status,
+			&i.IsInternal,
+			&i.EnrollmentAnswers,
+			&i.AcceptedTermsVersion,
+			&i.UmamiTeamID,
+			&i.CreatedBy,
+			&i.ApprovedBy,
+			&i.StatusReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.StatusChangedAt,
+			&i.Demo,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserTenantsPage = `-- name: ListUserTenantsPage :many
-select t.id, t.slug, t.name, t.description, t.status, t.is_internal, t.enrollment_answers, t.accepted_terms_version, t.umami_team_id, t.created_by, t.approved_by, t.status_reason, t.created_at, t.updated_at, t.status_changed_at, m.role
+select t.id, t.slug, t.name, t.description, t.status, t.is_internal, t.enrollment_answers, t.accepted_terms_version, t.umami_team_id, t.created_by, t.approved_by, t.status_reason, t.created_at, t.updated_at, t.status_changed_at, t.demo, m.role
 from cp.tenant_members m
 join cp.tenants t on t.id = m.tenant_id
 where m.user_id = $1
@@ -228,6 +285,7 @@ type ListUserTenantsPageRow struct {
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 	StatusChangedAt      time.Time
+	Demo                 bool
 	Role                 string
 }
 
@@ -263,6 +321,7 @@ func (q *Queries) ListUserTenantsPage(ctx context.Context, arg ListUserTenantsPa
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.StatusChangedAt,
+			&i.Demo,
 			&i.Role,
 		); err != nil {
 			return nil, err
@@ -290,6 +349,42 @@ type RefreshUserLoginParams struct {
 func (q *Queries) RefreshUserLogin(ctx context.Context, arg RefreshUserLoginParams) error {
 	_, err := q.db.Exec(ctx, refreshUserLogin, arg.GithubLogin, arg.GithubID)
 	return err
+}
+
+const setTenantDemo = `-- name: SetTenantDemo :one
+with old as (select o.id, o.demo from cp.tenants o where o.id = $2::uuid for update)
+update cp.tenants t set demo = $1::boolean, updated_at = now()
+from old
+where t.id = old.id
+returning t.id, t.slug, t.name, t.status, old.demo as was_demo
+`
+
+type SetTenantDemoParams struct {
+	Demo bool
+	ID   uuid.UUID
+}
+
+type SetTenantDemoRow struct {
+	ID      uuid.UUID
+	Slug    string
+	Name    string
+	Status  string
+	WasDemo bool
+}
+
+// platformctl tenant demo: marks or unmarks a project of the public demo
+// (contract 21). the old value comes back for the audit row
+func (q *Queries) SetTenantDemo(ctx context.Context, arg SetTenantDemoParams) (SetTenantDemoRow, error) {
+	row := q.db.QueryRow(ctx, setTenantDemo, arg.Demo, arg.ID)
+	var i SetTenantDemoRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.Status,
+		&i.WasDemo,
+	)
+	return i, err
 }
 
 const tenantsCreatedSince = `-- name: TenantsCreatedSince :one

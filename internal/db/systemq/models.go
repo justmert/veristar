@@ -74,6 +74,7 @@ type CpTenant struct {
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 	StatusChangedAt      time.Time
+	Demo                 bool
 }
 
 type CpUser struct {

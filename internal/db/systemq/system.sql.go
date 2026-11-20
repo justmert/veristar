@@ -31,7 +31,7 @@ func (q *Queries) AddTenantMember(ctx context.Context, arg AddTenantMemberParams
 const createTenant = `-- name: CreateTenant :one
 insert into cp.tenants (slug, name, description, created_by)
 values ($1, $2, $3, $4)
-returning id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at
+returning id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at, demo
 `
 
 type CreateTenantParams struct {
@@ -65,6 +65,7 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (CpT
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.StatusChangedAt,
+		&i.Demo,
 	)
 	return i, err
 }

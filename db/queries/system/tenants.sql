@@ -62,3 +62,24 @@ where passkey_address = @passkey_address and deleted_at is null;
 -- it instead of the one stored at the last sign-in
 update cp.users set github_login = @github_login
 where github_id = @github_id and github_login <> @github_login;
+
+-- name: ListDemoTenantsPage :many
+-- the projects of the public demo for GET /api/demo/tenants (contract 21),
+-- keyset over (created_at, id) like ListUserTenantsPage
+select t.*
+from cp.tenants t
+where t.demo
+  and t.status <> 'removed'
+  and (sqlc.narg(after_created_at)::timestamptz is null
+       or (t.created_at, t.id) > (sqlc.narg(after_created_at)::timestamptz, sqlc.narg(after_id)::uuid))
+order by t.created_at, t.id
+limit @row_limit;
+
+-- name: SetTenantDemo :one
+-- platformctl tenant demo: marks or unmarks a project of the public demo
+-- (contract 21). the old value comes back for the audit row
+with old as (select o.id, o.demo from cp.tenants o where o.id = @id::uuid for update)
+update cp.tenants t set demo = @demo::boolean, updated_at = now()
+from old
+where t.id = old.id
+returning t.id, t.slug, t.name, t.status, old.demo as was_demo;

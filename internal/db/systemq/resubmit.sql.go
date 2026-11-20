@@ -13,7 +13,7 @@ import (
 
 const resubmitLockTenant = `-- name: ResubmitLockTenant :one
 
-select id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at from cp.tenants where id = $1 for update
+select id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at, demo from cp.tenants where id = $1 for update
 `
 
 // resubmission after rejection (control-plane-api 5.7). cp_system, after the
@@ -37,6 +37,7 @@ func (q *Queries) ResubmitLockTenant(ctx context.Context, id uuid.UUID) (CpTenan
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.StatusChangedAt,
+		&i.Demo,
 	)
 	return i, err
 }
@@ -51,7 +52,7 @@ set enrollment_answers = $1,
     status_changed_at = now(),
     updated_at = now()
 where id = $4 and status = 'rejected'
-returning id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at
+returning id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at, demo
 `
 
 type ResubmitTenantParams struct {
@@ -87,6 +88,7 @@ func (q *Queries) ResubmitTenant(ctx context.Context, arg ResubmitTenantParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.StatusChangedAt,
+		&i.Demo,
 	)
 	return i, err
 }

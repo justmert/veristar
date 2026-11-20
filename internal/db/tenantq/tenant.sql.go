@@ -107,7 +107,7 @@ func (q *Queries) CreateSite(ctx context.Context, arg CreateSiteParams) (CpSite,
 
 const getTenant = `-- name: GetTenant :one
 
-select id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at from cp.tenants where id = cp.current_tenant_id()
+select id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at, demo from cp.tenants where id = cp.current_tenant_id()
 `
 
 // queries for cp_tenant (db.WithTenant). row-level security limits every
@@ -132,6 +132,7 @@ func (q *Queries) GetTenant(ctx context.Context) (CpTenant, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.StatusChangedAt,
+		&i.Demo,
 	)
 	return i, err
 }

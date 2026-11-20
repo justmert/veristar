@@ -13,7 +13,7 @@ import (
 )
 
 const operatorTenant = `-- name: OperatorTenant :one
-select id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at from cp.tenants where id = $1 and not is_internal
+select id, slug, name, description, status, is_internal, enrollment_answers, accepted_terms_version, umami_team_id, created_by, approved_by, status_reason, created_at, updated_at, status_changed_at, demo from cp.tenants where id = $1 and not is_internal
 `
 
 func (q *Queries) OperatorTenant(ctx context.Context, id uuid.UUID) (CpTenant, error) {
@@ -35,6 +35,7 @@ func (q *Queries) OperatorTenant(ctx context.Context, id uuid.UUID) (CpTenant, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.StatusChangedAt,
+		&i.Demo,
 	)
 	return i, err
 }
