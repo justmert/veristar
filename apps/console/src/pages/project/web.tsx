@@ -34,7 +34,7 @@ import { ChangeLine, StatCard, type StatChange } from "@/components/stat-card";
 import { EmptyState, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
-import { type ZoomGroup, type ZoomPart, ZoomBlock } from "@/components/zoom-block";
+import { ZoomBlock, type ZoomGroup, type ZoomPart } from "@/components/zoom-block";
 import { formatCount, formatDateRange } from "@/lib/format";
 import { siblingUrl } from "@/lib/hosts";
 import { rejectionRows, sumUnclassified } from "@/lib/outcomes";
@@ -219,8 +219,7 @@ export function WebPage() {
             </Button>
           }
         >
-          The address names a deleted site or a site of another project. The numbers show all
-          sites.
+          The address names a deleted site or a site of another project. The numbers show all sites.
         </Notice>
       ) : null}
 
@@ -668,7 +667,11 @@ const GROUPS: ZoomGroup[] = [
     definition: "Many visitors from one network, or very many events from one visitor.",
   },
   { label: "Bots", tone: "neutral", definition: "The browser is a known bot." },
-  { label: "Rejected", tone: "critical", definition: "Refused at the edge, for the reasons below." },
+  {
+    label: "Rejected",
+    tone: "critical",
+    definition: "Refused at the edge, for the reasons below.",
+  },
   { label: "Not stored", tone: "muted", definition: "Accepted, but the write to storage failed." },
 ];
 
