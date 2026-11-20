@@ -5,6 +5,7 @@ import { api } from "@/api/endpoints";
 import { CopyButton } from "@/components/copy-button";
 import { FormMessage } from "@/components/error-panel";
 import { GoToButton } from "@/components/nav/go-to";
+import { GoToButton } from "@/components/nav/go-to";
 import { PublicFrame } from "@/components/public-frame";
 import { MessagePage } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -53,7 +54,7 @@ export function OperatorsOnlyPage() {
   });
   return (
     <MessagePage
-      icon={<LockKeyhole aria-hidden />}
+      code="403"
       title="Operators only"
       actions={
         <>
@@ -92,7 +93,7 @@ export function RouteErrorPage() {
   return (
     <PublicFrame>
       <MessagePage
-        icon={<TriangleAlert aria-hidden />}
+        code="Error"
         tone="critical"
         title="The console did not load"
         actions={

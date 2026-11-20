@@ -1,4 +1,3 @@
-import { Link2Off } from "lucide-react";
 import { Link } from "react-router";
 import { PublicFrame } from "@/components/public-frame";
 import { MessagePage } from "@/components/states";
@@ -11,7 +10,7 @@ export function SsoErrorPage() {
   return (
     <PublicFrame>
       <MessagePage
-        icon={<Link2Off aria-hidden />}
+        code="Old link"
         title="This link no longer works"
         actions={
           <Button asChild className="max-sm:h-(--vs-control-touch)">
@@ -19,8 +18,7 @@ export function SsoErrorPage() {
           </Button>
         }
       >
-        <p>The link is from an older version of the console.</p>
-        <p>Your projects and their dashboards are in the console. Sign in to see them.</p>
+        <p>It is from an older version of the console. Your projects are in the console.</p>
       </MessagePage>
     </PublicFrame>
   );
