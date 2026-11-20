@@ -327,13 +327,16 @@ func (r *Replayer) hold(ctx context.Context, part int, lock *natsx.Lock) error {
 			case <-done:
 				return
 			case <-hard:
-				// the hand-over took too long; stop what is left
+				// a backstop behind the hold's own limit (leadRun.run):
+				// stop what is left, and keep renewing the lock until the
+				// hold has handed its messages back, so no next owner
+				// starts before
+				hard = nil
 				cancel(errYield)
-				return
 			case <-stopping:
 				handOver()
 				stopping = nil
-				t := time.NewTimer(yieldTimeout + 5*time.Second)
+				t := time.NewTimer(handOverLimit + 5*time.Second)
 				defer t.Stop()
 				hard = t.C
 			case <-check.C:
@@ -341,7 +344,9 @@ func (r *Replayer) hold(ctx context.Context, part int, lock *natsx.Lock) error {
 					handOver()
 				}
 			case <-renew.C:
-				rctx, rcancel := context.WithTimeout(lctx, natsx.LockRenewEvery)
+				// detached from lctx, which a hand-over that took too long
+				// cancels while the lock must still be kept
+				rctx, rcancel := context.WithTimeout(context.WithoutCancel(lctx), natsx.LockRenewEvery)
 				_, err := lock.Renew(rctx)
 				rcancel()
 				if err != nil {
