@@ -5,8 +5,10 @@ import { Link } from "react-router";
 import { termsQuery } from "@/api/queries";
 import { Disclosure } from "@/components/disclosure";
 import { PublicFrame } from "@/components/public-frame";
+import { Pill } from "@/components/status";
+import { Button } from "@/components/ui/button";
 import { ErrorState, LoadingState, Skeleton } from "@/components/states";
-import { Markdown, outline } from "@/lib/markdown";
+import { Markdown, outline, splitNumber } from "@/lib/markdown";
 import { isDraftTerms, termsVersionLabel } from "@/lib/terms";
 
 // public: people read the terms before they sign in and enroll
@@ -19,39 +21,50 @@ export function TermsPage() {
     <PublicFrame
       center={false}
       header={
-        <Link
-          to="/"
-          className="rounded-md px-2 py-1 text-body text-fg-2 transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring"
-        >
-          Open the console
-        </Link>
+        <Button asChild variant="outline" size="sm">
+          <Link to="/">Open the console</Link>
+        </Button>
       }
     >
-      <div className="mx-auto grid w-full max-w-content gap-10 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] lg:gap-12">
+      <div className="grid w-full gap-10 lg:grid-cols-[15rem_minmax(0,700px)] lg:gap-16 lg:px-12">
         {sections.length > 0 ? (
           <nav
             aria-label="Sections"
-            className="sticky top-6 hidden flex-col gap-px self-start lg:flex"
+            className="sticky top-6 hidden flex-col gap-0.5 self-start pt-2 text-[13px] lg:flex"
           >
-            <span className="px-2 pb-2 text-caption text-fg-3">On this page</span>
-            {sections.map((s) => (
-              <a
-                key={s.id}
-                href={`#${s.id}`}
-                aria-current={current === s.id ? "location" : undefined}
-                className={cn(
-                  "rounded-md px-2 py-1 text-body transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring",
-                  current === s.id ? "bg-selected text-fg" : "text-fg-2",
-                )}
-              >
-                {s.text}
-              </a>
-            ))}
+            <span className="mb-2 px-2.5 text-caption text-fg-2">On this page</span>
+            {sections.map((s) => {
+              const { n, title } = splitNumber(s.text);
+              const on = current === s.id;
+              return (
+                <a
+                  key={s.id}
+                  href={`#${s.id}`}
+                  aria-current={on ? "location" : undefined}
+                  className={cn(
+                    "flex gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring",
+                    on ? "bg-selected text-fg" : "text-fg-2",
+                  )}
+                >
+                  {n ? (
+                    <span
+                      className={cn(
+                        "w-4 shrink-0 font-medium tabular",
+                        on ? "text-fg-2" : "text-fg-3",
+                      )}
+                    >
+                      {n}
+                    </span>
+                  ) : null}
+                  <span>{title}</span>
+                </a>
+              );
+            })}
           </nav>
         ) : (
           <span aria-hidden className="hidden lg:block" />
         )}
-        <div className="flex min-w-0 max-w-prose flex-col gap-6">
+        <div className="flex min-w-0 flex-col gap-6">
           {sections.length > 0 ? (
             <Disclosure
               summary="On this page"
@@ -90,13 +103,10 @@ export function TermsPage() {
               <Markdown
                 source={terms.data.markdown}
                 afterTitle={
-                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-fg-2">
+                  <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13.5px] text-fg-2">
                     <span title={terms.data.version}>{termsVersionLabel(terms.data.version)}</span>
                     {isDraftTerms(terms.data.version, terms.data.status) ? (
-                      <>
-                        <span aria-hidden>·</span>
-                        <span>Draft, not yet final</span>
-                      </>
+                      <Pill tone="warning">Draft, not yet final</Pill>
                     ) : null}
                   </p>
                 }
