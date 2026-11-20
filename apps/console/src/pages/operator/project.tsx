@@ -1,7 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import {
-  ArrowRight,
   Check,
   CircleAlert,
   CircleCheck,
@@ -16,19 +15,39 @@ import {
 import { type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { api } from "@/api/endpoints";
-import { operatorTenantQuery } from "@/api/queries";
-import type { OperatorSite, OperatorTenantDetail, TenantAction, TenantStatus } from "@/api/schemas";
+import { type ChainId, type OnchainView, operatorOnchainQuery } from "@/api/onchain";
+import {
+  apiCompareQuery,
+  integrityQuery,
+  operatorTenantQuery,
+  webCompareQuery,
+} from "@/api/queries";
+import type {
+  ApiCompareProject,
+  IntegrityGrade,
+  IntegrityReport,
+  OperatorSite,
+  OperatorTenantDetail,
+  TenantAction,
+  TenantStatus,
+  WebCompareProject,
+} from "@/api/schemas";
+import { Avatar } from "@/components/avatar";
+import { type TimeBucket, TimeChart } from "@/components/charts";
+import { type CheckItem, ChecksList } from "@/components/checks-list";
 import { OperatorCohortPanel } from "@/components/cohort";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { type Column, DataTable, useRowPages } from "@/components/data-table";
 import { DecisionPanel } from "@/components/decision-panel";
 import { Disclosure } from "@/components/disclosure";
 import { StellarTomlSummary, VerificationDetail } from "@/components/evidence";
-import { EvidenceList, evidenceOf } from "@/components/evidence-list";
 import { IntegrityReportView } from "@/components/integrity";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/panel";
-import { ErrorState, LoadingState, Skeleton } from "@/components/states";
+import { ScorecardTile, type ScorecardVisual } from "@/components/scorecard-tile";
+import { countChange, type StatChange } from "@/components/stat-card";
+import { EmptyState, ErrorState, LoadingState, Skeleton } from "@/components/states";
+import { Pill, type Tone } from "@/components/status";
 import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
@@ -36,13 +55,22 @@ import { Dialog } from "@/components/ui/dialog";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import { isNotFound } from "@/lib/errors";
-import { formatCount, formatDate, formatDateTimeUtc, truncateMiddle } from "@/lib/format";
+import {
+  countOf,
+  formatCompact,
+  formatCount,
+  formatDate,
+  formatDateRange,
+  formatDateTimeUtc,
+  formatTick,
+  truncateMiddle,
+} from "@/lib/format";
+import { compareSearch } from "@/lib/global";
+import { shortKey } from "@/lib/onchain";
 import { outcomeLabel } from "@/lib/outcomes";
 import { termsVersionLabel } from "@/lib/terms";
 import { NotFoundPage } from "@/pages/public/not-found";
-import { AuditEntries } from "./audit";
-import { DecisionSection, refreshOperator } from "./decision";
-import { ProjectNumbers, useProjectNumbers, withNumbers } from "./numbers";
+import { refreshOperator } from "./decision";
 import { TenantOnchainSection } from "./onchain-parts";
 
 type ActionSpec = {
@@ -147,131 +175,357 @@ export function OperatorProjectPage() {
   return <TenantDetail detail={detail.data} />;
 }
 
-// the operator's page of one project: the status, then the same order as
-// the review queue at every width (evidence and enrollment answers, the
-// decision, the figures when there are any), then the sites and the record
-// around it. a removed project shows its record
-// only: its data is deleted and no action applies.
+type CheckKey = "ownership" | "integrity" | "web" | "api" | "onchain";
+
+const DEFAULT_RANGE = { from: "", to: "" };
+
+const GRADE_RANK: Record<IntegrityGrade, number> = { A: 0, B: 1, C: 2 };
+
+// the grade of the project on each day: the lowest grade of its sites
+function dailyGrades(report: IntegrityReport | undefined, days: string[]): (IntegrityGrade | null)[] {
+  return days.map((d) => {
+    let worst: IntegrityGrade | null = null;
+    for (const s of report?.sites ?? []) {
+      const g = s.days.find((x) => x.day === d)?.grade ?? null;
+      if (g && (worst === null || GRADE_RANK[g] > GRADE_RANK[worst])) worst = g;
+    }
+    return worst;
+  });
+}
+
+type Proof = CheckItem & { done: boolean; label: string };
+
+// every proof of ownership the project holds or lacks, as the scf review
+// counts them: each live site's domain, a stellar.toml, and each on-chain
+// id's control (and an account's home domain)
+function proofsOf(sites: OperatorSite[], chain: OnchainView | undefined): Proof[] {
+  const out: Proof[] = [];
+  const live = sites.filter((x) => x.status !== "removed");
+  const mono = (t: string) => <span className="font-mono text-caption text-fg-3">{t}</span>;
+  const when = (t: string | null) =>
+    t ? <span className="text-caption text-fg-3">{formatDate(t)}</span> : undefined;
+  for (const x of live) {
+    const ok = x.verification === "verified";
+    out.push({
+      key: `domain-${x.id}`,
+      label: ok ? "Domain verified" : "Domain not verified",
+      done: ok,
+      status: ok ? "passed" : "failed",
+      children: (
+        <span className="flex flex-wrap items-baseline gap-x-3">
+          {ok ? "Domain verified" : "Domain not verified"}
+          {mono(x.domain)}
+        </span>
+      ),
+      aside: ok ? when(x.verified_at) : undefined,
+    });
+  }
+  const first = live[0];
+  if (first) {
+    const found = live.find((x) => x.stellar_toml?.status === "found");
+    out.push({
+      key: "toml",
+      label: found ? "stellar.toml found" : "stellar.toml not found",
+      done: !!found,
+      status: found ? "passed" : "missing",
+      children: (
+        <span className="flex flex-wrap items-baseline gap-x-3">
+          {found ? "stellar.toml found" : "stellar.toml not found"}
+          {mono((found ?? first).domain)}
+        </span>
+      ),
+      aside: found ? when(found.stellar_toml_checked_at) : undefined,
+    });
+  }
+  const ids = chain?.ids ?? [];
+  const accounts = ids.filter((i) => i.kind === "account");
+  const contracts = ids.filter((i) => i.kind === "contract");
+  const proven = (i: ChainId): Proof => {
+    const ok = i.verification.status === "verified";
+    const what = i.kind === "account" ? "Account" : "Contract";
+    return {
+      key: `proof-${i.id}`,
+      label: ok ? `${what} proven` : `${what} not proven`,
+      done: ok,
+      status: ok ? "passed" : "failed",
+      children: (
+        <span className="flex flex-wrap items-baseline gap-x-3">
+          {ok ? `${what} proven` : `${what} not proven`}
+          <span title={i.strkey}>{mono(shortKey(i.strkey))}</span>
+        </span>
+      ),
+      aside: ok ? when(i.verification.verified_at) : undefined,
+    };
+  };
+  for (const acc of accounts) {
+    const home = acc.read.home_domain;
+    out.push({
+      key: `home-${acc.id}`,
+      label: home ? "Home domain set" : "Home domain not set",
+      done: !!home,
+      status: home ? "passed" : "missing",
+      children: (
+        <span className="flex flex-wrap items-baseline gap-x-3">
+          {home ? "Home domain set" : "Home domain not set"}
+          <span title={acc.strkey}>{mono(home ?? shortKey(acc.strkey))}</span>
+        </span>
+      ),
+    });
+    out.push(proven(acc));
+  }
+  if (accounts.length === 0)
+    out.push({
+      key: "account",
+      label: "No account added",
+      done: false,
+      status: "missing",
+      children: "No account added",
+    });
+  for (const c of contracts) out.push(proven(c));
+  if (contracts.length === 0)
+    out.push({
+      key: "contract",
+      label: "No contract added",
+      done: false,
+      status: "missing",
+      children: "No contract added",
+    });
+  return out;
+}
+
+function compact(n: number): string {
+  return n >= 100_000 ? formatCompact(n) : formatCount(n);
+}
+
+const gradeTone = (x: IntegrityGrade | null | undefined): Tone =>
+  x === "A" ? "success" : x === "B" ? "warning" : x === "C" ? "critical" : "neutral";
+
+// the operator's page of one project: the same five-tile scorecard as the
+// scf review (ownership, traffic integrity, web, api, on-chain), so the
+// operator and the project read one picture. the picked tile opens its
+// detail under the row; the answers, the cohort and the members are in the
+// rail. a removed project shows its record only: its data is deleted and no
+// action applies.
 export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
   const t = detail.tenant;
   const removed = t.status === "removed";
   const decides = detail.allowed_actions.some((a) => a === "approve" || a === "reject");
-  const numbers = useProjectNumbers(t.id, !removed);
+  const web = useQuery({ ...webCompareQuery([t.id], DEFAULT_RANGE), enabled: !removed });
+  const api = useQuery({ ...apiCompareQuery([t.id], DEFAULT_RANGE), enabled: !removed });
+  const chain = useQuery({ ...operatorOnchainQuery(t.id, {}), enabled: !removed });
+  const report = useQuery({
+    ...integrityQuery("operator", t.id, DEFAULT_RANGE),
+    enabled: !removed && detail.sites.length > 0,
+  });
+  const w = web.data?.projects[0];
+  const a = api.data?.projects[0];
+  const days = web.data?.days ?? api.data?.days ?? [];
+  const range = web.data ?? api.data ?? null;
+  const today = new Date().toISOString().slice(0, 10);
+  const running = range ? range.to >= today : false;
+  const labels = days.map((d) => formatDate(d));
+  const proofs = chain.data || chain.error ? proofsOf(detail.sites, chain.data) : null;
+  const proofsDone = proofs?.filter((x) => x.done).length ?? 0;
+  const grade = report.data && report.data.graded_days > 0 ? report.data : null;
+  const webOk = (w?.totals.visitors ?? 0) > 0;
+  const apiOk = (a?.totals.requests ?? 0) > 0;
+  const onchain = w?.onchain ?? a?.onchain;
+  const chainOk = (onchain?.totals.ids_verified ?? 0) > 0 && (onchain?.totals.operations ?? 0) > 0;
+  const spark = (values: number[], series: 1 | 2 | 3): ScorecardVisual =>
+    values.some((x) => x > 0) ? { kind: "spark", values, series, running, labels } : { kind: "none" };
+
+  // the page opens on the weakest check, so it leads with what is missing
+  const weakest: CheckKey =
+    proofs && proofsDone < proofs.length
+      ? "ownership"
+      : grade?.grade && grade.grade !== "A"
+        ? "integrity"
+        : !webOk
+          ? "web"
+          : !apiOk
+            ? "api"
+            : !chainOk
+              ? "onchain"
+              : "integrity";
+  const [picked, setPicked] = useState<CheckKey | null>(null);
+  const open = picked ?? weakest;
+
+  const tiles: {
+    key: CheckKey;
+    name: string;
+    tone: Tone;
+    value: ReactNode;
+    sub: ReactNode;
+    change?: StatChange | null;
+    visual: ScorecardVisual;
+  }[] = [
+    {
+      key: "ownership",
+      name: "Ownership",
+      tone: !proofs ? "neutral" : proofsDone === proofs.length ? "success" : "critical",
+      value: proofs ? `${proofsDone} of ${proofs.length}` : "–",
+      sub: "proofs in place",
+      visual: proofs
+        ? { kind: "proofs", total: proofs.length, done: proofsDone, labels: proofs.map((x) => x.label) }
+        : { kind: "none" },
+    },
+    {
+      key: "integrity",
+      name: "Traffic integrity",
+      tone: gradeTone(grade?.grade),
+      value: grade?.grade ? `Grade ${grade.grade}` : "–",
+      sub: grade ? countOf(grade.graded_days, "site day") + " graded" : "not graded",
+      visual: grade ? { kind: "calendar", days: dailyGrades(report.data, days), labels } : { kind: "none" },
+    },
+    {
+      key: "web",
+      name: "Web",
+      tone: webOk ? "success" : "neutral",
+      value: webOk ? compact(w?.totals.visitors ?? 0) : "–",
+      change: webOk && w ? countChange(w.totals.visitors, w.previous_totals.visitors) : null,
+      sub: "verified visitors",
+      visual: spark((w?.series ?? []).map((x) => x.visitors ?? 0), 1),
+    },
+    {
+      key: "api",
+      name: "API",
+      tone: apiOk ? "success" : "neutral",
+      value: apiOk ? compact(a?.totals.requests ?? 0) : "–",
+      change: apiOk && a ? countChange(a.totals.requests, a.previous_totals.requests) : null,
+      sub: "requests",
+      visual: spark((a?.series ?? []).map((x) => x.requests), 3),
+    },
+    {
+      key: "onchain",
+      name: "On-chain",
+      tone: chainOk ? "success" : "neutral",
+      value: chainOk ? compact(onchain?.totals.operations ?? 0) : "–",
+      sub: chainOk ? "operations" : "no proven ID yet",
+      visual: chainOk ? spark((onchain?.series ?? []).map((x) => x.operations ?? 0), 2) : { kind: "none" },
+    },
+  ];
+
   return (
-    <div className="flex min-w-0 flex-col gap-8">
+    <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title={t.name}
+        crumb={
+          <Link to="/operator/projects" className="rounded-sm hover:text-fg focus-ring">
+            All projects
+          </Link>
+        }
         meta={<StatusBadge kind="project" status={t.status} operator />}
-        details={[
-          {
-            label: "Slug",
-            value: (
-              <span className="font-mono" title={t.slug}>
-                {truncateMiddle(t.slug, 40)}
-              </span>
-            ),
-          },
-          {
-            label: "Enrolled",
-            value: `${formatDate(t.created_at)}${t.created_by ? ` by ${t.created_by.display_name}` : ""}`,
-          },
-          ...(t.approved_by ? [{ label: "Approved by", value: t.approved_by.display_name }] : []),
-          { label: "Status since", value: formatDateTimeUtc(t.status_changed_at) },
+        items={[
+          <span key="slug" className="font-mono text-[12.5px]" title={t.slug}>
+            {truncateMiddle(t.slug, 40)}
+          </span>,
+          <span key="enrolled" title={formatDateTimeUtc(t.created_at)}>
+            Enrolled {formatDate(t.created_at)}
+            {t.created_by ? ` by ${t.created_by.display_name}` : ""}
+          </span>,
+          t.approved_by ? <span key="approved">Approved by {t.approved_by.display_name}</span> : null,
+          t.status !== "active" ? (
+            <span key="since">Status since {formatDateTimeUtc(t.status_changed_at)}</span>
+          ) : null,
+          range && !removed ? (
+            <span key="range">{`${formatDateRange(range.from, range.to)}, UTC`}</span>
+          ) : null,
         ]}
-        secondary={<MoreActions detail={detail} />}
+        secondary={
+          <>
+            {removed ? null : (
+              <Link
+                to={`/operator/compare?${compareSearch([t.id], DEFAULT_RANGE)}`}
+                className="rounded-sm px-2 text-small text-fg-2 hover:text-fg focus-ring"
+              >
+                Open in Compare
+              </Link>
+            )}
+            <Link
+              to={`/operator/audit?tenant_id=${t.id}`}
+              className="rounded-sm px-2 text-small text-fg-2 hover:text-fg focus-ring"
+            >
+              Audit log
+            </Link>
+            <MoreActions detail={detail} />
+          </>
+        }
       />
 
       {t.status_reason ? (
-        <p className="-mt-4 max-w-prose text-small break-words text-fg">
-          <span className="text-fg-2">Reason: </span>
-          {t.status_reason}
+        <p className="-mt-2 max-w-prose text-small break-words text-fg">
+          <span className="text-fg-3">Reason </span>
+          <q>{t.status_reason}</q>
         </p>
       ) : null}
 
       {detail.removal ? <Removal removal={detail.removal} /> : null}
 
-      <div className="grid min-w-0 items-start gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="flex min-w-0 flex-col gap-8">
-          <div className="grid min-w-0 items-start gap-8 lg:grid-cols-2">
-            <section aria-labelledby="evidence-h" className="flex min-w-0 flex-col gap-2">
-              <h2 id="evidence-h" className="text-title text-fg">
-                Evidence
-              </h2>
-              <EvidenceList items={withNumbers(evidenceOf(detail), numbers)} />
-            </section>
-            <Answers detail={detail} />
-          </div>
+      {decides ? (
+        <section
+          aria-label="Decision"
+          className="rounded-2xl border border-line bg-raised px-5 py-3.5 sm:px-6"
+        >
+          <DecisionPanel
+            subject={{ kind: "project", id: t.id, name: t.name, allowed: detail.allowed_actions }}
+            lead={<span className="text-fg-3">The project waits for a decision</span>}
+          />
+        </section>
+      ) : null}
 
-          {decides ? (
-            <DecisionSection>
-              <DecisionPanel
-                subject={{
-                  kind: "project",
-                  id: t.id,
-                  name: t.name,
-                  allowed: detail.allowed_actions,
-                }}
-              />
-            </DecisionSection>
-          ) : null}
+      {removed ? null : (
+        <section aria-label="Scorecard" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {tiles.map((x) => (
+            <ScorecardTile
+              key={x.key}
+              data-check={x.key}
+              name={x.name}
+              tone={x.tone}
+              value={x.value}
+              sub={x.sub}
+              change={x.change}
+              visual={x.visual}
+              selected={open === x.key}
+              onSelect={() => setPicked(x.key)}
+            />
+          ))}
+        </section>
+      )}
 
-          {removed ? null : <ProjectNumbers tenantId={t.id} numbers={numbers} />}
-
-          <Sites sites={detail.sites} decides={!removed} project={t.status} />
-
-          {removed ? null : (
-            <div className="flex min-w-0 flex-col gap-3">
-              <Fold id="integrity" title="Integrity report">
-                <IntegrityReportView
-                  scope="operator"
-                  tenantId={t.id}
-                  range={{ from: "", to: "" }}
-                  siteNames={Object.fromEntries(detail.sites.map((s) => [s.id, s.domain]))}
-                />
-              </Fold>
-
-              <Fold id="onchain" title="On-chain IDs">
-                <TenantOnchainSection tenantId={t.id} />
-              </Fold>
-
-              <Fold id="events" title="Tracker requests by outcome">
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <Counts title="Last 24 full hours, UTC" counts={detail.ingest.last_24h} />
-                  <Counts title="Last 30 full days, UTC" counts={detail.ingest.last_30d} />
-                </div>
-              </Fold>
-            </div>
+      <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_20.5rem]">
+        <div className="flex min-w-0 flex-col gap-4">
+          {removed ? (
+            <Sites sites={detail.sites} decides={false} project={t.status} />
+          ) : (
+            <CheckDetail
+              open={open}
+              tone={tiles.find((x) => x.key === open)?.tone ?? "neutral"}
+              detail={detail}
+              proofs={proofs}
+              chainError={chain.error}
+              onRetryChain={() => chain.refetch()}
+              web={w}
+              api={a}
+              days={days}
+              running={running}
+            />
           )}
-
-          <section aria-labelledby="audit-h" className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 id="audit-h" className="text-title text-fg">
-                Recent activity
-              </h2>
-              <Link
-                to={`/operator/audit?tenant_id=${t.id}`}
-                className="inline-flex items-center gap-1 rounded-sm text-small text-fg underline-offset-4 hover:underline focus-ring"
-              >
-                Open the full audit log
-                <ArrowRight aria-hidden className="size-3.5" />
-              </Link>
-            </div>
-            <AuditEntries entries={detail.recent_audit} limit={5} />
-          </section>
         </div>
-
         <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-4">
+          <Answers detail={detail} />
           <OperatorCohortPanel tenantId={t.id} readOnly={removed} />
-          <Box id="members-h" title="Members">
-            <ul className="flex flex-col gap-2 text-small">
+          <Box id="members-h" title="Members" count={detail.members.length}>
+            <ul className="flex flex-col gap-2.5">
               {detail.members.map((m) => (
                 <li
                   key={m.github_id ?? m.stellar_address ?? m.passkey_address ?? m.display_name}
-                  className="flex min-w-0 flex-wrap items-baseline gap-x-2"
+                  className="flex min-w-0 items-center gap-2.5 text-body"
+                  title={`${m.role === "owner" ? "Owner" : "Member"} since ${formatDate(m.created_at)}`}
                 >
-                  <span className="min-w-0 truncate font-medium text-fg">{m.display_name}</span>
-                  <span className="text-fg-2">
-                    {m.role === "owner" ? "Owner" : "Member"} since {formatDate(m.created_at)}
+                  <Avatar name={m.display_name} className="size-6" />
+                  <span className="min-w-0 flex-1 truncate text-fg">{m.display_name}</span>
+                  <span className="text-small text-fg-3">
+                    {m.role === "owner" ? "Owner" : "Member"}
                   </span>
                 </li>
               ))}
@@ -283,70 +537,272 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
   );
 }
 
-function Box({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+const DOT: Record<Tone, string> = {
+  success: "bg-success",
+  warning: "bg-warning",
+  critical: "bg-critical",
+  info: "bg-info",
+  neutral: "bg-fg-3",
+};
+
+const DETAIL_TITLE: Record<CheckKey, string> = {
+  ownership: "Ownership",
+  integrity: "Traffic integrity",
+  web: "Web",
+  api: "API",
+  onchain: "On-chain",
+};
+
+function dayBuckets(days: string[], running: boolean): TimeBucket[] {
+  return days.map((d, i) => ({
+    at: `${d}T00:00:00Z`,
+    tick: formatTick(d, "day"),
+    label: formatDate(d),
+    partial: running && i === days.length - 1,
+  }));
+}
+
+// the detail of the picked tile: its proofs and sites, its grades, its
+// chart with the tracker requests by outcome, or its on-chain ids
+function CheckDetail({
+  open,
+  tone,
+  detail,
+  proofs,
+  chainError,
+  onRetryChain,
+  web,
+  api,
+  days,
+  running,
+}: {
+  open: CheckKey;
+  tone: Tone;
+  detail: OperatorTenantDetail;
+  proofs: Proof[] | null;
+  chainError: unknown;
+  onRetryChain: () => void;
+  web: WebCompareProject | undefined;
+  api: ApiCompareProject | undefined;
+  days: string[];
+  running: boolean;
+}) {
+  const t = detail.tenant;
+  const link =
+    open === "web"
+      ? { to: "web", label: "Open Web" }
+      : open === "api"
+        ? { to: "api", label: "Open API" }
+        : null;
+  return (
+    <section
+      aria-labelledby="check-detail-h"
+      data-detail={open}
+      className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-raised"
+    >
+      <div className="flex items-center gap-2.5 px-5 py-3.5">
+        <span aria-hidden className={cn("size-2 rounded-full", DOT[tone])} />
+        <h2 id="check-detail-h" className="text-[15px] font-semibold text-fg">
+          {DETAIL_TITLE[open]}
+        </h2>
+        {open === "web" ? <span className="text-small text-fg-3">verified visitors per day</span> : null}
+        {open === "api" ? <span className="text-small text-fg-3">requests per day</span> : null}
+        {link ? (
+          <Link
+            to={`/operator/compare?${compareSearch([t.id], DEFAULT_RANGE)}&view=${link.to}`}
+            className="ml-auto rounded-sm text-small text-fg-2 hover:text-fg focus-ring"
+          >
+            Open in Compare
+          </Link>
+        ) : null}
+      </div>
+      {open === "ownership" ? (
+        <div className="flex min-w-0 flex-col gap-5 border-t border-line px-5 pt-2 pb-5">
+          {chainError ? (
+            <ErrorState
+              compact
+              title="The on-chain IDs did not load"
+              error={chainError}
+              onRetry={onRetryChain}
+            />
+          ) : null}
+          {proofs ? <ChecksList label="Proofs of ownership" items={proofs} /> : null}
+          <Sites sites={detail.sites} decides project={t.status} />
+        </div>
+      ) : open === "integrity" ? (
+        <div className="min-w-0 border-t border-line p-5">
+          <IntegrityReportView
+            scope="operator"
+            tenantId={t.id}
+            range={DEFAULT_RANGE}
+            siteNames={Object.fromEntries(detail.sites.map((x) => [x.id, x.domain]))}
+          />
+        </div>
+      ) : open === "onchain" ? (
+        <div className="min-w-0 border-t border-line p-5">
+          <TenantOnchainSection tenantId={t.id} />
+        </div>
+      ) : (
+        <div className="flex min-w-0 flex-col">
+          <div className="px-5 pb-4">
+            {open === "web" ? (
+              web && web.totals.visitors > 0 ? (
+                <TimeChart
+                  title="Verified visitors"
+                  description="per day, UTC"
+                  headingLevel={3}
+                  buckets={dayBuckets(days, running)}
+                  series={[
+                    {
+                      key: "visitors",
+                      label: "Verified visitors",
+                      tone: "series-1",
+                      values: web.series.map((x) => (x.aggregated ? x.visitors : null)),
+                    },
+                  ]}
+                  axisFormat={formatCompact}
+                  state="data"
+                />
+              ) : (
+                <EmptyState compact title="No web data in this range" />
+              )
+            ) : api && api.totals.requests > 0 ? (
+              <TimeChart
+                title="API requests"
+                description="per day, UTC"
+                headingLevel={3}
+
+                buckets={dayBuckets(days, running)}
+                series={[
+                  {
+                    key: "requests",
+                    label: "API requests",
+                    tone: "series-3",
+                    values: api.series.map((x) => x.requests),
+                  },
+                ]}
+                axisFormat={formatCompact}
+                state="data"
+              />
+            ) : (
+              <EmptyState compact title="No API requests in this range" />
+            )}
+          </div>
+          {open === "web" ? <Outcomes ingest={detail.ingest} /> : null}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// the tracker requests of the last 30 full days as accepted, held back and
+// refused; every outcome of the last 24 hours and 30 days opens under them
+function Outcomes({ ingest }: { ingest: OperatorTenantDetail["ingest"] }) {
+  const sum = (pred: (k: string) => boolean) =>
+    Object.entries(ingest.last_30d)
+      .filter(([k]) => pred(k))
+      .reduce((n, [, v]) => n + v, 0);
+  const accepted = sum((k) => k === "accepted");
+  const held = sum((k) => k.startsWith("quarantine"));
+  const refused = sum((k) => k !== "accepted" && !k.startsWith("quarantine"));
+  return (
+    <div className="flex min-w-0 flex-col border-t border-line">
+      <h3 className="px-5 pt-3 text-small font-medium text-fg-2">Tracker requests, last 30 full days</h3>
+      <dl className="grid grid-cols-3">
+        {[
+          ["Accepted", accepted],
+          ["Held back", held],
+          ["Refused", refused],
+        ].map(([k, v], i) => (
+          <div
+            key={k as string}
+            className={cn("flex flex-col gap-0.5 px-5 py-3", i > 0 && "border-l border-line")}
+          >
+            <dt className="text-small text-fg-3">{k}</dt>
+            <dd className="text-[17px] font-semibold text-fg tabular">{formatCount(v as number)}</dd>
+          </div>
+        ))}
+      </dl>
+      <Disclosure
+        variant="inline"
+        summary="Every outcome"
+        className="border-t border-line px-5 py-3 text-small"
+        bodyClassName="pt-3"
+      >
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Counts title="Last 24 full hours, UTC" counts={ingest.last_24h} />
+          <Counts title="Last 30 full days, UTC" counts={ingest.last_30d} />
+        </div>
+      </Disclosure>
+    </div>
+  );
+}
+
+function Box({
+  id,
+  title,
+  count,
+  aside,
+  children,
+}: {
+  id: string;
+  title: string;
+  count?: number;
+  aside?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <section
       aria-labelledby={id}
-      className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5"
+      className="flex min-w-0 flex-col gap-3 rounded-2xl border border-line bg-raised p-5"
     >
-      <h2 id={id} className="text-title text-fg">
-        {title}
-      </h2>
+      <div className="flex items-baseline gap-2">
+        <h2 id={id} className="text-body font-semibold text-fg">
+          {title}
+        </h2>
+        {count !== undefined ? (
+          <span className="ml-auto text-small text-fg-3 tabular">{count}</span>
+        ) : null}
+        {aside}
+      </div>
       {children}
     </section>
   );
 }
 
-function Fold({ id, title, children }: { id: string; title: string; children: ReactNode }) {
-  return (
-    <Disclosure
-      id={id}
-      summary={title}
-      className="min-w-0"
-      summaryClassName="sm:px-5"
-      bodyClassName="min-w-0 sm:p-5"
-    >
-      {children}
-    </Disclosure>
-  );
-}
-
-// the enrollment answers beside the evidence, label over value like the
-// evidence list. the scf round link is one of the evidence facts.
+// the enrollment answers in the rail, label over value
 export function Answers({ detail }: { detail: OperatorTenantDetail }) {
   const t = detail.tenant;
   const a = t.enrollment_answers;
   const rows: [string, ReactNode][] = [
-    ["Website", <span className="break-all">{a.website}</span>],
+    ["Website", <span className="font-mono text-[12.5px] break-all">{a.website}</span>],
     ["How it uses Stellar", <Clamped text={a.stellar_usage} />],
     ...(t.description
       ? [["Description", <Clamped text={t.description} />] as [string, ReactNode]]
       : []),
+    ...(a.scf_round_url
+      ? [["SCF round link", <span className="break-all">{a.scf_round_url}</span>] as [string, ReactNode]]
+      : []),
   ];
   return (
-    <section aria-labelledby="answers-h" className="flex min-w-0 flex-col gap-2">
-      <h2 id="answers-h" className="text-title text-fg">
-        Enrollment answers
-      </h2>
-      <dl className="flex flex-col gap-2 text-small">
+    <Box id="answers-h" title="Enrollment answers">
+      <dl className="flex flex-col gap-3 text-body">
         {rows.map(([k, v]) => (
-          <div key={k} className="flex min-w-0 flex-col">
-            <dt className="text-fg-2">{k}</dt>
+          <div key={k} className="flex min-w-0 flex-col gap-0.5">
+            <dt className="text-small text-fg-3">{k}</dt>
             <dd className="text-fg">{v}</dd>
           </div>
         ))}
         {detail.stellar_ids.length > 0 ? (
-          <div className="flex min-w-0 flex-col">
-            <dt className="text-fg-2">Account and contract IDs</dt>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <dt className="text-small text-fg-3">Account and contract IDs</dt>
             <dd>
               <ul className="flex flex-col gap-1" aria-label="Account and contract IDs">
-                {detail.stellar_ids.map((s) => (
-                  <li key={s.id} className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                    <code className="min-w-0 font-mono text-caption break-all text-fg">{s.id}</code>
-                    <span
-                      className={s.valid ? "text-caption text-fg-2" : "text-caption text-warning"}
-                    >
-                      {s.valid ? (s.type ?? "").replace("_", " ") : "Not a valid id"}
+                {detail.stellar_ids.map((x) => (
+                  <li key={x.id} className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                    <code className="min-w-0 font-mono text-caption break-all text-fg">{x.id}</code>
+                    <span className={x.valid ? "text-caption text-fg-3" : "text-caption text-warning"}>
+                      {x.valid ? (x.type ?? "").replace("_", " ") : "Not a valid ID"}
                     </span>
                   </li>
                 ))}
@@ -354,24 +810,20 @@ export function Answers({ detail }: { detail: OperatorTenantDetail }) {
             </dd>
           </div>
         ) : null}
-      </dl>
-      <div className="flex min-w-0 flex-wrap gap-x-6 gap-y-1 text-caption text-fg-2">
-        <span>
-          Terms:{" "}
-          <span className="text-fg">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <dt className="text-small text-fg-3">Terms</dt>
+          <dd className="text-fg">
             {t.accepted_terms_version
-              ? termsVersionLabel(t.accepted_terms_version)
+              ? `Accepted, ${termsVersionLabel(t.accepted_terms_version).replace("Version", "version")}`
               : "Not accepted"}
-          </span>
-        </span>
-        <span>
-          Dashboards:{" "}
-          <span className="text-fg">
-            {t.provisioning === "ready" ? "Set up" : "Not set up yet"}
-          </span>
-        </span>
-      </div>
-    </section>
+          </dd>
+        </div>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <dt className="text-small text-fg-3">Dashboards</dt>
+          <dd className="text-fg">{t.provisioning === "ready" ? "Set up" : "Not set up yet"}</dd>
+        </div>
+      </dl>
+    </Box>
   );
 }
 
@@ -521,6 +973,14 @@ function Sites({
         <span className="flex min-w-0 flex-col py-1">
           <span className="flex min-w-0 items-center gap-1 font-medium text-fg">
             <span className="truncate">{x.name}</span>
+            {x.in_review || x.status !== "active" || project !== "active" ? (
+              <StatusBadge
+                kind="site"
+                status={x.in_review ? "pending" : x.status}
+                project={project}
+                operator
+              />
+            ) : null}
             {x.domain_previously_removed ? (
               <Tooltip content="This domain, or a parent or subdomain of it, belonged to a removed project.">
                 <CircleAlert
@@ -535,29 +995,30 @@ function Sites({
       ),
     },
     {
-      key: "status",
-      header: "Status",
+      key: "domain",
+      header: "Domain",
       mobile: true,
-      cell: (x) => (
-        <StatusBadge
-          kind="site"
-          status={x.in_review ? "pending" : x.status}
-          project={project}
-          operator
-        />
-      ),
+      cell: (x) =>
+        x.verification === "verified" ? (
+          <Quiet>Verified</Quiet>
+        ) : x.verification === "unchecked" ? (
+          <span className="text-fg-3">Not checked yet</span>
+        ) : (
+          <Pill tone="critical">Not verified</Pill>
+        ),
     },
     {
-      key: "checks",
-      header: "Checks",
+      key: "toml",
+      header: "stellar.toml",
       mobile: true,
-      minWidth: "min-w-44",
-      cell: (x) => (
-        <span className="flex flex-col gap-1 py-1 text-small">
-          <DomainFact site={x} />
-          <TomlFact site={x} />
-        </span>
-      ),
+      cell: (x) =>
+        x.stellar_toml?.status === "found" ? (
+          <Quiet>Found</Quiet>
+        ) : x.stellar_toml === null ? (
+          <span className="text-fg-3">Not checked yet</span>
+        ) : (
+          <Pill tone="critical">Not found</Pill>
+        ),
     },
     {
       key: "origins",
@@ -680,6 +1141,16 @@ function SiteChecks({ site }: { site: OperatorSite }) {
         </ul>
       </div>
     </div>
+  );
+}
+
+// a passed check in a cell: a quiet check icon with plain text
+function Quiet({ children }: { children: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-fg-2">
+      <Check aria-hidden className="size-3.5 text-success" strokeWidth={2.6} />
+      {children}
+    </span>
   );
 }
 
