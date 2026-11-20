@@ -181,8 +181,10 @@ test("a new project waits in the review queue and the operator approves it", asy
   await expect(page.getByRole("heading", { level: 1, name: "Review" })).toBeVisible();
   const queue = page.getByRole("navigation", { name: "Review queue" });
   await queue.getByRole("button").filter({ hasText: tenant.name }).click();
-  const review = page.getByRole("region", { name: `Review ${tenant.name}` });
-  await expect(review.getByRole("list", { name: "Evidence" })).toBeVisible();
+  // the case is an article; its evidence is the list of checks
+  const review = page.getByRole("article", { name: `Review ${tenant.name}` });
+  await expect(review.getByRole("list", { name: "Checks" })).toBeVisible();
+  await expect(review.getByRole("list", { name: "Checks" })).toContainText(site.domain);
   await expect(review.getByRole("form", { name: `Decision on ${tenant.name}` })).toBeVisible();
   // a new project has no figures yet: the evidence carries the decision
   await expect(review.locator("[data-numbers]")).toHaveCount(0);
