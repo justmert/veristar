@@ -26,13 +26,7 @@ import { Pill, type Tone } from "@/components/status";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
-import {
-  ipField,
-  requestSummary,
-  sessionField,
-  userAgentField,
-  utcToday,
-} from "@/lib/erasure";
+import { ipField, requestSummary, sessionField, userAgentField, utcToday } from "@/lib/erasure";
 import { countOf, formatCount, formatDate, formatDateTimeUtc, formatTimeRange } from "@/lib/format";
 import { siblingUrl } from "@/lib/hosts";
 import { fieldMessage } from "@/lib/validate";

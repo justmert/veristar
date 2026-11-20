@@ -339,7 +339,9 @@ describe("privacy page", () => {
       ),
     );
     await click(confirm);
-    await waitFor(() => expect(host.textContent).toContain("Everything of this site on example.org: running"));
+    await waitFor(() =>
+      expect(host.textContent).toContain("Everything of this site on example.org: running"),
+    );
     const posts = calls.filter((c) => c.method === "POST");
     expect(posts).toHaveLength(2);
     expect(posts[1]?.body).toEqual({
