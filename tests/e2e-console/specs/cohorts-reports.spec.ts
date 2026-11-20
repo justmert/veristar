@@ -69,8 +69,7 @@ test.afterAll(async () => {
 test("the owner proposes a cohort and an operator confirms it", async () => {
   const page = owner.page;
   await page.goto(`${APP}/projects/${tenant.id}/scf`);
-  // the cohort is on demand, under the verdict
-  await page.locator("details#cohort > summary").click();
+  // the cohort is its own panel under the review
   const panel = page.getByRole("region", { name: "SCF cohort" });
   await expect(panel).toContainText("No cohort is confirmed for your project yet.");
   await panel.getByRole("button", { name: "Propose a cohort" }).click();
@@ -205,14 +204,15 @@ test("a signed report verifies in a browser without a session, until its link is
 
     // the owner revokes the link; the same address now says so
     await page.reload();
-    const reports = page.getByRole("list", { name: "Reports" });
+    const reports = page.getByRole("table", { name: "Reports" });
     await reports
       .getByRole("button", { name: /^Actions for the report for / })
       .first()
       .click();
     await page.getByRole("menuitem", { name: "Revoke link" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Revoke link" }).click();
-    await expect(reports.getByText("Link revoked").first()).toBeVisible();
+    // the link column of the revoked report reads revoked
+    await expect(reports.getByText("Revoked", { exact: true }).first()).toBeVisible();
 
     const again = await reader.newPage();
     await again.goto(url);
