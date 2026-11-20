@@ -303,7 +303,10 @@ function Ends({ client }: { client: string }) {
         <span className="max-w-full truncate text-center">{client}</span>
       </span>
       <span className="relative flex h-14 items-center justify-center">
-        <span aria-hidden className="absolute inset-x-0 top-1/2 border-t-[1.5px] border-dashed border-line-strong" />
+        <span
+          aria-hidden
+          className="absolute inset-x-0 top-1/2 border-t-[1.5px] border-dashed border-line-strong"
+        />
         <span className="relative inline-flex h-7 items-center gap-1.5 rounded-full border border-line-2 bg-ground px-3 text-[12.5px] text-fg">
           <Lock aria-hidden className="size-3" />
           Read-only

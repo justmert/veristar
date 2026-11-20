@@ -67,7 +67,10 @@ export function SignInPage() {
       <SignedProof />
       <div className="flex flex-1 flex-col">
         <div className="flex flex-1 px-4 py-10 sm:px-8">
-          <section aria-labelledby="sign-in-h" className="m-auto flex w-full max-w-90 flex-col gap-6">
+          <section
+            aria-labelledby="sign-in-h"
+            className="m-auto flex w-full max-w-90 flex-col gap-6"
+          >
             <div className="flex flex-col gap-2">
               <h1 id="sign-in-h" className="text-heading text-fg">
                 Sign in
@@ -226,18 +229,49 @@ function SignedProof() {
 function Stamp() {
   return (
     <svg
+      aria-hidden="true"
       viewBox="0 0 160 160"
       className="absolute -right-7 bottom-14.5 size-39 -rotate-12 text-success max-sm:hidden"
     >
       <defs>
         <path id="stamp-arc" d="M80,80 m-58,0 a58,58 0 1,1 116,0 a58,58 0 1,1 -116,0" />
       </defs>
-      <circle cx="80" cy="80" r="74" fill="none" stroke="currentColor" strokeOpacity=".55" strokeWidth="2" />
-      <circle cx="80" cy="80" r="44" fill="none" stroke="currentColor" strokeOpacity=".45" strokeWidth="1.5" />
-      <text fontSize="11.5" fontWeight="600" letterSpacing="3" fill="currentColor" fillOpacity=".75">
+      <circle
+        cx="80"
+        cy="80"
+        r="74"
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity=".55"
+        strokeWidth="2"
+      />
+      <circle
+        cx="80"
+        cy="80"
+        r="44"
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity=".45"
+        strokeWidth="1.5"
+      />
+      <text
+        fontSize="11.5"
+        fontWeight="600"
+        letterSpacing="3"
+        fill="currentColor"
+        fillOpacity=".75"
+      >
         <textPath href="#stamp-arc">SIGNED BY VERISTAR AND CHECKABLE ANYWHERE</textPath>
       </text>
-      <text x="80" y="88" textAnchor="middle" fontSize="26" fontWeight="700" fill="currentColor" fillOpacity=".85">
+      <text
+        x="80"
+        y="88"
+        textAnchor="middle"
+        fontSize="26"
+        fontWeight="700"
+        fill="currentColor"
+        fillOpacity=".85"
+      >
         B
       </text>
     </svg>

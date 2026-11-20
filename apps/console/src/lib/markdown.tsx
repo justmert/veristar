@@ -63,12 +63,7 @@ export function parseBlocks(md: string): Block[] {
       table.rows.push(cells(line));
     } else if (line.trim() === "") {
       flush();
-    } else if (
-      para.length === 1 &&
-      !list &&
-      para[0]?.startsWith("|") &&
-      TABLE_RULE.test(line)
-    ) {
+    } else if (para.length === 1 && !list && para[0]?.startsWith("|") && TABLE_RULE.test(line)) {
       // the line before the rule was the header row of a table
       const head = cells(para[0]);
       para = [];
@@ -234,7 +229,10 @@ export function Markdown({ source, afterTitle }: { source: string; afterTitle?: 
                 </h2>
               );
             return (
-              <h3 key={key} className="mt-1 flex gap-2.5 text-[16px] leading-6 font-semibold text-fg">
+              <h3
+                key={key}
+                className="mt-1 flex gap-2.5 text-[16px] leading-6 font-semibold text-fg"
+              >
                 {n ? <span className="text-fg-3 tabular">{n}</span> : null}
                 <span>{inline(title)}</span>
               </h3>
@@ -261,7 +259,9 @@ export function Markdown({ source, afterTitle }: { source: string; afterTitle?: 
                         {r.map((c, k) => (
                           <td
                             key={`${key}-r${j}-${k}`}
-                            className={k === 0 ? "px-4.5 py-2.5 text-fg-2" : "px-4.5 py-2.5 text-fg"}
+                            className={
+                              k === 0 ? "px-4.5 py-2.5 text-fg-2" : "px-4.5 py-2.5 text-fg"
+                            }
                           >
                             {inline(c)}
                           </td>

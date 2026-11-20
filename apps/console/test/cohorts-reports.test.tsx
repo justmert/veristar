@@ -553,9 +553,7 @@ describe("the public report page (contract 20.5)", () => {
     stubFetch([{ status: 200, body: publicBody(unread, SIGNER, unread) }]);
     const host = await renderRoutes(publicRoute, "/r/abcdefghijklmnopqrstuvwxyz");
     await waitFor(() => expect(host.querySelector("[data-verdict=verified]")).not.toBeNull());
-    expect(
-      host.querySelector("[data-hero=onchain_operations] [data-missing]"),
-    ).not.toBeNull();
+    expect(host.querySelector("[data-hero=onchain_operations] [data-missing]")).not.toBeNull();
     expect(host.textContent).not.toContain("Transactions");
     expect(host.textContent).not.toContain("Days without data");
     // the signer key and the signature are random per run and may hold the

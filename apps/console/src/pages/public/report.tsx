@@ -24,7 +24,7 @@ import { Disclosure } from "@/components/disclosure";
 import { LabeledFacts } from "@/components/labeled-facts";
 import { FunctionsTable, functionsDaysText } from "@/components/onchain-functions";
 import { PublicFrame } from "@/components/public-frame";
-import { StatCard, StatGrid, type StatChange } from "@/components/stat-card";
+import { StatCard, type StatChange, StatGrid } from "@/components/stat-card";
 import { EmptyState, ErrorState, LoadingState, MessagePage, Skeleton } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { isNotFound } from "@/lib/errors";
@@ -211,7 +211,11 @@ function Signature({ verdict, r }: { verdict: Verdict | null; r: PublicReport })
       aria-label="Signature"
       className={cn(
         "flex min-w-0 flex-col gap-3 rounded-2xl border bg-ground px-4.5 py-4 print:border-line-strong",
-        tone === "bad" ? "border-critical-line" : tone === "warn" ? "border-warning-line" : "border-line",
+        tone === "bad"
+          ? "border-critical-line"
+          : tone === "warn"
+            ? "border-warning-line"
+            : "border-line",
       )}
     >
       <div className="flex items-start gap-2.5">
@@ -483,7 +487,11 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
             row("visits", "Visits", formatCount(doc.web.visits)),
             webData ? row("bounce", "Bounce rate", pct(doc.web.bounce_rate)) : null,
             webData && num(doc.web.avg_visit_duration_seconds) !== null
-              ? row("visit", "Average visit", formatDuration(num(doc.web.avg_visit_duration_seconds) ?? 0))
+              ? row(
+                  "visit",
+                  "Average visit",
+                  formatDuration(num(doc.web.avg_visit_duration_seconds) ?? 0),
+                )
               : null,
             webData ? row("quarantine", "Quarantined share", pct(doc.web.quarantine_share)) : null,
             doc.web.gateway_requests > 0
@@ -503,7 +511,9 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
                 : row(
                     "p95",
                     "API p95 latency",
-                    num(doc.api.p95.seconds) === null ? null : formatLatency(num(doc.api.p95.seconds) ?? 0),
+                    num(doc.api.p95.seconds) === null
+                      ? null
+                      : formatLatency(num(doc.api.p95.seconds) ?? 0),
                   )
               : null,
             apiData ? row("services", "API services", formatCount(doc.api.services)) : null,
@@ -529,9 +539,16 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
             chainOk && doc.onchain.transactions !== null
               ? row("tx", "Transactions", formatCount(doc.onchain.transactions))
               : null,
-            waa && waa.average !== null ? row("waa", "Weekly active accounts", weeklyActiveText(waa)) : null,
+            waa && waa.average !== null
+              ? row("waa", "Weekly active accounts", weeklyActiveText(waa))
+              : null,
             chainOk && doc.onchain.days_missing !== null && doc.onchain.days_missing > 0
-              ? row("missing", "Days without data", formatCount(doc.onchain.days_missing), DAYS_WITHOUT_DATA)
+              ? row(
+                  "missing",
+                  "Days without data",
+                  formatCount(doc.onchain.days_missing),
+                  DAYS_WITHOUT_DATA,
+                )
               : null,
             doc.onchain.two_way_link ? row("toml", "stellar.toml linked both ways", "Yes") : null,
             doc.rules_met.length > 0
@@ -539,7 +556,9 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
                   "rules",
                   "SCF rules met",
                   formatCount(doc.rules_met.length),
-                  doc.rules_met.map((x) => `${x.name}, ${formatDateRange(x.from, x.to)}`).join("\n"),
+                  doc.rules_met
+                    .map((x) => `${x.name}, ${formatDateRange(x.from, x.to)}`)
+                    .join("\n"),
                 )
               : null,
           ]}

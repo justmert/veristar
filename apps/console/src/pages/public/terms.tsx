@@ -5,9 +5,9 @@ import { Link } from "react-router";
 import { termsQuery } from "@/api/queries";
 import { Disclosure } from "@/components/disclosure";
 import { PublicFrame } from "@/components/public-frame";
+import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
-import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { Markdown, outline, splitNumber } from "@/lib/markdown";
 import { isDraftTerms, termsVersionLabel } from "@/lib/terms";
 

@@ -657,11 +657,7 @@ export function StellarFields({
         name="stellar_usage"
         rows={3}
         maxLength={2000}
-        hint={
-          <span className="flex justify-end tabular text-fg-2">
-            {usage.length} / 2000
-          </span>
-        }
+        hint={<span className="flex justify-end tabular text-fg-2">{usage.length} / 2000</span>}
         value={usage}
         onChange={onUsage}
         error={usageError}

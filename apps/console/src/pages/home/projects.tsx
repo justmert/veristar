@@ -351,7 +351,7 @@ function ProjectCard({
             ) : null}
           </span>
         </span>
-        {v && v.integrity && (v.sites?.sites ?? 0) > 0 && v.integrity.graded_days > 0 ? (
+        {v?.integrity && (v.sites?.sites ?? 0) > 0 && v.integrity.graded_days > 0 ? (
           <GradeRing row={v.integrity} className="ml-auto" />
         ) : null}
       </div>
@@ -401,7 +401,10 @@ function ProjectCard({
             {numbers.map((n) => (
               <div key={n.key} data-number={n.key} className="flex min-w-0 flex-col gap-1.5">
                 <dt className="flex items-center gap-1.75 truncate text-caption text-fg-2">
-                  <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", DOT[n.series])} />
+                  <span
+                    aria-hidden
+                    className={cn("size-1.5 shrink-0 rounded-full", DOT[n.series])}
+                  />
                   {n.label}
                 </dt>
                 <dd className="flex flex-wrap items-baseline gap-x-2">

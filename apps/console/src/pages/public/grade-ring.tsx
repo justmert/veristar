@@ -56,12 +56,16 @@ export function GradeRing({
         <span
           className={cn(
             "font-semibold",
-            size === "sm" ? "text-[18px] leading-none" : "text-[56px] leading-none tracking-[-0.03em]",
+            size === "sm"
+              ? "text-[18px] leading-none"
+              : "text-[56px] leading-none tracking-[-0.03em]",
           )}
         >
           {letter ?? "–"}
         </span>
-        {size === "lg" ? <span className="mt-2 text-caption text-fg-2">Integrity grade</span> : null}
+        {size === "lg" ? (
+          <span className="mt-2 text-caption text-fg-2">Integrity grade</span>
+        ) : null}
       </span>
     </span>
   );

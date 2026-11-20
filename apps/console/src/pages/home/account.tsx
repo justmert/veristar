@@ -290,9 +290,7 @@ function SignInMethods({ me }: { me: Me }) {
     <section aria-labelledby="methods-h" className="flex flex-col gap-4">
       <h2 id="methods-h" className="flex items-baseline gap-2 text-[15px] font-semibold text-fg">
         Sign-in methods
-        <span className="text-small font-normal text-fg-3 tabular">
-          {count} of 3
-        </span>
+        <span className="text-small font-normal text-fg-3 tabular">{count} of 3</span>
       </h2>
       {linkError ? (
         <Notice tone="critical" role="alert" title="GitHub was not linked">
