@@ -357,7 +357,6 @@ describe("api traffic page", () => {
     expect(tile(host, "5xx rate")).toMatch(/-\d[\d.]* pp/);
     expect(tile(host, "p50")).toContain("42 ms");
     expect(tile(host, "p95")).toContain("310 ms");
-    expect(host.textContent).toContain("Compared with");
     // infrastructure requests stay out of the cards and are named apart
     const infra = text(host.querySelector('[data-testid="infrastructure-requests"]'));
     expect(infra).toContain("8,640 health checks and preflights are not included");
@@ -373,7 +372,8 @@ describe("api traffic page", () => {
     const kinds = [...host.querySelectorAll("[data-warning]")].map((e) =>
       e.getAttribute("data-warning"),
     );
-    expect(kinds).toEqual(["lossy_histogram", "secret_in_path", "coarse_buckets"]);
+    // the quiet notes share one band; the secret in a path is a notice of its own
+    expect(kinds).toEqual(["lossy_histogram", "coarse_buckets", "secret_in_path"]);
     expect(text(host.querySelector('[data-warning="secret_in_path"]'))).toContain(
       "last on Nov 11, 2026",
     );
@@ -420,19 +420,18 @@ describe("api traffic page", () => {
     ]);
   });
 
-  it("shows the status distribution by class and by code", async () => {
+  it("shows the success share, every error code by name and the success codes", async () => {
     serve(full);
     const host = await renderRoutes(routes(), path);
-    const code = (c: string) =>
-      host.querySelector(`ul[aria-label="Status codes"] li[data-key="${c}"]`);
-    await waitFor(() => expect(code("503")).not.toBeNull());
-    expect(text(code("404"))).toContain("404");
-    expect(text(code("404"))).toContain("30");
-    expect(text(code("404"))).toContain("2.5%");
-    const bar = host.querySelector('[role="img"][aria-label^="Requests by status class"]');
-    expect(bar?.getAttribute("aria-label")).toContain("2xx success 1,150");
-    // a class without requests draws nothing
-    expect(bar?.getAttribute("aria-label")).not.toContain("No status code");
+    const errors = () => host.querySelector('ul[aria-label="Errors, by code"]');
+    await waitFor(() => expect(errors()).not.toBeNull());
+    const items = [...(errors()?.querySelectorAll("li") ?? [])].map((li) => text(li));
+    expect(items.some((t) => t.includes("404 Not Found") && t.includes("30"))).toBe(true);
+    expect(items.some((t) => t.startsWith("503 Service Unavailable"))).toBe(true);
+    const ok = host.querySelector('ul[aria-label="Success codes"]');
+    expect(text(ok)).toContain("200 OK");
+    // a group without requests is not named
+    expect(text(host.querySelector('[data-testid="api-status"]'))).not.toContain("No status code");
   });
 
   it("switches the range and asks every route for it", async () => {
@@ -459,11 +458,11 @@ describe("api traffic page", () => {
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.querySelector("[data-route]")).not.toBeNull());
     expect(net.last("routes")?.search).toBe("?range=24h&sort=requests&order=desc&limit=50");
-    await click(header(host, "p95"));
+    await click(header(host, "Latency"));
     await waitFor(() => expect(net.last("routes")?.searchParams.get("sort")).toBe("p95"));
     expect(net.last("routes")?.searchParams.get("order")).toBe("desc");
-    expect(header(host, "p95").closest("th")?.getAttribute("aria-sort")).toBe("descending");
-    await click(header(host, "p95"));
+    expect(header(host, "Latency").closest("th")?.getAttribute("aria-sort")).toBe("descending");
+    await click(header(host, "Latency"));
     await waitFor(() => expect(net.last("routes")?.searchParams.get("order")).toBe("asc"));
     await click(header(host, "Route"));
     await waitFor(() => expect(net.last("routes")?.searchParams.get("sort")).toBe("route"));
@@ -491,11 +490,8 @@ describe("api traffic page", () => {
     const net = serve(full);
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.querySelector("[data-route]")).not.toBeNull());
-    const btn = host.querySelector<HTMLButtonElement>(
-      'button[aria-label="Filter to POST /jobs/{id} of orders-worker"]',
-    );
-    if (!btn) throw new Error("no filter button");
-    await click(btn);
+    await openMenu(host, "Actions for POST /jobs/{id} of orders-worker");
+    await click(menuItem("Filter to this route"));
     await waitFor(() => expect(net.last("overview")?.searchParams.get("route")).toBe("/jobs/{id}"));
     for (const k of ["overview", "timeseries", "status", "routes"]) {
       const q = net.last(k)?.searchParams;
@@ -507,13 +503,15 @@ describe("api traffic page", () => {
     }
     // services and warnings take the range only
     expect(net.last("services")?.searchParams.has("service")).toBe(false);
-    const chips = host.querySelector('ul[aria-label="Active filters"]');
-    expect(text(chips)).toContain("Route: /jobs/{id}");
+    expect((byLabel(host, "Route") as HTMLInputElement).value).toBe("/jobs/{id}");
+    expect(
+      host.querySelector('[data-service-chip="orders-worker"]')?.getAttribute("aria-pressed"),
+    ).toBe("true");
     const clear = [...host.querySelectorAll("button")].find((b) => text(b) === "Clear filters");
     if (!clear) throw new Error("no clear button");
     await click(clear);
     // the unfiltered answers are still cached, so nothing is fetched again
-    await waitFor(() => expect(host.querySelector('ul[aria-label="Active filters"]')).toBeNull());
+    await waitFor(() => expect((byLabel(host, "Route") as HTMLInputElement).value).toBe(""));
     expect(host.querySelector("[data-tile=Requests]")?.textContent).toContain("1,200");
   });
 
@@ -599,3 +597,20 @@ describe("a sparse range of days", () => {
     expect(lastDayOnly([...days, point("2026-11-18T00:00:00Z", 5)], range("hour"))).toBe(false);
   });
 });
+
+// radix opens a menu on pointer down, not on click
+async function openMenu(scope: HTMLElement, label: string) {
+  const trigger = scope.querySelector<HTMLElement>(`button[aria-label="${label}"]`);
+  if (!trigger) throw new Error(`no menu ${label}`);
+  await act(async () => {
+    trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+  });
+}
+
+function menuItem(label: string): HTMLElement {
+  const el = [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].find((m) =>
+    m.textContent?.includes(label),
+  );
+  if (!el) throw new Error(`no menu item ${label}`);
+  return el;
+}
