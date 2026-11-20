@@ -1,45 +1,67 @@
-// the project overview answers two questions above the fold: how the
-// project is doing (web and api numbers against the previous period, one
-// chart) and what to do next (the one setup step that is open). every other
-// answer is one line that links to its own page.
+// the project overview: what is happening now, what changed and what needs
+// the builder. the sites are chips that filter the web parts of the page;
+// eight figures (web, api, on-chain and the integrity grade) with their
+// change, the selected one drawing the chart; beside the chart the few
+// things to act on, which while setup is open are the next steps; then the
+// top pages, sources and routes (countries without an api), each opening
+// its full page.
 
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { ArrowRight, Check, Globe } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import type { ApiFilters } from "@/api/endpoints";
 import { onchainQuery } from "@/api/onchain";
-import { apiOverviewQuery, ingestMonthQuery, integrityQuery, sitesQuery } from "@/api/queries";
-import type { ApiOverview, Site, TenantStatus } from "@/api/schemas";
-import { type WebSummary, webSummaryQuery } from "@/api/web";
-import { DbIpAttribution } from "@/components/dbip-attribution";
-import { PageHeader } from "@/components/page-header";
-import { RangeControl } from "@/components/range-control";
-import { StatCard } from "@/components/stat-card";
-import { EmptyState, ErrorState, Missing, Skeleton } from "@/components/states";
-import { StatusBadge } from "@/components/status-badge";
 import {
+  apiOverviewQuery,
+  apiRoutesQuery,
+  apiTimeseriesQuery,
+  ingestMonthQuery,
+  integrityQuery,
+  sitesQuery,
+} from "@/api/queries";
+import type { ApiOverview, IntegrityGrade, Site, TenantStatus } from "@/api/schemas";
+import { type WebDimension, type WebSummary, webBreakdownQuery, webSummaryQuery } from "@/api/web";
+import { BreakdownList, type TimeBucket, TimeChart } from "@/components/charts";
+import { PageHeader } from "@/components/page-header";
+import { Panel } from "@/components/panel";
+import { RangeControl } from "@/components/range-control";
+import { SetupBar, type SetupStep } from "@/components/setup-progress";
+import { StatCard, type StatChange, StatGrid } from "@/components/stat-card";
+import { EmptyState, ErrorState, Skeleton } from "@/components/states";
+import { StatusDot } from "@/components/status";
+import { Button } from "@/components/ui/button";
+import {
+  formatBucket,
   latencyText,
   percentileChange,
+  plotPercentile,
   rateChange,
   relativeChange,
+  tickFormatter,
   toStatChange,
 } from "@/lib/api-metrics";
-import { countOf, formatCount, formatPercent, utcDay } from "@/lib/format";
-import { type DayRange, lastDays } from "@/lib/global";
-import { verifiedActivity } from "@/lib/onchain";
-import { apiRangeOfDays, type OverviewPreset, readOverviewRange } from "@/lib/overview";
 import {
-  combineFirstEvent,
-  firstEvent,
-  nextSetupStep,
-  type SetupNext,
-  siteSetupPath,
-} from "@/lib/site-setup";
+  countOf,
+  formatChange,
+  formatCompact,
+  formatCount,
+  formatDate,
+  formatDateRange,
+  formatPercent,
+  formatTick,
+  utcDay,
+} from "@/lib/format";
+import type { DayRange } from "@/lib/global";
+import { siblingUrl } from "@/lib/hosts";
+import { shortKey, verifiedActivity } from "@/lib/onchain";
+import { apiRangeOfDays, type OverviewPreset, readOverviewRange } from "@/lib/overview";
+import { combineFirstEvent, type FirstEvent, firstEvent, siteSetupPath } from "@/lib/site-setup";
 import {
   dayCount,
   formatMetric,
+  keyLabel,
   metricValue,
   periodLabel,
   WEB_MAX_DAYS,
@@ -48,11 +70,11 @@ import {
   webPath,
   webTrend,
 } from "@/lib/web-dashboard";
-import { AddSiteButton, canAddSites } from "@/pages/project/sites";
+import { canAddSites } from "@/pages/project/sites";
 import { useProject } from "@/pages/project-layout";
-import { type Mover, Movers } from "./movers";
 import { OverviewSkeleton, PAGE_HEADERS } from "./page-frame";
-import { Step, type StepState, Steps } from "./steps";
+import { LiveCount, SiteChips } from "./site-chips";
+import { HEADER_RANGE } from "./web";
 import { METRIC_LABEL, WebTrendChart } from "./web-chart";
 
 const NO_FILTERS: ApiFilters = { service: null, route: null, method: null };
@@ -62,71 +84,48 @@ const CADENCE = "Web totals refresh every hour. API counts refresh every few min
 // step: no event can arrive. the status notice above the page says why.
 const STOPPED: ReadonlySet<TenantStatus> = new Set(["rejected", "suspended", "removed"]);
 
-function noSiteText(status: TenantStatus, isOwner: boolean, termsCurrent: boolean): string {
-  if (!termsCurrent) return "An owner must accept the new terms before you can add sites.";
+function noSiteTitle(status: TenantStatus, termsCurrent: boolean): string {
+  if (!termsCurrent) return "An owner must accept the new terms before you can add sites";
   switch (status) {
-    case "rejected":
-      return isOwner
-        ? "Sites that you add now wait until operators approve the project. Change the answers above and submit them again."
-        : "Sites that you add now wait until operators approve the project. An owner can change the answers and submit them again.";
     case "suspended":
-      return "You cannot add sites while the project is suspended.";
+      return "You cannot add sites while the project is suspended";
     case "removed":
-      return "This project was removed. It cannot take new sites.";
+      return "This project was removed";
     default:
-      return "Add the website that you want to measure. You get a script tag for its pages.";
+      return "No sites yet";
   }
 }
 
+type Figure = WebMetric | "requests" | "5xx" | "p95" | "operations";
+
 export function OverviewPage() {
-  const { tenant, termsCurrent, isOwner } = useProject();
+  const { tenant, termsCurrent } = useProject();
   const stopped = STOPPED.has(tenant.status);
   const canAdd = canAddSites(tenant.status, termsCurrent);
   const sites = useQuery(sitesQuery(tenant.id));
   const [params, setParams] = useSearchParams();
   const { preset, days } = readOverviewRange(params, new Date());
   const live = sites.data?.filter((s) => s.status !== "removed") ?? [];
+  const siteParam = params.get("site");
+  const site = live.find((s) => s.id === siteParam)?.id ?? null;
   const summary = useQuery({
-    ...webSummaryQuery(tenant.id, { ...days, site: null, band: "primary" }),
+    ...webSummaryQuery(tenant.id, { ...days, site, band: "primary" }),
     enabled: live.length > 0,
   });
 
-  let body: ReactNode;
-  if (sites.isPending) body = <OverviewSkeleton />;
-  else if (sites.error)
-    body = (
-      <ErrorState
-        title="The sites did not load"
-        error={sites.error}
-        onRetry={() => sites.refetch()}
-      />
-    );
-  else if (live.length === 0)
-    // a project without a site can still declare on-chain ids: the
-    // summaries stay, only the web numbers wait for a site
-    body = (
-      <>
-        {!stopped && canAdd ? (
-          <SetupChecklist tenantId={tenant.id} sites={live} days={days} canAdd={canAdd} />
-        ) : (
-          <EmptyState
-            icon={<Globe aria-hidden strokeWidth={1.75} />}
-            title="No sites yet"
-            // the resubmit form above holds the page's main action
-            action={canAdd ? <AddSiteButton tenantId={tenant.id} variant="outline" /> : undefined}
-          >
-            {noSiteText(tenant.status, isOwner, termsCurrent)}
-          </EmptyState>
-        )}
-        <Summaries tenantId={tenant.id} sites={live} days={days} />
-      </>
-    );
-  else
-    body = (
-      <>
-        {stopped ? null : (
-          <SetupChecklist tenantId={tenant.id} sites={live} days={days} canAdd={canAdd} />
-        )}
+  const setParam = (k: string, v: string | null) => {
+    const next = new URLSearchParams(params);
+    if (v === null) next.delete(k);
+    else next.set(k, v);
+    setParams(next, { replace: true });
+  };
+
+  const header = (
+    <PageHeader
+      {...PAGE_HEADERS.overview}
+      freshness={summary.data?.read_at ? { at: summary.data.read_at, cadence: CADENCE } : null}
+      items={[`${formatDateRange(days.from, days.to)}, UTC`]}
+      secondary={
         <RangeControl<OverviewPreset>
           value={preset}
           presets={WEB_PRESETS}
@@ -149,285 +148,78 @@ export function OverviewPage() {
           maxDay={utcDay()}
           maxDays={WEB_MAX_DAYS}
           range={days}
+          className={HEADER_RANGE}
         />
-        <Numbers
+      }
+    />
+  );
+
+  let body: ReactNode;
+  if (sites.isPending) body = <OverviewSkeleton />;
+  else if (sites.error)
+    body = (
+      <ErrorState
+        title="The sites did not load"
+        error={sites.error}
+        onRetry={() => sites.refetch()}
+      />
+    );
+  else
+    body = (
+      <>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          {live.length > 0 ? (
+            <SiteChips
+              tenantId={tenant.id}
+              sites={live}
+              value={site}
+              onChange={(s) => setParam("site", s)}
+              canAdd={canAdd && !stopped}
+            />
+          ) : (
+            <span />
+          )}
+          {live.length > 0 && !stopped ? <LiveCount tenantId={tenant.id} site={site} /> : null}
+        </div>
+        <Dashboard
           tenantId={tenant.id}
+          sites={live}
+          site={site}
           days={days}
           summary={summary.data ?? null}
-          summaryState={summary.isPending ? "loading" : summary.error ? "error" : "data"}
+          summaryState={
+            live.length === 0
+              ? "data"
+              : summary.isPending
+                ? "loading"
+                : summary.error
+                  ? "error"
+                  : "data"
+          }
           summaryError={summary.error}
           onRetry={() => summary.refetch()}
-          only={live.length === 1 ? live[0] : undefined}
+          stopped={stopped}
+          canAdd={canAdd}
+          noSite={noSiteTitle(tenant.status, termsCurrent)}
         />
-        <Summaries tenantId={tenant.id} sites={live} days={days} />
       </>
     );
 
   return (
-    <div className="flex flex-col gap-8">
-      <PageHeader
-        {...PAGE_HEADERS.overview}
-        freshness={summary.data?.read_at ? { at: summary.data.read_at, cadence: CADENCE } : null}
-      />
+    <div className="flex flex-col gap-4">
+      {header}
       {body}
-      <DbIpAttribution />
     </div>
   );
 }
-// ---- the setup checklist and its next site step: one line, one action
 
-const STEP_ACTION: Record<SetupNext["step"], string> = {
-  install: "Continue setup",
-  refused: "See why events are refused",
-  verify: "Verify domain",
-};
+// ---- the figures, the chart and what needs attention
 
-// the setup step of the first site that is not set up, read from the edge
-// counts and, while those have no event, the web totals. loading is true
-// while an answer is missing, so no step jumps.
-function useNextStep(sites: Site[], tenantId: string) {
-  const range = lastDays(30, new Date());
-  const active = sites.filter((s) => s.status === "active" && !s.in_review);
-  const ingest = useQueries({ queries: active.map((s) => ingestMonthQuery(s.id)) });
-  const fromEdge = active.map((_, i) => {
-    const d = ingest[i]?.data;
-    return d ? firstEvent(d) : null;
-  });
-  // the edge counts lag by minutes, the web totals by an hour: either one
-  // with a counted event completes the step (lib/site-setup.ts). the web
-  // totals of a site are asked only when the edge has none.
-  const unsure = active.filter((_, i) => fromEdge[i] !== null && fromEdge[i] !== "received");
-  const web = useQueries({
-    queries: unsure.map((s) => ({
-      ...webSummaryQuery(tenantId, { ...range, site: s.id, band: "primary" as const }),
-      placeholderData: undefined,
-    })),
-  });
-  const step = nextSetupStep(active, (s) => {
-    const i = active.indexOf(s);
-    const j = unsure.indexOf(s);
-    if (j < 0) return fromEdge[i] ?? null;
-    const w = web[j];
-    if (w?.isPending) return null;
-    const views = w?.data?.current.totals.pageviews;
-    return combineFirstEvent(fromEdge[i] ?? null, views === undefined ? null : views > 0);
-  });
-  const loading = ingest.some((q) => q.isPending) || web.some((q) => q.isPending);
-  return { active, step, loading };
-}
-
-// the project's setup as one checklist at the top of the overview: a site,
-// its tracker and domain, then the api or a proven on-chain account. the
-// marks carry the state; it goes away when every step is done. a step is
-// current only when the one before it is done, so the card offers one
-// action at a time.
-function SetupChecklist({
-  tenantId,
-  sites,
-  days,
-  canAdd,
-}: {
-  tenantId: string;
-  sites: Site[];
-  days: DayRange;
-  canAdd: boolean;
-}) {
-  const next = useNextStep(sites, tenantId);
-  const api = useQuery(apiOverviewQuery(tenantId, apiRangeOfDays(days), NO_FILTERS));
-  const chain = useQuery(onchainQuery(tenantId, days));
-  const hasSite = sites.length > 0;
-  const siteDone = hasSite && next.active.length > 0 && !next.loading && next.step === null;
-  const apiDone = api.data ? usesApi(api.data) : false;
-  // only a proven id counts on-chain, as On-chain and SCF review count it
-  const chainDone = chain.data ? verifiedActivity(chain.data).verified > 0 : false;
-  const dataDone = apiDone || chainDone;
-  const dataKnown = !api.isPending && !chain.isPending;
-  // a project with a site waits for every answer, so a set-up project
-  // never shows the card for a moment
-  if (hasSite && (next.loading || !dataKnown)) return null;
-  if (siteDone && dataDone) return null;
-
-  const states: StepState[] = [
-    hasSite ? "done" : "current",
-    !hasSite ? "todo" : next.active.length === 0 ? "waiting" : siteDone ? "done" : "current",
-    dataDone ? "done" : hasSite && (siteDone || next.active.length === 0) ? "current" : "todo",
-  ];
-  const step = next.step;
-  return (
-    <section
-      aria-labelledby="setup-h"
-      data-setup
-      className="flex animate-rise-in flex-col gap-4 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
-    >
-      <h2 id="setup-h" className="text-title text-fg">
-        Set up the project
-      </h2>
-      <Steps>
-        <Step n={1} state={states[0] as StepState} title="Add a site">
-          {canAdd ? <AddSiteButton tenantId={tenantId} variant="default" /> : null}
-        </Step>
-        <Step
-          n={2}
-          state={states[1] as StepState}
-          title="Install the tracker and verify the domain"
-        >
-          {step ? (
-            <section
-              aria-label="Next step"
-              data-step={step.step}
-              className="flex flex-wrap items-baseline gap-x-4 gap-y-2"
-            >
-              <span className="text-small font-medium text-fg">{step.site.name}</span>
-              <PageLink to={siteSetupPath(step.site)}>{STEP_ACTION[step.step]}</PageLink>
-            </section>
-          ) : null}
-        </Step>
-        <Step
-          n={3}
-          state={states[2] as StepState}
-          title="Connect your API or an on-chain account"
-          // which part did it: the two marks hold their own state
-          aside={
-            <span className="flex items-center gap-3 text-caption">
-              <PartMark done={apiDone} part="api" label="API" />
-              <PartMark done={chainDone} part="onchain" label="On-chain" />
-            </span>
-          }
-        >
-          <span className="flex flex-wrap gap-x-6 gap-y-2">
-            <PageLink to={`/projects/${tenantId}/connect-api`}>Connect API</PageLink>
-            <PageLink to={`/projects/${tenantId}/onchain`}>Add an account</PageLink>
-          </span>
-        </Step>
-      </Steps>
-    </section>
-  );
-}
-
-function PartMark({ done, part, label }: { done: boolean; part: string; label: string }) {
-  return (
-    <span
-      data-part={part}
-      data-done={done ? "" : undefined}
-      className={cn("inline-flex items-center gap-1", done ? "text-fg" : "text-fg-3")}
-    >
-      {done ? (
-        <Check aria-hidden className="size-3.5 text-success" strokeWidth={2.6} />
-      ) : (
-        <span aria-hidden className="size-1.5 rounded-full bg-line-strong" />
-      )}
-      {label}
-      <span className="sr-only">{done ? ", connected" : ", not connected"}</span>
-    </span>
-  );
-}
-
-// ---- the numbers: web from the web totals, api from the api counts
-
-const WEB_CARDS: { metric: WebMetric; definition: string }[] = [
+const WEB_FIGURES: { metric: WebMetric; definition: string }[] = [
   { metric: "pageviews", definition: "Pages loaded in a browser." },
   { metric: "visitors", definition: "Distinct visitors per UTC day, added up over the range." },
   { metric: "bounce_rate", definition: "Visits with one page view and no custom event." },
 ];
-
-function Numbers({
-  tenantId,
-  days,
-  summary,
-  summaryState,
-  summaryError,
-  onRetry,
-  only,
-}: {
-  tenantId: string;
-  days: DayRange;
-  summary: WebSummary | null;
-  summaryState: "loading" | "error" | "data";
-  summaryError: unknown;
-  onRetry: () => void;
-  only: Site | undefined;
-}) {
-  const [metric, setMetric] = useState<WebMetric>("pageviews");
-  const api = useQuery(apiOverviewQuery(tenantId, apiRangeOfDays(days), NO_FILTERS));
-  const single = days.from === days.to;
-  const chartable = (m: WebMetric) => !single || m === "pageviews" || m === "visitors";
-  const shown: WebMetric = chartable(metric) ? metric : "pageviews";
-  const period = periodLabel(dayCount(days));
-  // an api that sent nothing has no cards; the setup checklist offers it
-  const apiUsed = api.data ? usesApi(api.data) : true;
-
-  const web = WEB_CARDS.map((c) => {
-    const v = summary ? metricValue(summary.current.totals, c.metric) : null;
-    const change = summary
-      ? webTrend(
-          c.metric,
-          v,
-          metricValue(summary.previous.totals, c.metric),
-          summary.current.range.days,
-        )
-      : null;
-    return { ...c, v, change };
-  });
-  const apiChanges = apiCardChanges(api.data ?? null, period);
-  const movers = [
-    ...web.map((c) => ({ key: c.metric, label: METRIC_LABEL[c.metric], change: c.change })),
-    ...(apiUsed ? apiChanges : []),
-  ];
-
-  return (
-    <div className="flex flex-col gap-4">
-      {/* the numbers name their pages in their own header, not in a loose
-          row of links under the cards */}
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-        <Movers items={movers} />
-        <span className="ml-auto flex flex-wrap gap-x-6 gap-y-1">
-          <PageLink to={webPath(tenantId, only?.id)}>Web</PageLink>
-          <PageLink to={`/projects/${tenantId}/api`}>API</PageLink>
-        </span>
-      </div>
-      <section
-        aria-label="Numbers"
-        className={cn("grid grid-cols-2 gap-3 md:grid-cols-3", apiUsed && "xl:grid-cols-6")}
-      >
-        {web.map((c) => (
-          <StatCard
-            key={c.metric}
-            data-metric={c.metric}
-            label={METRIC_LABEL[c.metric]}
-            definition={c.definition}
-            value={c.v}
-            format={(n) => formatMetric(c.metric, n)}
-            missingReason="No visits in this range"
-            state={summaryState}
-            change={c.change}
-            selected={chartable(c.metric) ? shown === c.metric : undefined}
-            onSelect={chartable(c.metric) ? () => setMetric(c.metric) : undefined}
-          />
-        ))}
-        {apiUsed ? (
-          <ApiCards
-            overview={api.data ?? null}
-            state={api.isPending ? "loading" : api.error ? "error" : "data"}
-            changes={apiChanges}
-          />
-        ) : null}
-      </section>
-
-      {summaryState === "error" ? (
-        <ErrorState title="The numbers did not load" error={summaryError} onRetry={onRetry} />
-      ) : summary ? (
-        <WebTrendChart
-          tenantId={tenantId}
-          q={{ ...days, site: null, band: "primary" }}
-          summary={summary}
-          metric={shown}
-        />
-      ) : (
-        <Skeleton.Chart />
-      )}
-    </div>
-  );
-}
 
 function usesApi(o: ApiOverview): boolean {
   return (
@@ -437,161 +229,666 @@ function usesApi(o: ApiOverview): boolean {
   );
 }
 
-function apiCardChanges(overview: ApiOverview | null, period: string): Mover[] {
-  const cur = overview?.current.summary;
-  const prev = overview?.previous.summary;
-  if (!cur || !prev) return [];
-  return [
-    {
-      key: "requests",
-      label: "API requests",
-      change: toStatChange(relativeChange(cur.requests, prev.requests), null, period),
-    },
-    {
-      key: "5xx",
-      label: "API 5xx rate",
-      change: toStatChange(rateChange(cur.rate_5xx, prev.rate_5xx), true, period),
-    },
-    {
-      key: "p95",
-      label: "API p95 latency",
-      change: toStatChange(percentileChange(cur.p95, prev.p95), true, period),
-    },
-  ];
+// the range of equal length right before a range of days
+export function previousDays(r: DayRange): DayRange {
+  const n = dayCount(r);
+  const start = Date.parse(`${r.from}T00:00:00Z`);
+  return {
+    from: utcDay(new Date(start - n * 86_400_000)),
+    to: utcDay(new Date(start - 86_400_000)),
+  };
 }
 
-function ApiCards({
-  overview,
-  state,
-  changes,
+function changeOf(r: number, period: string): StatChange {
+  const direction = r > 0.0005 ? "up" : r < -0.0005 ? "down" : "flat";
+  return {
+    text: formatChange(r),
+    direction,
+    good: direction === "flat" ? null : direction === "up",
+    period,
+  };
+}
+
+function Dashboard({
+  tenantId,
+  sites,
+  site,
+  days,
+  summary,
+  summaryState,
+  summaryError,
+  onRetry,
+  stopped,
+  canAdd,
+  noSite,
 }: {
-  overview: ApiOverview | null;
-  state: "loading" | "error" | "data";
-  changes: Mover[];
+  tenantId: string;
+  sites: Site[];
+  site: string | null;
+  days: DayRange;
+  summary: WebSummary | null;
+  summaryState: "loading" | "error" | "data";
+  summaryError: unknown;
+  onRetry: () => void;
+  stopped: boolean;
+  canAdd: boolean;
+  noSite: string;
 }) {
-  const cur = overview?.current.summary;
-  const change = (k: string) => changes.find((c) => c.key === k)?.change ?? null;
+  const [figure, setFigure] = useState<Figure>("pageviews");
+  const api = useQuery(apiOverviewQuery(tenantId, apiRangeOfDays(days), NO_FILTERS));
+  const chain = useQuery(onchainQuery(tenantId, days));
+  const chainBefore = useQuery(onchainQuery(tenantId, previousDays(days)));
+  const grade = useQuery(integrityQuery("tenant", tenantId, days));
+  const single = days.from === days.to;
+  const period = periodLabel(dayCount(days));
+  const hasSite = sites.length > 0;
+  const noWeb = !hasSite || (summary !== null && summary.current.totals.pageviews === 0);
+
+  const apiUsed = api.data ? usesApi(api.data) : null;
+  const activity = chain.data ? verifiedActivity(chain.data) : null;
+  const before = chainBefore.data ? verifiedActivity(chainBefore.data) : null;
+  const chainUsed = activity ? activity.verified > 0 : null;
+  const unproven = chain.data?.ids.find((i) => i.verification.status !== "verified") ?? null;
+  // operations against the same days before, only where both are measured
+  const opsRatio =
+    activity && before && !activity.gap && !before.gap && before.operations > 0
+      ? (activity.operations - before.operations) / before.operations
+      : null;
+
+  const webChartable = (m: WebMetric) => !single || m === "pageviews" || m === "visitors";
+  const selectable = (f: Figure): boolean => {
+    if (f === "requests" || f === "5xx" || f === "p95") return apiUsed === true;
+    if (f === "operations") return chainUsed === true && !activity?.gap;
+    return hasSite && !noWeb && webChartable(f);
+  };
+  const shown: Figure = selectable(figure) ? figure : "pageviews";
+  const pick = (f: Figure) =>
+    selectable(f)
+      ? { selected: shown === f, onSelect: () => setFigure(f) }
+      : { selected: undefined, onSelect: undefined };
+
+  const cur = api.data?.current.summary;
+  const prev = api.data?.previous.summary;
+  const apiChange = (k: "requests" | "5xx" | "p95"): StatChange | null => {
+    if (!cur || !prev || !apiUsed) return null;
+    if (k === "requests")
+      return toStatChange(relativeChange(cur.requests, prev.requests), null, period);
+    if (k === "5xx") return toStatChange(rateChange(cur.rate_5xx, prev.rate_5xx), true, period);
+    return toStatChange(percentileChange(cur.p95, prev.p95), true, period);
+  };
+  const apiState = api.isPending ? "loading" : api.error ? "error" : "data";
+  const onchainPath = `/projects/${tenantId}/onchain`;
+
+  const g = grade.data;
+  const graded = hasSite && g !== undefined && g.graded_days > 0 ? g : null;
+
   return (
     <>
-      <StatCard
-        data-tile="API requests"
-        label="API requests"
-        definition="Requests that your services answered. Health checks and preflights are not included."
-        value={cur ? cur.requests : null}
-        state={state}
-        change={change("requests")}
-      />
-      <StatCard
-        data-tile="API 5xx rate"
-        label="API 5xx rate"
-        definition="Share of requests answered with a 5xx status."
-        value={cur ? cur.rate_5xx : null}
-        format={formatPercent}
-        missingReason="No API requests in this range"
-        state={state}
-        change={change("5xx")}
-      />
-      <StatCard
-        data-tile="API p95"
-        label="API p95 latency"
-        definition="95 of 100 requests were faster than this."
-        value={cur ? latencyText(cur.p95) : null}
-        missingReason="No API requests in this range"
-        state={state}
-        change={change("p95")}
-      />
+      <StatGrid min="8rem" aria-label="Figures" className="xl:grid-cols-8">
+        {WEB_FIGURES.map((c) => {
+          const v = summary ? metricValue(summary.current.totals, c.metric) : null;
+          return (
+            <StatCard
+              key={c.metric}
+              data-metric={c.metric}
+              series={1}
+              label={METRIC_LABEL[c.metric]}
+              definition={c.definition}
+              value={noWeb ? null : v}
+              format={(n) => formatMetric(c.metric, n)}
+              missingReason={hasSite ? "No visits in this range" : "No site yet"}
+              state={summaryState}
+              change={
+                summary && !noWeb
+                  ? webTrend(
+                      c.metric,
+                      v,
+                      metricValue(summary.previous.totals, c.metric),
+                      summary.current.range.days,
+                    )
+                  : null
+              }
+              {...pick(c.metric)}
+            />
+          );
+        })}
+        <StatCard
+          data-tile="API requests"
+          series={3}
+          label="API requests"
+          definition="Requests that your services answered. Health checks and preflights are not included."
+          value={apiUsed ? (cur?.requests ?? null) : null}
+          missingReason="No API connected"
+          state={apiState}
+          change={apiChange("requests")}
+          action={
+            apiUsed === false && !stopped ? (
+              <Link to={`/projects/${tenantId}/connect-api`}>Connect API</Link>
+            ) : undefined
+          }
+          {...pick("requests")}
+        />
+        <StatCard
+          data-tile="API 5xx rate"
+          series={3}
+          label="API 5xx rate"
+          definition="Share of requests answered with a 5xx status."
+          value={apiUsed ? (cur?.rate_5xx ?? null) : null}
+          format={formatPercent}
+          missingReason={apiUsed ? "No API requests in this range" : "No API connected"}
+          state={apiState}
+          change={apiChange("5xx")}
+          {...pick("5xx")}
+        />
+        <StatCard
+          data-tile="API p95"
+          series={3}
+          label="API p95 latency"
+          definition="95 of 100 requests were faster than this."
+          value={apiUsed && cur ? latencyText(cur.p95) : null}
+          missingReason={apiUsed ? "No API requests in this range" : "No API connected"}
+          state={apiState}
+          change={apiChange("p95")}
+          {...pick("p95")}
+        />
+        <StatCard
+          data-tile="On-chain ops"
+          series="success"
+          label="On-chain ops"
+          definition="Operations of your proven accounts and contracts, days before today."
+          value={chainUsed && activity && !activity.gap ? activity.operations : null}
+          missingReason={activity?.gap ?? "No proven account or contract"}
+          state={chain.isPending ? "loading" : chain.error ? "error" : "data"}
+          change={opsRatio === null ? null : changeOf(opsRatio, period)}
+          action={
+            chainUsed === false && !stopped ? (
+              <Link to={onchainPath}>{unproven ? "Prove control" : "Add an account"}</Link>
+            ) : undefined
+          }
+          {...pick("operations")}
+        />
+        <StatCard
+          data-tile="Integrity grade"
+          series="neutral"
+          label="Integrity grade"
+          definition="How likely the project's web traffic is real, graded per site and day."
+          value={graded?.grade ?? null}
+          missingReason="Not graded"
+          state={grade.isPending && hasSite ? "loading" : "data"}
+          lead={<GradeRing grade={graded?.grade ?? null} />}
+          footer={
+            <Link
+              to={`/projects/${tenantId}/scf`}
+              className="w-fit rounded-sm text-caption text-fg-2 hover:text-fg focus-ring"
+              data-grade-days=""
+            >
+              {graded ? countOf(graded.graded_days, "site day") : "not graded"}
+            </Link>
+          }
+        />
+      </StatGrid>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="min-w-0">
+          {shown === "requests" || shown === "5xx" || shown === "p95" ? (
+            <ApiChart tenantId={tenantId} days={days} figure={shown} />
+          ) : shown === "operations" && activity ? (
+            <ChainChart daily={activity.daily} />
+          ) : !hasSite ? (
+            <WaitPanel title={noSite} />
+          ) : summaryState === "error" ? (
+            <ErrorState title="The numbers did not load" error={summaryError} onRetry={onRetry} />
+          ) : summary && noWeb ? (
+            <WaitPanel title="Waiting for the first page view" />
+          ) : summary ? (
+            <WebTrendChart
+              tenantId={tenantId}
+              q={{ ...days, site, band: "primary" }}
+              summary={summary}
+              metric={shown as WebMetric}
+            />
+          ) : (
+            <Skeleton.Chart />
+          )}
+        </div>
+        <Attention
+          tenantId={tenantId}
+          sites={sites}
+          days={days}
+          stopped={stopped}
+          canAdd={canAdd}
+          apiUsed={apiUsed}
+          chainUsed={chainUsed}
+          unproven={unproven ? unproven.strkey : null}
+          grade={graded}
+          opsRatio={opsRatio}
+        />
+      </div>
+
+      {hasSite && !noWeb ? (
+        <TopLists tenantId={tenantId} days={days} site={site} apiUsed={apiUsed === true} />
+      ) : null}
     </>
   );
 }
 
-function PageLink({ to, children }: { to: string; children: ReactNode }) {
+function WaitPanel({ title }: { title: string }) {
   return (
-    <Link
-      to={to}
-      className="group inline-flex w-fit items-center gap-1 rounded-sm text-small font-medium text-fg-2 transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring max-lg:min-h-(--vs-control-touch)"
+    <Panel title="Page views" className="h-full min-h-80" bodyClassName="flex flex-1 items-center">
+      <EmptyState className="w-full" title={title} />
+    </Panel>
+  );
+}
+
+const RING: Record<IntegrityGrade, string> = {
+  A: "border-success",
+  B: "border-warning",
+  C: "border-critical",
+};
+
+// the grade's ring before its letter: its colour is the grade
+function GradeRing({ grade }: { grade: IntegrityGrade | null }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "inline-block size-5 shrink-0 rounded-full border-[3px]",
+        grade ? RING[grade] : "border-line-strong",
+      )}
+    />
+  );
+}
+
+// ---- the chart of an api figure, per hour or per day
+
+const API_LABEL = { requests: "API requests", "5xx": "API 5xx rate", p95: "API p95 latency" };
+
+function ApiChart({
+  tenantId,
+  days,
+  figure,
+}: {
+  tenantId: string;
+  days: DayRange;
+  figure: "requests" | "5xx" | "p95";
+}) {
+  const ts = useQuery(apiTimeseriesQuery(tenantId, apiRangeOfDays(days), NO_FILTERS));
+  const points = ts.data?.points ?? [];
+  const range = ts.data?.range;
+  const now = Date.now();
+  const buckets: TimeBucket[] = points.map((p) => ({
+    at: p.at,
+    tick: range ? tickFormatter(range)(p.at) : p.at,
+    label: range ? formatBucket(p.at, range) : p.at,
+    partial: range ? Date.parse(p.at) + range.bucket_seconds * 1000 > now : false,
+  }));
+  const values = points.map((p) =>
+    figure === "requests" ? p.requests : figure === "5xx" ? p.rate_5xx : plotPercentile(p.p95),
+  );
+  const fmt = (n: number) =>
+    figure === "requests"
+      ? formatCount(n)
+      : figure === "5xx"
+        ? formatPercent(n)
+        : (latencyText(n) ?? "");
+  const total = points.reduce((a, p) => a + p.requests, 0);
+  return (
+    <TimeChart
+      key={figure}
+      title={API_LABEL[figure]}
+      description={range?.resolution === "day" ? "per day, UTC" : "per hour, UTC"}
+      kind={figure === "requests" ? "bar" : "line"}
+      buckets={buckets}
+      series={[{ key: figure, label: API_LABEL[figure], tone: "series-3", values }]}
+      format={fmt}
+      axisFormat={figure === "requests" ? formatCompact : fmt}
+      higherIsBetter={figure === "requests"}
+      state={ts.isPending ? "loading" : ts.error ? "error" : total === 0 ? "empty" : "data"}
+      error={ts.error}
+      onRetry={() => ts.refetch()}
+      emptyTitle="No API requests in this range"
+    />
+  );
+}
+
+// ---- the chart of on-chain operations per day
+
+function ChainChart({ daily }: { daily: { day: string; value: number | null }[] }) {
+  const today = utcDay();
+  const buckets: TimeBucket[] = daily.map((d) => ({
+    at: `${d.day}T00:00:00Z`,
+    tick: formatTick(d.day, "day"),
+    label: formatDate(d.day),
+    partial: d.day === today,
+  }));
+  return (
+    <TimeChart
+      title="On-chain operations"
+      description="per day, UTC"
+      buckets={buckets}
+      series={[
+        { key: "operations", label: "Operations", tone: "series-2", values: daily.map((d) => d.value) },
+      ]}
+      axisFormat={formatCompact}
+      state={daily.some((d) => (d.value ?? 0) > 0) ? "data" : "empty"}
+      emptyTitle="No operations in this range"
+    />
+  );
+}
+
+// ---- needs attention, or next steps while setup is open
+
+type Item = {
+  key: string;
+  tone: "warning" | "critical" | "neutral";
+  text: ReactNode;
+  actions: ReactNode;
+};
+
+// the first event of every active site: the edge counts of 30 days, and
+// while those have none, the web totals of the range
+function useFirstEvents(sites: Site[], tenantId: string, days: DayRange) {
+  const active = sites.filter((s) => s.status === "active" && !s.in_review);
+  const ingest = useQueries({ queries: active.map((s) => ingestMonthQuery(s.id)) });
+  const fromEdge = active.map((_, i) => {
+    const d = ingest[i]?.data;
+    return d ? firstEvent(d) : null;
+  });
+  // the edge counts lag by minutes, the web totals by an hour: either one
+  // with a counted event completes the step (lib/site-setup.ts)
+  const unsure = active.filter((_, i) => fromEdge[i] !== null && fromEdge[i] !== "received");
+  const web = useQueries({
+    queries: unsure.map((s) => ({
+      ...webSummaryQuery(tenantId, { ...days, site: s.id, band: "primary" as const }),
+      placeholderData: undefined,
+    })),
+  });
+  const events = new Map<string, FirstEvent | null>();
+  active.forEach((s, i) => {
+    const j = unsure.indexOf(s);
+    const w = j < 0 ? undefined : web[j];
+    if (j < 0) events.set(s.id, fromEdge[i] ?? null);
+    else if (w?.isPending) events.set(s.id, null);
+    else {
+      const views = w?.data?.current.totals.pageviews;
+      events.set(
+        s.id,
+        combineFirstEvent(fromEdge[i] ?? null, views === undefined ? null : views > 0),
+      );
+    }
+  });
+  const loading = ingest.some((q) => q.isPending) || web.some((q) => q.isPending);
+  return { active, events, loading };
+}
+
+function Attention({
+  tenantId,
+  sites,
+  days,
+  stopped,
+  canAdd,
+  apiUsed,
+  chainUsed,
+  unproven,
+  grade,
+  opsRatio,
+}: {
+  tenantId: string;
+  sites: Site[];
+  days: DayRange;
+  stopped: boolean;
+  canAdd: boolean;
+  apiUsed: boolean | null;
+  chainUsed: boolean | null;
+  unproven: string | null;
+  grade: { grade: IntegrityGrade | null; days_b: number; days_c: number } | null;
+  opsRatio: number | null;
+}) {
+  const first = useFirstEvents(sites, tenantId, days);
+  const failing = useQuery({
+    ...apiRoutesQuery(tenantId, apiRangeOfDays(days), NO_FILTERS, {
+      sort: "rate_5xx",
+      order: "desc",
+      limit: 3,
+      cursor: null,
+    }),
+    enabled: apiUsed === true,
+  });
+  const docs = siblingUrl(window.location.hostname, "docs");
+  const p = `/projects/${tenantId}`;
+
+  // setup: a site, its tracker sending, its domain verified
+  const hasSite = sites.length > 0;
+  const waiting = first.active.filter((s) => first.events.get(s.id) !== "received");
+  const unverified = first.active.filter((s) => s.verification !== "verified");
+  const steps: SetupStep[] = [
+    { key: "site", label: "Add a site", state: hasSite ? "done" : "current" },
+    {
+      key: "tracker",
+      label: "Install the tracker",
+      state: !hasSite ? "todo" : waiting.length > 0 ? "current" : "done",
+    },
+    {
+      key: "domain",
+      label: "Verify the domain",
+      state: !hasSite ? "todo" : unverified.length > 0 ? "current" : "done",
+    },
+  ];
+  const setupOpen = !stopped && steps.some((s) => s.state !== "done");
+  const done = steps.filter((s) => s.state === "done").length;
+
+  const items: Item[] = [];
+  if (!stopped) {
+    if (!hasSite && canAdd)
+      items.push({
+        key: "site",
+        tone: "warning",
+        text: "No site yet",
+        actions: (
+          <Button asChild size="sm">
+            <Link to={`${p}/sites`}>Add site</Link>
+          </Button>
+        ),
+      });
+    for (const s of first.active) {
+      const ev = first.events.get(s.id);
+      if (ev === null || ev === undefined || ev === "received") continue;
+      items.push({
+        key: `event-${s.id}`,
+        tone: ev === "refused" ? "critical" : "warning",
+        text: ev === "refused" ? `${s.name} sends refused events` : `${s.name} has no event yet`,
+        actions: (
+          <>
+            <Button asChild size="sm">
+              <Link to={siteSetupPath(s)}>
+                {ev === "refused" ? "See why events are refused" : "Continue setup"}
+              </Link>
+            </Button>
+            {docs ? (
+              <Button asChild size="sm" variant="ghost">
+                <a href={docs}>Docs</a>
+              </Button>
+            ) : null}
+          </>
+        ),
+      });
+    }
+    for (const s of unverified) {
+      if (first.events.get(s.id) !== "received") continue;
+      items.push({
+        key: `domain-${s.id}`,
+        tone: "warning",
+        text: `${s.domain} is not verified`,
+        actions: (
+          <Button asChild size="sm" variant="outline">
+            <Link to={siteSetupPath(s)}>Verify domain</Link>
+          </Button>
+        ),
+      });
+    }
+  }
+  for (const r of failing.data?.items ?? []) {
+    if (!r.rate_5xx) continue;
+    const q = new URLSearchParams({ route: r.route, method: r.method, service: r.service });
+    items.push({
+      key: `route-${r.service}-${r.method}-${r.route}`,
+      tone: "critical",
+      text: `${r.method} ${r.route} fails ${formatPercent(r.rate_5xx)} of the time`,
+      actions: (
+        <Button asChild size="sm" variant="outline">
+          <Link to={`${p}/api?${q}`}>Open the route</Link>
+        </Button>
+      ),
+    });
+  }
+  if (grade?.grade && grade.grade !== "A")
+    items.push({
+      key: "grade",
+      tone: "warning",
+      text: `Grade lowered to ${grade.grade} on ${countOf(grade.days_b + grade.days_c, "day")}`,
+      actions: (
+        <Button asChild size="sm" variant="outline">
+          <Link to={`${p}/scf`}>See why</Link>
+        </Button>
+      ),
+    });
+  if (opsRatio !== null && opsRatio < -0.0005)
+    items.push({
+      key: "ops",
+      tone: "warning",
+      text: `On-chain operations down ${formatChange(opsRatio).replace(/^[-−]/, "")}`,
+      actions: (
+        <Button asChild size="sm" variant="outline">
+          <Link to={`${p}/onchain`}>Open On-chain</Link>
+        </Button>
+      ),
+    });
+  if (!stopped) {
+    if (unproven)
+      items.push({
+        key: "unproven",
+        tone: "neutral",
+        text: `${shortKey(unproven)} is not proven yet`,
+        actions: (
+          <Button asChild size="sm" variant="outline">
+            <Link to={`${p}/onchain`}>Prove control</Link>
+          </Button>
+        ),
+      });
+    if (apiUsed === false)
+      items.push({
+        key: "api",
+        tone: "neutral",
+        text: "No API connected",
+        actions: (
+          <Button asChild size="sm" variant="outline">
+            <Link to={`${p}/connect-api`}>Connect API</Link>
+          </Button>
+        ),
+      });
+    if (chainUsed === false && !unproven)
+      items.push({
+        key: "chain",
+        tone: "neutral",
+        text: "No Stellar account or contract",
+        actions: (
+          <Button asChild size="sm" variant="outline">
+            <Link to={`${p}/onchain`}>Add an account</Link>
+          </Button>
+        ),
+      });
+  }
+
+  const nextSteps = setupOpen || items.some((i) => i.tone === "neutral");
+  const title = nextSteps ? "Next steps" : "Needs attention";
+  return (
+    <Panel
+      data-setup={setupOpen ? "" : undefined}
+      title={title}
+      actions={
+        setupOpen ? (
+          <span className="text-caption text-fg-3 tabular">
+            setup {done} of {steps.length}
+          </span>
+        ) : items.length ? (
+          <span className="text-caption text-fg-3 tabular">{formatCount(items.length)}</span>
+        ) : null
+      }
+      className="h-full"
     >
-      {children}
-      <ArrowRight
-        aria-hidden
-        className="size-3.5 transition-transform duration-(--vs-duration-press) group-hover:translate-x-0.5"
+      {setupOpen ? <SetupBar steps={steps} className="mb-1" /> : null}
+      {first.loading && hasSite ? (
+        <div className="pt-3">
+          <Skeleton.Table rows={2} columns={1} />
+        </div>
+      ) : items.length === 0 ? (
+        <p className="flex items-center gap-2 pt-1 text-small text-fg-2">
+          <Check aria-hidden strokeWidth={2.6} className="size-3.5 text-success" />
+          Nothing needs you now
+        </p>
+      ) : (
+        <ul aria-label={title} className="flex flex-col">
+          {items.map((it) => (
+            <li
+              key={it.key}
+              data-attention={it.key}
+              className="grid grid-cols-[10px_minmax(0,1fr)] items-start gap-3 border-t border-line-subtle py-3 first:border-t-0"
+            >
+              <StatusDot tone={it.tone} className="mt-1.5" />
+              <span className="flex min-w-0 flex-col gap-2">
+                <span className="text-body text-fg">{it.text}</span>
+                <span className="flex flex-wrap items-center gap-2">{it.actions}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+// ---- the top lists, each opening its full page
+
+function TopLists({
+  tenantId,
+  days,
+  site,
+  apiUsed,
+}: {
+  tenantId: string;
+  days: DayRange;
+  site: string | null;
+  apiUsed: boolean;
+}) {
+  const web = webPath(tenantId, site);
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <WebTop title="Top pages" tenantId={tenantId} days={days} site={site} dim="page" to={web} />
+      <WebTop
+        title="Top sources"
+        tenantId={tenantId}
+        days={days}
+        site={site}
+        dim="referrer"
+        to={web}
       />
-    </Link>
+      {apiUsed ? (
+        <BusiestRoutes tenantId={tenantId} days={days} />
+      ) : (
+        <WebTop
+          title="Countries"
+          tenantId={tenantId}
+          days={days}
+          site={site}
+          dim="country"
+          to={web}
+        />
+      )}
+    </div>
   );
 }
 
-// ---- one line each for sites, the grade and on-chain, linking to their pages
-
-function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[]; days: DayRange }) {
-  const grade = useQuery(integrityQuery("tenant", tenantId, days));
-  const chain = useQuery(onchainQuery(tenantId, days));
-  // verified ids only, as On-chain and SCF review count them
-  const activity = chain.data ? verifiedActivity(chain.data) : null;
-  const unverified = sites.filter((s) => s.status === "active" && s.verification !== "verified");
-  const inReview = sites.filter((s) => s.in_review || s.status === "pending");
-  // a card stands only for something that is there: no site, no grade or no
-  // proven id is no card at all, the checklist above offers the step
-  const showGrade = sites.length > 0 && (grade.data?.graded_days ?? 0) > 0;
-  const showChain = (activity?.verified ?? 0) > 0;
-  const cards = [sites.length > 0, showGrade, showChain].filter(Boolean).length;
-  if (cards === 0) return null;
-  // the cards that stand share the row evenly, so two leave no hole
-  return (
-    <section
-      aria-label="Project"
-      className={cn("grid gap-3", cards === 2 && "md:grid-cols-2", cards === 3 && "md:grid-cols-3")}
-    >
-      {sites.length > 0 ? (
-        <SummaryCard title="Sites" to={`/projects/${tenantId}/sites`} link="Sites">
-          <span className="flex flex-wrap items-baseline gap-x-2">
-            <span className="text-title text-fg tabular">{formatCount(sites.length)}</span>
-            <span className="text-small text-fg-2">
-              {inReview.length > 0
-                ? `${formatCount(inReview.length)} in review`
-                : unverified.length > 0
-                  ? `${countOf(unverified.length, "domain")} not verified`
-                  : "All domains verified"}
-            </span>
-          </span>
-        </SummaryCard>
-      ) : null}
-      {showGrade && grade.data ? (
-        <SummaryCard title="Integrity grade" to={`/projects/${tenantId}/scf`} link="SCF review">
-          <span className="flex flex-wrap items-center gap-2">
-            <StatusBadge kind="grade" grade={grade.data.grade} />
-            <span className="text-small text-fg-2 tabular">
-              {countOf(grade.data.graded_days, "site day")}
-            </span>
-          </span>
-        </SummaryCard>
-      ) : null}
-      {showChain && chain.data && activity ? (
-        <SummaryCard title="On-chain" to={`/projects/${tenantId}/onchain`} link="On-chain">
-          {activity.gap ? (
-            <span className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-title text-fg tabular">
-                <Missing reason={activity.gap} />
-              </span>
-              <span className="text-small text-fg-2">
-                operations, {formatCount(activity.verified)} of {formatCount(chain.data.totals.ids)}{" "}
-                verified
-              </span>
-            </span>
-          ) : (
-            <span className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-title text-fg tabular">{formatCount(activity.operations)}</span>
-              <span className="text-small text-fg-2">
-                operations of verified IDs, {formatCount(activity.verified)} of{" "}
-                {formatCount(chain.data.totals.ids)} verified
-              </span>
-            </span>
-          )}
-        </SummaryCard>
-      ) : null}
-    </section>
-  );
-}
-
-function SummaryCard({
+function TopPanel({
   title,
   to,
   link,
@@ -603,14 +900,125 @@ function SummaryCard({
   children: ReactNode;
 }) {
   return (
-    <section
-      aria-label={title}
+    <Panel
+      title={title}
       data-summary={title}
-      className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-raised p-4"
+      actions={
+        <Link
+          to={to}
+          aria-label={`${title}, open ${link}`}
+          className="inline-flex items-center gap-1 rounded-sm text-caption text-fg-2 hover:text-fg focus-ring"
+        >
+          {link}
+          <ArrowRight aria-hidden className="size-3" />
+        </Link>
+      }
     >
-      <h2 className="text-caption text-fg-2">{title}</h2>
-      <div className="flex min-h-8 items-center">{children}</div>
-      <PageLink to={to}>{link}</PageLink>
-    </section>
+      {children}
+    </Panel>
+  );
+}
+
+const TOP = 5;
+
+function WebTop({
+  title,
+  tenantId,
+  days,
+  site,
+  dim,
+  to,
+}: {
+  title: string;
+  tenantId: string;
+  days: DayRange;
+  site: string | null;
+  dim: WebDimension;
+  to: string;
+}) {
+  const b = useQuery(webBreakdownQuery(tenantId, { ...days, site, band: "primary" }, dim, TOP));
+  const sites = b.data?.sites ?? [];
+  const names = site || sites.length < 2 ? null : Object.fromEntries(sites.map((s) => [s.id, s.name]));
+  return (
+    <TopPanel title={title} to={to} link="Web">
+      <BreakdownList
+        label={title}
+        state={b.isPending ? "loading" : b.error ? "error" : undefined}
+        error={b.error}
+        onRetry={() => b.refetch()}
+        items={(b.data?.items ?? []).map((it) => {
+          const text = keyLabel(dim, it.key);
+          const siteName = names && it.site_id ? names[it.site_id] : undefined;
+          return {
+            key: `${it.site_id ?? ""}|${it.key}`,
+            text: siteName ? `${text}, ${siteName}` : text,
+            label: (
+              <span className="flex min-w-0 items-baseline gap-2">
+                <span className="truncate">{text}</span>
+                {siteName ? (
+                  <span className="shrink-0 truncate text-caption text-fg-3">{siteName}</span>
+                ) : null}
+              </span>
+            ),
+            value: it.value,
+          };
+        })}
+        valueLabel="Visitors"
+        emptyTitle="Nothing in this range"
+      />
+    </TopPanel>
+  );
+}
+
+function BusiestRoutes({ tenantId, days }: { tenantId: string; days: DayRange }) {
+  const r = useQuery(
+    apiRoutesQuery(tenantId, apiRangeOfDays(days), NO_FILTERS, {
+      sort: "requests",
+      order: "desc",
+      limit: TOP,
+      cursor: null,
+    }),
+  );
+  const services = new Set((r.data?.items ?? []).map((i) => i.service));
+  return (
+    <TopPanel title="Busiest routes" to={`/projects/${tenantId}/api`} link="API">
+      <BreakdownList
+        label="Busiest routes"
+        state={r.isPending ? "loading" : r.error ? "error" : undefined}
+        error={r.error}
+        onRetry={() => r.refetch()}
+        items={(r.data?.items ?? []).map((it) => {
+          const text = `${it.method} ${it.route}`;
+          return {
+            key: `${it.service}|${it.method}|${it.route}`,
+            text,
+            label: (
+              <span className="flex min-w-0 items-baseline gap-2">
+                <span className="truncate">{text}</span>
+                {services.size > 1 ? (
+                  <span className="shrink-0 truncate text-caption text-fg-3">{it.service}</span>
+                ) : null}
+                {it.rate_5xx === null ? null : (
+                  <span
+                    className={cn(
+                      "ml-auto shrink-0 text-caption tabular",
+                      it.rate_5xx > 0 ? "text-critical" : "text-fg-3",
+                    )}
+                    data-rate-5xx=""
+                  >
+                    {formatPercent(it.rate_5xx)}
+                    <span className="sr-only"> 5xx</span>
+                  </span>
+                )}
+              </span>
+            ),
+            value: it.requests,
+          };
+        })}
+        valueLabel="Requests"
+        format={formatCompact}
+        emptyTitle="No API requests in this range"
+      />
+    </TopPanel>
   );
 }
