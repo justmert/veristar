@@ -975,6 +975,7 @@
 .seal .mark {
   width: var(--seal-mark);
   height: var(--seal-mark);
+  color: var(--color-on-accent);
 }
 .seal .mark .star {
   fill: var(--color-on-accent);

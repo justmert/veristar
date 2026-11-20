@@ -2,6 +2,7 @@
 // and class names match landing.css; the scripted motion lives in motion.ts.
 // self-hosted fonts: fraunces with its soft and wonk axes, and figtree
 import "@fontsource-variable/fraunces/full.css";
+import { Mark as BrandMark } from "@veristar/brand/mark";
 import "@fontsource-variable/fraunces/full-italic.css";
 import "@fontsource-variable/figtree";
 import "./tokens.css";
@@ -35,17 +36,9 @@ import { startMotion } from "./motion";
 // a style-src 'self' policy allows
 const vars = (v: Record<string, string | number>) => v as CSSProperties;
 
+// the brand mark, the same shape as the console, docs and favicon
 function Mark({ className = "mark" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 32 32" aria-hidden="true">
-      <circle className="ring" cx="16" cy="17" r="11" />
-      <path className="ring" d="M16 6v22" />
-      <path
-        className="star"
-        d="M16 1.5 L17.3 4.7 L20.5 6 L17.3 7.3 L16 10.5 L14.7 7.3 L11.5 6 L14.7 4.7 Z"
-      />
-    </svg>
-  );
+  return <BrandMark className={className} />;
 }
 
 const Check = () => (
