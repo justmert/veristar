@@ -391,25 +391,30 @@ test("the routes table sorts by a column and reverses", async () => {
 });
 
 test("filters scope every number to a service, a method and a route", async () => {
-  await page.getByLabel("Service", { exact: true }).selectOption({ label: PAYMENTS });
+  // the services are chips, the methods a switch, the route a field
+  const chip = page.locator(`[data-service-chip="${PAYMENTS}"]`);
+  await chip.click();
   await page.waitForURL(new RegExp(`service=${PAYMENTS}`));
+  await expect(chip).toHaveAttribute("aria-pressed", "true");
   await expect(requestsValue(page, sentFor(PAYMENTS))).toBeVisible();
   await expect.poll(async () => (await rows(page)).every((x) => x.service === PAYMENTS)).toBe(true);
 
-  await page.getByLabel("Method", { exact: true }).selectOption("POST");
+  await page
+    .getByRole("radiogroup", { name: "Method" })
+    .getByRole("radio", { name: "POST", exact: true })
+    .click();
   await page.waitForURL(/method=POST/);
   await expect.poll(async () => (await rows(page)).map((x) => x.method)).toEqual(["POST", "POST"]);
 
-  // narrow to one route from its row
-  await page.getByRole("button", { name: `Filter to POST /accounts of ${PAYMENTS}` }).click();
+  // narrow to one route from its row menu
+  await page.getByRole("button", { name: `Actions for POST /accounts of ${PAYMENTS}` }).click();
+  await page.getByRole("menuitem", { name: "Filter to this route" }).click();
   await page.waitForURL(/route=%2Faccounts(&|$)/);
   const posted =
     (sent.get(key(PAYMENTS, "POST", "/accounts", 201)) ?? 0) +
     (sent.get(key(PAYMENTS, "POST", "/accounts", 400)) ?? 0);
   await expect(requestsValue(page, posted)).toBeVisible();
-  await expect(page.getByRole("list", { name: "Active filters" })).toContainText(
-    "Route: /accounts",
-  );
+  await expect(page.getByRole("searchbox", { name: "Route" })).toHaveValue("/accounts");
   await expect.poll(async () => (await rows(page)).length).toBe(1);
   // the 400s of this route are its 4xx rate
   const bad = sent.get(key(PAYMENTS, "POST", "/accounts", 400)) ?? 0;
@@ -419,7 +424,9 @@ test("filters scope every number to a service, a method and a route", async () =
   await page.screenshot({ path: join(shots, "filtered.png"), fullPage: true });
 
   await page.getByRole("button", { name: "Clear filters" }).click();
-  await expect(page.getByRole("list", { name: "Active filters" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Clear filters" })).toHaveCount(0);
+  await expect(chip).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("searchbox", { name: "Route" })).toHaveValue("");
   await expect(requestsValue(page, sentFor(PAYMENTS) + sentFor(LEDGER))).toBeVisible();
 });
 
@@ -429,14 +436,14 @@ test("ranges switch between minute, hour and day data", async () => {
   await waitExact(ctx, tenant.id, [PAYMENTS, LEDGER], "24h", 420_000);
   await pickRange(page, "24 hours");
   await page.waitForURL(/range=24h/);
-  await expect(page.getByText(", per hour", { exact: false })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Requests per hour", exact: true })).toBeVisible();
   await expect(requestsValue(page, sentFor(PAYMENTS) + sentFor(LEDGER))).toBeVisible();
 
   // daily rows of the same rollup
   await waitExact(ctx, tenant.id, [PAYMENTS, LEDGER], "90d", 420_000);
   await pickRange(page, "90 days");
   await page.waitForURL(/range=90d/);
-  await expect(page.getByText(", per day", { exact: false })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Requests per day", exact: true })).toBeVisible();
   await expect(requestsValue(page, sentFor(PAYMENTS) + sentFor(LEDGER))).toBeVisible();
 
   // a custom range of the last two hours is minute data again
@@ -448,7 +455,9 @@ test("ranges switch between minute, hour and day data", async () => {
   await form.getByLabel("To (UTC)").fill(local(now + 5 * 60_000));
   await form.getByRole("button", { name: "Apply range" }).click();
   await page.waitForURL(/range=custom/);
-  await expect(page.getByText(", per minute", { exact: false })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Requests per minute", exact: true }),
+  ).toBeVisible();
   await expect(requestsValue(page, sentFor(PAYMENTS) + sentFor(LEDGER))).toBeVisible();
   await page.screenshot({ path: join(shots, "custom-range.png"), fullPage: true });
 });
