@@ -177,11 +177,7 @@ export function AddSiteForm({
         }
       />
       {wide ? (
-        <Button
-          type="submit"
-          pending={create.isPending}
-          className="mt-1 h-[42px] w-full"
-        >
+        <Button type="submit" pending={create.isPending} className="mt-1 h-[42px] w-full">
           {create.isPending ? "Adding" : submitLabel}
         </Button>
       ) : (
@@ -406,9 +402,7 @@ function siteStatePill(site: Site): ReactNode {
 function SetupCell({ row }: { row: Row }) {
   if (row.failed) return <Missing reason="Did not load" />;
   if (row.event === null) return <Bone className="h-8 w-44" />;
-  return (
-    <SetupNext steps={siteSteps(row.site, row.event)} status={siteStatePill(row.site)} />
-  );
+  return <SetupNext steps={siteSteps(row.site, row.event)} status={siteStatePill(row.site)} />;
 }
 
 // the project's sites with how far each is set up and its last 30 days:

@@ -7,8 +7,8 @@ import { click, render, stubFetch, waitFor } from "./helpers";
 const siteUrl = `/api/tenants/${f.TENANT_ID}/sites/${f.SITE_ID}`;
 
 function box(host: HTMLElement): HTMLElement {
-  const el = host.querySelector<HTMLElement>("[role=checkbox]");
-  if (!el) throw new Error("no checkbox");
+  const el = host.querySelector<HTMLElement>("[role=switch]");
+  if (!el) throw new Error("no switch");
   return el;
 }
 
@@ -22,7 +22,6 @@ describe("utm collection setting (contract 3.1 collect_utm, 4.3.4)", () => {
     const calls = stubFetch([{ status: 200, body: { ...f.siteBody, collect_utm: true } }]);
     const host = await render(<CampaignParams site={f.siteBody as Site} canEdit isOwner />);
     expect(box(host).getAttribute("aria-checked")).toBe("false");
-    expect(host.textContent).toContain("Off by default");
     await click(box(host));
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0]?.method).toBe("PATCH");

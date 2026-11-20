@@ -53,7 +53,7 @@ describe("api analytics setup page (contract section 6)", () => {
     expect(calls[0]?.url).toBe(listPath);
     expect(host.textContent).toContain("sa_otlp_Ab3x...");
     expect(host.textContent).toContain("production");
-    expect(host.textContent).toContain("Not used yet");
+    expect(host.textContent).toContain("Never");
     // the plaintext never comes from a list
     expect(host.textContent).not.toContain(f.OTLP_PLAIN);
   });
@@ -68,7 +68,7 @@ describe("api analytics setup page (contract section 6)", () => {
     // the list starts with an active token; the toggle sits above it
     await waitFor(() => expect(host.textContent).toContain("Production API"));
     const label = [...host.querySelectorAll("label")].find(
-      (l) => l.textContent?.trim() === "Show revoked tokens",
+      (l) => l.textContent?.trim() === "Show revoked",
     );
     const toggle = label ? host.ownerDocument.getElementById(label.htmlFor) : null;
     if (!toggle) throw new Error("no show revoked checkbox");
@@ -87,7 +87,7 @@ describe("api analytics setup page (contract section 6)", () => {
       { status: 201, body: f.otlpTokenCreatedBody },
     ]);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.querySelector('[data-check="1"]')).not.toBeNull());
+    await waitFor(() => expect(opener(host)).not.toBeNull());
     await openCreate(host);
     await type(byLabel(host, "Token name"), "  Production API ");
     await type(byLabel(host, "Environment"), "production");
@@ -125,7 +125,7 @@ describe("api analytics setup page (contract section 6)", () => {
       { status: 201, body: { ...f.otlpTokenCreatedBody, environment: "" } },
     ]);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.querySelector('[data-check="1"]')).not.toBeNull());
+    await waitFor(() => expect(opener(host)).not.toBeNull());
     await openCreate(host);
     await type(byLabel(host, "Token name"), "Staging");
     await click(submit(host));
@@ -139,7 +139,7 @@ describe("api analytics setup page (contract section 6)", () => {
       { status: 422, body: f.errorBody("validation_failed", { name: "too_many" }) },
     ]);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.querySelector('[data-check="1"]')).not.toBeNull());
+    await waitFor(() => expect(opener(host)).not.toBeNull());
     await openCreate(host);
     await type(byLabel(host, "Environment"), "Production EU");
     await click(submit(host));
@@ -195,8 +195,10 @@ describe("api analytics setup page (contract section 6)", () => {
   it("shows one short exporter per stack, node first, and no example files", async () => {
     stubFetch([{ status: 200, body: page([f.otlpTokenBody]) }]);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.querySelector("[role=tab]")).not.toBeNull());
-    const tabs = [...host.querySelectorAll("[role=tab]")].map((t) => t.textContent);
+    await waitFor(() => expect(host.querySelector("[role=radio]")).not.toBeNull());
+    const tabs = [...host.querySelectorAll('[aria-label="Language"] [role=radio]')].map(
+      (t) => t.textContent,
+    );
     expect(tabs).toEqual(["Node.js", "Go", "Python", "Rust", "Java"]);
     const node = host.querySelector("[data-snippet=node] code")?.textContent ?? "";
     expect(node).toContain("new OTLPMetricExporter({");
@@ -211,10 +213,13 @@ describe("api analytics setup page (contract section 6)", () => {
     stubFetch([{ status: 200, body: page([f.otlpTokenBody]) }]);
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.textContent).toContain("Production API"));
-    const states = [...host.querySelectorAll("[data-check]")].map((e) =>
-      e.getAttribute("data-state"),
+    // the token step is a done row, the exporter the step to do now, and
+    // the first export is awaited in it
+    expect(host.textContent).toContain("2 of 3");
+    expect(host.querySelector("h3")?.textContent).toContain("Add the exporter");
+    expect(host.querySelector("[data-waiting]")?.textContent).toContain(
+      "Waiting for the first export",
     );
-    expect(states).toEqual(["done", "current", "waiting"]);
   });
 });
 
