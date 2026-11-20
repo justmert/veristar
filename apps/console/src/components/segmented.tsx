@@ -18,8 +18,9 @@ export function Segmented<T extends string>({
   label: string;
   value: T;
   // with `iconOnly`, an option shows its icon and its label is its
-  // accessible name only
-  options: readonly { value: T; label: string; icon?: ReactNode }[];
+  // accessible name only. `marker` sits before the label, such as the small
+  // amber dot of quarantined traffic (see SegmentedDot)
+  options: readonly { value: T; label: string; icon?: ReactNode; marker?: ReactNode }[];
   onChange: (v: T) => void;
   // a note after the control, e.g. the resolution the range implies
   hint?: string;
@@ -82,6 +83,7 @@ export function Segmented<T extends string>({
                   />
                 ) : null}
                 <span className="relative flex items-center">
+                  {o.marker && !iconOnly ? o.marker : null}
                   {iconOnly && o.icon ? o.icon : o.label}
                 </span>
               </button>
@@ -92,4 +94,15 @@ export function Segmented<T extends string>({
       {hint ? <span className="text-caption text-fg-3">{hint}</span> : null}
     </div>
   );
+}
+
+const DOT = {
+  warning: "bg-warning",
+  critical: "bg-critical",
+  success: "bg-success",
+} as const;
+
+// the marker of an option: a 6 px dot in a status colour
+export function SegmentedDot({ tone }: { tone: keyof typeof DOT }) {
+  return <span aria-hidden className={`mr-1.5 inline-block size-1.5 rounded-full ${DOT[tone]}`} />;
 }

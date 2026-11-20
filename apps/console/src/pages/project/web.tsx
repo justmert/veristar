@@ -29,7 +29,7 @@ import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
 import { Panel } from "@/components/panel";
 import { RangeControl } from "@/components/range-control";
-import { Segmented } from "@/components/segmented";
+import { Segmented, SegmentedDot } from "@/components/segmented";
 import { ChangeLine, StatCard, type StatChange } from "@/components/stat-card";
 import { EmptyState, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -123,7 +123,11 @@ export function WebPage() {
               value={state.band}
               options={[
                 { value: "primary", label: "Counted" },
-                { value: "quarantine", label: "Quarantined" },
+                {
+                  value: "quarantine",
+                  label: "Quarantined",
+                  marker: <SegmentedDot tone="warning" />,
+                },
               ]}
               onChange={(band) => set({ band })}
             />
@@ -541,6 +545,7 @@ function BreakdownPanel({
             };
           })}
           total={visitors}
+          tone={q.band === "primary" ? "series-1" : "warning"}
           shareDefinition="The share of the range's visitors. A visitor can count in several rows, so the shares can add up to more than 100%."
           valueLabel="Visitors"
           emptyTitle={`No ${DIMENSION_LABEL[active].toLowerCase()} in this range`}

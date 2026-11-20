@@ -759,6 +759,17 @@ function Summary({
             definition={`Share of requests answered with a ${k} status.`}
             value={r}
             format={formatPercent}
+            valueTone={
+              r === null
+                ? undefined
+                : k === "4xx"
+                  ? r >= RATE_4XX_MARK
+                    ? "warning"
+                    : undefined
+                  : r > 0
+                    ? "critical"
+                    : undefined
+            }
             missingReason="No requests in this range"
             change={toStatChange(rateChange(r, pr), true, period)}
             selected={metric === k}
@@ -1147,55 +1158,51 @@ function RoutesSection({
   ];
 
   return (
-    <section aria-labelledby="api-routes" className="flex min-w-0 flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <h2 id="api-routes" className="flex items-baseline gap-2 text-body font-semibold text-fg">
-          Routes
-          {data ? (
-            <span className="text-small font-normal text-fg-3 tabular">
-              {formatCount(data.total)}
-            </span>
-          ) : null}
-        </h2>
-        <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-caption text-fg-2">
-          <ul aria-label="Legend" className="flex flex-wrap items-center gap-x-3.5 gap-y-1">
-            <li className="flex items-center gap-1.5">
-              <span aria-hidden className="size-2 rounded-full bg-warning" />
-              4xx 5% or more
-            </li>
-            <li className="flex items-center gap-1.5">
-              <span aria-hidden className="size-2 rounded-full bg-critical" />
-              any 5xx
-            </li>
-            <li className="flex items-center gap-1.5">
-              <span aria-hidden className="h-1.5 w-3.5 rounded-[3px] bg-line-strong" />
-              p50 to p99
-            </li>
-            <li className="flex items-center gap-1.5">
-              <span aria-hidden className="h-3 w-[3px] rounded-[2px] bg-fg" />
-              p95
-            </li>
-          </ul>
-          <NativeSelect
-            aria-label="Sort latency by"
-            size="sm"
-            value={latencySort}
-            onChange={(e) => {
-              const sort = e.target.value as DashboardState["sort"];
-              set({ ...state, sort, order: defaultOrder(sort) });
-            }}
-            className="w-auto"
-          >
-            {LATENCY_SORTS.map((p) => (
-              <option key={p} value={p}>
-                Sort by {p}
-              </option>
-            ))}
-          </NativeSelect>
-        </div>
-      </div>
+    <div className="flex min-w-0 flex-col">
       <DataTable
         label="Routes"
+        title={{
+          text: "Routes",
+          count: data ? formatCount(data.total) : null,
+          aside: (
+            <>
+              <ul aria-label="Legend" className="flex flex-wrap items-center gap-x-3.5 gap-y-1">
+                <li className="flex items-center gap-1.5">
+                  <span aria-hidden className="size-2 rounded-full bg-warning" />
+                  4xx 5% or more
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span aria-hidden className="size-2 rounded-full bg-critical" />
+                  any 5xx
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span aria-hidden className="h-1.5 w-3.5 rounded-[3px] bg-line-strong" />
+                  p50 to p99
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span aria-hidden className="h-3 w-[3px] rounded-[2px] bg-fg" />
+                  p95
+                </li>
+              </ul>
+              <NativeSelect
+                aria-label="Sort latency by"
+                size="sm"
+                value={latencySort}
+                onChange={(e) => {
+                  const sort = e.target.value as DashboardState["sort"];
+                  set({ ...state, sort, order: defaultOrder(sort) });
+                }}
+                className="w-auto"
+              >
+                {LATENCY_SORTS.map((p) => (
+                  <option key={p} value={p}>
+                    Sort by {p}
+                  </option>
+                ))}
+              </NativeSelect>
+            </>
+          ),
+        }}
         columns={columns}
         rows={data?.items ?? []}
         getRowKey={routeKey}
@@ -1244,7 +1251,7 @@ function RoutesSection({
           routes.isPlaceholderData && "opacity-60",
         )}
       />
-    </section>
+    </div>
   );
 }
 
@@ -1389,20 +1396,19 @@ function StatusSection({
         parts={parts}
         caption="Errors, by code"
         cleanText="Every request succeeded."
+        footer={
+          ok.length > 0 ? (
+            <ul aria-label="Success codes" className="flex flex-wrap gap-x-4 gap-y-1 text-caption">
+              {ok.map((c) => (
+                <li key={c.status_code} data-key={c.status_code} className="flex gap-1.5">
+                  <span>{codeName(c.status_code)}</span>
+                  <span className="text-fg-2 tabular">{formatCount(c.requests)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null
+        }
       />
-      {ok.length > 0 ? (
-        <ul
-          aria-label="Success codes"
-          className="flex flex-wrap gap-x-4 gap-y-1 px-1 text-caption text-fg-3"
-        >
-          {ok.map((c) => (
-            <li key={c.status_code} data-key={c.status_code} className="flex gap-1.5">
-              <span>{codeName(c.status_code)}</span>
-              <span className="text-fg-2 tabular">{formatCount(c.requests)}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
     </div>
   );
 }

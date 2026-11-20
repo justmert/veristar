@@ -1063,20 +1063,13 @@ function Ids({
       cell: (id) => <FunctionSplit id={id} />,
     });
   return (
-    <Panel
-      title={
-        <span className="flex items-baseline gap-2">
-          Accounts and contracts
-          <span className="text-small font-normal text-fg-3 tabular">
-            {formatCount(view.ids.length)} of {MAX_IDS}
-          </span>
-        </span>
-      }
-      flush
-      aria-label="Accounts and contracts"
-    >
+    <>
       <DataTable<ChainId>
         label="Accounts and contracts"
+        title={{
+          text: "Accounts and contracts",
+          count: `${formatCount(view.ids.length)} of ${MAX_IDS}`,
+        }}
         columns={columns}
         rows={view.ids}
         getRowKey={(id) => id.id}
@@ -1105,7 +1098,7 @@ function Ids({
         range={range}
         onOpenChange={(o) => !o && setDetails(null)}
       />
-    </Panel>
+    </>
   );
 }
 

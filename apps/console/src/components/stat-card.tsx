@@ -68,6 +68,7 @@ export function StatCard({
   series,
   action,
   lead,
+  valueTone,
   className,
   ...data
 }: {
@@ -79,6 +80,9 @@ export function StatCard({
   action?: ReactNode;
   // drawn before the value (the integrity grade's ring)
   lead?: ReactNode;
+  // the value in a status colour, for a figure that is itself a problem
+  // (a 4xx rate of 5% or more, any 5xx rate)
+  valueTone?: "warning" | "critical";
   definition?: string;
   // a number counts to its new value when it changes; a string is shown
   // as it is (an already formatted value such as ">10 s")
@@ -165,8 +169,16 @@ export function StatCard({
                 <Missing reason={missingReason} className="text-[24px] leading-[30px]" />
               ) : (
                 <span
-                  className="metric-fit font-semibold text-fg [--vs-text-metric:24px] [line-height:30px]"
+                  className={cn(
+                    "metric-fit font-semibold [--vs-text-metric:24px] [line-height:30px]",
+                    valueTone === "warning"
+                      ? "text-warning"
+                      : valueTone === "critical"
+                        ? "text-critical"
+                        : "text-fg",
+                  )}
                   data-value=""
+                  data-tone={valueTone}
                 >
                   {typeof value === "number" ? (
                     <AnimatedNumber value={value} format={format} />
