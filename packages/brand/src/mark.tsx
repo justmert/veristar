@@ -27,8 +27,8 @@ export function Mark({
     >
       <defs>
         <mask id={cut} maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">
-          <rect width="48" height="48" fill="#fff" />
-          <circle cx={MARK_CUT.cx} cy={MARK_CUT.cy} r={MARK_CUT.r} fill="#000" />
+          <rect width="48" height="48" fill="white" />
+          <circle cx={MARK_CUT.cx} cy={MARK_CUT.cy} r={MARK_CUT.r} fill="black" />
         </mask>
       </defs>
       <polygon

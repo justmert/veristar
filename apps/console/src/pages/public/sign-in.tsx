@@ -238,7 +238,7 @@ function Stamp() {
       className="absolute -right-7 bottom-14.5 size-39 -rotate-12 text-success max-sm:hidden"
     >
       <defs>
-        <path id="stamp-arc" d="M80,80 m-58,0 a58,58 0 1,1 116,0 a58,58 0 1,1 -116,0" />
+        <path id="stamp-arc" d="M22,80 a58,58 0 1,1 116,0 a58,58 0 1,1 -116,0" />
       </defs>
       <circle
         cx="80"
