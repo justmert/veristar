@@ -106,18 +106,13 @@ contention add time, which the production drills measure.
 - **Web event drain rate.** Ingestion and delivery are two rates. Every node accepts events, and
   every node's replayer delivers the web event partitions it owns (11, 11 and 10 of 32 on three
   nodes) to the `core_umami_processes` (2) Umami processes of its own node, so delivery grows
-  with the node count ([capacity.md](capacity.md), "Web events end to end"). On production on
-  2026-11-18, with release `0.4.0` and one replayer delivering for the whole cluster, the cluster
-  delivered 55.5 events a second end to end, challenges included, every event stored in Umami in
-  the second it was sent and the queue never holding one: above the expected peak, but the rate
-  one address could offer, not the ceiling. The delivery ceiling of a production node has not been
-  measured. The local drill gave 280 events a second for one
-  Umami process ([drills/2026-11-13.md](drills/2026-11-13.md)); scaled by the drill's 1.5x for
-  two processes that is about 420 a second per node, an estimate. Local runs on 2026-11-17 on a
-  contended host, with every node's containers on that one host and one Umami process per node,
-  drained 238 to 417 a second with one replayer node, 340 to 586 with two and 447 to 637 with
-  three. Against the expected peak (50 a second) that leaves room; above the delivery rate, as in
-  a long 10x burst (500 a second), events queue in `WEB_EVENTS` and the dashboards fall behind.
+  with the node count ([capacity.md](capacity.md), "Web events end to end"). Measured on
+  production on 2026-11-20 with release `0.4.7`, a backlog of 24,000 page views drained at 168 a
+  second with one replayer node, 203 with two and 210 with three from a cold start, and at 258 and
+  270 a second once every partition of two and three nodes was consuming; every event was stored
+  in Umami exactly once. On 2026-11-18, with no backlog, the cluster delivered the 55.5 events a
+  second one address could offer, each stored in the second it was sent. Against the expected
+  peak (50 a second) that leaves room; above the delivery rate, as in a long 10x burst (500 a second), events queue in `WEB_EVENTS` and the dashboards fall behind.
   The queue keeps an event at most 72 hours and then drops it, and a large backlog can fill the
   NATS file store first, which stops ingestion; `WebEventsDelayed`, `WebEventsBacklogGrowing`
   and `WebEventsNearDiscard` announce both ([../runbooks/alerts.md](../runbooks/alerts.md)).

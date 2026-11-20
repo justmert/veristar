@@ -241,11 +241,74 @@ load from several addresses as in [gateway-limits.md](gateway-limits.md), "Capac
 `0.4.0` does not include partitioned replay: in this run one replayer delivered for the whole
 cluster to the Umami processes of its own node.
 
-**What is not measured.** The delivery ceiling of a production node, and partitioned delivery on
-production with one, two or three replayer nodes: the "about 420 events a second" per node of
-[availability.md](availability.md) is the 2026-11-13 drill's 280/s of one process scaled by its
-1.5x for two, not a run. The production ingest figure of about 700 events a second per node
-was measured with proofs solved before the run, so it holds no `GET /v1/c`.
+**Partitioned delivery measured on production, 2026-11-20** (release `v0.4.7`, three
+`Standard_B2as_v2` nodes, two Umami processes per node, 128 replayer workers and 900 in flight
+per node, the Patroni leader on `production-node-1`). The same load client and Umami lookup as on
+2026-11-18, against the internal probe site with production's gateway limits unchanged and
+challenges included. Each round:
+
+1. `docker compose stop replayer` on every core node.
+2. Three clients, one per node's Caddy, each sent 8,000 page views at 19 a second (1,334 page
+   loads of 6 page views, one challenge each, one visitor per page load), so 24,000 queued in
+   `WEB_EVENTS` in 421 s. Every event was answered 202.
+3. `docker compose start replayer` on the round's nodes at once. A sampler on `production-node-1`
+   read the `WEB_EVENTS` stream and its 32 partition consumers from their NATS leaders about every
+   1.1 s until the stream held no message and no consumer had one pending or unacknowledged. The
+   delivered count is the backlog at the start plus what arrived during the drain (live traffic
+   and the prober, 15 to 18 events).
+4. The replayers of the other nodes started, and ownership returned to 11, 10 and 11.
+
+`docker stats` sampled every node about every 5 s; the CPU figures are averages over the drain
+from 15 s after the start. The mean send is `replayer_send_duration_seconds` for answered sends
+over the drain. Every acknowledged path was then looked up in Umami's `website_event`.
+
+| Replayer nodes | Backlog | Start to empty | Rate | Rate once every partition was consuming | Delivered per node | Umami CPU per process (cores) | Leader PostgreSQL CPU (cores) | Mean send |
+|---|---|---|---|---|---|---|---|---|
+| 1 (`node-2`) | 24,064 | 143.0 s | **168.4/s** | 171.3/s | 24,084 | 0.49, 0.46 | 0.24 | 662 ms |
+| 2 (`node-2`, `node-3`) | 24,045 | 118.4 s | **203.3/s** | 258.3/s (the last 15,228, from 60.2 s) | 13,522, 10,547 | 0.32, 0.32; 0.27, 0.30 | 0.26 | 653, 609 ms |
+| 3 | 24,057 | 114.7 s | **209.9/s** | 269.6/s (the last 15,173, from 59.5 s) | 7,084, 6,627, 10,362 | 0.20 to 0.24 | 0.33 | 954, 813, 693 ms |
+
+The delivered counts are `replayer_outcomes_total{outcome="delivered"}` of each replayer since its
+start, which includes the live traffic of those minutes.
+
+| Round | Answered 202 | Stored in Umami | Missing | Stored twice | Dead-lettered |
+|---|---|---|---|---|---|
+| 1 node | 24,000 | 24,000 (112 primary, 23,888 quarantine), 4,005 sessions | 0 | 0 | 0 |
+| 2 nodes | 24,000 | 24,000 (all quarantine), 4,002 sessions | 0 | 0 | 0 |
+| 3 nodes | 24,000 | 24,000 (all quarantine), 4,002 sessions | 0 | 0 | 0 |
+
+Reading:
+
+- **One node delivers about 170 events a second** from a backlog, at a mean send of 662 ms with its
+  two Umami processes at about half a core each.
+- **Hand-over at a cold start.** The replayer that starts first sees only itself in its first
+  member list and takes all 32 partitions; the others get their share after the 10 s settle and
+  the 15 s minimum hold, and wait up to the 30 s ack wait for the messages handed back. In the
+  rounds with two and three nodes the last partition began consuming 60.2 s and 59.5 s after the
+  start, and the first node delivered alone until then (122 to 188 a second in the 30 s windows
+  of that time). Every hand-over finished the sends in flight before handing back the rest
+  (16 and 21 partitions), and no event was stored twice.
+- **Once every partition had its owner**, two nodes delivered 258 a second and three 270 a second,
+  1.5 and 1.6 times one node. The mean send rose from 662 ms with one node to 954 ms on the
+  leader's node with three, while no Umami process averaged more than half a core and the
+  leader's PostgreSQL 0.33 cores. Every stored event goes through the one Patroni leader, which
+  is the part all nodes share.
+- **Against the expected peak of 50 a second**, one node delivers 3.4 times it and the cluster 4.2
+  times it from a cold start, 5.4 times it once all three consume. A one-hour backlog at the
+  expected peak (180,000 events) drains in about 14 minutes at 270 a second while 50 a second
+  keep arriving (180,000 / 220 a second = 818 s).
+- During each round the stopped replayers made `ReplayerNotConsuming` and `ServiceDown` page, and
+  both resolved when the replayers started; `ReplayerLagHigh`, `WebEventsBacklogGrowing` and
+  `ReplayerPartitionsUnowned` stayed pending. The status page stayed green: web freshness allows
+  10 minutes.
+
+**What is not measured.** Ingest and delivery at the same time above 60 events a second on
+production: in these rounds the backlog was built with the replayers stopped, so delivery did
+not share the nodes' CPUs with ingest from several addresses. A backlog larger than 24,000
+events. More Umami processes, workers or sends in flight per node on production, the levers
+[../runbooks/capacity.md](../runbooks/capacity.md) describes. The production ingest figure of
+about 700 events a second per node was measured with proofs solved before the run, so it holds
+no `GET /v1/c`.
 
 **What a backlog costs.** Above the delivery rate, events wait in `WEB_EVENTS`:
 
