@@ -109,7 +109,8 @@ export function ConnectClient({
                 <CopyField value={mcpEndpoint(origin)} label="server address" className="min-w-0" />
               </Step>
               <Step n={2} title="Add it as a custom connector">
-                <span className="text-small text-fg-2">
+                {/* a plain line sits close under its title, closer than a field */}
+                <span className="-mt-1.5 text-small text-fg-2">
                   Settings, Connectors, Add custom connector
                 </span>
               </Step>

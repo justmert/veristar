@@ -10,6 +10,9 @@ type Common = {
   hint?: ReactNode;
   error?: string | null;
   optional?: boolean;
+  // the label is read out but not drawn, where a heading right above the
+  // field already names it
+  labelHidden?: boolean;
 };
 
 // label, control, hint and error wired together with ids, so a screen reader
@@ -27,9 +30,19 @@ function describedBy(ids: ReturnType<typeof useIds>, hint: unknown, error: unkno
 
 // a field is required unless it says "optional": the canvas marks only the
 // optional ones, in quiet text after the label and without brackets
-function Label({ text, optional, htmlFor }: { text: string; optional?: boolean; htmlFor: string }) {
+function Label({
+  text,
+  optional,
+  htmlFor,
+  hidden,
+}: {
+  text: string;
+  optional?: boolean;
+  htmlFor: string;
+  hidden?: boolean;
+}) {
   return (
-    <FieldLabel htmlFor={htmlFor}>
+    <FieldLabel htmlFor={htmlFor} className={hidden ? "sr-only" : undefined}>
       {text}
       {optional ? <span className="font-normal text-fg-3">optional</span> : null}
     </FieldLabel>
@@ -41,12 +54,13 @@ export function TextField({
   hint,
   error,
   optional,
+  labelHidden,
   ...input
 }: Common & Omit<React.ComponentProps<"input">, "id">) {
   const ids = useIds();
   return (
     <Field data-invalid={error ? true : undefined}>
-      <Label text={label} optional={optional} htmlFor={ids.control} />
+      <Label text={label} optional={optional} htmlFor={ids.control} hidden={labelHidden} />
       <Input
         id={ids.control}
         aria-invalid={error ? true : undefined}

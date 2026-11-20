@@ -6,6 +6,7 @@
 // focused card: add an id, or prove the one added.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { cn } from "@veristar/brand/cn";
 import { Blocks, Braces, Download, FileText, Plus, ShieldCheck, Trash2, User } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -322,7 +323,10 @@ function FirstStep({
       </EmptyState>
     );
   return (
-    <div data-first-step="" className="flex min-h-[60vh] flex-col justify-center gap-4 py-8">
+    <div
+      data-first-step=""
+      className="flex min-h-[calc(100dvh-10rem)] flex-col justify-center gap-4 py-8"
+    >
       {view.ids.length === 0 ? (
         <FocusCard data-step="add">
           <h2 id="add-h" className="text-[17px] leading-6 font-semibold text-fg">
@@ -433,6 +437,7 @@ function AddForm({
         <div className="min-w-0 flex-1">
           <TextField
             label="Account or contract"
+            labelHidden={Boolean(labelledBy)}
             name="strkey"
             data-autofocus=""
             value={strkey}
@@ -440,7 +445,7 @@ function AddForm({
             placeholder="G… or C…"
             autoComplete="off"
             spellCheck={false}
-            className="font-mono"
+            className={cn("font-mono", labelledBy && "h-11")}
             hint="A muxed M… account is added as its G account. Up to 20."
             error={error ?? undefined}
           />
@@ -448,7 +453,7 @@ function AddForm({
         <Button
           type="submit"
           pending={add.isPending}
-          className="sm:mt-6 max-lg:h-(--vs-control-touch)"
+          className={cn(labelledBy ? "h-11 px-5" : "sm:mt-6 max-lg:h-(--vs-control-touch)")}
         >
           {add.isPending ? "Adding" : "Add"}
         </Button>
