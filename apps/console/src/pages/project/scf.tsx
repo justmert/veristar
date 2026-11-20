@@ -828,18 +828,22 @@ function IntegrityEvidence({
             Not measured
           </span>
           {r.coverage.unmeasured_share !== null ? (
-            <>
-              <span className="flex items-baseline gap-2">
-                <span className="text-[24px] leading-7 font-semibold text-fg tabular">
-                  {formatPercent(r.coverage.unmeasured_share)}
-                </span>
-                <span className="text-small text-fg-2">of visits</span>
+            <span className="flex items-baseline gap-2">
+              <span className="text-[24px] leading-7 font-semibold text-fg tabular">
+                {formatPercent(r.coverage.unmeasured_share)}
               </span>
-              <span className="text-small text-fg-3">browsers with Global Privacy Control</span>
-            </>
+              <span className="text-small text-fg-2">of visits</span>
+            </span>
           ) : (
             <span className="text-small text-fg-2">{coverageText(r.coverage)}</span>
           )}
+          {/* the counts behind the estimate, as on the operator's list */}
+          {r.coverage.script_requests > 0 ? (
+            <span className="text-small text-fg-3 tabular">
+              {formatCount(r.coverage.gpc_requests)} of {formatCount(r.coverage.script_requests)}{" "}
+              loads with GPC
+            </span>
+          ) : null}
         </li>
       </ul>
     </div>
