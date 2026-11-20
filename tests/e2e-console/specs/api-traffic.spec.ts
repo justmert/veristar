@@ -193,13 +193,18 @@ async function waitExact(
 
 async function rows(p: Page) {
   return p.locator("tbody tr[data-route]").evaluateAll((trs) =>
-    trs.map((tr) => ({
-      service: tr.getAttribute("data-service") ?? "",
-      method: tr.getAttribute("data-method") ?? "",
-      route: tr.getAttribute("data-route") ?? "",
-      requests: Number((tr.children[1]?.textContent ?? "").replace(/,/g, "")),
-      text: tr.textContent ?? "",
-    })),
+    trs.map((tr) => {
+      // the requests cell is found by its column header, not by position
+      const heads = [...(tr.closest("table")?.querySelectorAll("thead th") ?? [])];
+      const at = heads.findIndex((th) => th.textContent?.trim() === "Requests");
+      return {
+        service: tr.getAttribute("data-service") ?? "",
+        method: tr.getAttribute("data-method") ?? "",
+        route: tr.getAttribute("data-route") ?? "",
+        requests: Number((tr.children[at]?.textContent ?? "").replace(/,/g, "")),
+        text: tr.textContent ?? "",
+      };
+    }),
   );
 }
 
@@ -298,7 +303,8 @@ test("the tenant sees its own endpoints with the numbers that were sent", async 
   );
   expect(shown.every((r) => !r.text.includes(FOREIGN))).toBe(true);
 
-  // the status distribution counts each code that was answered
+  // the status distribution counts each code that was answered: the success
+  // codes and the errors by code, both inside the status codes block
   const codes = new Map<number, number>();
   for (const [k, v] of sent) {
     const [service, , , status] = k.split("|");
@@ -307,7 +313,7 @@ test("the tenant sees its own endpoints with the numbers that were sent", async 
   }
   for (const [code, n] of codes)
     await expect(
-      page.getByRole("list", { name: "Status codes" }).locator(`li[data-key="${code}"]`),
+      page.getByRole("region", { name: "Status codes" }).locator(`li[data-key="${code}"]`),
     ).toContainText(n.toLocaleString("en"));
 
   // the other tenant's endpoints answer 404, as every tenant route does

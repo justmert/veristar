@@ -179,6 +179,7 @@ export function ZoomBlock({
               const body = (
                 <li
                   key={p.key}
+                  data-key={p.key}
                   aria-label={
                     p.definition
                       ? `${p.label}, ${formatCount(p.count)}. ${p.definition}`
