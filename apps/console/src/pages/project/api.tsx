@@ -1421,7 +1421,9 @@ function ServicesSection({ services }: { services: ApiServiceItem[] }) {
           text: serviceName(s.service),
           label: (
             <span className="flex min-w-0 items-center gap-2">
-              <span className="max-w-full shrink-0 truncate font-mono">{serviceName(s.service)}</span>
+              <span className="max-w-full shrink-0 truncate font-mono">
+                {serviceName(s.service)}
+              </span>
               {s.source === "span" ? <TracesBadge /> : null}
               {s.lossy ? <ApproxBadge /> : null}
               {s.span_data_ignored ? (

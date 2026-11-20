@@ -854,8 +854,8 @@ function Readout({
   );
 }
 
-// an empty chart that keeps its axis: the zero line and one grid line, with
-// the title and its actions in the middle of the plot
+// an empty chart that keeps its axis: the zero line, with the title and its
+// actions in the middle of the plot. no grid line runs through the title
 function EmptyPlot({
   height,
   title,
@@ -868,7 +868,6 @@ function EmptyPlot({
   return (
     <div className="relative" style={{ height }}>
       <div aria-hidden className="absolute inset-0" style={{ left: AXIS_W }}>
-        <span className="absolute inset-x-0 top-1/2 h-px bg-grid" />
         <span className="absolute inset-x-0 bottom-0 h-px bg-line-2" />
       </div>
       <span

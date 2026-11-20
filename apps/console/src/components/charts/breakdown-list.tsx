@@ -199,7 +199,9 @@ export function BreakdownList({
                     {partShare(it.value, total ?? 0)}
                   </span>
                 ) : null}
-                {hasAside ? <span className="w-12 text-right text-caption leading-5">{it.aside}</span> : null}
+                {hasAside ? (
+                  <span className="w-12 text-right text-caption leading-5">{it.aside}</span>
+                ) : null}
               </span>
             </>
           );
