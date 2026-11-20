@@ -1,12 +1,21 @@
-// the one approve or reject ui: the choice as two radio cards, reason
-// presets for a rejection, the reason the members read, keyboard a, r and
-// ctrl enter, and a toast when it is done. the review queue and the
+// the one approve or reject ui: a bar that closes a case. it holds the way
+// to the project, Reject (r) and Approve (a). either button swaps the bar
+// for the reason: presets and the text the members read for a rejection, an
+// optional note for an approval, sent with ctrl enter and dropped with
+// escape. nothing is sent by a single key. the review queue and the
 // operator project page use it for projects and for sites.
 
 import { useMutation } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { Check, CircleAlert, RotateCcw, X } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useId, useState } from "react";
+import { CircleAlert, RotateCcw, X } from "lucide-react";
+import {
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useId,
+  useState,
+} from "react";
 import { ApiError } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/queries";
@@ -34,22 +43,25 @@ const PRESETS = [
   "Duplicate of another project.",
 ];
 
-const NOUN = { project: "project", site: "site" } as const;
+const MAX = 1000;
 
-// approve or reject inline. a reject needs a reason, an approve takes an
-// optional note (contract 5.5); both reach the members. nothing is chosen
-// when the panel opens, so no key sends a decision the operator did not
-// make: a and r pick, then ctrl or cmd enter sends. a project and a site
-// use the same panel and words.
 export function DecisionPanel({
   subject,
   onDecided,
+  lead,
+  globalKeys = false,
+  className,
 }: {
   subject: DecisionSubject;
   onDecided?: (choice: Choice) => void;
+  // at the left of the bar: the way to the project
+  lead?: ReactNode;
+  // r and a open the reason from anywhere on the page (the review queue,
+  // where the case is the page); otherwise only inside the bar
+  globalKeys?: boolean;
+  className?: string;
 }) {
   const t = subject;
-  const noun = NOUN[subject.kind];
   const allowed = (["approve", "reject"] as const).filter(
     (a) => subject.kind === "site" || subject.allowed.includes(a),
   );
@@ -67,59 +79,68 @@ export function DecisionPanel({
         `${t.name} ${vars.act === "approve" ? "approved" : "rejected"}. The members see the decision.`,
       );
       setReason("");
+      setChoice(null);
       onDecided?.(vars.act);
       await queryClient.invalidateQueries({ queryKey: keys.operator });
     },
   });
 
+  function pick(c: Choice) {
+    if (!allowed.includes(c)) return;
+    setChoice(c);
+    setFieldError(null);
+    run.reset();
+  }
+
+  // r and a anywhere on the page while no field has focus
+  useEffect(() => {
+    if (!globalKeys || choice !== null) return;
+    function onKey(e: globalThis.KeyboardEvent) {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el?.closest("input, textarea, select, [contenteditable=true], dialog")) return;
+      if (e.key === "a" || e.key === "r") {
+        e.preventDefault();
+        pick(e.key === "a" ? "approve" : "reject");
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   if (allowed.length === 0) return null;
-  const required = choice === "reject";
+  const noun = subject.kind === "site" ? "site" : t.name;
   const conflict = run.error instanceof ApiError && run.error.code === "invalid_transition";
 
   function submit(e?: FormEvent) {
     e?.preventDefault();
     if (run.isPending || choice === null) return;
-    const code = v.reason(reason, required);
+    const code = v.reason(reason, choice === "reject");
     setFieldError(code ? v.fieldMessage(code) : null);
     if (code) return;
     run.mutate({ act: choice, text: reason.trim() });
   }
 
-  function pick(c: Choice) {
-    if (!allowed.includes(c)) return;
-    setChoice(c);
+  function cancel() {
+    setChoice(null);
     setFieldError(null);
+    run.reset();
   }
 
-  // the radio group pattern: one tab stop, the arrow keys move the choice
-  // and the focus together
-  function arrows(e: KeyboardEvent<HTMLDivElement>) {
-    const step =
-      e.key === "ArrowRight" || e.key === "ArrowDown"
-        ? 1
-        : e.key === "ArrowLeft" || e.key === "ArrowUp"
-          ? -1
-          : 0;
-    if (step === 0 || allowed.length < 2) return;
-    e.preventDefault();
-    // from the focused card, which is the chosen one once there is a choice
-    const from = (e.target as HTMLElement).closest<HTMLElement>("[data-choice]")?.dataset.choice;
-    const i = allowed.indexOf((from ?? choice) as (typeof allowed)[number]);
-    const next = allowed[(i + step + allowed.length) % allowed.length];
-    if (!next) return;
-    pick(next);
-    e.currentTarget.querySelector<HTMLElement>(`[data-choice="${next}"]`)?.focus();
-  }
-
-  // a and r pick, ctrl or cmd enter submits; typing in the reason is left alone
+  // inside the bar: r and a pick, ctrl or cmd enter sends, escape drops
   function shortcuts(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       e.preventDefault();
       submit();
       return;
     }
+    if (e.key === "Escape" && choice !== null) {
+      e.preventDefault();
+      cancel();
+      return;
+    }
     const typing = (e.target as HTMLElement).closest("textarea, input");
-    if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (typing || e.ctrlKey || e.metaKey || e.altKey || choice !== null || globalKeys) return;
     if (e.key === "a") pick("approve");
     if (e.key === "r") pick("reject");
   }
@@ -130,159 +151,171 @@ export function DecisionPanel({
       onSubmit={submit}
       onKeyDown={shortcuts}
       noValidate
-      className="flex flex-col gap-3"
+      data-decision={choice ?? ""}
+      className={cn("flex flex-col gap-3", className)}
     >
-      <div
-        role="radiogroup"
-        aria-label="Decision"
-        className="grid grid-cols-2 gap-2"
-        onKeyDown={arrows}
-      >
-        {allowed.map((c, i) => {
-          const on = c === choice;
-          return (
-            // biome-ignore lint/a11y/useSemanticElements: a radio card with a shortcut hint, like the segmented control
-            <button
-              key={c}
+      {choice === null ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-0 flex-1 text-small">{lead}</div>
+          {allowed.includes("reject") ? (
+            <Button
               type="button"
-              role="radio"
-              aria-checked={on}
-              // with nothing chosen the first card takes the one tab stop
-              tabIndex={on || (choice === null && i === 0) ? 0 : -1}
-              data-choice={c}
-              aria-keyshortcuts={c === "approve" ? "A" : "R"}
-              onClick={() => pick(c)}
-              className={cn(
-                "flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-body font-medium transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:min-h-(--vs-control-touch)",
-                // selected is the ink edge on the card's own fill, for both
-                // choices: the icon carries approve or reject, never the edge
-                on
-                  ? "border-fg bg-raised text-fg ring-1 ring-fg"
-                  : "border-line-strong text-fg-2 hover:bg-hover hover:text-fg",
-              )}
+              variant="outline"
+              aria-keyshortcuts="R"
+              onClick={() => pick("reject")}
+              className="max-lg:h-(--vs-control-touch)"
             >
-              <span className="flex items-center gap-2">
-                {c === "approve" ? (
-                  <Check aria-hidden className="size-3.5 text-success" strokeWidth={2.6} />
-                ) : (
-                  <X aria-hidden className="size-3.5 text-critical" strokeWidth={2.6} />
-                )}
-                {c === "approve" ? "Approve" : "Reject"}
+              <X aria-hidden className="text-critical" />
+              {subject.kind === "site" ? "Reject site" : "Reject"}
+              <span aria-hidden className="max-lg:hidden">
+                <Kbd>R</Kbd>
               </span>
-              <span aria-hidden className="shrink-0 max-lg:hidden">
-                <Kbd>{c === "approve" ? "A" : "R"}</Kbd>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {choice === "reject" ? (
-        <fieldset className="flex flex-wrap gap-1">
-          <legend className="sr-only">Reason presets</legend>
-          {PRESETS.map((p) => {
-            const on = reason.trim() === p;
-            return (
-              <button
-                key={p}
-                type="button"
-                aria-pressed={on}
-                onClick={() => {
-                  setReason(p);
-                  setFieldError(null);
-                }}
-                className={cn(
-                  "min-h-7 rounded-full border px-2 py-1 text-left text-caption transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:min-h-9",
-                  on
-                    ? "border-fg bg-selected text-fg"
-                    : "border-line-strong text-fg-2 hover:bg-hover hover:text-fg",
-                )}
+            </Button>
+          ) : null}
+          {allowed.includes("approve") ? (
+            <Button
+              type="button"
+              aria-keyshortcuts="A"
+              onClick={() => pick("approve")}
+              className="max-lg:h-(--vs-control-touch) max-sm:flex-1"
+            >
+              {subject.kind === "site" ? "Approve site" : `Approve ${t.name}`}
+              <span
+                aria-hidden
+                className="max-lg:hidden [&>kbd]:border-current [&>kbd]:text-current"
               >
-                {p}
-              </button>
-            );
-          })}
-        </fieldset>
-      ) : null}
-
-      <div className="flex flex-col gap-1">
-        <label htmlFor={`${ids}-r`} className="text-small font-medium text-fg">
-          Reason{" "}
-          <span className="font-normal text-fg-3">
-            {choice === null ? "(required to reject)" : required ? "(required)" : "(optional)"}
-          </span>
-        </label>
-        <Textarea
-          id={`${ids}-r`}
-          name="reason"
-          rows={3}
-          maxLength={1000}
-          value={reason}
-          aria-invalid={fieldError ? true : undefined}
-          aria-describedby={`${ids}-h`}
-          onChange={(e) => {
-            setReason(e.target.value);
-            if (fieldError) setFieldError(null);
-          }}
-        />
-        <span id={`${ids}-h`} className="flex justify-between gap-3 text-caption">
-          <span className={cn("min-w-0", fieldError ? "text-critical" : "text-fg-3")}>
-            {fieldError ?? "The project's members see this text."}
-          </span>
-          <span className="shrink-0 text-right font-mono whitespace-nowrap text-fg-3">
-            {reason.length} / 1000
-          </span>
-        </span>
-      </div>
-
-      {conflict ? (
-        <div
-          role="alert"
-          className="flex animate-fade-in flex-wrap items-start gap-2 rounded-md border border-line-strong px-3 py-2 text-small text-fg"
-        >
-          <CircleAlert aria-hidden className="mt-1 size-4 shrink-0 text-warning" />
-          <span className="min-w-0 flex-1">
-            Another operator decided first. {run.error instanceof Error ? run.error.message : null}
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="xs"
-            onClick={() => queryClient.invalidateQueries({ queryKey: keys.operator })}
-          >
-            <RotateCcw aria-hidden />
-            Reload
-          </Button>
+                <Kbd>A</Kbd>
+              </span>
+            </Button>
+          ) : null}
         </div>
       ) : (
-        <FormMessage error={run.error} />
-      )}
-
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <Button
-          type="submit"
-          variant={choice === "reject" ? "destructive-outline" : "default"}
-          pending={run.isPending}
-          disabled={conflict || choice === null}
-          aria-keyshortcuts="Control+Enter"
-          className="max-lg:h-(--vs-control-touch) max-lg:w-full"
-        >
-          {choice === null
-            ? "Choose Approve or Reject"
-            : run.isPending
-              ? choice === "reject"
-                ? "Rejecting"
-                : "Approving"
-              : choice === "reject"
-                ? `Reject ${noun}`
-                : `Approve ${noun}`}
-          {choice === null ? null : (
-            <span aria-hidden className="font-mono text-axis font-normal opacity-70 max-lg:hidden">
-              Ctrl Enter
+        <>
+          <div className="flex items-baseline justify-between gap-3">
+            <label htmlFor={`${ids}-r`} className="text-body font-semibold text-fg">
+              {choice === "reject" ? "Why reject" : "Note for the members"}
+              {choice === "approve" ? (
+                <span className="font-normal text-fg-3"> (optional)</span>
+              ) : null}
+            </label>
+            <span className="shrink-0 font-mono text-caption text-fg-3 tabular">
+              {reason.length} / {MAX}
             </span>
+          </div>
+          {choice === "reject" ? (
+            <fieldset className="flex flex-wrap gap-1.5">
+              <legend className="sr-only">Reason presets</legend>
+              {PRESETS.map((p) => {
+                const on = reason.trim() === p;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => {
+                      setReason(p);
+                      setFieldError(null);
+                    }}
+                    className={cn(
+                      "min-h-7 rounded-full border px-2.5 py-1 text-left text-small transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:min-h-9",
+                      on
+                        ? "border-line-focus bg-selected text-fg"
+                        : "border-line-2 text-fg-2 hover:bg-hover hover:text-fg",
+                    )}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+            </fieldset>
+          ) : null}
+          <Textarea
+            id={`${ids}-r`}
+            name="reason"
+            rows={2}
+            maxLength={MAX}
+            value={reason}
+            // biome-ignore lint/a11y/noAutofocus: the reason is the next thing to type once Reject or Approve is pressed
+            autoFocus
+            aria-invalid={fieldError ? true : undefined}
+            aria-describedby={`${ids}-h`}
+            onChange={(e) => {
+              setReason(e.target.value);
+              if (fieldError) setFieldError(null);
+            }}
+          />
+          {conflict ? (
+            <div
+              role="alert"
+              className="flex animate-fade-in flex-wrap items-start gap-2 rounded-md border border-line-strong px-3 py-2 text-small text-fg"
+            >
+              <CircleAlert aria-hidden className="mt-1 size-4 shrink-0 text-warning" />
+              <span className="min-w-0 flex-1">
+                Another operator decided first.{" "}
+                {run.error instanceof Error ? run.error.message : null}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                onClick={() => queryClient.invalidateQueries({ queryKey: keys.operator })}
+              >
+                <RotateCcw aria-hidden />
+                Reload
+              </Button>
+            </div>
+          ) : (
+            <FormMessage error={run.error} />
           )}
-        </Button>
-      </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <span
+              id={`${ids}-h`}
+              className={cn("min-w-0 flex-1 text-small", fieldError ? "text-critical" : "text-fg-3")}
+            >
+              {fieldError ??
+                (choice === "reject"
+                  ? "The project's members see this reason"
+                  : "The project's members see this note")}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={cancel}
+              aria-keyshortcuts="Escape"
+              className="max-lg:h-(--vs-control-touch)"
+            >
+              Cancel
+              <span aria-hidden className="max-lg:hidden">
+                <Kbd>Esc</Kbd>
+              </span>
+            </Button>
+            <Button
+              type="submit"
+              variant={choice === "reject" ? "destructive-outline" : "default"}
+              pending={run.isPending}
+              disabled={conflict}
+              aria-keyshortcuts="Control+Enter"
+              className="max-lg:h-(--vs-control-touch) max-sm:w-full"
+            >
+              {run.isPending
+                ? choice === "reject"
+                  ? "Rejecting"
+                  : "Approving"
+                : choice === "reject"
+                  ? `Reject ${noun}`
+                  : `Approve ${noun}`}
+              {run.isPending ? null : (
+                <span
+                  aria-hidden
+                  className="max-lg:hidden [&>kbd]:border-current [&>kbd]:text-current"
+                >
+                  <Kbd>Ctrl Enter</Kbd>
+                </span>
+              )}
+            </Button>
+          </div>
+        </>
+      )}
     </form>
   );
 }
