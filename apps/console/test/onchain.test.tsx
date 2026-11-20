@@ -187,6 +187,7 @@ const ctx: ProjectContext = {
   me: f.meBody as ProjectContext["me"],
   isOwner: true,
   termsCurrent: true,
+  readOnly: false,
 };
 
 function routes(page: React.ReactNode, path: string) {

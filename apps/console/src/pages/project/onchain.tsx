@@ -126,8 +126,8 @@ export function previousRange(v: Pick<OnchainView, "from" | "days">): RangeParam
 }
 
 export function OnchainPage() {
-  const { tenant, termsCurrent, isOwner } = useProject();
-  const canChange = termsCurrent && tenant.status !== "suspended";
+  const { tenant, termsCurrent, isOwner, readOnly } = useProject();
+  const canChange = termsCurrent && tenant.status !== "suspended" && !readOnly;
   const [params, setParams] = useSearchParams();
   const range = readOnchainRange(params);
   const [adding, setAdding] = useState(false);
@@ -180,12 +180,14 @@ export function OnchainPage() {
               // the range in words is the header's meta item
               words={false}
             />
-            <Button asChild variant="outline">
-              <a href={exportPaths.overview(tenant.id, { from: v.from, to: v.to })} download>
-                <Download aria-hidden />
-                Export CSV
-              </a>
-            </Button>
+            {readOnly ? null : (
+              <Button asChild variant="outline">
+                <a href={exportPaths.overview(tenant.id, { from: v.from, to: v.to })} download>
+                  <Download aria-hidden />
+                  Export CSV
+                </a>
+              </Button>
+            )}
           </>
         ) : null
       }
@@ -217,7 +219,7 @@ export function OnchainPage() {
       <>
         <Activity view={v} tenantId={tenant.id} />
         <Ids view={v} tenantId={tenant.id} canChange={canChange} isOwner={isOwner} />
-        <LinkSection view={v} tenantId={tenant.id} />
+        <LinkSection view={v} tenantId={tenant.id} readOnly={readOnly} />
       </>
     );
 
@@ -1263,7 +1265,16 @@ export function linkRows(sites: LinkSite[]): LinkRow[] {
   return out;
 }
 
-function LinkSection({ view, tenantId }: { view: OnchainView; tenantId: string }) {
+// a reader gets the link's state without the steps that fix it
+function LinkSection({
+  view,
+  tenantId,
+  readOnly,
+}: {
+  view: OnchainView;
+  tenantId: string;
+  readOnly: boolean;
+}) {
   const [showAll, setShowAll] = useState(false);
   const hasVerifiedAccount = view.ids.some(
     (id) => id.kind === "account" && id.verification.status === "verified",
@@ -1292,15 +1303,16 @@ function LinkSection({ view, tenantId }: { view: OnchainView; tenantId: string }
       ),
     },
     { key: "link", header: "Link", mobile: true, cell: (r) => <LinkProgress row={r} /> },
-    {
+  ];
+  if (!readOnly)
+    columns.push({
       key: "fix",
       header: "Fix",
       hideHeader: true,
       align: "right",
       action: true,
       cell: (r) => <LinkFix row={r} tenantId={tenantId} />,
-    },
-  ];
+    });
   return (
     <Panel
       aria-label="stellar.toml link"
@@ -1322,12 +1334,14 @@ function LinkSection({ view, tenantId }: { view: OnchainView; tenantId: string }
           data-link="no-site"
         >
           No site to link
-          <Link
-            to={`/projects/${tenantId}/sites`}
-            className="rounded-sm font-medium text-fg hover:underline focus-ring"
-          >
-            Add a site
-          </Link>
+          {readOnly ? null : (
+            <Link
+              to={`/projects/${tenantId}/sites`}
+              className="rounded-sm font-medium text-fg hover:underline focus-ring"
+            >
+              Add a site
+            </Link>
+          )}
         </p>
       ) : (
         <>

@@ -22,6 +22,12 @@ export type TenantStatus = z.infer<typeof tenantStatus>;
 export const role = z.enum(["owner", "member"]);
 export type Role = z.infer<typeof role>;
 
+// a person's role in a project they are shown. viewer is the demo's role
+// (/api/demo): it reads the project and changes nothing. members and
+// invites never carry it, so their role stays the two above.
+export const tenantRole = z.enum(["owner", "member", "viewer"]);
+export type TenantRole = z.infer<typeof tenantRole>;
+
 export const siteStatus = z.enum(["pending", "active", "suspended", "removed"]);
 export type SiteStatus = z.infer<typeof siteStatus>;
 
@@ -62,7 +68,7 @@ export const meTenant = z.object({
   slug: z.string(),
   name: z.string(),
   status: tenantStatus,
-  role,
+  role: tenantRole,
   accepted_terms_version: z.string().nullable(),
   terms_current: z.boolean(),
 });
@@ -90,6 +96,8 @@ export const me = z.object({
   tenants: z.array(meTenant),
   terms: termsRef,
   removed_tenants: z.array(removedTenant),
+  // set by /api/demo/me only
+  demo: z.literal(true).optional(),
 });
 export type Me = z.infer<typeof me>;
 
@@ -119,7 +127,7 @@ export const tenant = z.object({
   enrollment_answers: enrollmentAnswers,
   accepted_terms_version: z.string().nullable(),
   provisioning: z.enum(["pending", "ready"]),
-  role,
+  role: tenantRole,
   created_at: time,
   updated_at: time,
   status_changed_at: time,

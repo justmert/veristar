@@ -79,7 +79,7 @@ const RANGE = {};
 type CheckKey = "ownership" | "integrity" | "web" | "api" | "onchain";
 
 export function ScfReviewPage() {
-  const { tenant, isOwner } = useProject();
+  const { tenant, isOwner, readOnly } = useProject();
   const q = useQuery(scfViewQuery(tenant.id, RANGE));
   const v = q.data;
   const [signing, setSigning] = useState(false);
@@ -89,7 +89,7 @@ export function ScfReviewPage() {
       title={PAGE_HEADERS.scf.title}
       items={v ? [`${formatDateRange(v.from, v.to)}, UTC`] : []}
       secondary={
-        v ? (
+        v && !readOnly ? (
           <Button asChild variant="outline">
             <a href={exportPaths.overview(tenant.id, { from: v.from, to: v.to })} download>
               <Download aria-hidden />
@@ -159,7 +159,7 @@ function ruleText(v: SCFView["rules_met"][number]): string {
 }
 
 function Standing({ v, onSign }: { v: SCFView; onSign: () => void }) {
-  const { tenant } = useProject();
+  const { tenant, readOnly } = useProject();
   const reports = useQuery(reportsQuery(tenant.id));
   const c = v.comparison;
   const cohort = v.cohort.confirmed;
@@ -260,11 +260,13 @@ function Standing({ v, onSign }: { v: SCFView; onSign: () => void }) {
             No signed report yet
           </span>
         )}
-        <span className="mt-2 flex flex-wrap gap-2">
-          <Button onClick={onSign}>
-            <FileSignature aria-hidden />
-            Sign a report
-          </Button>
+        <span className="mt-2 flex flex-wrap gap-2 empty:hidden">
+          {readOnly ? null : (
+            <Button onClick={onSign}>
+              <FileSignature aria-hidden />
+              Sign a report
+            </Button>
+          )}
           {latest ? (
             <CopyButton
               text={latest.url}
@@ -293,19 +295,26 @@ function changeOf(r: number | null, period = "previous range"): StatChange | nul
 
 type Proof = CheckItem & { done: boolean; label: string };
 
-// every proof of ownership, with its date or the action that adds it
-function proofsOf(tenantId: string, sites: Site[], chain: OnchainView | undefined): Proof[] {
+// every proof of ownership, with its date or the action that adds it. a
+// reader gets the proofs without the actions
+function proofsOf(
+  tenantId: string,
+  sites: Site[],
+  chain: OnchainView | undefined,
+  readOnly: boolean,
+): Proof[] {
   const out: Proof[] = [];
   const live = sites.filter((s) => s.status !== "removed");
   const when = (t: string | null) =>
     t ? (utcDay(new Date(t)) === utcDay() ? "today" : formatDate(t)) : null;
   const quiet = (t: string | null) =>
     t ? <span className="text-caption text-fg-3">{when(t)}</span> : undefined;
-  const action = (to: string, label: string) => (
-    <Button asChild size="sm" variant="outline">
-      <Link to={to}>{label}</Link>
-    </Button>
-  );
+  const action = (to: string, label: string) =>
+    readOnly ? undefined : (
+      <Button asChild size="sm" variant="outline">
+        <Link to={to}>{label}</Link>
+      </Button>
+    );
   const mono = (s: string) => <span className="font-mono text-caption text-fg-3">{s}</span>;
   for (const s of live) {
     const ok = s.verification === "verified";
@@ -430,14 +439,15 @@ const kpiPlace = (v: SCFView, k: KpiKey): string | null => {
 };
 
 function Review({ v }: { v: SCFView }) {
-  const { tenant } = useProject();
+  const { tenant, readOnly } = useProject();
   const sites = useQuery(sitesQuery(tenant.id));
   const chain = useQuery(onchainQuery(tenant.id, { from: v.from, to: v.to }));
   const report = useQuery({
     ...integrityQuery("tenant", tenant.id, { from: v.from, to: v.to }),
     enabled: (v.sites?.sites ?? 0) > 0,
   });
-  const proofs = sites.data && chain.data ? proofsOf(tenant.id, sites.data, chain.data) : null;
+  const proofs =
+    sites.data && chain.data ? proofsOf(tenant.id, sites.data, chain.data, readOnly) : null;
   const proofsDone = proofs?.filter((p) => p.done).length ?? 0;
   const g = v.integrity && v.integrity.graded_days > 0 ? v.integrity : null;
   const kpi = v.comparison?.kpis;
@@ -651,7 +661,7 @@ function Evidence({
   report: { data?: IntegrityReport; isPending: boolean; error: unknown; refetch: () => unknown };
   sites: Site[];
 }) {
-  const { tenant } = useProject();
+  const { tenant, readOnly } = useProject();
   const left = proofs ? proofs.filter((p) => !p.done).length : 0;
   const note =
     open === "ownership" && proofs
@@ -663,7 +673,7 @@ function Evidence({
         : null;
   const names = Object.fromEntries(sites.map((s) => [s.id, s.domain]));
   const actions =
-    open === "integrity" && report.data ? (
+    open === "integrity" && report.data && !readOnly ? (
       <AppealLink report={report.data} appeal={{ slug: tenant.slug, siteDomains: names }} />
     ) : open === "web" || open === "api" || open === "onchain" ? (
       <Link
@@ -1050,7 +1060,7 @@ function ApiEvidence({ v }: { v: SCFView }) {
 }
 
 function ChainEvidence({ v }: { v: SCFView }) {
-  const { tenant } = useProject();
+  const { tenant, readOnly } = useProject();
   const chain = v.onchain;
   if (!chain || chain.ids === 0)
     return (
@@ -1058,9 +1068,11 @@ function ChainEvidence({ v }: { v: SCFView }) {
         compact
         title="No Stellar account or contract yet"
         action={
-          <Button asChild variant="outline">
-            <Link to={`/projects/${tenant.id}/onchain`}>Add an account</Link>
-          </Button>
+          readOnly ? null : (
+            <Button asChild variant="outline">
+              <Link to={`/projects/${tenant.id}/onchain`}>Add an account</Link>
+            </Button>
+          )
         }
       />
     );
@@ -1133,7 +1145,7 @@ export function SignedReports({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
-  const { tenant } = useProject();
+  const { tenant, readOnly } = useProject();
   const list = useQuery(reportsQuery(tenant.id));
   const queryClient = useQueryClient();
   const [ownOpen, setOwnOpen] = useState(false);
@@ -1215,7 +1227,7 @@ export function SignedReports({
             </span>
           ) : null}
         </h2>
-        {controlled ? null : (
+        {controlled || readOnly ? null : (
           <Button variant="outline" size="sm" onClick={() => setSigning(true)}>
             <FileSignature aria-hidden />
             Sign a report
@@ -1261,7 +1273,7 @@ export function SignedReports({
               disabled: download.isPending && download.variables?.id === r.id,
               onSelect: () => download.mutate(r),
             },
-            r.revoked_at
+            r.revoked_at || readOnly
               ? null
               : {
                   label: "Revoke link",
@@ -1276,7 +1288,7 @@ export function SignedReports({
         />
       )}
 
-      <SignDialog open={signing} onOpenChange={setSigning} onSigned={refresh} />
+      {readOnly ? null : <SignDialog open={signing} onOpenChange={setSigning} onSigned={refresh} />}
 
       <ConfirmDialog
         open={revoking !== null}

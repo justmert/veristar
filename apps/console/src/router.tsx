@@ -1,7 +1,9 @@
 import { Mark } from "@veristar/brand/mark";
+import { type ReactNode, useEffect } from "react";
 import { createBrowserRouter, type LoaderFunctionArgs, redirect } from "react-router";
 import { ApiError } from "@/api/client";
 import { meQuery } from "@/api/queries";
+import { enterDemo, isDemo, leaveDemo } from "@/lib/demo";
 import { AppShell } from "@/pages/app-shell";
 import { AccountPage } from "@/pages/home/account";
 import { EnrollPage } from "@/pages/home/enroll";
@@ -53,12 +55,13 @@ function ConsoleLoading() {
 }
 
 // every signed-in page needs /api/me first; without a session the browser
-// goes to sign-in and comes back to the page it asked for
+// goes to sign-in and comes back to the page it asked for. a demo tab has no session to lose: its /api/demo/me failing is an
+// error to show, never a trip to sign-in
 async function requireSession({ request }: LoaderFunctionArgs) {
   try {
     return await queryClient.ensureQueryData(meQuery);
   } catch (err) {
-    if (err instanceof ApiError && err.status === 401) {
+    if (err instanceof ApiError && err.status === 401 && !isDemo()) {
       const url = new URL(request.url);
       throw redirect(`/sign-in?return_to=${encodeURIComponent(url.pathname + url.search)}`);
     }
@@ -66,8 +69,52 @@ async function requireSession({ request }: LoaderFunctionArgs) {
   }
 }
 
+// /demo turns this tab into the demo and opens the first sample project.
+// the cache is emptied on the way in, so nothing a signed-in session read
+// earlier in the tab can show beside the demo's answers
+export async function demoLoader() {
+  await queryClient.cancelQueries();
+  queryClient.clear();
+  enterDemo();
+  try {
+    const me = await queryClient.ensureQueryData(meQuery);
+    const first = me.tenants[0];
+    return redirect(first ? `/projects/${first.id}` : "/");
+  } catch (err) {
+    // a demo that did not open leaves the tab as it was
+    leaveDemo();
+    queryClient.clear();
+    throw err;
+  }
+}
+
+// sign-in always talks to the real api: a demo tab that reaches it (the
+// banner's enroll link, a typed address) leaves the demo and its cache
+function OutsideDemo({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    if (!isDemo()) return;
+    leaveDemo();
+    queryClient.clear();
+  }, []);
+  return children;
+}
+
 export const router = createBrowserRouter([
-  { path: "/sign-in", element: <SignInPage />, errorElement: <RouteErrorPage /> },
+  {
+    path: "/demo",
+    loader: demoLoader,
+    hydrateFallbackElement: <ConsoleLoading />,
+    errorElement: <RouteErrorPage />,
+  },
+  {
+    path: "/sign-in",
+    element: (
+      <OutsideDemo>
+        <SignInPage />
+      </OutsideDemo>
+    ),
+    errorElement: <RouteErrorPage />,
+  },
   // an address older versions sent people to after a single sign-on
   { path: "/sso-error", element: <SsoErrorPage />, errorElement: <RouteErrorPage /> },
   { path: "/terms", element: <TermsPage />, errorElement: <RouteErrorPage /> },

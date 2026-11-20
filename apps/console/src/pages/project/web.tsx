@@ -90,7 +90,7 @@ const EMPTY_TITLE: Partial<Record<TenantStatus, string>> = {
 const CADENCE = "Totals refresh every hour. Pages, events and hours are read live.";
 
 export function WebPage() {
-  const { tenant } = useProject();
+  const { tenant, readOnly } = useProject();
   const [params, setParams] = useSearchParams();
   const state = readWebState(params);
   const set = (next: Partial<WebState>) =>
@@ -171,9 +171,11 @@ export function WebPage() {
         <EmptyState
           title="No sites yet"
           action={
-            <Button asChild variant="outline">
-              <Link to={`/projects/${tenant.id}/sites`}>Add site</Link>
-            </Button>
+            readOnly ? null : (
+              <Button asChild variant="outline">
+                <Link to={`/projects/${tenant.id}/sites`}>Add site</Link>
+              </Button>
+            )
           }
         />
       </Page>
@@ -233,7 +235,7 @@ export function WebPage() {
           onRetry={() => summary.refetch()}
         />
       ) : empty ? (
-        <FirstStep sites={scope} status={tenant.status} />
+        <FirstStep sites={scope} status={tenant.status} readOnly={readOnly} />
       ) : (
         <Dashboard
           tenantId={tenant.id}
@@ -281,12 +283,21 @@ function useProvisioningPending(tenantId: string): boolean {
 // ---- no page view yet: the figures wait, and the chart's place holds the
 // one step that brings the first page view
 
-function FirstStep({ sites, status }: { sites: Site[]; status: TenantStatus }) {
+function FirstStep({
+  sites,
+  status,
+  readOnly,
+}: {
+  sites: Site[];
+  status: TenantStatus;
+  readOnly: boolean;
+}) {
   const health = useSiteHealth(sites);
   const docs = siblingUrl(window.location.hostname, "docs");
   // the first site whose tracker sent nothing is the one to set up
   const next = sites.find((s) => health.get(s.id)?.tone !== "success") ?? sites[0];
-  const active = status === "active";
+  // a reader sees the empty chart without the setup step it cannot take
+  const active = status === "active" && !readOnly;
   return (
     <div className="flex flex-col gap-4" data-testid="web-first-step">
       <FigureRow>

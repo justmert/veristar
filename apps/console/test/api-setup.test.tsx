@@ -11,7 +11,7 @@ const path = `/projects/${f.TENANT_ID}/api`;
 const listPath = `/api/tenants/${f.TENANT_ID}/otlp-tokens?limit=200`;
 
 function routes(tenant: Tenant = base, termsCurrent = true) {
-  const ctx = { tenant, me: f.meBody, isOwner: true, termsCurrent };
+  const ctx = { tenant, me: f.meBody, isOwner: true, termsCurrent, readOnly: false };
   return [
     {
       path: "/projects/:tenantId",

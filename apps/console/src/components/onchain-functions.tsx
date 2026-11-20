@@ -14,6 +14,7 @@ import { type Column, DataTable } from "@/components/data-table";
 import { DayStrip } from "@/components/onchain";
 import { ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
 import { Button } from "@/components/ui/button";
+import { useDemo } from "@/lib/demo";
 import { countOf, formatCount } from "@/lib/format";
 import { missingText } from "@/lib/onchain";
 
@@ -205,6 +206,8 @@ function DailyCalls({ id, source }: { id: ChainId; source: FunctionsSource }) {
 // open the daily calls and export them.
 export function ContractFunctionsBlock({ id, source }: { id: ChainId; source?: FunctionsSource }) {
   const [open, setOpen] = useState(false);
+  // the demo serves no csv
+  const demo = useDemo();
   if (id.kind !== "contract") return null;
   const s = id.functions;
   if (s === null) return null;
@@ -239,12 +242,14 @@ export function ContractFunctionsBlock({ id, source }: { id: ChainId; source?: F
             />
             Daily calls
           </Button>
-          <Button asChild variant="ghost" size="sm" className="max-lg:h-(--vs-control-touch)">
-            <a href={exportPaths.functions(source, id.id)} download>
-              <Download aria-hidden />
-              Export CSV
-            </a>
-          </Button>
+          {demo ? null : (
+            <Button asChild variant="ghost" size="sm" className="max-lg:h-(--vs-control-touch)">
+              <a href={exportPaths.functions(source, id.id)} download>
+                <Download aria-hidden />
+                Export CSV
+              </a>
+            </Button>
+          )}
         </div>
       ) : null}
       {source && open ? (

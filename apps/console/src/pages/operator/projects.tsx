@@ -27,6 +27,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "@/components/ui/menu";
+import { useDemo } from "@/lib/demo";
 import { formatDate, formatDateRange } from "@/lib/format";
 import {
   COHORT_KEYS,
@@ -72,6 +73,8 @@ const isEmpty = (f: ProjectFilters) => JSON.stringify(f) === JSON.stringify(EMPT
 // filters and the sort are in the address, so a list can be shared.
 export function OperatorProjectsPage() {
   const [params, setParams] = useSearchParams();
+  // the demo serves no csv
+  const demo = useDemo();
   const view = readView(params.get("view"));
   const location = useLocation();
   const [selected, setSelected] = useState<Selection>(() => handedOver(location.state));
@@ -379,7 +382,7 @@ export function OperatorProjectsPage() {
                 onRange={(range) => writeList({ ...listState, range })}
               />
               <AboutNumbers view={view} />
-              {resolved && loaded > 0 && !badDays ? (
+              {resolved && loaded > 0 && !badDays && !demo ? (
                 <Button asChild variant="outline">
                   <a href={listExportHref(view, listState, resolved, loaded)} download>
                     <Download aria-hidden />
@@ -441,11 +444,15 @@ export function OperatorProjectsPage() {
           selected={selected}
           onChange={setSelected}
           href={`/operator/compare?${compare.toString()}`}
-          csv={exportPaths.compare(
-            view === "api" ? "api" : "web",
-            selected.map((x) => x.id),
-            resolved ?? listState.range,
-          )}
+          csv={
+            demo
+              ? null
+              : exportPaths.compare(
+                  view === "api" ? "api" : "web",
+                  selected.map((x) => x.id),
+                  resolved ?? listState.range,
+                )
+          }
         />
       </div>
     </div>
@@ -793,7 +800,7 @@ function SelectionBar({
   selected: Selection;
   onChange: (s: Selection) => void;
   href: string;
-  csv: string;
+  csv: string | null;
 }) {
   const any = selected.length > 0;
   useEffect(() => {
@@ -825,12 +832,14 @@ function SelectionBar({
       <Button asChild size="sm" className="max-lg:h-(--vs-control-touch)">
         <Link to={href}>Open in Compare</Link>
       </Button>
-      <Button asChild variant="outline" size="sm" className="max-lg:h-(--vs-control-touch)">
-        <a href={csv} download>
-          <Download aria-hidden />
-          Export CSV
-        </a>
-      </Button>
+      {csv ? (
+        <Button asChild variant="outline" size="sm" className="max-lg:h-(--vs-control-touch)">
+          <a href={csv} download>
+            <Download aria-hidden />
+            Export CSV
+          </a>
+        </Button>
+      ) : null}
       <Button
         variant="ghost"
         size="sm"

@@ -80,7 +80,7 @@ function SitesCrumb({ tenantId }: { tenantId: string }) {
 type Shown = "tag" | "record" | "toml" | null;
 
 function SitePage({ site }: { site: Site }) {
-  const { isOwner, termsCurrent } = useProject();
+  const { isOwner, termsCurrent, readOnly } = useProject();
   const [params, setParams] = useSearchParams();
   const version = params.get("version");
   const snippet = useQuery(snippetQuery(site.id, version));
@@ -126,9 +126,17 @@ function SitePage({ site }: { site: Site }) {
             <span>{site.verify_method === "dns" ? "DNS record" : "File on the site"}</span>
           ) : null}
           {site.verified_at ? <span>{formatDate(site.verified_at)}</span> : null}
-          <button type="button" aria-expanded={shown === "record"} onClick={() => toggle("record")}>
-            {shown === "record" ? "Hide the record" : "Show the record"}
-          </button>
+          {/* the record is read from the verification route, which a
+              reader has no access to */}
+          {readOnly ? null : (
+            <button
+              type="button"
+              aria-expanded={shown === "record"}
+              onClick={() => toggle("record")}
+            >
+              {shown === "record" ? "Hide the record" : "Show the record"}
+            </button>
+          )}
         </>
       ),
   }));
@@ -298,9 +306,9 @@ function SitePage({ site }: { site: Site }) {
             </div>
           ) : current?.key === "event" ? (
             <div id="event" className="scroll-mt-6">
-              <Refused site={site} day={first.day} month={first.month} />
+              <Refused site={site} day={first.day} month={first.month} readOnly={readOnly} />
             </div>
-          ) : current?.key === "domain" ? (
+          ) : current?.key === "domain" && !readOnly ? (
             <div id="domain" className="scroll-mt-6">
               <VerifyDomain site={site} current />
             </div>
@@ -383,10 +391,12 @@ function Refused({
   site,
   day,
   month,
+  readOnly,
 }: {
   site: Site;
   day: Ingest | undefined;
   month: Ingest | undefined;
+  readOnly: boolean;
 }) {
   // the month answer is cached longer than the polled day, so a refusal seen
   // in the last 24 hours is named even before the month catches up
@@ -417,7 +427,7 @@ function Refused({
         ))}
       </ul>
       <div className="flex flex-wrap gap-2">
-        {originRefused ? (
+        {originRefused && !readOnly ? (
           <Button asChild variant="outline" size="sm" className="max-lg:h-(--vs-control-touch)">
             <Link to={{ hash: "settings" }} replace>
               Edit allowed origins

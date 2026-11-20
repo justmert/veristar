@@ -16,7 +16,13 @@ const IP = "203.0.113.77";
 const UA = "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0";
 
 function routes(isOwner = true) {
-  const ctx = { tenant: f.tenantBody as Tenant, me: f.meBody, isOwner, termsCurrent: true };
+  const ctx = {
+    tenant: f.tenantBody as Tenant,
+    me: f.meBody,
+    isOwner,
+    termsCurrent: true,
+    readOnly: false,
+  };
   return [
     {
       path: "/projects/:tenantId",

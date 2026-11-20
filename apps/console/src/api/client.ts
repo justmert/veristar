@@ -4,9 +4,8 @@
 // ApiError, so pages branch on stable codes and never on message text.
 
 import type { z } from "zod";
+import { apiBase } from "@/lib/demo";
 import { errorEnvelope } from "./schemas";
-
-export const API_BASE = "/api";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -102,7 +101,7 @@ export async function request<S extends z.ZodType>(
   if (MUTATING.has(method)) headers["X-Requested-With"] = "sa-console";
   if (body !== undefined) headers["Content-Type"] = "application/json; charset=utf-8";
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${apiBase(path)}${path}`, {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -138,7 +137,7 @@ export async function requestNoContent(
   const headers: Record<string, string> = { Accept: "application/json" };
   if (MUTATING.has(method)) headers["X-Requested-With"] = "sa-console";
   if (body !== undefined) headers["Content-Type"] = "application/json; charset=utf-8";
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${apiBase(path)}${path}`, {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),

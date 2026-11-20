@@ -34,10 +34,10 @@ export function SiteSettingsPage() {
 // campaign parameters and, for owners, deleting the site. the domain cannot
 // change. Save appears once the name or the origins change.
 export function SiteSettings({ site }: { site: Site }) {
-  const { tenant, isOwner, termsCurrent } = useProject();
+  const { tenant, isOwner, termsCurrent, readOnly } = useProject();
   // a suspended project's sites cannot be changed (contract 5.11); deleting
-  // stays possible
-  const canEdit = termsCurrent && tenant.status !== "suspended";
+  // stays possible. a reader sees the settings as text
+  const canEdit = termsCurrent && tenant.status !== "suspended" && !readOnly;
   const id = useId();
   return (
     <section id="settings" aria-labelledby={id} className="flex scroll-mt-6 flex-col">

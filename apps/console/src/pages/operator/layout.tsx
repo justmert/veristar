@@ -7,6 +7,7 @@ import { useOperatorAdmin } from "@/components/nav/operator-role";
 import { PageHeader } from "@/components/page-header";
 import { ErrorState } from "@/components/states";
 import { StepUpGate } from "@/components/step-up";
+import { useDemo } from "@/lib/demo";
 import { OperatorPagePending } from "@/pages/operator/page-frame";
 import { OperatorsOnlyPage } from "@/pages/public/not-found";
 
@@ -15,11 +16,15 @@ import { OperatorsOnlyPage } from "@/pages/public/not-found";
 // pages away from people who would get 403 on each request anyway. the
 // sidebar names the pages; each operator page draws its own header. alerts
 // are platform operations and open for operator admins only.
+// the demo has no passkey to step up with; its operator pages read
+// /api/demo, which needs none
 export function OperatorLayout() {
   const me = useQuery(meQuery);
+  const demo = useDemo();
   if (me.isPending) return <GateLoading />;
   if (me.error) return <GateError error={me.error} onRetry={() => me.refetch()} />;
   if (!me.data.user.is_operator) return <OperatorsOnlyPage />;
+  if (demo) return <Outlet />;
   return <SteppedUp userName={me.data.user.display_name} />;
 }
 

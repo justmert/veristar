@@ -6,10 +6,11 @@ import { useLocation, useNavigate } from "react-router";
 import { stepUpQuery } from "@/api/operators";
 import { operatorTenantsQuery } from "@/api/queries";
 import type { Me } from "@/api/schemas";
-import { areaOf, HOME_NAV, OPERATOR_NAV, projectNav } from "@/components/nav/nav-items";
+import { areaOf, demoNav, HOME_NAV, OPERATOR_NAV, projectNav } from "@/components/nav/nav-items";
 import { useOperatorAdmin } from "@/components/nav/operator-role";
 import { Kbd } from "@/components/panel";
 import { Button } from "@/components/ui/button";
+import { useDemo } from "@/lib/demo";
 
 // the group header carries the context ("Lumen Pay", "Operator"), so a row
 // says only the page or project name
@@ -41,8 +42,10 @@ export function CommandPalette({
   const [active, setActive] = useState(0);
   const listId = useId();
   const operator = me.user.is_operator;
-  const stepUp = useQuery({ ...stepUpQuery, enabled: open && operator });
-  const live = open && operator && stepUp.data?.stepped_up === true;
+  // the demo has no step-up and lists only its own projects
+  const demo = useDemo();
+  const stepUp = useQuery({ ...stepUpQuery, enabled: open && operator && !demo });
+  const live = open && operator && !demo && stepUp.data?.stepped_up === true;
   // alerts are for operator admins only
   const admin = useOperatorAdmin(open) === true;
   const term = q.trim();
@@ -75,7 +78,7 @@ export function CommandPalette({
     const projectId = area.kind === "project" ? area.id : (me.tenants[0]?.id ?? null);
     const projectName = me.tenants.find((t) => t.id === projectId)?.name;
     if (projectId)
-      for (const g of projectNav(projectId))
+      for (const g of demo ? demoNav(projectNav(projectId), "project") : projectNav(projectId))
         for (const i of g.items)
           out.push({
             key: `p-${i.key}`,
@@ -84,10 +87,12 @@ export function CommandPalette({
             to: i.to,
           });
     for (const i of HOME_NAV)
-      out.push({ key: `h-${i.key}`, group: "Console", label: i.label, to: i.to });
-    out.push({ key: "h-new", group: "Console", label: "Enroll a project", to: "/projects/new" });
+      if (!demo || i.key === "projects")
+        out.push({ key: `h-${i.key}`, group: "Console", label: i.label, to: i.to });
+    if (!demo)
+      out.push({ key: "h-new", group: "Console", label: "Enroll a project", to: "/projects/new" });
     if (operator)
-      for (const g of OPERATOR_NAV)
+      for (const g of demo ? demoNav(OPERATOR_NAV, "operator") : OPERATOR_NAV)
         for (const i of g.items)
           if (i.key !== "alerts" || admin)
             out.push({ key: `o-${i.key}`, group: "Operator pages", label: i.label, to: i.to });
@@ -116,7 +121,7 @@ export function CommandPalette({
         e.label.toLowerCase().includes(lower) ||
         (e.detail ?? "").toLowerCase().includes(lower),
     );
-  }, [pathname, me.tenants, operator, admin, live, opList.data, term]);
+  }, [pathname, me.tenants, operator, admin, live, opList.data, term, demo]);
 
   const at = Math.min(active, Math.max(0, entries.length - 1));
 

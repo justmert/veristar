@@ -3,15 +3,16 @@ import { cn } from "@veristar/brand/cn";
 import { Mark } from "@veristar/brand/mark";
 import { Menu as MenuIcon, Search, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, Outlet, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router";
 import { api } from "@/api/endpoints";
 import { stepUpQuery } from "@/api/operators";
 import { meQuery, operatorAlertsQuery, tenantQuery } from "@/api/queries";
 import { CommandPalette, isPaletteKey } from "@/components/command-palette";
+import { DemoBanner } from "@/components/demo-banner";
 import { FormMessage } from "@/components/error-panel";
 import { PageMotion } from "@/components/motion";
 import { PaletteContext } from "@/components/nav/go-to";
-import { areaOf, pageTitle } from "@/components/nav/nav-items";
+import { areaOf, demoAllows, pageTitle } from "@/components/nav/nav-items";
 import { useOperatorAdmin } from "@/components/nav/operator-role";
 import { AlertsBadge, Sidebar } from "@/components/nav/sidebar";
 import { Toaster, toast } from "@/components/toast";
@@ -19,7 +20,9 @@ import { Button } from "@/components/ui/button";
 import { MenuContainer } from "@/components/ui/menu";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { criticalCount } from "@/lib/alerts";
+import { useDemo } from "@/lib/demo";
 import { isNotFound } from "@/lib/errors";
+import { NotFoundPage } from "@/pages/public/not-found";
 import { queryClient } from "@/query-client";
 
 // the signed-in frame: the sidebar on a wide screen, a top bar with the
@@ -33,6 +36,7 @@ export function AppShell() {
   const { pathname } = useLocation();
   const [drawer, setDrawer] = useState(false);
   const [palette, setPalette] = useState(false);
+  const demo = useDemo();
   // a project that answers 404 names that in the top bar, not a page of it
   const area = areaOf(pathname);
   const asked = area.kind === "project" ? area.id : null;
@@ -123,7 +127,9 @@ export function AppShell() {
             <span className="min-w-0 flex-1 truncate text-title text-fg" data-testid="page-title">
               {contextTitle}
             </span>
-            {operatorArea && pathname !== "/operator/alerts" ? <OperatorAlertButton /> : null}
+            {operatorArea && !demo && pathname !== "/operator/alerts" ? (
+              <OperatorAlertButton />
+            ) : null}
             <Button
               variant="ghost"
               size="icon-lg"
@@ -151,16 +157,27 @@ export function AppShell() {
               {/* a column that fills the window, so a message page (404,
                   operators only) centres in it as on the canvas */}
               <PageMotion key={pathname} className="flex flex-1 flex-col">
-                <Outlet />
+                {demo ? <DemoPage pathname={pathname} /> : <Outlet />}
               </PageMotion>
             </main>
           </div>
         </div>
         <CommandPalette me={me.data} open={palette} onOpenChange={setPalette} />
         <Toaster />
+        {demo ? <DemoBanner /> : null}
       </TooltipProvider>
     </PaletteContext.Provider>
   );
+}
+
+// the demo draws only the pages that read what /api/demo serves; any other
+// address is not found, as it would be for a project that is not yours. the
+// operator area opens on its project list, as the review queue is not shown
+function DemoPage({ pathname }: { pathname: string }) {
+  const a = areaOf(pathname);
+  if (a.kind === "operator" && a.rest === "") return <Navigate to="/operator/projects" replace />;
+  if (!demoAllows(pathname)) return <NotFoundPage />;
+  return <Outlet />;
 }
 
 // on a phone, the firing alerts as a badge in the top bar, for operator

@@ -94,7 +94,7 @@ export const IGNORED_NOTE =
 const CADENCE = "Hourly and daily counts refresh every few minutes. Minute counts are live.";
 
 export function ApiPage() {
-  const { tenant } = useProject();
+  const { tenant, readOnly } = useProject();
   const [params, setParams] = useSearchParams();
   const state = readState(params);
   const set = (next: DashboardState) => setParams(writeState(next));
@@ -141,7 +141,7 @@ export function ApiPage() {
           onRetry={() => services.refetch()}
         />
       ) : items.length === 0 ? (
-        <NoData tenantId={tenant.id} range={range} docs={docs} />
+        <NoData tenantId={tenant.id} range={range} docs={docs} readOnly={readOnly} />
       ) : (
         <Dashboard tenantId={tenant.id} state={state} set={set} services={items} />
       )}
@@ -213,10 +213,12 @@ function NoData({
   tenantId,
   range,
   docs,
+  readOnly,
 }: {
   tenantId: string;
   range: ApiRange | null;
   docs: string | null;
+  readOnly: boolean;
 }) {
   return (
     <>
@@ -242,9 +244,11 @@ function NoData({
           className="min-h-80"
           action={
             <span className="flex flex-wrap items-center justify-center gap-2">
-              <Button asChild>
-                <Link to={`/projects/${tenantId}/connect-api`}>Connect API</Link>
-              </Button>
+              {readOnly ? null : (
+                <Button asChild>
+                  <Link to={`/projects/${tenantId}/connect-api`}>Connect API</Link>
+                </Button>
+              )}
               {docs ? (
                 <Button asChild variant="ghost">
                   <a href={`${docs}/onboarding/api/quickstart`}>Docs</a>
