@@ -206,16 +206,17 @@ const BAR: Record<number, string> = {
   4: "bg-series-4",
   5: "bg-series-5",
 };
-const EDGE: Record<number, string> = {
-  1: "border-series-1",
-  2: "border-series-2",
-  3: "border-series-3",
-  4: "border-series-4",
-  5: "border-series-5",
+// the running bar is hatched in its series colour (the text colour)
+const INK: Record<number, string> = {
+  1: "text-series-1",
+  2: "text-series-2",
+  3: "text-series-3",
+  4: "text-series-4",
+  5: "text-series-5",
 };
 
 // a 38 px bar picture of a range: one bar per day or hour, a zero as a flat
-// line, the running period as an outlined bar
+// line, the running period hatched as on every chart
 export function MiniBars({
   values,
   series,
@@ -247,7 +248,7 @@ export function MiniBars({
               v === 0
                 ? "bg-line"
                 : last
-                  ? cn("border bg-transparent", EDGE[series])
+                  ? cn("hatch-running", INK[series])
                   : cn(BAR[series], "opacity-80"),
             )}
             style={{ height: v === 0 ? "2px" : `${Math.max(6, Math.round((v / max) * 100))}%` }}

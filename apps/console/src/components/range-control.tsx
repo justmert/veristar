@@ -132,6 +132,7 @@ export function RangeControl<T extends string>({
   minDay,
   maxDay,
   validate,
+  words: sayWords = true,
   className,
 }: {
   label?: string;
@@ -151,6 +152,9 @@ export function RangeControl<T extends string>({
   maxDay?: string;
   // a data source's own rules, after the shared ones
   validate?: (r: CustomRange) => { from?: string; to?: string };
+  // false in a page header, where the range in words is a meta item of the
+  // header: the control then draws only the choices and the custom form
+  words?: boolean;
   className?: string;
 }) {
   const [editing, setEditing] = useState(false);
@@ -223,7 +227,7 @@ export function RangeControl<T extends string>({
             </option>
           ))}
         </NativeSelect>
-        {words ? (
+        {!sayWords ? null : words ? (
           <span className="text-small text-fg-2" aria-live="polite">
             {words}
           </span>
