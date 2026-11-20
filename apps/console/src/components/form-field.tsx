@@ -24,24 +24,13 @@ function describedBy(ids: ReturnType<typeof useIds>, hint: unknown, error: unkno
   return parts.length ? parts.join(" ") : undefined;
 }
 
-// a field marks itself either optional or required; one that says neither is
-// required by the form's own rule (most fields)
-function Label({
-  text,
-  optional,
-  required,
-  htmlFor,
-}: {
-  text: string;
-  optional?: boolean;
-  required?: boolean;
-  htmlFor: string;
-}) {
+// a field is required unless it says "optional": the canvas marks only the
+// optional ones, in quiet text after the label and without brackets
+function Label({ text, optional, htmlFor }: { text: string; optional?: boolean; htmlFor: string }) {
   return (
     <FieldLabel htmlFor={htmlFor}>
       {text}
-      {optional ? <span className="font-normal text-fg-3">(optional)</span> : null}
-      {required && !optional ? <span className="font-normal text-fg-3">(required)</span> : null}
+      {optional ? <span className="font-normal text-fg-3">optional</span> : null}
     </FieldLabel>
   );
 }
@@ -56,7 +45,7 @@ export function TextField({
   const ids = useIds();
   return (
     <Field data-invalid={error ? true : undefined}>
-      <Label text={label} optional={optional} required={input.required} htmlFor={ids.control} />
+      <Label text={label} optional={optional} htmlFor={ids.control} />
       <Input
         id={ids.control}
         aria-invalid={error ? true : undefined}
@@ -79,7 +68,7 @@ export function TextAreaField({
   const ids = useIds();
   return (
     <Field data-invalid={error ? true : undefined}>
-      <Label text={label} optional={optional} required={input.required} htmlFor={ids.control} />
+      <Label text={label} optional={optional} htmlFor={ids.control} />
       <Textarea
         id={ids.control}
         aria-invalid={error ? true : undefined}
