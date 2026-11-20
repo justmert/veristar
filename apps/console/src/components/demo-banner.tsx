@@ -1,6 +1,6 @@
 import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { leaveDemo } from "@/lib/demo";
+import { leaveDemoOnNavigation } from "@/lib/demo";
 
 // the one line every demo page carries, as small as a toast and where none
 // sits: toasts take the right corner (the top on a phone), and a list's
@@ -18,7 +18,7 @@ export function DemoBanner() {
         <Info aria-hidden className="size-4 shrink-0 text-info" />
         <span>Demo with sample data. Read-only.</span>
         <Button asChild variant="link" size="sm" className="shrink-0">
-          <a href="/sign-in" onClick={() => leaveDemo()}>
+          <a href="/sign-in" onClick={() => leaveDemoOnNavigation()}>
             Enroll your project
           </a>
         </Button>

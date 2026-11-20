@@ -37,6 +37,18 @@ export function leaveDemo() {
   setDemo(false);
 }
 
+// for a link that leaves the demo with a full page load: the flag goes, but
+// this page is not told, so it does not redraw as a signed-out console (and
+// send the visitor to sign-in with a return address) before the browser
+// follows the link
+export function leaveDemoOnNavigation() {
+  try {
+    window.sessionStorage.removeItem(KEY);
+  } catch {
+    // storage refused; the next page reads no demo either
+  }
+}
+
 function subscribe(onChange: () => void) {
   window.addEventListener(CHANGED, onChange);
   return () => window.removeEventListener(CHANGED, onChange);
