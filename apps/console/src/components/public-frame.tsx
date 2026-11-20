@@ -58,14 +58,26 @@ export function BrandLink() {
 }
 
 // docs and status exist only on the production host names, so a link is
-// shown only where it points at a real address
-function PublicFooter() {
+// shown only where it points at a real address. sign-in lays its halves out
+// itself and puts this footer under its right half
+export function PublicFooter({
+  tagline = "No fees, no ads, no cookies on your visitors.",
+  className,
+}: {
+  tagline?: string;
+  className?: string;
+}) {
   const docs = siblingUrl(window.location.hostname, "docs");
   const status = siblingUrl(window.location.hostname, "status");
   const link =
     "rounded-sm text-fg-2 transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring max-sm:py-2";
   return (
-    <footer className="flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-line px-4 py-4 text-small sm:px-8">
+    <footer
+      className={cn(
+        "flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-line px-4 py-4 text-small sm:px-8",
+        className,
+      )}
+    >
       {docs ? (
         <a href={docs} className={link}>
           Docs
@@ -79,7 +91,7 @@ function PublicFooter() {
       <Link to="/terms" className={link}>
         Terms
       </Link>
-      <span className="text-fg-3 sm:ml-auto">No fees, no ads, no cookies on your visitors.</span>
+      <span className="text-fg-3 sm:ml-auto">{tagline}</span>
     </footer>
   );
 }

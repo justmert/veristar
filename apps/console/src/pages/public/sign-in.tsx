@@ -6,7 +6,7 @@ import { api, signInUrl } from "@/api/endpoints";
 import { GitHubMark } from "@/components/github-mark";
 import { Notice } from "@/components/notice";
 import { PasskeyDialog } from "@/components/passkey-dialog";
-import { PublicFrame } from "@/components/public-frame";
+import { BrandLink, PublicFooter } from "@/components/public-frame";
 import { Button } from "@/components/ui/button";
 import { WalletPicker } from "@/components/wallet-picker";
 import { connectWallet, signTransaction } from "@/lib/stellar-wallet";
@@ -61,12 +61,12 @@ export function SignInPage() {
   const deleted = !message && params.get("deleted") === "1";
 
   return (
-    // the frame's footer spans both halves until the frame can end at the
-    // right half (shared-requests.md)
-    <PublicFrame center={false} className="p-0 pt-0 pb-0 sm:pt-0 lg:flex-row">
+    // two halves: the darker left half runs the full height with the brand at
+    // its top, the footer sits under the right half only
+    <div className="flex min-h-dvh flex-col bg-ground text-fg lg:flex-row">
       <SignedProof />
       <div className="flex flex-1 flex-col">
-        <div className="flex flex-1 px-4 py-10 sm:px-8">
+        <main id="main" className="flex flex-1 animate-rise-in px-4 py-10 sm:px-8">
           <section
             aria-labelledby="sign-in-h"
             className="m-auto flex w-full max-w-90 flex-col gap-6"
@@ -161,9 +161,10 @@ export function SignInPage() {
               .
             </p>
           </section>
-        </div>
+        </main>
+        <PublicFooter tagline="No fees, no ads, no cookies" />
       </div>
-    </PublicFrame>
+    </div>
   );
 }
 
@@ -184,6 +185,9 @@ function SignedProof() {
       aria-label="What a signed report looks like"
       className="relative flex flex-col overflow-hidden bg-sunken px-4 pt-0 pb-10 shadow-[1px_0_0_var(--color-line-subtle)] sm:px-14 lg:w-[54%] lg:pb-11"
     >
+      <div className="flex h-16 items-center">
+        <BrandLink />
+      </div>
       <div className="my-auto flex flex-col gap-8 pt-10 lg:gap-9 lg:pt-0">
         <p className="max-w-120 text-[clamp(1.75rem,3vw,2.25rem)] leading-[1.17] font-semibold tracking-[-0.03em] text-fg">
           Proof of real usage, signed and checkable
