@@ -338,12 +338,14 @@ export function TimeChart({
   return (
     <section
       aria-label={title}
-      className={cn("flex min-w-0 flex-col rounded-lg border border-line bg-raised", className)}
+      className={cn("flex min-w-0 flex-col rounded-2xl border border-line bg-raised", className)}
     >
       <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-4 pt-4 pb-2 sm:px-5">
-        <div className="flex min-w-0 flex-col gap-1">
+        {/* the description (per day, UTC) sits after the title on its line,
+            quieter, not as a line under it */}
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
           <Heading className="text-title text-fg">{title}</Heading>
-          {description ? <p className="text-small text-fg-2">{description}</p> : null}
+          {description ? <p className="text-[12.5px] text-fg-3">{description}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           {actions}

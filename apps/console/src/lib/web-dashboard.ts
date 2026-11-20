@@ -193,6 +193,24 @@ export const DIMENSION_LABEL: Record<WebDimension, string> = {
   utm_term: "UTM term",
 };
 
+// the heading of the key column of a list: one row is one of these
+export const DIMENSION_COLUMN: Record<WebDimension, string> = {
+  page: "Page",
+  entry_page: "Entry page",
+  exit_page: "Exit page",
+  referrer: "Referrer",
+  country: "Country",
+  browser: "Browser",
+  os: "Operating system",
+  device: "Device",
+  event: "Event",
+  utm_source: "UTM source",
+  utm_medium: "UTM medium",
+  utm_campaign: "UTM campaign",
+  utm_content: "UTM content",
+  utm_term: "UTM term",
+};
+
 export const UTM_DIMENSIONS: readonly WebDimension[] = [
   "utm_source",
   "utm_medium",

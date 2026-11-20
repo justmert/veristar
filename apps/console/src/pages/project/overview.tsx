@@ -29,7 +29,7 @@ import { PageHeader } from "@/components/page-header";
 import { Panel } from "@/components/panel";
 import { RangeControl } from "@/components/range-control";
 import { SetupBar, type SetupStep } from "@/components/setup-progress";
-import { StatCard, type StatChange, StatGrid } from "@/components/stat-card";
+import { StatCard, type StatChange } from "@/components/stat-card";
 import { ErrorState, Skeleton } from "@/components/states";
 import { StatusDot } from "@/components/status";
 import { Button } from "@/components/ui/button";
@@ -324,7 +324,12 @@ function Dashboard({
 
   return (
     <>
-      <StatGrid min="8rem" aria-label="Figures" className="xl:grid-cols-8">
+      {/* web, api and on-chain figures in three groups with a wider gap between
+          them on a wide screen, as one row of tiles that wraps on a narrow one */}
+      <section
+        aria-label="Figures"
+        className="grid grid-cols-[repeat(auto-fit,minmax(min(8rem,100%),1fr))] gap-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_10px_repeat(3,minmax(0,1fr))_10px_repeat(2,minmax(0,1fr))]"
+      >
         {WEB_FIGURES.map((c) => {
           const v = summary ? metricValue(summary.current.totals, c.metric) : null;
           return (
@@ -352,6 +357,7 @@ function Dashboard({
             />
           );
         })}
+        <span aria-hidden className="hidden xl:block" />
         <StatCard
           data-tile="API requests"
           series={3}
@@ -391,6 +397,7 @@ function Dashboard({
           change={apiChange("p95")}
           {...pick("p95")}
         />
+        <span aria-hidden className="hidden xl:block" />
         <StatCard
           data-tile="On-chain ops"
           series="success"
@@ -426,7 +433,7 @@ function Dashboard({
             </Link>
           }
         />
-      </StatGrid>
+      </section>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0">
@@ -916,6 +923,18 @@ function TopPanel({
 
 const TOP = 5;
 
+// a key with a quieter tag after it (the site of a page, the service of a
+// route). the key always reads first; the tag wraps onto a hidden second
+// line when the row has no room for it, so it never squeezes the key
+function KeyWithTag({ text, tag }: { text: string; tag?: string | undefined }) {
+  return (
+    <span className="flex h-[1lh] min-w-0 flex-wrap items-baseline gap-x-2 overflow-hidden">
+      <span className="min-w-0 max-w-full truncate">{text}</span>
+      {tag ? <span className="text-caption text-fg-3 whitespace-nowrap">{tag}</span> : null}
+    </span>
+  );
+}
+
 function WebTop({
   title,
   tenantId,
@@ -948,17 +967,11 @@ function WebTop({
           return {
             key: `${it.site_id ?? ""}|${it.key}`,
             text: siteName ? `${text}, ${siteName}` : text,
-            label: (
-              <span className="flex min-w-0 items-baseline gap-2">
-                <span className="truncate">{text}</span>
-                {siteName ? (
-                  <span className="shrink-0 truncate text-caption text-fg-3">{siteName}</span>
-                ) : null}
-              </span>
-            ),
+            label: <KeyWithTag text={text} tag={siteName} />,
             value: it.value,
           };
         })}
+        header={false}
         valueLabel="Visitors"
         emptyTitle="Nothing in this range"
       />
@@ -988,14 +1001,7 @@ function BusiestRoutes({ tenantId, days }: { tenantId: string; days: DayRange })
           return {
             key: `${it.service}|${it.method}|${it.route}`,
             text,
-            label: (
-              <span className="flex min-w-0 items-baseline gap-2">
-                <span className="truncate">{text}</span>
-                {services.size > 1 ? (
-                  <span className="shrink-0 truncate text-caption text-fg-3">{it.service}</span>
-                ) : null}
-              </span>
-            ),
+            label: <KeyWithTag text={text} tag={services.size > 1 ? it.service : undefined} />,
             value: it.requests,
             aside:
               it.rate_5xx === null ? null : (
@@ -1010,6 +1016,8 @@ function BusiestRoutes({ tenantId, days }: { tenantId: string; days: DayRange })
           };
         })}
         asideLabel="5xx"
+        header={false}
+        tone="series-3"
         valueLabel="Requests"
         format={formatCompact}
         emptyTitle="No API requests in this range"
