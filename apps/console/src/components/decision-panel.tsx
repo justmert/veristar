@@ -195,7 +195,7 @@ export function DecisionPanel({
             <label htmlFor={`${ids}-r`} className="text-body font-semibold text-fg">
               {choice === "reject" ? "Why reject" : "Note for the members"}
               {choice === "approve" ? (
-                <span className="font-normal text-fg-3"> (optional)</span>
+                <span className="font-normal text-fg-3"> optional</span>
               ) : null}
             </label>
             <span className="shrink-0 font-mono text-caption text-fg-3 tabular">
