@@ -47,7 +47,7 @@ export function WebTrendChart({
         day={only}
       />
     );
-  return <DayChart summary={summary} metric={metric} />;
+  return <DayChart summary={summary} metric={metric} band={q.band} />;
 }
 
 // the one day of a range that holds page views, when no other day of the
@@ -58,7 +58,20 @@ export function onlyDay(summary: WebSummary): string | null {
   return withData.length === 1 && !before ? (withData[0]?.day ?? null) : null;
 }
 
-function DayChart({ summary, metric }: { summary: WebSummary; metric: WebMetric }) {
+// quarantined traffic reads amber on every part of the page
+const quarantined = (band: WebQuery["band"]) => band === "quarantine";
+const titleOf = (label: string, band: WebQuery["band"]) =>
+  quarantined(band) ? `Quarantined ${label.toLowerCase()}` : label;
+
+function DayChart({
+  summary,
+  metric,
+  band,
+}: {
+  summary: WebSummary;
+  metric: WebMetric;
+  band: WebQuery["band"];
+}) {
   const today = utcDay();
   const buckets: TimeBucket[] = summary.current.series.map((p) => ({
     at: `${p.day}T00:00:00Z`,
@@ -74,18 +87,21 @@ function DayChart({ summary, metric }: { summary: WebSummary; metric: WebMetric 
     <TimeChart
       // a remount from empty to data gives the reveal observer the plot
       key={state}
-      title={`${label} per day`}
+      title={titleOf(label, band)}
+      description="per day, UTC"
       kind={LINE.includes(metric) ? "line" : "bar"}
       buckets={buckets}
       series={[
         {
           key: metric,
-          label,
-          tone: "series-1",
+          label: titleOf(label, band),
+          tone: quarantined(band) ? "warning" : "series-1",
           values: summary.current.series.map((p) => pointValue(p, metric)),
         },
       ]}
-      previous={summary.previous.series.map((p) => pointValue(p, metric))}
+      previous={
+        quarantined(band) ? null : summary.previous.series.map((p) => pointValue(p, metric))
+      }
       format={fmt}
       axisFormat={LINE.includes(metric) ? fmt : formatCompact}
       higherIsBetter={higherIsBetter(metric)}
@@ -123,10 +139,16 @@ function HourChart({
   return (
     <TimeChart
       key={state}
-      title={`${label === "Unique visitors" ? "Visitors" : label} per hour${day ? `, ${formatDate(day)}` : ""}`}
+      title={titleOf(label, q.band)}
+      description={day ? `per hour, ${formatDate(day)}` : "per hour, UTC"}
       buckets={buckets}
       series={[
-        { key: metric, label, tone: "series-1", values: points.map((p) => (p ? p[metric] : null)) },
+        {
+          key: metric,
+          label: titleOf(label, q.band),
+          tone: quarantined(q.band) ? "warning" : "series-1",
+          values: points.map((p) => (p ? p[metric] : null)),
+        },
       ]}
       firstData="bars"
       state={state}

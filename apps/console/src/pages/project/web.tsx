@@ -1,13 +1,14 @@
-// the project's web numbers: the seven web metrics for a range of utc days
-// against the previous period, one chart, the breakdowns, the visitors right
-// now and what the totals leave out, for the whole project or one site.
+// the project's web numbers: the five web figures for a range of utc days
+// against the previous period, one chart, the breakdowns, the custom events,
+// the visitors right now and where every event went, for the whole project
+// or one site. counted or quarantined traffic is a page-wide switch in the
+// header, beside the range: it decides what every part of the page reads.
 // totals, days and the referrer, country and environment breakdowns come
 // from the daily totals operators read too; pages, events, utm values, hours
 // and the last minutes are read live.
 
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { Globe } from "lucide-react";
 import { type ReactNode, useCallback, useState, useSyncExternalStore } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
@@ -15,29 +16,29 @@ import { api } from "@/api/endpoints";
 import { sitesQuery } from "@/api/queries";
 import type { Site, TenantStatus } from "@/api/schemas";
 import {
+  type WebBand,
   type WebDimension,
   type WebQuery,
   type WebSummary,
   webBreakdownQuery,
   webKeys,
-  webRealtimeQuery,
   webSummaryQuery,
 } from "@/api/web";
 import { BreakdownList } from "@/components/charts";
-import { DbIpAttribution } from "@/components/dbip-attribution";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
 import { Panel } from "@/components/panel";
 import { RangeControl } from "@/components/range-control";
 import { Segmented } from "@/components/segmented";
-import { Sparkline, StatCard, StatGrid } from "@/components/stat-card";
-import { EmptyState, ErrorState, Missing } from "@/components/states";
-import { StatusDot } from "@/components/status";
+import { ChangeLine, StatCard, type StatChange } from "@/components/stat-card";
+import { EmptyState, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
-import { Tooltip } from "@/components/ui/tooltip";
-import { formatCount, formatPercent, formatTimeUtc } from "@/lib/format";
-import { rejectionRows, sumRejected, sumUnclassified } from "@/lib/outcomes";
+import { type ZoomGroup, type ZoomPart, ZoomBlock } from "@/components/zoom-block";
+import { formatCount, formatDateRange } from "@/lib/format";
+import { siblingUrl } from "@/lib/hosts";
+import { rejectionRows, sumUnclassified } from "@/lib/outcomes";
+import { siteSetupPath } from "@/lib/site-setup";
 import {
   DIMENSION_LABEL,
   formatMetric,
@@ -46,7 +47,6 @@ import {
   keyLabel,
   metricValue,
   readWebState,
-  sparkOf,
   sumOutcomes,
   UTM_DIMENSIONS,
   validateWebDays,
@@ -60,9 +60,8 @@ import {
   writeWebState,
 } from "@/lib/web-dashboard";
 import { useProject } from "@/pages/project-layout";
-import { Movers } from "./movers";
 import { PAGE_HEADERS, WebSkeleton } from "./page-frame";
-import { SelectFilter } from "./select-filter";
+import { LiveCount, SiteChips, useSiteHealth } from "./site-chips";
 import { METRIC_LABEL, WebTrendChart } from "./web-chart";
 
 const METRICS: { metric: WebMetric; definition: string }[] = [
@@ -79,16 +78,19 @@ const METRICS: { metric: WebMetric; definition: string }[] = [
   },
 ];
 
-// why a range has no visits, by project status
-const EMPTY_REASON: Partial<Record<TenantStatus, string>> = {
-  active:
-    "No site sent a page view in this range. Choose a longer range, or check that the tracker is on your pages.",
-  pending: "Sites receive traffic after an operator approves the project.",
-  rejected: "Sites receive traffic after an operator approves the project.",
-  suspended: "New events are refused while the project is suspended.",
+// why a range has no visits, by project status: the title of the first step
+const EMPTY_TITLE: Partial<Record<TenantStatus, string>> = {
+  active: "Waiting for the first page view",
+  pending: "Sites receive traffic after an operator approves the project",
+  rejected: "Sites receive traffic after an operator approves the project",
+  suspended: "New events are refused while the project is suspended",
 };
 
 const CADENCE = "Totals refresh every hour. Pages, events and hours are read live.";
+
+// the range control sits in the header; the range in words is the header's
+// meta item, so the control's own words are hidden
+export const HEADER_RANGE = "[&>div:first-child>span]:hidden";
 
 export function WebPage() {
   const { tenant } = useProject();
@@ -110,11 +112,39 @@ export function WebPage() {
     ...webSummaryQuery(tenant.id, q),
     enabled: listed.length > 0,
   });
+  const days = webDays(state, now);
 
   const header = (
     <PageHeader
       {...PAGE_HEADERS.web}
       freshness={summary.data?.read_at ? { at: summary.data.read_at, cadence: CADENCE } : null}
+      items={days.from && days.to ? [`${formatDateRange(days.from, days.to)}, UTC`] : []}
+      secondary={
+        listed.length > 0 ? (
+          <>
+            <Segmented<WebBand>
+              label="Traffic"
+              value={state.band}
+              options={[
+                { value: "primary", label: "Counted" },
+                { value: "quarantine", label: "Quarantined" },
+              ]}
+              onChange={(band) => set({ band })}
+            />
+            <RangeControl
+              value={state.preset}
+              presets={WEB_PRESETS}
+              onPreset={(preset) => set({ preset })}
+              custom={state.preset === "custom" ? state.custom : null}
+              onCustom={(custom) => set({ preset: "custom", custom })}
+              range={days}
+              maxDays={WEB_MAX_DAYS}
+              validate={(r) => validateWebDays(r, new Date())}
+              className={HEADER_RANGE}
+            />
+          </>
+        ) : null
+      }
     />
   );
 
@@ -138,23 +168,19 @@ export function WebPage() {
     return (
       <Page header={header}>
         <EmptyState
-          icon={<Globe aria-hidden strokeWidth={1.75} />}
           title="No sites yet"
           action={
             <Button asChild variant="outline">
               <Link to={`/projects/${tenant.id}/sites`}>Add site</Link>
             </Button>
           }
-        >
-          The numbers show here after a site sends its first page view.
-        </EmptyState>
+        />
       </Page>
     );
 
   const scope = selected ? [selected] : listed;
-  // a range without one counted page view gets one page-level
-  // empty state that says why, not a row of dashes and empty panels. the
-  // not counted section stays: it says why events did not count
+  // a range without one counted page view is the first step of the page,
+  // not a row of dashes and empty panels
   const totals = summary.data?.current.totals;
   const empty =
     state.band === "primary" &&
@@ -162,82 +188,40 @@ export function WebPage() {
     totals.pageviews === 0 &&
     !summary.isPlaceholderData;
   const utm = scope.some((s) => s.collect_utm);
-  const days = webDays(state, now);
-  // one control filters by site, and choosing All sites is the one way to
-  // clear it: no chip and no second Clear, so the row keeps its height.
-  // the options show the site name; the domain joins only where two sites
-  // share a name
-  const names = new Map<string, number>();
-  for (const x of listed) names.set(x.name, (names.get(x.name) ?? 0) + 1);
-  const siteFilter = (
-    <SelectFilter
-      label="Site"
-      value={selected?.id ?? ""}
-      onChange={(v) => set({ site: v || null })}
-    >
-      <option value="">All sites</option>
-      {listed.map((x) => (
-        <option key={x.id} value={x.id} title={x.domain}>
-          {(names.get(x.name) ?? 0) > 1 ? `${x.name} (${x.domain})` : x.name}
-        </option>
-      ))}
-    </SelectFilter>
-  );
 
   return (
     <Page header={header}>
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-          <RangeControl
-            value={state.preset}
-            presets={WEB_PRESETS}
-            onPreset={(preset) => set({ preset })}
-            custom={state.preset === "custom" ? state.custom : null}
-            onCustom={(custom) => set({ preset: "custom", custom })}
-            range={days}
-            maxDays={WEB_MAX_DAYS}
-            validate={(r) => validateWebDays(r, new Date())}
-          />
-          {listed.length > 1 ? siteFilter : null}
-        </div>
-
-        {provisioning ? (
-          <Notice tone="info" title="Live figures are being set up">
-            Pages, events, hours and visitors right now show when your access is ready. The daily
-            totals show now.
-          </Notice>
-        ) : null}
-        {unknownSite ? (
-          <Notice
-            tone="warning"
-            title="That site is not part of this project"
-            actions={
-              <Button variant="outline" size="sm" onClick={() => set({ site: null })}>
-                Show all sites
-              </Button>
-            }
-          >
-            The address names a deleted site or a site of another project. The numbers show all
-            sites.
-          </Notice>
-        ) : null}
-        {state.band === "quarantine" ? (
-          <Notice
-            tone="info"
-            title="You see quarantined traffic"
-            actions={
-              <Button variant="outline" size="sm" onClick={() => set({ band: "primary" })}>
-                Show counted traffic
-              </Button>
-            }
-          >
-            The totals leave this traffic out. It is likely automated.
-          </Notice>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <SiteChips
+          tenantId={tenant.id}
+          sites={listed}
+          value={selected?.id ?? null}
+          onChange={(site) => set({ site })}
+        />
+        {state.band === "primary" && !(empty && tenant.status !== "active") ? (
+          <LiveCount tenantId={tenant.id} site={q.site} minutes />
         ) : null}
       </div>
 
-      {state.band === "primary" && !(empty && tenant.status !== "active") ? (
-        <Realtime tenantId={tenant.id} site={q.site} />
+      {provisioning ? (
+        <Notice tone="info" title="Live figures are being set up">
+          Pages, events, hours and visitors right now show when your access is ready. The daily
+          totals show now.
+        </Notice>
+      ) : null}
+      {unknownSite ? (
+        <Notice
+          tone="warning"
+          title="That site is not part of this project"
+          actions={
+            <Button variant="outline" size="sm" onClick={() => set({ site: null })}>
+              Show all sites
+            </Button>
+          }
+        >
+          The address names a deleted site or a site of another project. The numbers show all
+          sites.
+        </Notice>
       ) : null}
 
       {summary.isPending ? (
@@ -249,19 +233,7 @@ export function WebPage() {
           onRetry={() => summary.refetch()}
         />
       ) : empty ? (
-        <EmptyState
-          icon={<Globe aria-hidden strokeWidth={1.75} />}
-          title="No visits in this range"
-          action={
-            tenant.status === "active" ? (
-              <Button asChild variant="outline">
-                <Link to={`/projects/${tenant.id}/sites`}>Check the site setup</Link>
-              </Button>
-            ) : undefined
-          }
-        >
-          {EMPTY_REASON[tenant.status] ?? EMPTY_REASON.active}
-        </EmptyState>
+        <FirstStep sites={scope} status={tenant.status} />
       ) : (
         <Dashboard
           tenantId={tenant.id}
@@ -275,27 +247,20 @@ export function WebPage() {
         />
       )}
 
-      <NotCounted
-        sites={scope}
-        q={q}
-        summary={summary.data ?? null}
-        band={state.band}
-        onBand={(band) => set({ band })}
-      />
-
-      <DbIpAttribution />
+      {empty ? null : <WhereEventsWent sites={scope} q={q} />}
     </Page>
   );
 }
 
 function Page({ header, children }: { header: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-4">
       {header}
       {children}
     </div>
   );
 }
+
 // whether a live read of the project waits for its analytics access (409
 // provisioning_pending). the query client keeps asking; this only says why
 // a section still loads.
@@ -313,66 +278,68 @@ function useProvisioningPending(tenantId: string): boolean {
   return useSyncExternalStore(subscribe, read, read);
 }
 
-// ---- right now: the last 5 minutes, asked for every 30 seconds
+// ---- no page view yet: the figures wait, and the chart's place holds the
+// one step that brings the first page view
 
-function Realtime({ tenantId, site }: { tenantId: string; site: string | null }) {
-  const rt = useQuery(webRealtimeQuery(tenantId, site));
-  const minutes = rt.data?.minutes ?? [];
-  const max = Math.max(1, ...minutes.map((m) => m.pageviews));
+function FirstStep({ sites, status }: { sites: Site[]; status: TenantStatus }) {
+  const health = useSiteHealth(sites);
+  const docs = siblingUrl(window.location.hostname, "docs");
+  // the first site whose tracker sent nothing is the one to set up
+  const next = sites.find((s) => health.get(s.id)?.tone !== "success") ?? sites[0];
+  const active = status === "active";
   return (
-    <section
-      aria-label="Right now"
-      className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-lg border border-line bg-raised px-4 py-3 sm:px-5"
-    >
-      <div className="flex min-h-8 items-center gap-3">
-        <StatusDot
-          tone={rt.data && rt.data.visitors > 0 ? "success" : "neutral"}
-          live={!!rt.data}
+    <div className="flex flex-col gap-4" data-testid="web-first-step">
+      <FigureRow>
+        {METRICS.map((t) => (
+          <StatCard
+            key={t.metric}
+            data-metric={t.metric}
+            label={METRIC_LABEL[t.metric]}
+            definition={t.definition}
+            value={null}
+            missingReason="No page view yet"
+          />
+        ))}
+      </FigureRow>
+      <Panel title="Page views" className="min-h-96" bodyClassName="flex flex-1 items-center">
+        <EmptyState
+          className="w-full"
+          title={EMPTY_TITLE[status] ?? (EMPTY_TITLE.active as string)}
+          action={
+            active && next ? (
+              <>
+                <Button asChild>
+                  <Link to={siteSetupPath(next)}>Install the tracker</Link>
+                </Button>
+                {docs ? (
+                  <Button asChild variant="ghost">
+                    <a href={docs}>Docs</a>
+                  </Button>
+                ) : null}
+              </>
+            ) : undefined
+          }
         />
-        {rt.isPending ? (
-          <Bone className="h-6 w-48" />
-        ) : rt.error ? (
-          <span className="text-small text-fg-2">Visitors right now did not load.</span>
-        ) : (
-          <span className="text-body text-fg-2">
-            <span className="text-title text-fg tabular" data-testid="web-active">
-              {formatCount(rt.data.visitors)}
-            </span>{" "}
-            {rt.data.visitors === 1 ? "visitor" : "visitors"} in the last 5 minutes
-          </span>
-        )}
-      </div>
-      {rt.data ? (
-        <figure className="flex min-w-48 flex-1 flex-col gap-1">
-          <div
-            role="img"
-            aria-label={`Page views per minute, last 30 minutes: ${minutes.map((m) => m.pageviews).join(", ")}`}
-            className="flex h-8 items-end gap-px"
-          >
-            {minutes.map((m) => (
-              <span
-                key={m.at}
-                className={cn("flex-1 rounded-t-bar", m.pageviews > 0 ? "bg-series-1" : "bg-line")}
-                // the height is data; react writes it through the cssom
-                style={{ height: `${Math.max(6, (m.pageviews / max) * 100)}%` }}
-              />
-            ))}
-          </div>
-          <figcaption className="text-caption text-fg-2">
-            Page views per minute, last 30 minutes
-          </figcaption>
-        </figure>
-      ) : null}
-      {rt.data ? (
-        <time dateTime={rt.data.at} className="text-caption text-fg-2">
-          Checked {formatTimeUtc(rt.data.at, { seconds: true })}, every 30 s
-        </time>
-      ) : null}
+      </Panel>
+    </div>
+  );
+}
+
+function FigureRow({ children }: { children: ReactNode }) {
+  return (
+    <section aria-label="Totals" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      {children}
     </section>
   );
 }
 
 // ---- totals, the chart and the breakdowns
+
+// quarantined traffic that grows is bad news, so its colour turns
+function bandChange(c: StatChange | null, band: WebBand): StatChange | null {
+  if (!c || band === "primary" || c.good === null) return c;
+  return { ...c, good: !c.good };
+}
 
 function Dashboard({
   tenantId,
@@ -404,28 +371,16 @@ function Dashboard({
     <div
       // the last range's numbers stay while the next loads, dimmed and busy
       className={cn(
-        "flex flex-col gap-8 transition-opacity duration-(--vs-duration-change) ease-standard",
+        "flex flex-col gap-4 transition-opacity duration-(--vs-duration-change) ease-standard",
         stale && "opacity-60",
       )}
       aria-busy={stale || undefined}
       data-testid="web-dashboard"
+      data-band={q.band}
     >
-      <Movers
-        items={METRICS.map((t) => ({
-          key: t.metric,
-          label: METRIC_LABEL[t.metric],
-          change: webTrend(
-            t.metric,
-            metricValue(cur.totals, t.metric),
-            metricValue(prev.totals, t.metric),
-            cur.range.days,
-          ),
-        }))}
-      />
-      <StatGrid aria-label="Totals">
+      <FigureRow>
         {METRICS.map((t) => {
           const v = metricValue(cur.totals, t.metric);
-          const spark = sparkOf(cur.series, t.metric);
           return (
             <StatCard
               key={t.metric}
@@ -435,20 +390,16 @@ function Dashboard({
               value={v}
               format={(n) => formatMetric(t.metric, n)}
               missingReason="No visits in this range"
-              change={webTrend(t.metric, v, metricValue(prev.totals, t.metric), cur.range.days)}
-              spark={
-                spark ? (
-                  <Sparkline values={spark} previous={prev.series.map((p) => p[t.metric] ?? 0)} />
-                ) : null
-              }
+              change={bandChange(
+                webTrend(t.metric, v, metricValue(prev.totals, t.metric), cur.range.days),
+                q.band,
+              )}
               selected={chartable(t.metric) ? metric === t.metric : undefined}
               onSelect={chartable(t.metric) ? () => set({ metric: t.metric }) : undefined}
-              // a rate or an average with no visit behind it is no card
-              hideWhenEmpty
             />
           );
         })}
-      </StatGrid>
+      </FigureRow>
 
       <WebTrendChart tenantId={tenantId} q={q} summary={summary} metric={metric} />
 
@@ -459,24 +410,21 @@ function Dashboard({
         sites={sites}
         utm={utm}
       />
+
+      <CustomEvents tenantId={tenantId} q={q} summary={summary} />
     </div>
   );
 }
 
-// ---- breakdowns
+// ---- breakdowns: four equal panels, each with its own switch
 
-type Group = { title: string; options: WebDimension[]; wide?: boolean };
+type Group = { title: string; options: WebDimension[] };
 
 const SHORT: Partial<Record<WebDimension, string>> = {
   page: "Pages",
   entry_page: "Entry",
   exit_page: "Exit",
   referrer: "Referrers",
-  utm_source: "Source",
-  utm_medium: "Medium",
-  utm_campaign: "Campaign",
-  utm_content: "Content",
-  utm_term: "Term",
   browser: "Browsers",
   os: "OS",
   device: "Devices",
@@ -500,10 +448,10 @@ function Breakdowns({
     { title: "Sources", options: ["referrer", ...(utm ? UTM_DIMENSIONS : [])] },
     { title: "Countries", options: ["country"] },
     { title: "Environment", options: ["browser", "os", "device"] },
-    // events count events, not visitors, so they take their own full row
-    { title: "Custom events", options: ["event"], wide: true },
   ];
-  const names = q.site ? null : Object.fromEntries(sites.map((s) => [s.id, s.name]));
+  // the site of a row shows only when two sites share the list
+  const names =
+    q.site || sites.length < 2 ? null : Object.fromEntries(sites.map((s) => [s.id, s.name]));
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {groups.map((g) => (
@@ -521,7 +469,7 @@ function Breakdowns({
 }
 
 const LIMIT = 10;
-const MORE = 100;
+const MORE = 50;
 
 function BreakdownPanel({
   tenantId,
@@ -543,29 +491,18 @@ function BreakdownPanel({
   const active = group.options.includes(dim) ? dim : first;
   const b = useQuery(webBreakdownQuery(tenantId, q, active, limit));
   const data = b.data;
-  const events = data?.unit === "events";
-  const headingId = `breakdown-${group.title.toLowerCase().replace(/\s+/g, "-")}`;
   return (
-    <section
-      aria-labelledby={headingId}
-      className={cn(
-        "flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5",
-        group.wide && "lg:col-span-2",
-      )}
-    >
-      {/* the row is as tall as the segmented control, so titles of panels
-          side by side sit on one line with or without it */}
-      <div className="flex min-h-(--vs-control-touch) flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <h2 id={headingId} className="text-title text-fg">
-          {group.title}
-        </h2>
-        {group.options.length > 1 ? (
+    <Panel
+      title={group.title}
+      data-breakdown={group.title}
+      actions={
+        group.options.length > 1 ? (
           <Segmented<WebDimension>
             label={`${group.title} by`}
             value={active}
             options={group.options.map((o) => ({
               value: o,
-              label: SHORT[o] ?? DIMENSION_LABEL[o],
+              label: SHORT[o] ?? o,
             }))}
             onChange={(v) => {
               setDim(v);
@@ -573,8 +510,9 @@ function BreakdownPanel({
             }}
             className="max-w-full overflow-x-auto"
           />
-        ) : null}
-      </div>
+        ) : null
+      }
+    >
       <div
         className={cn(
           "transition-opacity duration-(--vs-duration-change) ease-standard",
@@ -597,21 +535,17 @@ function BreakdownPanel({
                 <span className="flex min-w-0 items-baseline gap-2">
                   <span className="truncate">{text}</span>
                   {site ? (
-                    <span className="shrink-0 truncate text-caption text-fg-2">{site}</span>
+                    <span className="shrink-0 truncate text-caption text-fg-3">{site}</span>
                   ) : null}
                 </span>
               ),
               value: it.value,
             };
           })}
-          total={events ? null : visitors}
+          total={visitors}
           shareDefinition="The share of the range's visitors. A visitor can count in several rows, so the shares can add up to more than 100%."
-          valueLabel={events ? "Events" : "Visitors"}
-          emptyTitle={
-            active === "event"
-              ? "No custom events in this range"
-              : `No ${DIMENSION_LABEL[active].toLowerCase()} in this range`
-          }
+          valueLabel="Visitors"
+          emptyTitle={`No ${DIMENSION_LABEL[active].toLowerCase()} in this range`}
           onShowMore={
             data && data.total_keys > data.items.length && limit < MORE
               ? () => setLimit(MORE)
@@ -620,52 +554,125 @@ function BreakdownPanel({
           showMoreLabel={
             (data?.total_keys ?? 0) <= MORE
               ? `Show all ${formatCount(data?.total_keys ?? 0)}`
-              : `Show the top ${MORE}`
+              : `Show the top ${MORE} of ${formatCount(data?.total_keys ?? 0)}`
           }
           showMorePending={b.isFetching && b.isPlaceholderData}
         />
       </div>
+    </Panel>
+  );
+}
+
+// ---- custom events: one card each, with its count and its change against
+// the previous period. with no event in the range the panel does not exist
+
+const EVENTS_SHOWN = 4;
+const EVENTS_MORE = 50;
+
+function CustomEvents({
+  tenantId,
+  q,
+  summary,
+}: {
+  tenantId: string;
+  q: WebQuery;
+  summary: WebSummary;
+}) {
+  const [limit, setLimit] = useState(EVENTS_SHOWN);
+  const cur = useQuery(webBreakdownQuery(tenantId, q, "event", limit));
+  const p = summary.previous.range;
+  const prev = useQuery(
+    webBreakdownQuery(tenantId, { ...q, from: p.from, to: p.to }, "event", EVENTS_MORE),
+  );
+  if (cur.isPending) return null;
+  if (cur.error)
+    return (
+      <ErrorState
+        compact
+        title="The custom events did not load"
+        error={cur.error}
+        onRetry={() => cur.refetch()}
+      />
+    );
+  const items = cur.data.items;
+  if (items.length === 0) return null;
+  const before = new Map(
+    (prev.data?.items ?? []).map((i) => [`${i.site_id ?? ""}|${i.key}`, i.value]),
+  );
+  const more = cur.data.total_keys > items.length && limit < EVENTS_MORE;
+  return (
+    <section
+      aria-labelledby="custom-events-h"
+      data-testid="custom-events"
+      className="flex min-w-0 flex-col gap-3 rounded-2xl border border-line bg-raised px-5 py-4"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2
+          id="custom-events-h"
+          className="flex items-baseline gap-2.5 text-body font-semibold text-fg"
+        >
+          Custom events
+          <span className="text-[12.5px] font-normal text-fg-3 tabular">
+            {formatCount(cur.data.total_keys)} {cur.data.total_keys === 1 ? "event" : "events"}
+          </span>
+        </h2>
+        {more ? (
+          <Button variant="ghost" size="sm" onClick={() => setLimit(EVENTS_MORE)}>
+            Show all
+          </Button>
+        ) : null}
+      </div>
+      <ul
+        aria-label="Custom events"
+        className="grid gap-2.5"
+        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(13rem, 100%), 1fr))" }}
+      >
+        {items.map((it) => {
+          const k = `${it.site_id ?? ""}|${it.key}`;
+          const change = prev.data
+            ? bandChange(
+                webTrend("pageviews", it.value, before.get(k) ?? 0, summary.current.range.days),
+                q.band,
+              )
+            : null;
+          return (
+            <li
+              key={k}
+              data-event={it.key}
+              className="flex min-w-0 flex-col gap-1 rounded-xl border border-line px-4 py-3"
+            >
+              <code className="truncate font-mono text-small text-fg-2" title={it.key}>
+                {it.key}
+              </code>
+              <span className="flex items-baseline gap-2">
+                <span className="text-[22px] leading-7 font-semibold text-fg tabular">
+                  {formatCount(it.value)}
+                </span>
+                {change ? <ChangeLine change={change} /> : null}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }
 
-// ---- not counted: what the totals leave out, and why
+// ---- where events went: every event by outcome, the uncounted slice
+// opened into each reason
 
-const OUTCOMES: { key: string; label: string; definition: string }[] = [
-  { key: "accepted", label: "Counted", definition: "Events the totals include." },
+const GROUPS: ZoomGroup[] = [
   {
-    key: "quarantined",
     label: "Quarantined",
+    tone: "warning",
     definition: "Many visitors from one network, or very many events from one visitor.",
   },
-  { key: "bot", label: "Bots", definition: "The browser is a known bot." },
-  { key: "rejected", label: "Rejected", definition: "Refused at the edge. The reasons are below." },
-  { key: "dlq", label: "Not stored", definition: "Accepted, but the write to storage failed." },
+  { label: "Bots", tone: "neutral", definition: "The browser is a known bot." },
+  { label: "Rejected", tone: "critical", definition: "Refused at the edge, for the reasons below." },
+  { label: "Not stored", tone: "muted", definition: "Accepted, but the write to storage failed." },
 ];
 
-// a term with its definition in a tooltip: dotted underline, focusable
-const DEFINED =
-  "rounded-sm underline decoration-line-strong decoration-dotted underline-offset-4 focus-ring";
-
-const OTHER_OUTCOME = {
-  key: "other",
-  label: "Other",
-  definition: "An outcome that this page does not name yet.",
-};
-
-function NotCounted({
-  sites,
-  q,
-  summary,
-  band,
-  onBand,
-}: {
-  sites: Site[];
-  q: WebQuery;
-  summary: WebSummary | null;
-  band: "primary" | "quarantine";
-  onBand: (b: "primary" | "quarantine") => void;
-}) {
+function WhereEventsWent({ sites, q }: { sites: Site[]; q: WebQuery }) {
   const span = ingestWindow(q, new Date());
   const answers = useQueries({
     queries: sites.map((s) => ({
@@ -679,118 +686,75 @@ function NotCounted({
       staleTime: 2 * 60_000,
     })),
   });
-  const pending = answers.some((a) => a.isPending);
+  if (span === null) return null;
   const failed = answers.find((a) => a.error);
-  const totals = sumOutcomes(answers.map((a) => a.data));
-  const other = sumUnclassified(totals);
-  const value = (k: string) =>
-    k === "rejected" ? sumRejected(totals) : k === "other" ? other : (totals[k] ?? 0);
-  const reasons = rejectionRows(totals);
-  const share = summary?.quarantine_share ?? null;
-  const quarantined = summary
-    ? band === "primary"
-      ? summary.other_band.pageviews
-      : summary.current.totals.pageviews
-    : null;
-  // an outcome nothing reached is left out; a range where nothing reached
-  // any outcome draws neither list
-  const rows = (other > 0 ? [...OUTCOMES, OTHER_OUTCOME] : OUTCOMES).filter(
-    (o) => pending || value(o.key) > 0,
-  );
-
-  // the reasons stand beside the outcomes only when there are any; alone,
-  // the outcomes take the width
-  const whyShown = span !== null && !failed && (pending || reasons.length > 0);
-
-  return (
-    <section aria-labelledby="not-counted" className="flex flex-col gap-4">
-      <h2 id="not-counted" className="text-section text-fg">
-        Not counted
-      </h2>
-
-      <div className={cn("grid items-start gap-4", whyShown && "lg:grid-cols-2")}>
-        {/* one panel: the quarantined page views, then every event by outcome */}
-        <Panel
-          title="Every event, by outcome"
-          actions={
-            <Button
-              variant="outline"
-              size="sm"
-              className="max-lg:h-(--vs-control-touch)"
-              onClick={() => onBand(band === "primary" ? "quarantine" : "primary")}
-            >
-              {band === "primary" ? "Show quarantined traffic" : "Show counted traffic"}
-            </Button>
-          }
-          bodyClassName="flex flex-col"
-        >
-          <p
-            className="border-b border-line-subtle pb-3 text-body text-fg-2"
-            data-testid="quarantined-pageviews"
-          >
-            {quarantined === null ? (
-              <Missing reason="The totals did not load" />
-            ) : (
-              <span className="text-fg tabular">{formatCount(quarantined)}</span>
-            )}{" "}
-            quarantined page views
-            {share !== null && share > 0 ? `, ${formatPercent(share)} of all page views` : ""}
-          </p>
-          {span === null ? (
-            <EmptyState compact title="The range has not started">
-              Outcome counts show from the first day of the range. Choose an earlier range.
-            </EmptyState>
-          ) : failed ? (
-            <ErrorState
-              compact
-              title="The outcome counts did not load"
-              error={failed.error}
-              onRetry={() => {
-                for (const a of answers) if (a.error) a.refetch();
-              }}
-            />
-          ) : rows.length === 0 ? null : (
-            <dl aria-label="Outcomes" className="flex flex-col">
-              {rows.map((o) => (
-                <div
-                  key={o.key}
-                  data-outcome={o.key}
-                  className="flex h-(--vs-control-sm) items-center justify-between gap-3 border-b border-line-subtle last:border-b-0 max-lg:h-(--vs-control-touch)"
-                >
-                  <dt className="text-body text-fg-2">
-                    <Tooltip content={o.definition}>
-                      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the definition opens on focus too */}
-                      <span tabIndex={0} className={DEFINED}>
-                        {o.label}
-                      </span>
-                    </Tooltip>
-                    <span className="sr-only">. {o.definition}</span>
-                  </dt>
-                  <dd className="text-small text-fg tabular">
-                    {pending ? <Bone className="h-3 w-12" /> : formatCount(value(o.key))}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </Panel>
-        {!whyShown ? null : (
-          <Panel title="Why events were rejected">
-            <BreakdownList
-              label="Reasons"
-              state={pending ? "loading" : undefined}
-              items={reasons.map((r) => ({
-                key: r.key,
-                label: r.label,
-                text: r.label,
-                value: r.count,
-              }))}
-              valueLabel="Events"
-              emptyTitle="No rejected events in this range"
-            />
-          </Panel>
-        )}
+  if (failed)
+    return (
+      <ErrorState
+        compact
+        title="Where events went did not load"
+        error={failed.error}
+        onRetry={() => {
+          for (const a of answers) if (a.error) a.refetch();
+        }}
+      />
+    );
+  if (answers.some((a) => a.isPending))
+    return (
+      <div
+        aria-busy="true"
+        className="flex flex-col gap-3 rounded-2xl border border-line bg-raised px-5 py-4"
+      >
+        <span className="sr-only">Loading where events went</span>
+        <Bone className="h-4 w-40" />
+        <Bone className="h-8 w-64" />
+        <Bone className="h-3 w-full" />
       </div>
-    </section>
+    );
+  const totals = sumOutcomes(answers.map((a) => a.data));
+  // the edge reached nothing in the range: no block of zeros
+  if (Object.values(totals).every((v) => v === 0)) return null;
+  const other = sumUnclassified(totals);
+  const parts: ZoomPart[] = [
+    {
+      key: "quarantined",
+      label: "Quarantined",
+      count: totals.quarantined ?? 0,
+      group: "Quarantined",
+      definition: GROUPS[0]?.definition,
+    },
+    {
+      key: "bot",
+      label: "Bots",
+      count: totals.bot ?? 0,
+      group: "Bots",
+      definition: GROUPS[1]?.definition,
+    },
+    ...rejectionRows(totals).map((r, i) => ({
+      key: r.key,
+      label: r.label,
+      count: r.count,
+      group: "Rejected",
+      shade: i,
+    })),
+    { key: "dlq", label: "Not stored", count: totals.dlq ?? 0, group: "Not stored" },
+    ...(other > 0
+      ? [{ key: "other", label: "Other", count: other, group: "Not stored", shade: 1 }]
+      : []),
+  ];
+  return (
+    <ZoomBlock
+      title="Where events went"
+      unit="events"
+      main={{
+        label: "Counted",
+        count: totals.accepted ?? 0,
+        definition: "Events the totals include.",
+      }}
+      groups={GROUPS}
+      parts={parts}
+      caption="Not counted, by reason"
+      cleanText="Every event in this range was counted"
+    />
   );
 }
