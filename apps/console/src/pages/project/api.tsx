@@ -149,8 +149,9 @@ export function ApiPage() {
   );
 }
 
-// the range in words and its resolution, each its own item of the meta
-// line, and why the resolution is coarser than asked, when it is
+// the range in words and why the resolution is coarser than asked, when it
+// is, each its own item of the meta line. the resolution itself is named by
+// the chart title, so it is not said twice
 function rangeItems(
   range: ApiRange | null,
   asked: DashboardState["range"],
@@ -161,7 +162,6 @@ function rangeItems(
       <span key="range" aria-live="polite" data-range-line="">
         {formatRange(range)}
       </span>,
-      <span key="res">{RESOLUTION_LABEL[range.resolution]}</span>,
       range.resolution_note ? (
         <span key="note">{RESOLUTION_NOTE[range.resolution_note]}</span>
       ) : null,
@@ -471,7 +471,7 @@ function DataNotes({
         <div className="flex flex-col divide-y divide-line-subtle rounded-xl border border-line-strong px-3.5 text-small text-fg-2">
           {traces.length > 0 ? (
             <p data-note="span" className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
-              <Pill tone="neutral">From traces</Pill>
+              <NoteTag>From traces</NoteTag>
               <span className="font-mono text-fg">
                 {traces.map((s) => serviceName(s.service)).join(", ")}
               </span>
@@ -520,14 +520,24 @@ function TracesBadge() {
     <Tooltip content={SPAN_NOTE}>
       {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the note opens on focus too */}
       <span tabIndex={0} className="inline-flex rounded-full focus-ring">
-        <Pill tone="neutral">From traces</Pill>
+        <NoteTag>From traces</NoteTag>
       </span>
     </Tooltip>
   );
 }
 
 function ApproxBadge() {
-  return <Pill tone="neutral">Approximate</Pill>;
+  return <NoteTag>Approximate</NoteTag>;
+}
+
+// a note on a service or a route (from traces, approximate, metrics only):
+// a quiet outlined tag, not a status, so it carries no dot and no colour
+function NoteTag({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-full border border-line-strong px-2 text-[11.5px] text-fg-2">
+      {children}
+    </span>
+  );
 }
 
 // ---- the dashboard
@@ -1411,14 +1421,14 @@ function ServicesSection({ services }: { services: ApiServiceItem[] }) {
           text: serviceName(s.service),
           label: (
             <span className="flex min-w-0 items-center gap-2">
-              <span className="truncate font-mono">{serviceName(s.service)}</span>
+              <span className="max-w-full shrink-0 truncate font-mono">{serviceName(s.service)}</span>
               {s.source === "span" ? <TracesBadge /> : null}
               {s.lossy ? <ApproxBadge /> : null}
               {s.span_data_ignored ? (
                 <Tooltip content={IGNORED_NOTE}>
                   {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the note opens on focus too */}
                   <span tabIndex={0} className="inline-flex rounded-full focus-ring">
-                    <Pill tone="neutral">Metrics only</Pill>
+                    <NoteTag>Metrics only</NoteTag>
                   </span>
                 </Tooltip>
               ) : null}
@@ -1427,6 +1437,8 @@ function ServicesSection({ services }: { services: ApiServiceItem[] }) {
           value: s.requests,
         }))}
         total={total}
+        header={false}
+        tone="series-3"
         valueLabel="Requests"
         limit={20}
       />

@@ -40,6 +40,7 @@ import { siblingUrl } from "@/lib/hosts";
 import { rejectionRows, sumUnclassified } from "@/lib/outcomes";
 import { siteSetupPath } from "@/lib/site-setup";
 import {
+  DIMENSION_COLUMN,
   DIMENSION_LABEL,
   formatMetric,
   ingestWindow,
@@ -495,7 +496,9 @@ function BreakdownPanel({
   const data = b.data;
   return (
     <Panel
-      title={group.title}
+      // the title keeps the height of a switch, so panels side by side line up
+      // whether or not they have one
+      title={<span className="flex min-h-8 items-center">{group.title}</span>}
       data-breakdown={group.title}
       actions={
         group.options.length > 1 ? (
@@ -524,6 +527,7 @@ function BreakdownPanel({
       >
         <BreakdownList
           label={DIMENSION_LABEL[active]}
+          columnLabel={DIMENSION_COLUMN[active]}
           state={b.isPending ? "loading" : b.error ? "error" : undefined}
           error={b.error}
           onRetry={() => b.refetch()}

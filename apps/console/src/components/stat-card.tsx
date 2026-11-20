@@ -117,7 +117,7 @@ export function StatCard({
       onClick={onSelect}
       {...data}
       className={cn(
-        "group/stat @container flex min-h-[92px] min-w-0 flex-col gap-[3px] rounded-xl border px-3.5 py-3 text-left transition duration-(--vs-duration-press) ease-standard",
+        "group/stat @container flex min-h-[92px] min-w-0 flex-col gap-[3px] rounded-xl border px-3 py-[11px] text-left transition duration-(--vs-duration-press) ease-standard",
         onSelect &&
           "focus-ring hover:border-line-strong active:translate-y-px disabled:pointer-events-none",
         selected ? "border-line-focus bg-hover" : "border-line bg-raised",
@@ -126,7 +126,7 @@ export function StatCard({
     >
       <span
         className={cn(
-          "flex min-w-0 items-center gap-[7px] text-[12.5px] leading-4",
+          "flex min-w-0 items-center gap-[7px] text-[12px] leading-4",
           selected ? "text-fg" : "text-fg-2",
         )}
       >
@@ -135,12 +135,12 @@ export function StatCard({
         ) : null}
         {definition ? (
           <Tooltip content={definition}>
-            <span className="min-w-0 truncate underline decoration-line-strong decoration-dotted underline-offset-[3px]">
+            <span className="min-w-0 underline decoration-line-strong decoration-dotted underline-offset-[3px]">
               {label}
             </span>
           </Tooltip>
         ) : (
-          <span className="min-w-0 truncate">{label}</span>
+          <span className="min-w-0">{label}</span>
         )}
         {definition ? <span className="sr-only">. {definition}</span> : null}
         {selected ? <span className="sr-only">. In chart</span> : null}
@@ -170,7 +170,7 @@ export function StatCard({
               ) : (
                 <span
                   className={cn(
-                    "metric-fit font-semibold [--vs-text-metric:24px] [line-height:30px]",
+                    "metric-fit font-semibold [--vs-text-metric:22px] [line-height:28px]",
                     valueTone === "warning"
                       ? "text-warning"
                       : valueTone === "critical"
@@ -235,7 +235,7 @@ export function ChangeLine({ change, className }: { change: StatChange; classNam
   return (
     <span
       data-change={change.direction}
-      className={cn("flex items-center gap-1 text-[12.5px] leading-4 tabular", tone, className)}
+      className={cn("flex items-center gap-1 text-[12px] leading-4 tabular", tone, className)}
     >
       {flat ? null : (
         // a drawn triangle, not a glyph, so the text of the change stays the change

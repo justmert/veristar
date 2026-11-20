@@ -31,6 +31,11 @@ export type BreakdownListProps = {
   // the whole the shares are of (visitors of the range); without it no share
   // column shows, since keys can overlap and their sum is not the whole
   total?: number | null;
+  // the heading of the key column, such as "Country" or "Route"; the panel
+  // title above the list already names the list, so this names one row
+  columnLabel?: string;
+  // the column headings row; off where the panel shows the list without one
+  header?: boolean;
   // the heading of the value column, such as "Visitors"
   valueLabel?: string;
   // what the share column counts, as a tooltip on its heading, such as when
@@ -52,9 +57,9 @@ export type BreakdownListProps = {
   onRetry?: () => void;
   emptyTitle?: string;
   emptyText?: string;
-  // the colour of the share bars: the first series, or amber for a list of
-  // quarantined traffic
-  tone?: "series-1" | "warning";
+  // the colour of the share bars: the series of the data (web blue, api
+  // violet), or amber for a list of quarantined traffic
+  tone?: "series-1" | "series-3" | "warning";
   // the heading of the extra column, when items carry an `aside`
   asideLabel?: string;
   className?: string;
@@ -63,13 +68,14 @@ export type BreakdownListProps = {
 // a share of a part: a part smaller than the whole never reads as 100%, so
 // 99.8% and 0.2% add up as the reader expects
 const DEFINED =
-  "w-12 rounded-sm text-right underline decoration-line-strong decoration-dotted underline-offset-4 focus-ring";
+  "w-11 rounded-sm text-right underline decoration-line-strong decoration-dotted underline-offset-4 focus-ring";
 
-// the bar behind a label, plain and selected: quiet grey for the first
-// series, amber when the list reads quarantined traffic
+// the bar behind a row, plain and selected: a faint tint of the series the
+// list counts, amber when the list reads quarantined traffic
 const BAR = {
-  "series-1": ["bg-selected", "bg-pressed"],
-  warning: ["bg-warning/25", "bg-warning/40"],
+  "series-1": ["bg-series-1/16", "bg-series-1/30"],
+  "series-3": ["bg-series-3/16", "bg-series-3/30"],
+  warning: ["bg-warning/20", "bg-warning/35"],
 } as const;
 
 export function partShare(value: number, total: number): string {
@@ -82,6 +88,8 @@ export function BreakdownList({
   label,
   items,
   total,
+  columnLabel,
+  header = true,
   valueLabel = "Value",
   shareDefinition,
   format = formatCount,
@@ -137,61 +145,61 @@ export function BreakdownList({
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-2", className)}>
-      <div className="flex items-center justify-between gap-3 px-2 text-caption text-fg-2">
-        <span aria-hidden>{label}</span>
-        <span className="flex gap-4">
-          {showShare ? (
-            shareDefinition ? (
-              <Tooltip content={shareDefinition}>
-                {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the definition opens on focus too */}
-                <span tabIndex={0} className={DEFINED}>
-                  Share
-                  <span className="sr-only">. {shareDefinition}</span>
-                </span>
-              </Tooltip>
-            ) : (
-              <span aria-hidden className="w-12 text-right">
-                Share
-              </span>
-            )
-          ) : null}
-          <span aria-hidden className="min-w-16 text-right">
-            {valueLabel}
-          </span>
-          {hasAside ? (
-            <span aria-hidden className="min-w-14 text-right">
-              {asideLabel}
+      {header ? (
+        <div className="flex items-center justify-between gap-3 px-2 text-caption text-fg-2">
+          <span aria-hidden>{columnLabel ?? label}</span>
+          <span className="flex gap-4">
+            <span aria-hidden className="min-w-12 text-right">
+              {valueLabel}
             </span>
-          ) : null}
-        </span>
-      </div>
+            {showShare ? (
+              shareDefinition ? (
+                <Tooltip content={shareDefinition}>
+                  {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the definition opens on focus too */}
+                  <span tabIndex={0} className={DEFINED}>
+                    Share
+                    <span className="sr-only">. {shareDefinition}</span>
+                  </span>
+                </Tooltip>
+              ) : (
+                <span aria-hidden className="w-11 text-right">
+                  Share
+                </span>
+              )
+            ) : null}
+            {hasAside ? (
+              <span aria-hidden className="w-12 text-right">
+                {asideLabel}
+              </span>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
       <ul aria-label={label} className="flex flex-col gap-1">
         {shown.map((it) => {
-          // the bar stays inside the label column, so it never runs under
-          // the share and the value
+          // the bar spans the row under the label and the numbers, a faint
+          // tint that keeps every text readable over it
           const bar = (
             <>
-              <span className="relative flex min-w-0 flex-1 self-stretch items-center">
-                <span
-                  aria-hidden
-                  className={cn(
-                    "absolute inset-y-1 left-0 rounded-sm transition-colors duration-(--vs-duration-press)",
-                    BAR[tone][selectedKey === it.key ? 1 : 0],
-                  )}
-                  style={{ width: `${(it.value / max) * 100}%` }}
-                />
-                <span className="relative min-w-0 flex-1 truncate px-1 text-fg" title={it.text}>
-                  {it.label}
-                </span>
+              <span
+                aria-hidden
+                className={cn(
+                  "absolute inset-y-1 left-0 rounded-sm transition-colors duration-(--vs-duration-press)",
+                  BAR[tone][selectedKey === it.key ? 1 : 0],
+                )}
+                style={{ width: `${(it.value / max) * 100}%` }}
+              />
+              <span className="relative min-w-0 flex-1 truncate text-fg" title={it.text}>
+                {it.label}
               </span>
               <span className="relative flex shrink-0 gap-4 text-small tabular">
+                <span className="min-w-12 text-right text-fg">{format(it.value)}</span>
                 {showShare ? (
-                  <span className="w-12 text-right text-fg-2">
+                  <span className="w-11 text-right text-caption leading-5 text-fg-3">
                     {partShare(it.value, total ?? 0)}
                   </span>
                 ) : null}
-                <span className="min-w-16 text-right text-fg">{format(it.value)}</span>
-                {hasAside ? <span className="min-w-14 text-right">{it.aside}</span> : null}
+                {hasAside ? <span className="w-12 text-right text-caption leading-5">{it.aside}</span> : null}
               </span>
             </>
           );
