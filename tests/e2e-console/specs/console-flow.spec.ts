@@ -112,12 +112,11 @@ test("sign in, enroll, add a site and copy the snippet", async ({ browserName })
   tenant = (await api<Tenant>(context, "GET", `/api/tenants/${tenantId}`)).body;
   expect(tenant).toMatchObject({ name, status: "active", role: "owner" });
 
-  // a new project's sites page: the header's Add site opens the form
-  await page.getByRole("button", { name: "Add site" }).click();
+  // a new project's sites page is the add form; the domain is the first
+  // allowed origin
   const form = page.getByRole("form", { name: "Add a site" });
   await form.getByLabel("Name").fill("Shop");
   await form.getByLabel("Domain").fill(TENANT_HOST);
-  await form.getByLabel("Allowed origins").fill(TENANT_ORIGIN);
   await shot(page, "03-add-site");
   const created = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url() === `${APP}/api/tenants/${tenant.id}/sites`,
@@ -134,10 +133,10 @@ test("sign in, enroll, add a site and copy the snippet", async ({ browserName })
   await page.waitForURL(`${APP}/projects/${tenant.id}/sites/${site.id}`);
   await page.goto(`${APP}/projects/${tenant.id}/sites/${site.id}`);
   await expect(page.getByRole("heading", { name: site.name, level: 1 })).toBeVisible();
-  await expect(page.getByRole("progressbar", { name: "Setup progress" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Setup", level: 2 })).toBeVisible();
   await expect(page.getByRole("region", { name: "Install the tag", exact: true })).toBeVisible();
   // the pinned script, integrity and site id sit under a disclosure
-  await page.getByText("Version and what the tag pins").click();
+  await page.getByText("Tag options and version").click();
   const newest = manifest().at(-1);
   expect(newest).toBeTruthy();
   const shown = (await page.locator("pre code").first().innerText()).trim();

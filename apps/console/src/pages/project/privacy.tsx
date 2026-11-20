@@ -28,7 +28,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
 import {
   ipField,
-  KIND_LABEL,
   requestSummary,
   sessionField,
   userAgentField,
@@ -610,7 +609,7 @@ function LastRequest({
     >
       <SummaryPill r={r} />
       <span className="font-medium text-fg">
-        {`${KIND_LABEL[r.kind]} on ${site?.domain ?? "the site"}: ${summary.toLowerCase()}`}
+        {`${KIND_TEXT[r.kind].label} on ${site?.domain ?? "the site"}: ${summary.toLowerCase()}`}
       </span>
       {r.status !== "running" && (r.message ?? r.error) ? (
         <span className="text-small text-fg-2">{r.message ?? r.error}</span>

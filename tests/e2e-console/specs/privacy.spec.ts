@@ -172,21 +172,21 @@ test("the privacy page erases one session by its id and leaves the other", async
   await page.screenshot({ path: join(shots, "01-privacy.png"), fullPage: true });
 
   const form = page.getByRole("form", { name: "Request erasure" });
-  // the kind is a radio card; a person clicks the card's title
-  await form.getByText("One session", { exact: true }).click();
-  await expect(form.getByRole("radio", { name: "One session" })).toBeChecked();
+  // the kind is a radio row; a person clicks it
+  await form.getByRole("radio", { name: /^One session/ }).click();
+  await expect(form.getByRole("radio", { name: /^One session/ })).toBeChecked();
   // the owner finds the desktop visitor's session, the one with two page
   // views, in the form's list of today's sessions
   await form
-    .getByRole("list", { name: "Sessions" })
-    .getByRole("button")
+    .getByRole("radiogroup", { name: "Sessions" })
+    .getByRole("radio")
     .filter({ hasText: "2 page views" })
     .click();
   await expect(form.getByLabel("Session id")).toHaveValue(erased);
   const sent = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url() === `${APP}/api/tenants/${tenant.id}/erasure`,
   );
-  await form.getByRole("button", { name: "Request erasure" }).click();
+  await form.getByRole("button", { name: "Review and erase" }).click();
   // nothing is erased before the confirmation
   const confirm = page.getByRole("dialog", { name: `Erase this session on ${host}?` });
   await confirm.getByRole("button", { name: "Erase data" }).click();
@@ -206,7 +206,7 @@ test("the privacy page erases one session by its id and leaves the other", async
   });
   // the history on the page shows the finished request with its counts
   const history = page.getByRole("table", { name: "Request history" });
-  await expect(history.getByText(`One session: ${host}`)).toBeVisible();
+  await expect(history.getByText("One session", { exact: true })).toBeVisible();
   await expect(history.getByText(/Deleted 1 session, 2 events and 0 undeliverable/)).toBeVisible();
 
   // the erased session and its page views are gone, the other stays
@@ -220,10 +220,10 @@ test("the privacy page erases one session by its id and leaves the other", async
 test("the privacy page resets the whole site after the domain is typed and confirmed", async () => {
   const page = await privacyPage();
   const form = page.getByRole("form", { name: "Request erasure" });
-  // the kind is a radio card; a person clicks the card's title
-  await form.getByText("Whole site", { exact: true }).click();
-  await expect(form.getByRole("radio", { name: "Whole site" })).toBeChecked();
-  await form.getByRole("button", { name: "Reset site data" }).click();
+  // the kind is a radio row; a person clicks it
+  await form.getByRole("radio", { name: /^Everything of this site/ }).click();
+  await expect(form.getByRole("radio", { name: /^Everything of this site/ })).toBeChecked();
+  await form.getByRole("button", { name: "Review and erase" }).click();
   const dialog = page.getByRole("dialog", { name: `Reset all web data of ${host}?` });
   await expect(dialog).toBeVisible();
   // the domain is typed in the dialog, exactly
@@ -238,7 +238,7 @@ test("the privacy page resets the whole site after the domain is typed and confi
   );
   await dialog.getByRole("button", { name: "Reset site data" }).click();
   expect((await sent).status()).toBe(202);
-  await expect(page.getByText(`Whole site on ${host}: erased`)).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByText(`Everything of this site on ${host}: erased`)).toBeVisible({ timeout: 120_000 });
   await page.screenshot({ path: join(shots, "04-reset-done.png"), fullPage: true });
 
   const row = await latest();

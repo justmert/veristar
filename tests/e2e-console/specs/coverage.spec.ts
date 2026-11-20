@@ -121,21 +121,18 @@ test("the snippet offers the title opt-in from 1.3.0", async () => {
   const page = owner.page;
   await page.goto(`${APP}/projects/${tenant.id}/sites/${site.id}`);
   // the loads above close as soon as the tracker file arrives, so a page
-  // view may or may not have reached the gateway: the install step is open,
-  // or done and folded away behind Show
-  const install = page.getByRole("region", { name: /^Install the tag\W/ });
-  await expect(install).toBeVisible();
-  // the step folds once the first event is known, so its sources answer first
+  // view may or may not have reached the gateway: the install step is the
+  // current step, or done with its tag behind Show the tag
   await page.waitForLoadState("networkidle");
-  const show = install.getByRole("button", { name: "Show" });
-  await expect(async () => {
-    if (await show.isVisible()) await show.click();
-    await expect(page.getByLabel("Send the page title")).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 30_000 });
+  const showTag = page.getByRole("button", { name: "Show the tag" });
+  if (await showTag.isVisible()) await showTag.click();
+  const install = page.getByRole("region", { name: "Install the tag" });
+  await expect(install).toBeVisible();
+  await install.getByText("Tag options and version").click();
   // the newest release, which reads the title choice like every release from 1.3.0
-  await expect(page.getByText("tracker 1.4.0").first()).toBeVisible();
-  await page.getByLabel("Send the page title").check();
-  await expect(page.locator("pre code").first()).toContainText('data-send-title="true"');
+  await expect(install.getByLabel("Tracker version")).toHaveValue("1.4.0");
+  await install.getByLabel("Send the page title").check();
+  await expect(install.locator("pre code").first()).toContainText('data-send-title="true"');
   expect(tag).not.toContain("data-send-title");
 });
 
