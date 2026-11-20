@@ -2,7 +2,7 @@
 // builds react elements, never html strings, so nothing in the text can
 // inject markup. it covers what docs/compliance/terms.md uses: headings,
 // paragraphs, lists with one nested level, block quotes, bold, inline code,
-// links and bare https addresses.
+// links, bare https addresses and pipe tables.
 
 import type { ReactNode } from "react";
 
@@ -13,7 +13,19 @@ type Block =
   | { kind: "h"; level: number; text: string }
   | { kind: "p"; text: string }
   | { kind: "ul" | "ol"; items: ListItem[] }
-  | { kind: "quote"; text: string };
+  | { kind: "quote"; text: string }
+  | { kind: "table"; head: string[]; rows: string[][] };
+
+// the cells of a pipe table row: "| a | b |" is ["a", "b"]
+function cells(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((c) => c.trim());
+}
+const TABLE_RULE = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
 
 export function stripFrontMatter(md: string): string {
   const m = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(md);
@@ -26,8 +38,11 @@ export function parseBlocks(md: string): Block[] {
   let para: string[] = [];
   let list: { kind: "ul" | "ol"; items: ListItem[] } | null = null;
   let quote: string[] = [];
+  let table: { kind: "table"; head: string[]; rows: string[][] } | null = null;
 
   const flush = () => {
+    if (table) blocks.push(table);
+    table = null;
     if (para.length) blocks.push({ kind: "p", text: para.join(" ") });
     if (list) blocks.push(list);
     if (quote.length) blocks.push({ kind: "quote", text: quote.join(" ") });
@@ -44,8 +59,21 @@ export function parseBlocks(md: string): Block[] {
     const indent = (bullet?.[1] ?? numbered?.[1] ?? "").length;
     const lastItem = list?.items.at(-1);
     const q = /^>\s?(.*)$/.exec(line);
-    if (line.trim() === "") {
+    if (table && line.trim().startsWith("|")) {
+      table.rows.push(cells(line));
+    } else if (line.trim() === "") {
       flush();
+    } else if (
+      para.length === 1 &&
+      !list &&
+      para[0]?.startsWith("|") &&
+      TABLE_RULE.test(line)
+    ) {
+      // the line before the rule was the header row of a table
+      const head = cells(para[0]);
+      para = [];
+      flush();
+      table = { kind: "table", head, rows: [] };
     } else if (heading?.[1] && heading[2] !== undefined) {
       flush();
       blocks.push({ kind: "h", level: heading[1].length, text: heading[2] });
@@ -164,13 +192,20 @@ export function outline(source: string): { id: string; text: string }[] {
     }));
 }
 
+// "1. Parties and roles" is the number "1" and the title "Parties and
+// roles"; a heading without a number has none
+export function splitNumber(text: string): { n: string | null; title: string } {
+  const m = /^(\d+(?:\.\d+)*)\.?\s+(.*)$/.exec(text);
+  return m?.[1] && m[2] !== undefined ? { n: m[1], title: m[2] } : { n: null, title: text };
+}
+
 // `afterTitle` is placed right under the document's first-level heading (the
 // terms page puts the version there)
 export function Markdown({ source, afterTitle }: { source: string; afterTitle?: ReactNode }) {
   const blocks = parseBlocks(source);
   const titled = blocks.some((b) => b.kind === "h" && b.level === 1);
   return (
-    <div className="flex flex-col gap-4 text-body text-fg-2">
+    <div className="flex flex-col gap-4.5 text-[15px] leading-[25px] text-fg-2">
       {titled ? null : afterTitle}
       {blocks.map((b, n) => {
         // blocks have no identity beyond their position in a static document
@@ -180,28 +215,63 @@ export function Markdown({ source, afterTitle }: { source: string; afterTitle?: 
             if (b.level === 1)
               return (
                 <div key={key} className="flex flex-col gap-3">
-                  <h1 className="text-h1 tracking-tight text-fg">{inline(b.text)}</h1>
+                  <h1 className="text-[34px] leading-10 font-semibold tracking-[-0.03em] text-fg">
+                    {inline(b.text)}
+                  </h1>
                   {afterTitle}
                 </div>
               );
+            const { n, title } = splitNumber(b.text);
             if (b.level === 2)
               return (
                 <h2
                   key={key}
                   id={headingId(b.text.replace(/[*`]/g, ""))}
-                  className="scroll-mt-6 pt-4 text-section text-fg"
+                  className="mt-3.5 flex scroll-mt-6 gap-3 text-[20px] leading-7 font-semibold tracking-[-0.015em] text-fg"
                 >
-                  {inline(b.text)}
+                  {n ? <span className="text-fg-3 tabular">{n}</span> : null}
+                  <span>{inline(title)}</span>
                 </h2>
               );
             return (
-              <h3 key={key} className="pt-2 text-title text-fg">
-                {inline(b.text)}
+              <h3 key={key} className="mt-1 flex gap-2.5 text-[16px] leading-6 font-semibold text-fg">
+                {n ? <span className="text-fg-3 tabular">{n}</span> : null}
+                <span>{inline(title)}</span>
               </h3>
             );
           }
           case "p":
             return <p key={key}>{inline(b.text)}</p>;
+          case "table":
+            return (
+              <div key={key} className="overflow-x-auto rounded-xl border border-line">
+                <table className="w-full border-collapse text-left text-[13.5px] leading-5">
+                  <thead className="bg-sunken text-caption text-fg-2">
+                    <tr>
+                      {b.head.map((h, j) => (
+                        <th key={`${key}-h${j}`} scope="col" className="px-4.5 py-2.5 font-normal">
+                          {inline(h)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {b.rows.map((r, j) => (
+                      <tr key={`${key}-r${j}`} className="border-t border-line-subtle">
+                        {r.map((c, k) => (
+                          <td
+                            key={`${key}-r${j}-${k}`}
+                            className={k === 0 ? "px-4.5 py-2.5 text-fg-2" : "px-4.5 py-2.5 text-fg"}
+                          >
+                            {inline(c)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
           case "quote":
             return (
               <blockquote
@@ -213,7 +283,7 @@ export function Markdown({ source, afterTitle }: { source: string; afterTitle?: 
             );
           case "ul":
             return (
-              <ul key={key} className="flex list-disc flex-col gap-1 pl-5 marker:text-fg-3">
+              <ul key={key} className="flex list-disc flex-col gap-2 pl-5 marker:text-fg-3">
                 {b.items.map((it, j) => (
                   <Item key={`${key}-${j}`} item={it} />
                 ))}
@@ -221,7 +291,7 @@ export function Markdown({ source, afterTitle }: { source: string; afterTitle?: 
             );
           case "ol":
             return (
-              <ol key={key} className="flex list-decimal flex-col gap-1 pl-5 marker:text-fg-3">
+              <ol key={key} className="flex list-decimal flex-col gap-2 pl-5 marker:text-fg-3">
                 {b.items.map((it, j) => (
                   <Item key={`${key}-${j}`} item={it} />
                 ))}
