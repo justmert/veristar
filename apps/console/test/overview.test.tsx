@@ -261,6 +261,27 @@ function stub(opts: { pageviews: number; ingest: Record<string, number>; api: "u
                 },
               },
         );
+      if (u.pathname.endsWith("/api-metrics/routes")) return json(f.apiRoutesBody);
+      if (u.pathname.endsWith("/api-metrics/timeseries")) return json(f.apiTimeseriesBody);
+      if (u.pathname.endsWith("/web/breakdown"))
+        return json({
+          dimension: u.searchParams.get("dimension"),
+          band: "primary",
+          range: { from: "2026-11-15", to: "2026-11-16", days: 2 },
+          source: "engine",
+          unit: "visitors",
+          items: [{ key: "/", value: 10 }],
+          total_keys: 1,
+          sites: null,
+        });
+      if (u.pathname.endsWith("/web/realtime"))
+        return json({
+          at: "2026-11-16T15:00:00Z",
+          source: "engine",
+          visitors: 2,
+          sites: [],
+          minutes: [],
+        });
       if (u.pathname.endsWith("/integrity")) return json(integrityReportBody);
       if (u.pathname.endsWith("/onchain")) return json(onchainBody);
       return new Response(JSON.stringify({ error: { code: "unavailable", message: "x" } }), {
@@ -321,7 +342,7 @@ describe("the chart of a range with one day of data", () => {
 });
 
 describe("overview page", () => {
-  it("shows web numbers from the web totals, api numbers and one line per other page", async () => {
+  it("shows web, api and on-chain figures, the grade and the top lists", async () => {
     const urls = stub({ pageviews: 120, ingest: { accepted: 5 }, api: "used" });
     const host = await renderRoutes(routes, `/projects/${f.TENANT_ID}`);
     await waitFor(() =>
@@ -332,54 +353,54 @@ describe("overview page", () => {
     await waitFor(() =>
       expect(host.querySelector('[data-tile="API requests"]')?.textContent).toContain("1,200"),
     );
+    // only the proven id's operations count on-chain
     await waitFor(() =>
-      expect(host.querySelector('[data-summary="On-chain"]')?.textContent).toContain(
-        "1,234operations of verified IDs, 1 of 2 verified",
-      ),
+      expect(host.querySelector('[data-tile="On-chain ops"]')?.textContent).toContain("1,234"),
     );
-    expect(host.querySelector('[data-summary="Integrity grade"] [data-grade]')).not.toBeNull();
-    // the change leads: what moved most against the previous period
-    const movers = [...host.querySelectorAll("[data-mover]")].map((e) =>
-      e.getAttribute("data-mover"),
+    await waitFor(() =>
+      expect(host.querySelector('[data-tile="Integrity grade"]')?.textContent).toContain("B"),
     );
-    expect(movers[0]).toBe("pageviews");
-    expect(host.querySelector('[data-mover="pageviews"]')?.textContent).toContain("50%");
+    // the grade lowered to B is something to act on
+    await waitFor(() => expect(host.querySelector('[data-attention="grade"]')).not.toBeNull());
     const links = [...host.querySelectorAll("a")].map((a) => a.getAttribute("href"));
     expect(links).toContain(`/projects/${f.TENANT_ID}/scf`);
     expect(links).toContain(`/projects/${f.TENANT_ID}/onchain`);
-    expect(links).toContain(`/projects/${f.TENANT_ID}/sites`);
     // the api asks for the same utc days as the web totals
     const api = decodeURIComponent(urls.find((u) => u.includes("/api-metrics/overview")) ?? "");
     expect(api).toContain("range=custom");
     expect(api).toMatch(/from=\d{4}-\d{2}-\d{2}T00:00:00Z/);
-    // no full integrity or on-chain panel
-    expect(host.querySelector('[aria-label="Integrity"]')).toBeNull();
-    expect(host.textContent).not.toContain("Weekly active accounts");
+    // the top lists open their pages
+    await waitFor(() => expect(host.querySelector('[data-summary="Top pages"]')).not.toBeNull());
     expect(host.querySelector("[data-freshness]")?.textContent).toContain("Updated");
   });
 
-  it("names the next setup step, and completes the first event on the web totals", async () => {
+  it("turns the panel into next steps while setup is open", async () => {
     stub({ pageviews: 0, ingest: {}, api: "none" });
     const host = await renderRoutes(routes, `/projects/${f.TENANT_ID}`);
-    await waitFor(() => expect(host.querySelector('[aria-label="Next step"]')).not.toBeNull());
-    const step = host.querySelector('[aria-label="Next step"]');
-    expect(step?.getAttribute("data-step")).toBe("install");
-    expect(step?.textContent).toContain("Continue setup");
-    // an api that sent nothing draws no cards; the third step marks which
-    // part is connected: the api is not, the proven on-chain account is
-    expect(host.querySelector('[data-tile="API requests"]')).toBeNull();
-    await waitFor(() => expect(host.querySelector('[data-check="3"]')).not.toBeNull());
-    expect(host.querySelector('[data-part="api"]')?.hasAttribute("data-done")).toBe(false);
-    expect(host.querySelector('[data-part="onchain"]')?.hasAttribute("data-done")).toBe(true);
+    await waitFor(() => expect(host.querySelector("[data-setup]")).not.toBeNull());
+    expect(host.textContent).toContain("Next steps");
+    await waitFor(() =>
+      expect(host.querySelector('[data-attention^="event-"]')?.textContent).toContain(
+        "Continue setup",
+      ),
+    );
+    // an api that sent nothing offers Connect API on its figure and as a step
+    await waitFor(() =>
+      expect(host.querySelector('[data-tile="API requests"]')?.textContent).toContain(
+        "Connect API",
+      ),
+    );
+    expect(host.querySelector('[data-attention="api"]')).not.toBeNull();
+    // the unproven id asks to prove control
+    expect(host.querySelector('[data-attention="unproven"]')?.textContent).toContain(
+      "Prove control",
+    );
 
     stub({ pageviews: 7, ingest: {}, api: "none" });
     const again = await renderRoutes(routes, `/projects/${f.TENANT_ID}`);
-    // the edge has no event, the web totals have one: the next step is the domain
-    await waitFor(() =>
-      expect(again.querySelector('[aria-label="Next step"]')?.getAttribute("data-step")).toBe(
-        "verify",
-      ),
-    );
+    // the edge has no event, the web totals have one: the first event is done
+    await waitFor(() => expect(again.querySelector('[data-attention^="domain-"]')).not.toBeNull());
+    expect(again.querySelector('[data-attention^="event-"]')).toBeNull();
   });
 
   const stopped = (status: ProjectContext["tenant"]["status"], isOwner = true) => [
@@ -398,20 +419,16 @@ describe("overview page", () => {
 
   it("offers no setup step on a project that is not approved, suspended or removed", async () => {
     for (const status of ["rejected", "suspended", "removed"] as const) {
-      const urls = stub({ pageviews: 0, ingest: {}, api: "none" });
+      stub({ pageviews: 0, ingest: {}, api: "none" });
       const host = await renderRoutes(stopped(status), `/projects/${f.TENANT_ID}`);
-      await waitFor(() =>
-        expect(host.querySelector('[data-metric="pageviews"]')?.textContent).toContain("0"),
-      );
-      // the same site is at its install step on an active project (above)
-      expect(host.querySelector('[aria-label="Next step"]')).toBeNull();
+      await waitFor(() => expect(host.textContent).toContain("Needs attention"));
+      expect(host.querySelector("[data-setup]")).toBeNull();
       expect(host.textContent).not.toContain("Continue setup");
-      // the setup step is not even read
-      expect(urls.some((u) => u.includes("/ingest"))).toBe(false);
+      expect(host.textContent).not.toContain("Add site");
     }
   });
 
-  it("offers Add site where the control plane takes a site, and says what to do", async () => {
+  it("offers Add site where the control plane takes a site", async () => {
     const noSites = () => {
       vi.stubGlobal(
         "fetch",
@@ -431,31 +448,21 @@ describe("overview page", () => {
         }),
       );
     };
-    const buttons = (host: HTMLElement) =>
-      [...host.querySelectorAll("button")].map((b) => b.textContent?.trim());
-    // an active project starts with the setup checklist and its Add site
     noSites();
     const active = await renderRoutes(stopped("active"), `/projects/${f.TENANT_ID}`);
-    await waitFor(() => expect(active.textContent).toContain("Set up the project"));
-    expect(active.querySelector('[data-check="1"]')?.getAttribute("data-state")).toBe("current");
-    expect(buttons(active)).toContain("Add site");
+    await waitFor(() => expect(active.querySelector('[data-attention="site"]')).not.toBeNull());
+    expect(active.textContent).toContain("Next steps");
+    expect(active.textContent).toContain("Add site");
 
-    // the control plane takes sites on a project that is not approved: they
-    // wait for review. a suspended project refuses them.
     const cases = [
-      ["rejected", true, "Change the answers above and submit them again.", true],
-      ["rejected", false, "An owner can change the answers", true],
-      ["suspended", true, "You cannot add sites while the project is suspended.", false],
-      ["removed", true, "This project was removed. It cannot take new sites.", false],
+      ["suspended", "You cannot add sites while the project is suspended"],
+      ["removed", "This project was removed"],
     ] as const;
-    for (const [status, isOwner, text, add] of cases) {
+    for (const [status, text] of cases) {
       noSites();
-      const host = await renderRoutes(stopped(status, isOwner), `/projects/${f.TENANT_ID}`);
-      await waitFor(() => expect(host.textContent).toContain("No sites yet"));
-      expect(host.textContent).toContain(text);
-      expect(host.textContent).not.toContain("Set up the project");
-      if (add) expect(buttons(host)).toContain("Add site");
-      else expect(buttons(host)).not.toContain("Add site");
+      const host = await renderRoutes(stopped(status), `/projects/${f.TENANT_ID}`);
+      await waitFor(() => expect(host.textContent).toContain(text));
+      expect(host.textContent).not.toContain("Add site");
     }
   });
 });

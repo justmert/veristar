@@ -654,7 +654,7 @@ describe("the reports page (contract 20.3 and 20.4)", () => {
       projectRoutes(<SignedReports />, "scf"),
       `/projects/${c.TENANT_ID}/scf`,
     );
-    await waitFor(() => expect(host.textContent).toContain("3 views"));
+    await waitFor(() => expect(host.querySelector(`[data-report="${summary.id}"]`)).not.toBeNull());
     await click(byRole(host, "button", "Sign a report"));
 
     // the last days before today are not final yet
@@ -691,7 +691,9 @@ describe("the reports page (contract 20.3 and 20.4)", () => {
       (b) => b.textContent === "Revoke link",
     );
     await click(confirm as HTMLElement);
-    await waitFor(() => expect(host.textContent).toContain("Link revoked"));
+    await waitFor(() =>
+      expect(host.querySelector(`[data-report="${summary.id}"]`)?.textContent).toContain("Revoked"),
+    );
     // a revoked report keeps one action, in its menu: its signed file
     const revokedRow = host.querySelector(`[data-report="${summary.id}"]`) as HTMLElement;
     expect(revokedRow.querySelector('button[aria-label^="Copy link of"]')).toBeNull();
@@ -737,7 +739,7 @@ describe("revoking a report link", () => {
       projectRoutes(<SignedReports />, "scf"),
       `/projects/${c.TENANT_ID}/scf`,
     );
-    await waitFor(() => expect(host.textContent).toContain("3 views"));
+    await waitFor(() => expect(host.querySelector(`[data-report="${summary.id}"]`)).not.toBeNull());
     const open = () => [...host.querySelectorAll("dialog")].find((d) => d.hasAttribute("open"));
     const actions = "Actions for the report for Oct 1 to Oct 31, 2026";
     await openMenu(host, actions);
@@ -828,35 +830,31 @@ describe("scf review with cohorts (contract 19.3)", () => {
       `/projects/${c.TENANT_ID}/scf`,
     );
     await waitFor(() => expect(host.querySelector("[data-testid=verdict]")).not.toBeNull());
-    // the verdict: the cohort, the rule met and the key numbers with change
+    // the standing: the cohort as labeled facts and the rule met, its
+    // definition with the qualifying days of each month
     const verdict = host.querySelector("[data-testid=verdict]");
-    expect(verdict?.querySelector("[data-cohort]")?.textContent).toContain("4 projects");
-    expect(verdict?.querySelector(`[data-rule-met="${rule.id}"]`)).not.toBeNull();
-    expect(verdict?.querySelector("[data-key-number=visitors]")?.textContent).toContain("+100%");
-    expect(host.querySelector("[data-testid=cohort-population]")?.textContent).toBe(
-      "Build Award, SCF #38 · 4 projects",
-    );
-    const visitors = host.querySelector("tr[data-kpi=visitors]");
-    expect(visitors?.textContent).toContain("+100%");
-    // a cohort of four is too small for a percentile: no column of dashes
-    expect(visitors?.textContent).not.toContain("P75");
-    expect(host.querySelector("[data-percentile]")).toBeNull();
-    expect([...host.querySelectorAll("th")].some((th) => th.textContent === "Percentile")).toBe(
-      false,
-    );
-    expect(host.querySelector("tr[data-kpi=error_rate]")?.textContent).toContain("-0.1 pp");
-    expect(host.querySelector(`[data-rule="${rule.id}"]`)?.textContent).toContain(
+    expect(verdict?.textContent).toContain("Build Award");
+    expect(host.querySelector("[data-testid=cohort-population]")?.textContent).toBe("4 projects");
+    expect(verdict?.querySelector(`[data-rule-met="${rule.id}"]`)?.textContent).toContain(
       "Oct 2026: 4 qualifying days",
     );
-    // the full integrity report sits on this page, with its appeal for a B
-    await waitFor(() =>
-      expect(host.querySelector('[aria-label="Integrity report"]')).not.toBeNull(),
-    );
+    // the web check carries its change; a cohort of four is too small for a
+    // percentile
+    const web = host.querySelector("[data-check=web]");
+    expect(web?.textContent).toContain("+100%");
+    expect(web?.textContent).not.toContain("in cohort");
+    // the integrity evidence with its appeal for a B
+    await click(host.querySelector("[data-check=integrity]") as HTMLElement);
+    await waitFor(() => expect(host.querySelector("[data-integrity]")).not.toBeNull());
     expect(host.querySelector("[data-testid=integrity-appeal]")).not.toBeNull();
     expect(host.querySelectorAll("[data-testid=coverage]")).toHaveLength(1);
     expect(host.querySelector("[data-proposal]")?.textContent).toContain("SCF #39");
-    expect(host.querySelector("[data-award]")?.textContent).toContain("award date");
-    expect(host.querySelector("[data-marker='2026-11-15']")).not.toBeNull();
+    // the web evidence: the previous range, the change of the error rate and
+    // the award date on the chart
+    await click(host.querySelector("[data-check=web]") as HTMLElement);
+    await waitFor(() => expect(host.querySelector("[data-evidence=web]")).not.toBeNull());
+    expect(host.querySelector("[data-figure=previous-visitors]")).not.toBeNull();
+    await waitFor(() => expect(host.querySelector("[data-marker^='2026-11-15']")).not.toBeNull());
 
     await click(byRole(host, "button", "Edit"));
     await type(byLabel(host, "Round") as HTMLInputElement, "SCF #40");

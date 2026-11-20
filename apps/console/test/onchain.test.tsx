@@ -603,32 +603,31 @@ describe("scf review figures (contract 16.3)", () => {
       routes(<ScfReviewPage />, "scf"),
       `/projects/${f.TENANT_ID}/scf`,
     );
-    await waitFor(() => expect(host.textContent).toContain("1,234"));
-    expect(host.textContent).toContain("1 of 2");
-    expect(host.textContent).toContain("stellar.toml linked both ways");
+    await waitFor(() => expect(host.querySelector("[data-check=web]")).not.toBeNull());
     // the control plane sent no grade, so none is drawn
-    expect(host.querySelector("[data-testid=standing-grade] [data-grade]")).toBeNull();
+    expect(host.querySelector("[data-testid=standing-grade]")?.getAttribute("data-grade")).toBe(
+      "none",
+    );
     const link = [...host.querySelectorAll("a")].find((a) => a.textContent?.includes("Export CSV"));
     expect(link?.getAttribute("href")).toBe(
       `/api/tenants/${f.TENANT_ID}/overview.csv?from=${days[0]}&to=${days[3]}`,
     );
-    // "Days without data" reads as the on-chain page counts it, and the api
-    // count of routes is named for what it counts
+    expect(host.querySelector("[data-check=web]")?.textContent).toContain("+50%");
+    // the api has no request: its check shows no figure and its evidence says so
+    await click(host.querySelector("[data-check=api]") as HTMLElement);
+    await waitFor(() => expect(host.querySelector("[data-evidence=api]")).not.toBeNull());
+    expect(host.querySelector("[data-figure=routes]")).toBeNull();
+    // the on-chain evidence: "Days without data" reads as the on-chain page
+    // counts it, and each verified contract's calls per function
+    await click(host.querySelector("[data-check=onchain]") as HTMLElement);
+    await waitFor(() => expect(host.querySelector("[data-evidence=onchain]")).not.toBeNull());
+    expect(host.textContent).toContain("1 of 2");
+    expect(host.textContent).toContain("Linked both ways");
     expect(host.querySelector("[data-figure=days-missing]")?.textContent).toContain(
       "before today without a ledger read",
     );
-    // the verdict carries the three counts with data, in a funder's order;
-    // the api has no request, so neither a key number nor a figure group
-    const keys = [...host.querySelectorAll("[data-key-number]")].map((e) =>
-      e.getAttribute("data-key-number"),
-    );
-    expect(keys).toEqual(["visitors", "onchain_operations", "pageviews"]);
-    expect(host.querySelector("[data-key-number=visitors]")?.textContent).toContain("+50%");
-    expect(host.querySelector("[data-figure=routes]")).toBeNull();
-    expect(host.querySelector('section[aria-label="API"]')).toBeNull();
     // a value the view does not have is the missing glyph, never n/a
     expect(host.textContent).not.toContain("n/a");
-    // each verified contract's calls per function, failed missing for accounts
     const table = host.querySelector(`[aria-label="Calls per function of ${f.C_KEY}"]`);
     const row = table?.querySelector('[data-function="swap"][data-caller="account"]');
     expect(row?.textContent).toContain("17");
@@ -636,7 +635,7 @@ describe("scf review figures (contract 16.3)", () => {
     expect(host.textContent).toContain("2 days read, 1 with calls of accounts only");
   });
 
-  it("draws the grade with its word, colour and meaning when the field arrives", async () => {
+  it("draws the grade in the seal when the field arrives", async () => {
     answer({
       ...scfBody,
       integrity: { grade: "B", graded_days: 8, days_a: 5, days_b: 3, days_c: 0 },
@@ -646,11 +645,10 @@ describe("scf review figures (contract 16.3)", () => {
       `/projects/${f.TENANT_ID}/scf`,
     );
     await waitFor(() => expect(host.querySelector("[data-testid=standing-grade]")).not.toBeNull());
-    const card = host.querySelector("[data-testid=standing-grade]");
-    expect(card?.querySelector("[data-grade]")?.getAttribute("data-grade")).toBe("B");
-    // nothing in the report lowered a day, so the day counts stand in for
-    // the reasons, as numbers
-    expect(card?.querySelector("[data-day-counts]")?.textContent).toBe("5 A · 3 B · 0 C");
+    const seal = host.querySelector("[data-testid=standing-grade]");
+    expect(seal?.getAttribute("data-grade")).toBe("B");
+    expect(seal?.textContent).toContain("5 A days, 3 B days, 0 C days");
+    expect(host.querySelector("[data-check=integrity]")?.textContent).toContain("Grade B");
   });
 
   it("leaves out on-chain counts that measured nothing, with no zero", async () => {
@@ -674,11 +672,13 @@ describe("scf review figures (contract 16.3)", () => {
       routes(<ScfReviewPage />, "scf"),
       `/projects/${f.TENANT_ID}/scf`,
     );
+    await waitFor(() => expect(host.querySelector("[data-check=onchain]")).not.toBeNull());
+    expect(host.querySelector("[data-check=onchain]")?.textContent).toContain("no ledger read yet");
+    await click(host.querySelector("[data-check=onchain]") as HTMLElement);
     // a figure that holds no value is left out, never shown as 0
     await waitFor(() => expect(host.textContent).toContain("Verified IDs"));
     expect(host.querySelector("[data-figure=days-missing]")).toBeNull();
     expect(host.textContent).not.toContain("Transactions");
-    expect(host.querySelector("[data-key-number=onchain_operations]")).toBeNull();
     expect(host.textContent).not.toContain("What SCF reviewers see did not load");
   });
 
@@ -688,8 +688,8 @@ describe("scf review figures (contract 16.3)", () => {
       routes(<ScfReviewPage />, "scf"),
       `/projects/${f.TENANT_ID}/scf`,
     );
-    await waitFor(() => expect(host.textContent).toContain("Not in the SCF views"));
-    expect(host.textContent).not.toContain("Figures");
+    await waitFor(() => expect(host.textContent).toContain("SCF reviewers do not see it"));
+    expect(host.querySelector("[data-check]")).toBeNull();
     expect(host.textContent).toContain("Signed reports");
   });
 });
