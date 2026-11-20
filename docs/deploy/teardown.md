@@ -2,6 +2,7 @@
 title: "Tearing down an environment"
 sidebarTitle: "Teardown"
 description: "Remove an environment's servers, network, addresses and DNS, with protection for production."
+icon: "power-off"
 ---
 
 This page removes an environment's VMs, network, addresses, Traffic Manager profiles and DNS

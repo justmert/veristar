@@ -2,6 +2,7 @@
 title: "AI assistants (MCP)"
 sidebarTitle: "AI assistants (MCP)"
 description: "Ask Claude, ChatGPT, Cursor or any MCP client about your project's web and API analytics."
+icon: "robot"
 ---
 
 Veristar runs a [Model Context Protocol](https://modelcontextprotocol.io) server at

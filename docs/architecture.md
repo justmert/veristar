@@ -1,6 +1,7 @@
 ---
 title: "Architecture"
 description: "The services, hosts, data flows, queues and stores that make up Veristar, with diagrams of each path."
+icon: "sitemap"
 ---
 
 Veristar is a multi-tenant web, API and on-chain analytics service. Web analytics are built on

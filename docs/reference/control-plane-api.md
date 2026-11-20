@@ -1,6 +1,7 @@
 ---
 title: "Control plane HTTP API"
 description: "The HTTP contract between the console and the control plane: routes, fields and error codes."
+icon: "code"
 ---
 
 The contract between the console (`apps/console`) and the control plane

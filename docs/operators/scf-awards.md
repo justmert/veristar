@@ -1,6 +1,7 @@
 ---
 title: "SCF awards"
 description: "Import an SCF awards file so enrolled projects get their cohort proposed, and the enrollment form finds a project's award."
+icon: "award"
 ---
 
 You can import an SCF awards file with the command line. Veristar then uses it in two places:

@@ -2,6 +2,7 @@
 title: "Web analytics quickstart"
 sidebarTitle: "Quickstart"
 description: "Register a site, paste one script tag and see pageviews, visitors and referrers in your dashboard."
+icon: "globe"
 ---
 
 From a fresh site to data in your dashboard: register the site, paste one script tag, open the
@@ -66,18 +67,38 @@ single byte differs, so the code on your pages never changes unless you change t
 
 Put the tag in the `<head>` of every page, once. Where that is depends on your framework:
 
-| Framework | Where the tag goes | Guide |
-|---|---|---|
-| Hand-written HTML, static site generators | the `<head>` of each page or of the shared layout | [static-html.md](static-html.md) |
-| Vite with React | `index.html` | [vite-react.md](vite-react.md) |
-| Vue | `index.html` | [vue.md](vue.md) |
-| Astro | the layout every page uses | [astro.md](astro.md) |
-| SvelteKit | `src/app.html` | [sveltekit.md](sveltekit.md) |
-| React Router in framework mode | `app/root.tsx` | [react-router.md](react-router.md) |
-| Next.js with the App Router | `app/layout.js` or `app/layout.tsx` | [nextjs.md](nextjs.md) |
-| Docusaurus | `scripts` in `docusaurus.config.ts` | [docusaurus.md](docusaurus.md) |
-| VitePress | `head` in `.vitepress/config.ts` | [vitepress.md](vitepress.md) |
-| Mintlify | a `tracker.js` file in the docs repository | [mintlify.md](mintlify.md) |
+<CardGroup cols={2}>
+  <Card horizontal title="Hand-written HTML, static site generators" icon="html5" iconType="brands" className="tone-web" href="/onboarding/web/static-html">
+    The `<head>` of each page or of the shared layout
+  </Card>
+  <Card horizontal title="Vite with React" icon="react" iconType="brands" className="tone-web" href="/onboarding/web/vite-react">
+    `index.html`
+  </Card>
+  <Card horizontal title="Vue" icon="vuejs" iconType="brands" className="tone-web" href="/onboarding/web/vue">
+    `index.html`
+  </Card>
+  <Card horizontal title="Astro" icon="meteor" className="tone-web" href="/onboarding/web/astro">
+    The layout every page uses
+  </Card>
+  <Card horizontal title="SvelteKit" icon="fire" className="tone-web" href="/onboarding/web/sveltekit">
+    `src/app.html`
+  </Card>
+  <Card horizontal title="React Router in framework mode" icon="route" className="tone-web" href="/onboarding/web/react-router">
+    `app/root.tsx`
+  </Card>
+  <Card horizontal title="Next.js with the App Router" icon="n" className="tone-web" href="/onboarding/web/nextjs">
+    `app/layout.js` or `app/layout.tsx`
+  </Card>
+  <Card horizontal title="Docusaurus" icon="book-open" className="tone-web" href="/onboarding/web/docusaurus">
+    `scripts` in `docusaurus.config.ts`
+  </Card>
+  <Card horizontal title="VitePress" icon="book" className="tone-web" href="/onboarding/web/vitepress">
+    `head` in `.vitepress/config.ts`
+  </Card>
+  <Card horizontal title="Mintlify" icon="leaf" className="tone-web" href="/onboarding/web/mintlify">
+    A `tracker.js` file in the docs repository
+  </Card>
+</CardGroup>
 
 Client-side route changes (`history.pushState`, `replaceState`, back and forward) are counted by
 the tracker on its own. No router hook is needed.

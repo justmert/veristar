@@ -2,6 +2,7 @@
 title: "Alerts"
 sidebarTitle: "Alerts"
 description: "The console's Alerts page: the platform's live alerts, how to read them, and what the page shows when alerting itself is broken."
+icon: "bell"
 ---
 
 The **Alerts** page of the operator area, `https://app.<BASE_DOMAIN>/operator/alerts`,

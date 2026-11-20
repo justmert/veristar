@@ -2,6 +2,7 @@
 title: "Bootstrap a new environment"
 sidebarTitle: "Bootstrap"
 description: "The first converge of an empty environment, end to end, with a check after each step."
+icon: "seedling"
 ---
 
 This page takes an empty environment through its first converge, end to end, with a check after

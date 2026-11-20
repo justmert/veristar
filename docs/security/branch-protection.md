@@ -1,6 +1,7 @@
 ---
 title: "Branch protection for main"
 description: "The repository settings that keep the history of main intact, and the checks that run on every change."
+icon: "code-branch"
 ---
 
 These are the settings for `main` in `github.com/justmert/veristar`. They keep the history of

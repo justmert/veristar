@@ -1,6 +1,7 @@
 ---
 title: "Legal sources register"
 description: "The register of legal sources the compliance documents rely on."
+icon: "book-bookmark"
 ---
 
 This register records what each primary source says, as read on the date stated in its entry (2026-11-12 or 2026-11-13). The other compliance pages cite the anchors below (S1, S2, ...). An anchor never changes its meaning, so a retired number (S11) is not reused. Statements marked "Inference" are a reading of the source, not the source's words. This page is not legal advice.

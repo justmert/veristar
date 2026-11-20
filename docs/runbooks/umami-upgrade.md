@@ -1,6 +1,7 @@
 ---
 title: "Umami upgrade and rollback"
 description: "Upgrade the pinned Umami image through the compatibility gate, and roll back."
+icon: "code-compare"
 ---
 
 Umami runs as its official image, unmodified, pinned by tag and index digest

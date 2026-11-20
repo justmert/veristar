@@ -1,6 +1,7 @@
 ---
 title: "Enrolling a project on its behalf"
 description: "Create a project for a console user from the command line, add its site and token, and invite its team."
+icon: "user-plus"
 ---
 
 You can enroll a project for someone with `platformctl tenant create`. The person becomes the

@@ -2,6 +2,7 @@
 title: "Accounts, contracts and the stellar.toml link"
 sidebarTitle: "On-chain activity"
 description: "Declare your project's Stellar accounts and Soroban contracts, prove you control them, and link your domain and your accounts both ways."
+icon: "link"
 ---
 
 Veristar shows the ledger activity of your project's Stellar accounts and Soroban contracts next to

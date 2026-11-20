@@ -2,6 +2,7 @@
 title: "Operator guide"
 sidebarTitle: "Overview"
 description: "For the SCF operators who govern the shared service: enrollment, removal and cross-project views."
+icon: "compass"
 ---
 
 Operators are the SCF people who govern the shared service: they decide who may enroll, which
@@ -10,20 +11,44 @@ enrollment answers, members and audit log for review. They are not members of an
 have no access to a project's own **Web** page, whose totals come from the same daily
 aggregates the operator views read.
 
-| Page | Covers |
-|---|---|
-| [review-and-enrollment.md](review-and-enrollment.md) | The review queue, approving and rejecting projects and sites, suspending and resuming, and the switch between open and approval-required enrollment |
-| [removal.md](removal.md) | Removing a project that is not part of the ecosystem, what is deleted, and the setting that keeps or deletes its aggregates |
-| [global-views.md](global-views.md) | The Web and API views of All projects and the Compare page: ranges, filters, sorting, growth, cohorts, percentiles and side-by-side comparison |
-| [threshold-rules.md](threshold-rules.md) | Saved traction rules and the projects that meet them, with the evidence |
-| [scf-awards.md](scf-awards.md) | Importing an SCF awards file for the enrollment form's award search and for cohort proposals from exact matches |
-| [onchain-and-exports.md](onchain-and-exports.md) | Ledger activity of the accounts and contracts projects declare, calls per contract function, and the CSV exports |
-| [reading-the-numbers.md](reading-the-numbers.md) | What bands, daily-unique visitors and span-derived API data mean, and how to compare projects fairly |
-| [api-keys.md](api-keys.md) | Keys for machine consumers of the metrics API: create, use, revoke, usage |
-| [mcp.md](mcp.md) | Connecting an AI client to the operator view through the MCP server |
-| [roster.md](roster.md) | The Operators page: roles, adding and removing operators, passkeys, and lockout recovery |
-| [alerts.md](alerts.md) | The Alerts page: the platform's live alerts, the count badge and critical banner, and what the page shows when alerting itself is broken |
-| [umami-admin-access.md](umami-admin-access.md) | For platform administrators with SSH access: opening Umami's own interface over a tunnel to debug the engine |
+<CardGroup cols={2}>
+  <Card horizontal title="Review and enrollment modes" icon="clipboard-check" href="/operators/review-and-enrollment">
+    The review queue, approving and rejecting projects and sites, suspending and resuming, and the switch between open and approval-required enrollment
+  </Card>
+  <Card horizontal title="Removing a project" icon="trash-can" href="/operators/removal">
+    Removing a project that is not part of the ecosystem, what is deleted, and the setting that keeps or deletes its aggregates
+  </Card>
+  <Card horizontal title="Reading the global views" icon="chart-line" href="/operators/global-views">
+    The Web and API views of All projects and the Compare page: ranges, filters, sorting, growth, cohorts, percentiles and side-by-side comparison
+  </Card>
+  <Card horizontal title="Threshold rules" icon="sliders" href="/operators/threshold-rules">
+    Saved traction rules and the projects that meet them, with the evidence
+  </Card>
+  <Card horizontal title="SCF awards" icon="award" href="/operators/scf-awards">
+    Importing an SCF awards file for the enrollment form's award search and for cohort proposals from exact matches
+  </Card>
+  <Card horizontal title="On-chain activity and exports" icon="file-export" className="tone-chain" href="/operators/onchain-and-exports">
+    Ledger activity of the accounts and contracts projects declare, calls per contract function, and the CSV exports
+  </Card>
+  <Card horizontal title="What the numbers mean" icon="magnifying-glass-chart" href="/operators/reading-the-numbers">
+    What bands, daily-unique visitors and span-derived API data mean, and how to compare projects fairly
+  </Card>
+  <Card horizontal title="API keys" icon="key" href="/operators/api-keys">
+    Keys for machine consumers of the metrics API: create, use, revoke, usage
+  </Card>
+  <Card horizontal title="AI assistants (MCP)" icon="robot" className="tone-ai" href="/operators/mcp">
+    Connecting an AI client to the operator view through the MCP server
+  </Card>
+  <Card horizontal title="Operators and passkeys" icon="users" href="/operators/roster">
+    The Operators page: roles, adding and removing operators, passkeys, and lockout recovery
+  </Card>
+  <Card horizontal title="Alerts" icon="bell" href="/operators/alerts">
+    The Alerts page: the platform's live alerts, the count badge and critical banner, and what the page shows when alerting itself is broken
+  </Card>
+  <Card horizontal title="Umami's interface for platform administrators" icon="terminal" href="/operators/umami-admin-access">
+    For platform administrators with SSH access: opening Umami's own interface over a tunnel to debug the engine
+  </Card>
+</CardGroup>
 
 ## Becoming an operator
 

@@ -2,6 +2,8 @@
 title: "The npm package"
 sidebarTitle: "npm package"
 description: "Bundle the tracker into your app as an npm package instead of a script tag."
+icon: "npm"
+iconType: "brands"
 ---
 
 The tracker also comes as an npm package that you bundle into your app instead of loading a script

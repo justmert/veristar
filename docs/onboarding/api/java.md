@@ -1,6 +1,8 @@
 ---
 title: "Java"
 description: "Dual export from a Java service on Spring Boot with the OpenTelemetry Java agent."
+icon: "java"
+iconType: "brands"
 ---
 
 Dual export from a Java service, without changing its code. Built from the example

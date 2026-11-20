@@ -1,6 +1,7 @@
 ---
 title: "VitePress"
 description: "Add the tracker to a VitePress documentation site with the head option."
+icon: "book"
 ---
 
 For a VitePress site. Tested by the example

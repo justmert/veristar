@@ -1,6 +1,7 @@
 ---
 title: "Verify the tracker"
 description: "Check that the sdk.js your pages load is exactly the released file, rebuild it, or host it yourself."
+icon: "circle-check"
 ---
 
 This page shows how you check that the `sdk.js` your pages load is exactly the released file, how

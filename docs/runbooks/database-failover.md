@@ -2,6 +2,7 @@
 title: "Database failover and replica rebuild"
 sidebarTitle: "Database failover"
 description: "Patroni failover between the database members and rebuilding a replica."
+icon: "database"
 ---
 
 PostgreSQL runs under Patroni with three members, one on each converged node of staging and

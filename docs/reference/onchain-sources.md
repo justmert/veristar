@@ -1,6 +1,7 @@
 ---
 title: "On-chain data sources"
 description: "Which public ledger APIs the on-chain witness reads, what each one counts, and their limits."
+icon: "link"
 ---
 
 The on-chain witness (contract section 15 of

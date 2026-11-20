@@ -2,6 +2,7 @@
 title: "0002: Separate services beside Umami, not a fork"
 sidebarTitle: "0002: Overlay, not fork"
 description: "Why the extra features run as separate services beside an unmodified Umami."
+icon: "layer-group"
 ---
 
 - Status: accepted

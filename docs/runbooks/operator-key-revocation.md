@@ -2,6 +2,7 @@
 title: "Operator API key revocation"
 sidebarTitle: "Operator key revocation"
 description: "Revoke an operator API key and confirm that it no longer works."
+icon: "ban"
 ---
 
 Operator API keys (`sa_op_` plus 40 characters) give machine read access to the metrics API

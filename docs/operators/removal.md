@@ -1,6 +1,7 @@
 ---
 title: "Removing a project"
 description: "Remove a project that is not part of the Stellar ecosystem."
+icon: "trash-can"
 ---
 
 Operators remove projects that are not part of the Stellar ecosystem. Removal is final: there is

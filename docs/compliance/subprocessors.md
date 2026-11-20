@@ -1,6 +1,7 @@
 ---
 title: "Sub-processors"
 description: "The sub-processors that support the service, and what each one handles."
+icon: "handshake"
 ---
 
 The sub-processors of the production deployment in `infra/tofu/envs/production`

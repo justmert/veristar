@@ -1,6 +1,7 @@
 ---
 title: "Gateway limits"
 description: "Every limit of the collect gateway, with its starting value and the reason for it."
+icon: "gauge"
 ---
 
 Settings of the collect gateway (`cmd/gateway`, `internal/gateway`). Every value

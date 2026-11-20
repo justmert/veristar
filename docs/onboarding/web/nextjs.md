@@ -1,6 +1,7 @@
 ---
 title: "Next.js"
 description: "Add the tracker to a Next.js app that uses the App Router."
+icon: "n"
 ---
 
 For Next.js with the App Router. Tested by the example [`examples/nextjs`](https://github.com/justmert/veristar/tree/main/examples/nextjs)

@@ -2,6 +2,7 @@
 title: "API analytics quickstart"
 sidebarTitle: "Quickstart"
 description: "Count your backend's HTTP requests, status codes and latency by adding a second OpenTelemetry exporter."
+icon: "server"
 ---
 
 API analytics counts the HTTP requests your backend serves: volume, status codes and latency
@@ -51,13 +52,23 @@ environment, so you can revoke one without touching the others.
 Follow the guide for your language. Each is built from an example app that the platform's
 integration tests run against stock collectors and against the real platform collector:
 
-| Language | Example | Guide |
-|---|---|---|
-| Node.js | Express 5 | [node.md](node.md) |
-| Go | `net/http` | [go.md](go.md) |
-| Python | FastAPI | [python.md](python.md) |
-| Rust | actix-web | [rust.md](rust.md) |
-| Java | Spring Boot with the OpenTelemetry Java agent | [java.md](java.md) |
+<CardGroup cols={2}>
+  <Card horizontal title="Node.js" icon="node-js" iconType="brands" className="tone-api" href="/onboarding/api/node">
+    Express 5
+  </Card>
+  <Card horizontal title="Go" icon="golang" iconType="brands" className="tone-api" href="/onboarding/api/go">
+    `net/http`
+  </Card>
+  <Card horizontal title="Python" icon="python" iconType="brands" className="tone-api" href="/onboarding/api/python">
+    FastAPI
+  </Card>
+  <Card horizontal title="Rust" icon="rust" iconType="brands" className="tone-api" href="/onboarding/api/rust">
+    actix-web
+  </Card>
+  <Card horizontal title="Java" icon="java" iconType="brands" className="tone-api" href="/onboarding/api/java">
+    Spring Boot with the OpenTelemetry Java agent
+  </Card>
+</CardGroup>
 
 All five use the same environment variables:
 

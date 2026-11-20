@@ -1,6 +1,7 @@
 ---
 title: "SvelteKit"
 description: "Add the tracker to a SvelteKit app."
+icon: "fire"
 ---
 
 For SvelteKit apps. Tested by the example [`examples/sveltekit`](https://github.com/justmert/veristar/tree/main/examples/sveltekit)

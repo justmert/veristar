@@ -1,6 +1,7 @@
 ---
 title: "Mintlify"
 description: "Add the tracker to a Mintlify documentation site with a custom JavaScript file."
+icon: "leaf"
 ---
 
 For a documentation site hosted by Mintlify. Mintlify runs every `.js` file in your docs repository

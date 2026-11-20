@@ -1,6 +1,7 @@
 ---
 title: "Data residency"
 description: "Where each kind of data is processed and stored in the production deployment."
+icon: "location-dot"
 ---
 
 This page declares where the production deployment processes and stores each

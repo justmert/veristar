@@ -1,6 +1,7 @@
 ---
 title: "Upgrading the tracker"
 description: "Move your pages to a newer pinned tracker version, at the time you choose."
+icon: "circle-up"
 ---
 
 The tag pins one tracker version, and the browser checks the file against the tag's `integrity`

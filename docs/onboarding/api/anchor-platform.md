@@ -1,6 +1,7 @@
 ---
 title: "Stellar Anchor Platform"
 description: "Request metrics from the Stellar Anchor Platform's SEP server and platform server, with the OpenTelemetry Java agent."
+icon: "anchor"
 ---
 
 Count the requests your anchor's SEP endpoints and platform API serve, per route and status,

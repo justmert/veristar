@@ -1,6 +1,7 @@
 ---
 title: "Setting http.route"
 description: "Make sure every request carries the route template, so the API dashboard groups requests by route."
+icon: "signs-post"
 ---
 
 The API dashboard groups requests by route: `GET /accounts/{id}` is one row, however many accounts

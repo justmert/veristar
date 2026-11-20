@@ -1,6 +1,7 @@
 ---
 title: "Records of processing"
 description: "The records of processing activities for the service."
+icon: "folder-open"
 ---
 
 Two records of processing: the hosting operator as processor for tenants (GDPR
