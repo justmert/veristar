@@ -132,6 +132,7 @@
   --radius-full: var(--vs-radius-full);
   --shadow-overlay: var(--vs-shadow-overlay);
   --shadow-dialog: var(--vs-shadow-dialog);
+  --shadow-showcase: var(--vs-shadow-showcase);
   --ease-standard: var(--vs-ease-standard);
   --ease-exit: var(--vs-ease-exit);
   --container-content: var(--vs-content);

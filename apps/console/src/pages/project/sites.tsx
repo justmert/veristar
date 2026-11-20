@@ -685,7 +685,7 @@ function FirstSiteCard({ tenantId }: { tenantId: string }) {
     <div className="flex min-h-[60vh] items-center justify-center">
       <section
         aria-labelledby={id}
-        className="flex w-full max-w-[600px] flex-col gap-5 rounded-2xl border border-line bg-raised px-[30px] py-7 max-sm:px-5"
+        className="flex w-full max-w-[600px] flex-col gap-5 rounded-2xl border border-line bg-raised px-7 py-7 max-sm:px-5"
       >
         <h2 id={id} className="text-title text-fg">
           Add your first site

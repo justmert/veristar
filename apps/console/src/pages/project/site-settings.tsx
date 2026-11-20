@@ -41,7 +41,7 @@ export function SiteSettings({ site }: { site: Site }) {
   const id = useId();
   return (
     <section id="settings" aria-labelledby={id} className="flex scroll-mt-6 flex-col">
-      <h2 id={id} className="pb-3 text-[15px] leading-5 font-semibold text-fg">
+      <h2 id={id} className="pb-3 text-title leading-5 font-semibold text-fg">
         Settings
       </h2>
       {canEdit ? (
@@ -211,23 +211,29 @@ function EditSiteForm({ site }: { site: Site }) {
         }
       />
       {changed || save.isPending ? (
-        <div className="flex flex-wrap items-center gap-2 pb-4 sm:pl-[264px]">
-          <Button type="submit" pending={save.isPending} className="max-lg:h-(--vs-control-touch)">
-            {save.isPending ? "Saving" : "Save changes"}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className="max-lg:h-(--vs-control-touch)"
-            onClick={() => {
-              setValues(initial);
-              setDraft("");
-              setErrors({});
-              save.reset();
-            }}
-          >
-            Cancel
-          </Button>
+        <div className="pb-4 sm:grid sm:grid-cols-[240px_minmax(0,560px)] sm:gap-x-6">
+          <div className="flex flex-wrap items-center gap-2 sm:col-start-2">
+            <Button
+              type="submit"
+              pending={save.isPending}
+              className="max-lg:h-(--vs-control-touch)"
+            >
+              {save.isPending ? "Saving" : "Save changes"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="max-lg:h-(--vs-control-touch)"
+              onClick={() => {
+                setValues(initial);
+                setDraft("");
+                setErrors({});
+                save.reset();
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
         </div>
       ) : null}
     </form>

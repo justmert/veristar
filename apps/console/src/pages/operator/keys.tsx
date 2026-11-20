@@ -211,7 +211,7 @@ export function AccessKeysPage() {
       <PageHeader
         title="Access keys"
         meta={
-          <span className="inline-flex h-[22px] items-center gap-1.5 rounded-full border border-line-2 px-2.5 text-[12.5px] text-fg-2">
+          <span className="inline-flex h-[22px] items-center gap-1.5 rounded-full border border-line-2 px-2.5 text-small text-fg-2">
             <Lock aria-hidden className="size-3" />
             Read-only, every project
           </span>
@@ -244,7 +244,7 @@ export function AccessKeysPage() {
       ) : (
         <section aria-labelledby="keys-h" className="flex min-w-0 flex-col gap-3">
           <div className="flex flex-wrap items-baseline gap-2">
-            <h2 id="keys-h" className="text-[15px] font-semibold text-fg">
+            <h2 id="keys-h" className="text-title font-semibold text-fg leading-5">
               Keys and connections
             </h2>
             <span className="text-small text-fg-3 tabular">{shown.length}</span>

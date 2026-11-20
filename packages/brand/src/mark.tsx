@@ -4,7 +4,8 @@ import { type SVGProps, useId } from "react";
 // run long into the v of the name, and a measured point held in a round cut
 // between them. one colour, the current text colour. the same geometry as
 // the svg files that scripts/generate.ts writes (favicons, docs logos).
-export const MARK_POINTS = "24.00,40.00 20.47,33.35 13.06,32.05 18.29,26.65 9.01,7.87 24.00,22.50 38.99,7.87 29.71,26.65 34.94,32.05 27.53,33.35";
+export const MARK_POINTS =
+  "24.00,40.00 20.47,33.35 13.06,32.05 18.29,26.65 9.01,7.87 24.00,22.50 38.99,7.87 29.71,26.65 34.94,32.05 27.53,33.35";
 export const MARK_CUT = { cx: 24, cy: 16.5, r: 7.5 } as const;
 export const MARK_DOT = { cx: 24, cy: 16.5, r: 3.4 } as const;
 

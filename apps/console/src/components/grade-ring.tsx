@@ -27,7 +27,7 @@ const INSET: Record<Exclude<GradeRingSize, "xs">, string> = {
   xl: "inset-3 inset-ring inset-ring-line-2",
 };
 const LETTER: Record<Exclude<GradeRingSize, "xs">, string> = {
-  sm: "text-[18px] leading-none",
+  sm: "text-section leading-none",
   lg: "text-grade-lg",
   xl: "text-grade-xl",
 };

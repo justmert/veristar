@@ -101,7 +101,7 @@ function RuleSentence({
     <p
       className={cn(
         "break-words text-fg-2",
-        size === "lg" ? "text-[17px] leading-[30px]" : "text-small leading-6",
+        size === "lg" ? "text-title leading-7.5 font-normal" : "text-small leading-6",
       )}
     >
       {parts.map((p, i) => (
@@ -343,7 +343,7 @@ function RuleCard({
         </div>
         <div className="flex min-w-0 flex-col gap-2" data-matches={r.id}>
           <p className="flex items-baseline gap-1.5 text-small text-fg-3">
-            <span className="text-[19px] font-semibold text-fg tabular">
+            <span className="text-section font-semibold text-fg tabular leading-5">
               {formatCount(r.match_count)}
             </span>{" "}
             of {formatCount(r.evaluated)} meet it

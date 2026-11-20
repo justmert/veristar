@@ -134,7 +134,7 @@ export function SectionTitle({
     <h2
       id={id}
       className={cn(
-        "flex items-baseline gap-2 text-[15px] leading-5 font-semibold text-fg",
+        "flex items-baseline gap-2 text-title leading-5 font-semibold text-fg",
         className,
       )}
     >

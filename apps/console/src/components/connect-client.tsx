@@ -70,7 +70,7 @@ export function ConnectClient({
   );
   return (
     <section aria-labelledby={headingId} className={cn("flex min-w-0 flex-col gap-3", className)}>
-      <h2 id={headingId} className="text-[15px] leading-5 font-semibold text-fg">
+      <h2 id={headingId} className="text-title leading-5 font-semibold text-fg">
         {title}
       </h2>
       <div className="grid min-w-0 overflow-hidden rounded-2xl border border-line bg-raised md:grid-cols-[16.25rem_minmax(0,1fr)]">
@@ -144,7 +144,7 @@ export function ConnectClient({
                 n={2}
                 title={
                   <>
-                    Add it to <code className="font-mono text-[13px]">.cursor/mcp.json</code>
+                    Add it to <code className="font-mono text-small">.cursor/mcp.json</code>
                   </>
                 }
               >

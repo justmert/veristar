@@ -272,7 +272,7 @@ function KindIcon({ kind }: { kind: ChainId["kind"] }) {
   return (
     <span
       aria-hidden
-      className="flex size-[34px] shrink-0 items-center justify-center rounded-[10px] border border-line-strong text-fg-2"
+      className="flex size-[34px] shrink-0 items-center justify-center rounded-lg border border-line-strong text-fg-2"
     >
       <Icon className="size-4" strokeWidth={1.75} />
     </span>
@@ -329,7 +329,7 @@ function FirstStep({
     >
       {view.ids.length === 0 ? (
         <FocusCard data-step="add">
-          <h2 id="add-h" className="text-[17px] leading-6 font-semibold text-fg">
+          <h2 id="add-h" className="text-title leading-6 font-semibold text-fg">
             Add a Stellar account or contract
           </h2>
           <AddForm tenantId={tenantId} labelledBy="add-h" />
@@ -493,7 +493,7 @@ function ProveHead({ id, until, menu }: { id: ChainId; until?: string | null; me
       <div className="flex min-w-0 items-start gap-3.5">
         <KindIcon kind={id.kind} />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <StrKey strkey={id.strkey} className="[&_code]:text-[15px]" />
+          <StrKey strkey={id.strkey} className="[&_code]:text-body" />
           <KindLabel kind={id.kind} />
           {until ? (
             <span className="text-caption text-fg-2">Proof open until {formatTimeUtc(until)}</span>
@@ -513,7 +513,7 @@ function ProveHead({ id, until, menu }: { id: ChainId; until?: string | null; me
 // a value to copy, shown whole: an entry value is short and must be exact
 function CopyBox({ value, label }: { value: string; label: string }) {
   return (
-    <div className="flex min-w-0 items-center gap-1 rounded-[10px] border border-line bg-sunken pl-3">
+    <div className="flex min-w-0 items-center gap-1 rounded-lg border border-line bg-sunken pl-3">
       <code className="min-w-0 flex-1 py-2 font-mono text-small break-all text-fg">{value}</code>
       <CopyButton text={value} label={`Copy ${label}`} size="xs" variant="ghost" iconOnly />
     </div>
@@ -592,7 +592,7 @@ function AccountProof({
       ) : way === "sep53" ? (
         <>
           <div className="relative min-w-0">
-            <pre className="min-w-0 overflow-x-auto rounded-[10px] border border-line bg-sunken px-3.5 py-3 pr-10 font-mono text-caption leading-5 whitespace-pre-wrap break-all text-fg-2">
+            <pre className="min-w-0 overflow-x-auto rounded-lg border border-line bg-sunken px-3.5 py-3 pr-10 font-mono text-caption leading-5 whitespace-pre-wrap break-all text-fg-2">
               {challenge.message}
             </pre>
             <span className="absolute top-1.5 right-1.5">
@@ -1123,7 +1123,7 @@ function FunctionSplit({ id }: { id: ChainId }) {
       <span
         role="img"
         aria-label={`Calls per function: ${rows.map(([name, n]) => `${name} ${share(n)}%`).join(", ")}`}
-        className="flex h-2 w-full max-w-[240px] gap-px overflow-hidden rounded-[4px] bg-line"
+        className="flex h-2 w-full max-w-[240px] gap-px overflow-hidden rounded-sm bg-line"
       >
         {rows.slice(0, 3).map(([name, n], i) => (
           <i

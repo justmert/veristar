@@ -68,6 +68,7 @@
   --vs-radius-full: 9999px;
   --vs-shadow-overlay: 0 8px 24px var(--vs-shadow-soft);
   --vs-shadow-dialog: 0 16px 48px var(--vs-shadow-strong);
+  --vs-shadow-showcase: 0 30px 80px var(--vs-shadow-strong);
   --vs-duration-press: 120ms;
   --vs-duration-reveal: 180ms;
   --vs-duration-change: 240ms;

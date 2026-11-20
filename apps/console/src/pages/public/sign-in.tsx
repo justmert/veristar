@@ -183,24 +183,24 @@ function SignedProof() {
   return (
     <aside
       aria-label="What a signed report looks like"
-      className="relative flex flex-col overflow-hidden bg-sunken px-4 pt-0 pb-10 shadow-[1px_0_0_var(--color-line-subtle)] sm:px-14 lg:w-[54%] lg:pb-11"
+      className="relative flex flex-col overflow-hidden bg-sunken px-4 pt-0 pb-10 border-r border-line-subtle sm:px-14 lg:w-[54%] lg:pb-12"
     >
       <div className="flex h-16 items-center">
         <BrandLink />
       </div>
       <div className="my-auto flex flex-col gap-8 pt-10 lg:gap-9 lg:pt-0">
-        <p className="max-w-120 text-[clamp(1.75rem,3vw,2.25rem)] leading-[1.17] font-semibold tracking-[-0.03em] text-fg">
+        <p className="max-w-120 text-page leading-8 font-semibold lg:text-h1 lg:leading-9.5 tracking-tight text-fg">
           Proof of real usage, signed and checkable
         </p>
         <figure
           aria-hidden
-          className="relative w-full max-w-125 overflow-hidden rounded-xl border border-line bg-raised shadow-[0_30px_80px_var(--color-shadow-strong)]"
+          className="relative w-full max-w-125 overflow-hidden rounded-xl border border-line bg-raised shadow-showcase"
         >
-          <div className="flex items-center gap-2 px-3.5 py-2.5 font-mono text-[11.5px] text-fg-2 shadow-[0_1px_0_var(--color-line-subtle)]">
+          <div className="flex items-center gap-2 px-3.5 py-2.5 font-mono text-axis text-fg-2 border-b border-line-subtle leading-5">
             <Lock className="size-3" />
             lumen-pay-2026-10.json
           </div>
-          <div className="grid grid-cols-[28px_minmax(0,1fr)] pt-3.5 pb-4.5 font-mono text-[12.5px] leading-5.25">
+          <div className="grid grid-cols-[28px_minmax(0,1fr)] pt-3.5 pb-4 font-mono text-small leading-5.25">
             <span className="pr-3 text-right text-fg-3 select-none">1</span>
             <span className="text-fg-3">{"{"}</span>
             {lines.map(([k, v, kind], i) => (
@@ -218,10 +218,10 @@ function SignedProof() {
             <span className="pr-3 text-right text-fg-3 select-none">{lines.length + 2}</span>
             <span className="text-fg-3">{"}"}</span>
           </div>
-          <div className="flex items-center gap-2.5 px-4 py-3 text-[12.5px] text-fg-2 shadow-[0_-1px_0_var(--color-line-subtle)]">
+          <div className="flex items-center gap-2.5 px-4 py-3 text-small text-fg-2 border-t border-line-subtle">
             <ShieldCheck className="size-4 text-success" />
             <span>Signature valid</span>
-            <span className="ml-auto font-mono text-[11.5px] text-fg-3">sig 3f9a51…c07e</span>
+            <span className="ml-auto font-mono text-axis text-fg-3 leading-5">sig 3f9a51…c07e</span>
           </div>
           <Stamp />
         </figure>
