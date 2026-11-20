@@ -8,7 +8,7 @@ import { Button } from "./button";
 // page, focus inside and Escape to close. radix dialog injects a <style>
 // element for its scroll lock, which the console's csp (style-src 'self')
 // refuses. it grows in over a fading scrim with css only (dialog-motion).
-const PANEL = "flex flex-col rounded-xl border border-line-strong bg-overlay shadow-dialog";
+const PANEL = "flex flex-col rounded-[14px] border border-line-2 bg-overlay shadow-dialog";
 const WIDTH = { sm: "max-w-dialog-sm", md: "max-w-dialog" } as const;
 
 // the first focus inside an opened dialog: a field the caller marked, else
@@ -78,25 +78,30 @@ export function Dialog({
     <>
       <div className="flex items-start gap-3 px-5 pt-5">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <h2 id={titleId} className="text-title text-fg">
+          <h2 id={titleId} className="text-[17px] leading-6 font-semibold text-fg">
             {title}
           </h2>
           {description ? (
-            <div id={descId} className="text-body text-fg-2">
+            <div id={descId} className="text-body leading-[21px] text-fg-2">
               {description}
             </div>
           ) : null}
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={closeLabel}
-          className="-mr-2 -mt-1"
-          onClick={() => onOpenChange(false)}
-        >
-          <X aria-hidden />
-        </Button>
+        {/* as on the canvas a dialog with a footer has no corner close:
+            Cancel, Escape and the scrim close it. one without a footer keeps
+            the close button, so it always has a visible way out */}
+        {footer ? null : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={closeLabel}
+            className="-mr-2 -mt-1"
+            onClick={() => onOpenChange(false)}
+          >
+            <X aria-hidden />
+          </Button>
+        )}
       </div>
       {children ? (
         <div data-dialog-body="" className="px-5 pt-4 pb-1">
@@ -106,7 +111,7 @@ export function Dialog({
       {footer ? (
         <div
           data-dialog-footer=""
-          className="mt-4 flex flex-wrap justify-end gap-2 border-t border-line px-5 py-3"
+          className="mt-4 flex flex-wrap justify-end gap-2 border-t border-line px-5 py-3.5"
         >
           {footer}
         </div>

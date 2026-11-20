@@ -1,5 +1,5 @@
 import { cn } from "@veristar/brand/cn";
-import { ArrowDown, ArrowRight, ArrowUp, ChartColumn, CircleAlert, Info } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { AnimatedNumber } from "@/components/motion";
 import { Missing } from "@/components/states";
@@ -17,6 +17,26 @@ export type StatChange = {
   period: string;
 };
 
+// the series a figure draws in the chart: its dot carries the colour
+export type FigureSeries = 1 | 2 | 3 | 4 | 5 | "neutral" | "success" | "warning" | "critical";
+const SERIES_DOT: Record<string, string> = {
+  1: "bg-series-1",
+  2: "bg-series-2",
+  3: "bg-series-3",
+  4: "bg-series-4",
+  5: "bg-series-5",
+  neutral: "bg-fg-3",
+  success: "bg-success",
+  warning: "bg-warning",
+  critical: "bg-critical",
+};
+
+// the figure tile of the canvas (Overview, Web, API, On-chain): a small
+// bordered tile with the label after its series dot, the value, and the
+// change in its colour (or one action when the figure has no source yet).
+// the tile that draws the chart is selected. it is the same component as
+// StatCard, under the canvas name
+//
 // one number per card: the label (with its definition in a tooltip), the
 // value in the metric step (tabular sans; it steps down to fit a narrow
 // card), an optional unit, the change against the
@@ -45,10 +65,20 @@ export function StatCard({
   state = "data",
   footer,
   hideWhenEmpty = false,
+  series,
+  action,
+  lead,
   className,
   ...data
 }: {
   label: string;
+  // the dot before the label: the chart series this figure draws
+  series?: FigureSeries;
+  // one action in place of the change, for a figure without a source yet
+  // ("Connect API"): a link or a button the caller renders
+  action?: ReactNode;
+  // drawn before the value (the integrity grade's ring)
+  lead?: ReactNode;
   definition?: string;
   // a number counts to its new value when it changes; a string is shown
   // as it is (an already formatted value such as ">10 s")
@@ -83,66 +113,61 @@ export function StatCard({
       onClick={onSelect}
       {...data}
       className={cn(
-        "group/stat @container flex min-w-0 flex-col gap-2 rounded-lg border bg-raised p-4 text-left transition duration-(--vs-duration-press) ease-standard",
+        "group/stat @container flex min-h-[92px] min-w-0 flex-col gap-[3px] rounded-xl border px-3.5 py-3 text-left transition duration-(--vs-duration-press) ease-standard",
         onSelect &&
-          "focus-ring hover:border-line-strong hover:bg-hover active:translate-y-px disabled:pointer-events-none",
-        // the card that drives the chart: an ink edge and the chart icon, on
-        // the card's own fill (a grey fill reads as pressed or disabled)
-        selected ? "border-fg ring-1 ring-fg hover:bg-raised" : "border-line",
+          "focus-ring hover:border-line-strong active:translate-y-px disabled:pointer-events-none",
+        selected ? "border-line-focus bg-hover" : "border-line bg-raised",
         className,
       )}
     >
-      <span className="flex w-full items-start justify-between gap-2">
-        {/* a label wraps, never truncates: its end often carries the meaning */}
-        <span className="flex min-w-0 items-start gap-1 text-caption text-fg-2">
-          <span className="min-w-0 break-words">{label}</span>
-          {definition ? (
-            <Tooltip content={definition}>
-              <span
-                tabIndex={onSelect ? -1 : 0}
-                role="img"
-                aria-label={definition}
-                className="inline-flex rounded-full text-fg-3 focus-ring"
-              >
-                <Info aria-hidden className="size-3.5" />
-              </span>
-            </Tooltip>
-          ) : null}
-        </span>
-        {selected ? (
-          // an icon, not a word: a narrow card keeps its full label
-          <span className="inline-flex shrink-0 animate-fade-in text-fg" title="In chart">
-            <ChartColumn aria-hidden className="size-3.5" />
-            <span className="sr-only">In chart</span>
-          </span>
+      <span
+        className={cn(
+          "flex min-w-0 items-center gap-[7px] text-[12.5px] leading-4",
+          selected ? "text-fg" : "text-fg-2",
+        )}
+      >
+        {series ? (
+          <span aria-hidden className={cn("size-2 shrink-0 rounded-full", SERIES_DOT[series])} />
         ) : null}
+        {definition ? (
+          <Tooltip content={definition}>
+            <span className="min-w-0 truncate underline decoration-line-strong decoration-dotted underline-offset-[3px]">
+              {label}
+            </span>
+          </Tooltip>
+        ) : (
+          <span className="min-w-0 truncate">{label}</span>
+        )}
+        {definition ? <span className="sr-only">. {definition}</span> : null}
+        {selected ? <span className="sr-only">. In chart</span> : null}
       </span>
 
       {state === "loading" ? (
-        <span aria-busy="true" className="flex flex-col gap-2">
+        <span aria-busy="true" className="flex flex-col gap-2 pt-1">
           <span className="sr-only">Loading {label}</span>
-          <Skeleton className="h-8 w-3/5" />
+          <Skeleton className="h-7 w-3/5" />
           <Skeleton className="h-3 w-2/5" />
         </span>
       ) : state === "error" ? (
         <span className="flex flex-col gap-1">
-          <Missing reason="The value did not load" className="text-metric" />
-          <span className="flex items-center gap-1 text-small text-critical">
+          <Missing reason="The value did not load" className="text-[24px] leading-[30px]" />
+          <span className="flex items-center gap-1 text-caption text-critical">
             <CircleAlert aria-hidden className="size-3.5" />
             Did not load
           </span>
         </span>
       ) : (
         <>
-          <span
-            className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 tabular"
-            style={fit}
-          >
+          <span className="flex min-w-0 items-center gap-2 tabular" style={fit}>
+            {lead}
             <span className="flex min-w-0 items-baseline gap-1">
               {value === null ? (
-                <Missing reason={missingReason} className="text-metric" />
+                <Missing reason={missingReason} className="text-[24px] leading-[30px]" />
               ) : (
-                <span className="metric-fit text-fg" data-value="">
+                <span
+                  className="metric-fit font-semibold text-fg [--vs-text-metric:24px] [line-height:30px]"
+                  data-value=""
+                >
                   {typeof value === "number" ? (
                     <AnimatedNumber value={value} format={format} />
                   ) : (
@@ -152,8 +177,14 @@ export function StatCard({
               )}
               {unit && value !== null ? <span className="text-small text-fg-2">{unit}</span> : null}
             </span>
-            {change && value !== null ? <ChangeLine change={change} /> : null}
           </span>
+          {change && value !== null ? (
+            <ChangeLine change={change} />
+          ) : action ? (
+            <span className="text-caption text-fg [&_a]:underline [&_a]:underline-offset-[3px] [&_button]:underline [&_button]:underline-offset-[3px]">
+              {action}
+            </span>
+          ) : null}
           {spark ? <span className="mt-auto block pt-1">{spark}</span> : null}
           {footer}
         </>
@@ -161,6 +192,8 @@ export function StatCard({
     </Comp>
   );
 }
+
+export { StatCard as FigureTile };
 
 // the change of a count against the same count over the previous period;
 // nothing to compare with (no previous count) is no change at all
@@ -180,20 +213,24 @@ export function countChange(
   };
 }
 
-// the arrow and the change in its colour, after a value; a table cell or a
-// figure line passes a smaller text step
+// the change after a value: a small triangle and the change, green when
+// the move is good, red when bad, quiet when neither. the period is read out
+// to assistive technology
 export function ChangeLine({ change, className }: { change: StatChange; className?: string }) {
   const flat = change.direction === "flat";
-  const Icon =
-    change.direction === "up" ? ArrowUp : change.direction === "down" ? ArrowDown : ArrowRight;
+  const mark = change.direction === "up" ? "\u25B2" : change.direction === "down" ? "\u25BC" : "";
   const tone =
-    change.good === null || flat ? "text-fg-2" : change.good ? "text-success" : "text-critical";
+    change.good === null || flat ? "text-fg-3" : change.good ? "text-success" : "text-critical";
   return (
     <span
       data-change={change.direction}
-      className={cn("flex items-center gap-1 text-body font-semibold tabular", tone, className)}
+      className={cn("flex items-center gap-1 text-[12.5px] leading-4 tabular", tone, className)}
     >
-      <Icon aria-hidden className="size-4" strokeWidth={2.4} />
+      {mark ? (
+        <span aria-hidden className="text-[10px]">
+          {mark}
+        </span>
+      ) : null}
       {flat ? <span className="sr-only">{change.text}</span> : change.text}
       <span className="sr-only"> vs {change.period}</span>
     </span>
@@ -216,7 +253,7 @@ export function StatGrid({
   // a section, so a labelled row of numbers is a region a reader can jump to
   return (
     <section
-      className={cn("grid gap-3", className)}
+      className={cn("grid gap-2", className)}
       style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(${min}, 100%), 1fr))` }}
       {...rest}
     >

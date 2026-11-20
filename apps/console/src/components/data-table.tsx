@@ -217,7 +217,12 @@ export function DataTable<Row>({
   const frame = useWideTable([rows, columns, state]);
 
   return (
-    <div className={cn("flex min-w-0 flex-col rounded-lg border border-line bg-raised", className)}>
+    <div
+      className={cn(
+        "flex min-w-0 flex-col overflow-clip rounded-2xl border border-line bg-raised",
+        className,
+      )}
+    >
       {frame.wide ? (
         <FloatingHead
           frame={frame}
@@ -236,7 +241,7 @@ export function DataTable<Row>({
           tabIndex={frame.wide ? 0 : undefined}
           onScroll={frame.onScroll}
           data-wide={frame.wide ? "" : undefined}
-          className={cn("rounded-t-lg", frame.wide && "overflow-x-auto focus-ring")}
+          className={cn("rounded-t-2xl", frame.wide && "overflow-x-auto focus-ring")}
         >
           <table
             ref={frame.tableRef}
@@ -429,8 +434,9 @@ export function DataTable<Row>({
   );
 }
 
+// the header row is darker than the rows, as on the canvas
 const HEAD =
-  "h-9 border-b border-line bg-raised px-3 text-left align-middle text-caption font-medium whitespace-nowrap text-fg-2";
+  "h-9 border-b border-line bg-sunken px-4 text-left align-middle text-caption font-normal whitespace-nowrap text-fg-3 first:pl-5 last:pr-5";
 // the header sticks to the top of the window, under the shell header where
 // the shell has one (below lg)
 const STICKY = "sticky top-(--vs-header) z-(--vs-layer-sticky) lg:top-0";
@@ -440,7 +446,7 @@ const FADE =
 // a cell keeps 8 px above and below, so a two-line cell (name and slug)
 // makes a row of 48 px or more and its lines never touch the rules
 const CELL =
-  "border-b border-line-subtle px-3 py-2 align-middle text-fg group-last/row:border-b-0 [&_.flex-col]:gap-px";
+  "h-[52px] border-b border-line-subtle px-4 py-3 align-middle text-fg group-last/row:border-b-0 first:pl-5 last:pr-5 [&_.flex-col]:gap-0.5";
 // the row link stretches over the whole row; a control inside another cell
 // (a menu, a reasons button, a second link) sits above it and gets its own
 // click
@@ -647,7 +653,7 @@ function FloatingHead<Row>({
       data-sticky-head=""
       className={cn(STICKY, "h-0 max-sm:hidden", !frame.stuck && "invisible")}
     >
-      <div className="overflow-hidden bg-raised">
+      <div className="overflow-hidden bg-sunken">
         <table
           ref={frame.copyTableRef}
           className="table-fixed border-separate border-spacing-0 text-body"
@@ -862,9 +868,9 @@ function Footer({ footer }: { footer: TableFooter }) {
   return (
     <nav
       aria-label="Pages"
-      className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-2"
+      className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-2"
     >
-      <span className="text-small text-fg-2 tabular">
+      <span className="text-small text-fg-3 tabular">
         {formatCount(first)} to {formatCount(last)} of {formatCount(total)}
         {more ? "+" : ""}
       </span>

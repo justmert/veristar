@@ -111,7 +111,7 @@ export function CreateDialog({
             </Button>
           ) : (
             <>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit" pending={pending}>

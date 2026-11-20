@@ -103,7 +103,7 @@ export function ConfirmDialog({
       onSubmit={submit}
       footer={
         <>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             {cancelLabel}
           </Button>
           <Button

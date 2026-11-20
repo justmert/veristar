@@ -25,8 +25,8 @@ const LINE: Record<NoticeTone, string> = {
 };
 
 // one notice under the header of a page, only the one that applies: it names
-// what is blocked and the next action. a notice never fills: the surface
-// stays raised, the edge and the icon carry the tone, the words stay neutral
+// what is blocked and the next action. as the canvas band: a thin edge all
+// round in the tone, the icon in its colour, the words neutral, no fill
 export function Notice({
   tone,
   title,
@@ -48,20 +48,15 @@ export function Notice({
     <div
       role={role}
       className={cn(
-        "grid animate-rise-in grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-3 rounded-lg border bg-raised px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]",
+        "grid animate-rise-in grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 rounded-xl border bg-transparent px-3.5 py-2.5 text-small sm:grid-cols-[auto_minmax(0,1fr)_auto]",
         LINE[tone],
         className,
       )}
     >
-      <span
-        className={cn(
-          "flex size-8 items-center justify-center self-start rounded-md border border-current [&_svg]:size-4",
-          COLOUR[tone],
-        )}
-      >
+      <span className={cn("flex h-5 items-center self-start [&_svg]:size-4", COLOUR[tone])}>
         {icon ?? ICON[tone]}
       </span>
-      <div className="flex min-w-0 flex-col gap-1 text-body">
+      <div className="flex min-w-0 flex-col gap-0.5 text-small">
         {title ? <span className="font-semibold text-fg">{title}</span> : null}
         {children ? <div className="text-fg-2">{children}</div> : null}
       </div>

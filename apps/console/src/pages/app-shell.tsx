@@ -10,10 +10,10 @@ import { meQuery, operatorAlertsQuery, tenantQuery } from "@/api/queries";
 import { CommandPalette, isPaletteKey } from "@/components/command-palette";
 import { FormMessage } from "@/components/error-panel";
 import { PageMotion } from "@/components/motion";
+import { PaletteContext } from "@/components/nav/go-to";
 import { areaOf, pageTitle } from "@/components/nav/nav-items";
 import { useOperatorAdmin } from "@/components/nav/operator-role";
 import { AlertsBadge, Sidebar } from "@/components/nav/sidebar";
-import { Kbd } from "@/components/panel";
 import { Toaster, toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { MenuContainer } from "@/components/ui/menu";
@@ -24,7 +24,7 @@ import { queryClient } from "@/query-client";
 
 // the signed-in frame: the sidebar on a wide screen, a top bar with the
 // context and a drawer on a phone, the toasts and the command palette
-// (ctrl k). firing alerts are signalled by the Alerts badge in the sidebar
+// (ctrl k, or Go to in the sidebar). firing alerts are signalled by the Alerts badge in the sidebar
 // (on a phone, a badge in the top bar), for operator admins only; nothing
 // is drawn above the page title. the page settles in when the route changes.
 export function AppShell() {
@@ -72,6 +72,10 @@ export function AppShell() {
   }, []);
 
   if (!me.data) return null;
+  const openPalette = () => {
+    setDrawer(false);
+    setPalette(true);
+  };
   const operatorArea = me.data.user.is_operator && area.kind === "operator";
   const contextTitle = gone
     ? me.data.removed_tenants.some((r) => r.id === asked)
@@ -87,83 +91,72 @@ export function AppShell() {
   );
 
   return (
-    <TooltipProvider>
-      <div className="min-h-dvh lg:grid lg:grid-cols-[var(--vs-sidebar)_minmax(0,1fr)]">
-        <a
-          href="#main"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-4 focus:z-(--vs-layer-toast) focus:rounded-md focus:bg-overlay focus:px-3 focus:py-2 focus:shadow-overlay"
-        >
-          Skip to content
-        </a>
-        <aside className="sticky top-0 hidden h-dvh border-r border-line bg-ground lg:block">
-          {side}
-        </aside>
-
-        <header className="sticky top-0 z-(--vs-layer-header) flex h-(--vs-header) items-center gap-2 border-b border-line bg-ground px-2 lg:hidden">
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            aria-label="Open navigation"
-            aria-expanded={drawer}
-            onClick={() => setDrawer(true)}
+    <PaletteContext.Provider value={openPalette}>
+      <TooltipProvider>
+        <div className="min-h-dvh lg:grid lg:grid-cols-[var(--vs-sidebar)_minmax(0,1fr)]">
+          <a
+            href="#main"
+            className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-4 focus:z-(--vs-layer-toast) focus:rounded-md focus:bg-overlay focus:px-3 focus:py-2 focus:shadow-overlay"
           >
-            <MenuIcon aria-hidden />
-          </Button>
-          <Link to="/" className="rounded-md p-1 focus-ring" aria-label="Veristar, your projects">
-            <Mark className="size-5" />
-          </Link>
-          {/* the context (the project, the operator area), never the page: the
-              page's own title is the h1 right below */}
-          <span className="min-w-0 flex-1 truncate text-title text-fg" data-testid="page-title">
-            {contextTitle}
-          </span>
-          {operatorArea && pathname !== "/operator/alerts" ? <OperatorAlertButton /> : null}
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            aria-label="Search pages and projects"
-            onClick={() => setPalette(true)}
-          >
-            <Search aria-hidden />
-          </Button>
-        </header>
-        <Drawer open={drawer} onClose={() => setDrawer(false)}>
-          {side}
-        </Drawer>
+            Skip to content
+          </a>
+          <aside className="sticky top-0 hidden h-dvh border-r border-line bg-ground lg:block">
+            {side}
+          </aside>
 
-        <div className="flex min-w-0 flex-col">
-          <div className="hidden min-h-12 items-start justify-end gap-4 px-6 pt-4 lg:flex xl:px-10">
+          <header className="sticky top-0 z-(--vs-layer-header) flex h-(--vs-header) items-center gap-2 border-b border-line bg-ground px-2 lg:hidden">
             <Button
               variant="ghost"
-              size="sm"
+              size="icon-lg"
+              aria-label="Open navigation"
+              aria-expanded={drawer}
+              onClick={() => setDrawer(true)}
+            >
+              <MenuIcon aria-hidden />
+            </Button>
+            <Link to="/" className="rounded-md p-1 focus-ring" aria-label="Veristar, your projects">
+              <Mark className="size-5" />
+            </Link>
+            {/* the context (the project, the operator area), never the page: the
+              page's own title is the h1 right below */}
+            <span className="min-w-0 flex-1 truncate text-title text-fg" data-testid="page-title">
+              {contextTitle}
+            </span>
+            {operatorArea && pathname !== "/operator/alerts" ? <OperatorAlertButton /> : null}
+            <Button
+              variant="ghost"
+              size="icon-lg"
+              aria-label="Search pages and projects"
               onClick={() => setPalette(true)}
-              className="text-fg-2"
-              aria-keyshortcuts="Control+K Meta+K"
             >
               <Search aria-hidden />
-              Go to
-              <Kbd>Ctrl K</Kbd>
             </Button>
+          </header>
+          <Drawer open={drawer} onClose={() => setDrawer(false)}>
+            {side}
+          </Drawer>
+
+          <div className="flex min-w-0 flex-col">
+            {signOut.error ? (
+              <div className="px-4 pt-4 sm:px-6">
+                <FormMessage error={signOut.error} />
+              </div>
+            ) : null}
+            <main
+              id="main"
+              tabIndex={-1}
+              className="mx-auto w-full max-w-[1200px] flex-1 px-4 pt-6 pb-16 outline-none sm:px-6 lg:px-10 lg:pt-7"
+            >
+              <PageMotion key={pathname}>
+                <Outlet />
+              </PageMotion>
+            </main>
           </div>
-          {signOut.error ? (
-            <div className="px-4 pt-4 sm:px-6">
-              <FormMessage error={signOut.error} />
-            </div>
-          ) : null}
-          <main
-            id="main"
-            tabIndex={-1}
-            className="mx-auto w-full max-w-content flex-1 px-4 pt-6 pb-16 outline-none sm:px-6 lg:pt-2 xl:px-10"
-          >
-            <PageMotion key={pathname}>
-              <Outlet />
-            </PageMotion>
-          </main>
         </div>
-      </div>
-      <CommandPalette me={me.data} open={palette} onOpenChange={setPalette} />
-      <Toaster />
-    </TooltipProvider>
+        <CommandPalette me={me.data} open={palette} onOpenChange={setPalette} />
+        <Toaster />
+      </TooltipProvider>
+    </PaletteContext.Provider>
   );
 }
 

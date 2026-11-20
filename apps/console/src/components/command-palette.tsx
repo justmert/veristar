@@ -155,7 +155,7 @@ export function CommandPalette({
       // would cut the panel's shadow into a visible rectangle
       className="dialog-motion mx-auto mt-16 mb-auto max-h-[70dvh] w-full max-w-dialog overflow-visible bg-transparent p-4 text-fg max-sm:mt-4"
     >
-      <div className="flex max-h-[calc(70dvh-2rem)] flex-col overflow-hidden rounded-xl border border-line-strong bg-overlay shadow-dialog">
+      <div className="flex max-h-[calc(70dvh-2rem)] flex-col overflow-hidden rounded-[14px] border border-line-2 bg-overlay shadow-dialog">
         <div className="flex items-center gap-2 border-b border-line px-4">
           <Search aria-hidden className="size-4 shrink-0 text-fg-3" />
           <input
@@ -204,7 +204,7 @@ export function CommandPalette({
               return (
                 <div key={e.key} role="presentation">
                   {head ? (
-                    <div role="presentation" className="px-2 pt-2 pb-1 text-caption text-fg-2">
+                    <div role="presentation" className="px-2 pt-2 pb-1 text-caption text-fg-3">
                       {head}
                     </div>
                   ) : null}
@@ -217,7 +217,7 @@ export function CommandPalette({
                     onPointerMove={() => setActive(i)}
                     onClick={() => go(e)}
                     className={cn(
-                      "flex h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-body max-lg:h-(--vs-control-touch)",
+                      "flex h-9 cursor-pointer items-center gap-2.5 rounded-[8px] px-2 text-body max-lg:h-(--vs-control-touch)",
                       i === at ? "bg-hover text-fg" : "text-fg-2",
                     )}
                   >
