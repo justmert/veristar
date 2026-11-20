@@ -40,7 +40,7 @@ describe("tenant status banner (contract 5.10)", () => {
     const host = await render(<StatusNotice tenant={rejected} isOwner />);
     expect(host.textContent).toContain("Reason given: “Tell us more”");
     await click(byRole(host, "button", "Edit and resubmit"));
-    await type(byLabel(host, "How does the project use Stellar?"), "Soroban AMM with 2,000 users");
+    await type(byLabel(host, "How the project uses Stellar"), "Soroban AMM with 2,000 users");
     await click(byRole(host, "button", "Submit for review"));
     await waitFor(() => expect(calls.length).toBeGreaterThan(0));
     expect(calls[0]?.method).toBe("PUT");

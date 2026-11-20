@@ -65,11 +65,11 @@ describe("Find your SCF award", () => {
     expect(calls.filter((c) => c.url.startsWith("/api/scf/awards"))).toHaveLength(1);
     expect(calls[0]?.url).toBe("/api/scf/awards/search?q=examp");
     await click(host.querySelector(`[data-award="${AWARD.id}"]`) as HTMLElement);
-    expect(byLabel(host, "Project name").value).toBe("Example Pay");
+    expect(byLabel(host, "Name").value).toBe("Example Pay");
     expect(byLabel(host, "Website").value).toBe("https://examplepay.example");
     expect(byLabel(host, "Account or contract IDs").value).toBe(f.G_KEY);
-    expect(byLabel(host, "Round").value).toBe("SCF #44");
-    await type(byLabel(host, "How does the project use Stellar?"), "payments");
+    expect(host.querySelector("[data-award-picked]")?.textContent).toContain("SCF #44");
+    await type(byLabel(host, "How the project uses Stellar"), "payments");
     await click(byLabel(host, "I accept the") as unknown as HTMLElement);
     await click(byRole(host, "button", "Enroll project"));
     await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
@@ -104,7 +104,7 @@ describe("Find your SCF award", () => {
     await type(byLabel(host, "Find your SCF award"), "examp");
     await waitFor(() => expect(host.querySelector(`[data-award="${AWARD.id}"]`)).not.toBeNull());
     await click(host.querySelector(`[data-award="${AWARD.id}"]`) as HTMLElement);
-    await type(byLabel(host, "How does the project use Stellar?"), "payments");
+    await type(byLabel(host, "How the project uses Stellar"), "payments");
     await click(byLabel(host, "I accept the") as unknown as HTMLElement);
     await click(byRole(host, "button", "Enroll project"));
     await waitFor(() => expect(host.querySelector("[data-award-error]")).not.toBeNull());
