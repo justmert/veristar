@@ -210,7 +210,7 @@ function Signature({ verdict, r }: { verdict: Verdict | null; r: PublicReport })
     <section
       aria-label="Signature"
       className={cn(
-        "flex min-w-0 flex-col gap-3 rounded-2xl border bg-ground px-4.5 py-4 print:border-line-strong",
+        "flex min-w-0 flex-col gap-3 rounded-2xl border bg-ground px-4.5 py-4 lg:max-w-80 print:border-line-strong",
         tone === "bad"
           ? "border-critical-line"
           : tone === "warn"
@@ -251,7 +251,7 @@ function Signature({ verdict, r }: { verdict: Verdict | null; r: PublicReport })
           <p>The figures stay hidden while the signature does not hold.</p>
         )}
       </Disclosure>
-      <div className="flex flex-wrap items-center gap-2 print:hidden">
+      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap print:hidden">
         <Button
           variant="outline"
           size="sm"
@@ -431,7 +431,7 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
 
   return (
     <article className="flex min-w-0 flex-col gap-6">
-      <header className="grid min-w-0 items-center gap-6 rounded-[20px] border border-line bg-raised p-5 sm:p-7 lg:grid-cols-[auto_minmax(0,1fr)_minmax(15rem,16rem)]">
+      <header className="grid min-w-0 items-center gap-6 rounded-[20px] border border-line bg-raised p-5 sm:p-7 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
         <GradeRing row={g} size="lg" className="max-sm:size-28" />
         <div className="flex min-w-0 flex-col gap-1.5">
           <h1 className="text-[32px] leading-10 font-semibold tracking-[-0.025em] break-words text-fg">

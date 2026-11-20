@@ -388,7 +388,10 @@ export function AuditEntries({
           </h3>
           <ol className="flex flex-col">
             {foldRuns(g.items).map((item) => (
-              <li key={item.kind === "one" ? item.entry.id : `run-${item.key}`}>
+              <li
+                key={item.kind === "one" ? item.entry.id : `run-${item.key}`}
+                className="border-b border-line last:border-b-0"
+              >
                 <ItemRow item={item} />
               </li>
             ))}
@@ -417,7 +420,8 @@ function ItemRow({ item }: { item: AuditItem }) {
 // are square marks with an icon, so they never look like a person
 function ActorMark({ e }: { e: AuditEntry }) {
   const s = auditSentence(e);
-  if (s.kind === "person" && e.actor_login) return <Avatar name={e.actor_login} />;
+  if (s.kind === "person" && e.actor_login)
+    return <Avatar name={e.actor_login} className="size-6" />;
   const Icon = s.kind === "system" ? Cog : s.kind === "assistant" ? Bot : User;
   return (
     <span
@@ -427,6 +431,19 @@ function ActorMark({ e }: { e: AuditEntry }) {
     >
       <Icon className="size-3.5" strokeWidth={1.75} />
     </span>
+  );
+}
+
+// the actor in bold; the job of a system entry ("(purge)") stays plain,
+// as on the canvas
+function ActorName({ actor }: { actor: string }) {
+  const m = /^(.*?)( \(.+\))$/.exec(actor);
+  if (!m) return <span className="font-semibold text-fg">{actor}</span>;
+  return (
+    <>
+      <span className="font-semibold text-fg">{m[1]}</span>
+      {m[2]}
+    </>
   );
 }
 
@@ -459,11 +476,7 @@ function AuditRow({
       data-action={e.action}
       data-run={run ? run.count : undefined}
       data-open={open ? "" : undefined}
-      className={cn(
-        "flex flex-col",
-        !nested && "border-b border-line last:border-b-0",
-        open && !nested && "bg-hover",
-      )}
+      className={cn("flex flex-col", open && !nested && "bg-hover")}
     >
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: the chevron button is the keyboard way to open the row */}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: a click anywhere on the row opens it, as the chevron does */}
@@ -499,7 +512,7 @@ function AuditRow({
         <ActorMark e={e} />
         <div className="flex min-w-0 flex-col gap-1.5">
           <p className="text-body break-words text-fg-2">
-            <span className="font-semibold text-fg">{s.actor}</span> {verb}
+            <ActorName actor={s.actor} /> {verb}
             {s.object && !run ? (
               <>
                 {" "}

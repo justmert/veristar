@@ -146,9 +146,11 @@ export function AppShell() {
             <main
               id="main"
               tabIndex={-1}
-              className="mx-auto w-full max-w-[1200px] flex-1 px-4 pt-6 pb-16 outline-none sm:px-6 lg:px-10 lg:pt-7"
+              className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col px-4 pt-6 pb-16 outline-none sm:px-6 lg:px-10 lg:pt-7"
             >
-              <PageMotion key={pathname}>
+              {/* a column that fills the window, so a message page (404,
+                  operators only) centres in it as on the canvas */}
+              <PageMotion key={pathname} className="flex flex-1 flex-col">
                 <Outlet />
               </PageMotion>
             </main>
