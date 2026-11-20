@@ -17,6 +17,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { formatCount, formatTimeUtc } from "@/lib/format";
 import { type FirstEvent, firstEvent } from "@/lib/site-setup";
 import { AddSiteDialog } from "@/pages/project/sites";
+import { waitsOnProvisioning } from "@/query-client";
 
 type Health = { tone: "success" | "warning" | "critical" | "neutral"; note: string | null };
 
@@ -133,6 +134,12 @@ export function LiveCount({
   minutes?: boolean;
 }) {
   const rt = useQuery(webRealtimeQuery(tenantId, site));
+  if (waitsOnProvisioning(rt))
+    return (
+      <span className="text-caption text-fg-3" data-testid="web-active-pending">
+        Being set up
+      </span>
+    );
   if (rt.isPending) return <Bone className="h-6 w-32" />;
   if (rt.error)
     return (
