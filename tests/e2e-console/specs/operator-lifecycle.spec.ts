@@ -139,11 +139,10 @@ test("the operator switches enrollment to approval after a confirmation", async 
     .getByRole("navigation", { name: "Operator" })
     .getByRole("link", { name: "Settings" })
     .click();
-  // the enrollment mode is a switch of two values; a new value asks for
-  // confirmation at once, and the switch shows the mode in force
+  // the enrollment mode is a pair of options; a new value asks for
+  // confirmation at once, and the pair shows the mode in force
   const mode = page.getByRole("region", { name: "Enrollment mode" });
-  const current = (name: string) =>
-    expect(mode.getByRole("radio", { name })).toHaveAttribute("aria-checked", "true");
+  const current = (name: string) => expect(mode.getByRole("radio", { name })).toBeChecked();
   if (before.body.mode === "approval") {
     // a previous attempt switched already; go through the dialog both ways
     await mode.getByRole("radio", { name: "Open" }).click();
@@ -184,29 +183,32 @@ test("a new project waits in the review queue and the operator approves it", asy
   await queue.getByRole("button").filter({ hasText: tenant.name }).click();
   const review = page.getByRole("region", { name: `Review ${tenant.name}` });
   await expect(review.getByRole("list", { name: "Evidence" })).toBeVisible();
-  await expect(review.getByRole("radiogroup", { name: "Decision" })).toBeVisible();
+  await expect(review.getByRole("form", { name: `Decision on ${tenant.name}` })).toBeVisible();
   // a new project has no figures yet: the evidence carries the decision
   await expect(review.locator("[data-numbers]")).toHaveCount(0);
-  await review.getByRole("link", { name: "Open the project page" }).click();
+  await review.getByRole("link", { name: "Open the project", exact: true }).click();
   await page.waitForURL(`${APP}/operator/projects/${tenant.id}`);
   // enrollment answers and the site with its evidence
   await expect(page.getByText("Soroban contracts on testnet", { exact: true })).toBeVisible();
-  const siteRow = page
-    .getByRole("table", { name: "Sites" })
-    .getByRole("row")
-    .filter({ hasText: site.name });
+  const sites = page.getByRole("table", { name: "Sites" });
+  const siteRow = sites.getByRole("row").filter({ hasText: site.name });
   await expect(siteRow).toContainText(site.domain);
-  await expect(siteRow).toContainText("stellar.toml");
+  // the stellar.toml check is a column of the row
+  await expect(sites.getByRole("columnheader", { name: "stellar.toml" })).toBeVisible();
+  await expect(siteRow).toContainText(/Found|Not found|Not checked yet/);
   // one decision panel for approve and reject; remove waits in the menu
   const decision = page.getByRole("form", { name: `Decision on ${tenant.name}` });
-  await expect(decision.getByRole("radio")).toHaveText([/Approve/, /Reject/]);
+  const approve = decision.getByRole("button", { name: `Approve ${tenant.name}` });
+  await expect(decision.getByRole("button", { name: "Reject" })).toBeVisible();
+  await expect(approve).toBeVisible();
   expect(await menuActions()).toEqual(["Remove project"]);
 
-  // nothing is chosen on open, so the send waits for a choice
-  await expect(decision.getByRole("button", { name: "Choose Approve or Reject" })).toBeDisabled();
-  await decision.getByRole("radio", { name: /Approve/ }).click();
-  await decision.getByLabel(/^Reason/).fill("Looks good");
-  await decision.getByRole("button", { name: /^Approve project/ }).click();
+  // nothing is chosen on open, so there is nothing to send yet: the note
+  // opens with the choice
+  await expect(decision.getByRole("textbox")).toHaveCount(0);
+  await approve.click();
+  await decision.getByLabel(/^Note for the members/).fill("Looks good");
+  await decision.getByRole("button", { name: `Approve ${tenant.name}` }).click();
   await expect(page.getByText(`${tenant.name} approved.`)).toBeVisible();
   await expect(decision).toHaveCount(0);
   expect(await menuActions()).toEqual(["Suspend project", "Remove project"]);
@@ -276,7 +278,8 @@ test("remove takes the project away from its members and keeps the audit trail",
 
   // the audit log, filtered to this project in the console
   const page = op.page;
-  await page.getByRole("link", { name: "Open the full audit log" }).click();
+  await page.getByRole("link", { name: "Audit log", exact: true }).click();
+  await page.waitForURL(`${APP}/operator/audit?tenant_id=${tenant.id}`);
   const entries = page.getByRole("list", { name: "Audit entries" });
   // each entry reads as a sentence; the action code stays in its details
   for (const verb of ["approved", "suspended", "resumed", "removed"])
