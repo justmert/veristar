@@ -22,6 +22,7 @@ here, before they take effect, as the processing terms require
 
 ### Fixed
 
+- A replayer that hands partitions over under a backlog (a rolling deploy, a node joining, a replayer starting while events wait) no longer stores events twice in Umami. When its 10 seconds for the hand-over ran out it cancelled the sends still in flight; Umami had often stored those events already, but the replayer never saw the answer, wrote no `sent.<event id>` key and handed the messages back, so the next owner sent them again (59 duplicates in 24,000 events in one production measurement). Now it starts no new send at that point, lets the sends in flight finish within the 15 second send timeout, records every one Umami accepted, and hands back only the messages it never sent. No send is cancelled by a hand-over or a lost lock any more. The replayer container's stop grace period is 45 seconds to fit this. A failed in-progress signal for a message acknowledged in the meantime is no longer reported as a possible redelivery.
 - A `stellar.toml` fetch whose body ends only after the 10 second request deadline is now a timeout, never a file, so a body cut short at the deadline is not read as complete. The slow-host test names the path, status, size and time when it fails.
 
 ## [0.4.5] - 2026-11-19

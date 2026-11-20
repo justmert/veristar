@@ -255,10 +255,11 @@ services:
   replayer:
     <<: *defaults
     image: {{ platform_images.replayer }}
-    # on sigterm the replayer delivers what its partitions hold (up to 10 s)
-    # before it gives them back, so the next owner starts without waiting
-    # out the ack wait of 30 s
-    stop_grace_period: 30s
+    # on sigterm the replayer delivers what its partitions hold (up to 10 s),
+    # then lets the sends in flight finish (up to the 15 s send timeout) and
+    # records them before it gives the rest back, so no event umami stored
+    # is sent again by the next owner. 35 s at most, with room to release
+    stop_grace_period: 45s
     depends_on:
       umami:
         condition: service_healthy

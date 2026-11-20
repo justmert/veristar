@@ -99,6 +99,10 @@ func (lr *leadRun) deliver(ctx context.Context, q *visitorQueue, h *held) bool {
 		if err == nil {
 			return true
 		}
+		if errors.Is(err, errSendsStopped) {
+			// the hand-over hands it back unsent
+			return false
+		}
 		if errors.Is(err, natsx.ErrLockLost) {
 			lr.cancel(err)
 			return false
@@ -167,7 +171,10 @@ func (lr *leadRun) deliver(ctx context.Context, q *visitorQueue, h *held) bool {
 
 // attempt runs the duplicate guard, the send and the bookkeeping once.
 func (lr *leadRun) attempt(ctx context.Context, q *visitorQueue, h *held) error {
-	release, err := lr.acquire(ctx, h.target)
+	if !h.delivered && lr.sendsStopped() {
+		return errSendsStopped
+	}
+	release, err := lr.acquire(ctx, h.target, !h.delivered)
 	if err != nil {
 		return err
 	}
@@ -199,8 +206,14 @@ func (lr *leadRun) attempt(ctx context.Context, q *visitorQueue, h *held) error 
 		if err := lr.guard.check(ctx); err != nil {
 			return err
 		}
+		if lr.sendsStopped() {
+			return errSendsStopped
+		}
+		// the send is detached from the hold: cancelling it would not undo
+		// a store umami already made, only lose the 200 that records it
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sendTimeout)
 		start := time.Now()
-		res, err := r.umami[h.target].Send(ctx, umami.SendRequest{
+		res, err := r.umami[h.target].Send(sctx, umami.SendRequest{
 			Event: umami.Event{
 				Website:   ev.WebsiteID,
 				Hostname:  ev.Hostname,
@@ -218,6 +231,7 @@ func (lr *leadRun) attempt(ctx context.Context, q *visitorQueue, h *held) error 
 			Country:   ev.Country,
 			Cache:     cache,
 		})
+		cancel()
 		elapsed := time.Since(start).Seconds()
 		if err != nil {
 			f, label := classify(err)
