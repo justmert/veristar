@@ -18,7 +18,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatChange, formatCompact, formatCount } from "@/lib/format";
-import { GradeRing } from "@/pages/public/grade-ring";
+import { GradeRing } from "@/components/grade-ring";
 import { queryClient } from "@/query-client";
 
 // an operator who is a member of no project starts on the operator review
