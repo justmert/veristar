@@ -225,9 +225,6 @@ function Verify({
           : ""}
       </span>
       <FormMessage error={verify.error} />
-      <p className="text-caption text-fg-2">
-        You can check 6 times per hour. The service also checks the domain once a day.
-      </p>
     </div>
   );
 }
@@ -244,7 +241,7 @@ function RecordTable({
   return (
     <dl
       aria-label={label}
-      className="flex flex-col divide-y divide-line overflow-hidden rounded-md border border-line bg-sunken"
+      className="flex flex-col divide-y divide-line overflow-hidden rounded-lg border border-line bg-sunken"
     >
       {rows.map((r) => (
         <div
