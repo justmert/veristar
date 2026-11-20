@@ -1,22 +1,24 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { ChevronRight, CircleAlert, FolderPlus, Plus } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { CircleAlert, Plus } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, redirect } from "react-router";
-import type { ApiFilters } from "@/api/endpoints";
-import { apiOverviewQuery, meQuery, sitesQuery } from "@/api/queries";
+import type { Kpi } from "@/api/cohort-schemas";
+import { type SCFView, scfViewQuery } from "@/api/onchain";
+import { meQuery } from "@/api/queries";
 import type { Me, MeTenant, RemovedTenant } from "@/api/schemas";
-import { webSummaryQuery } from "@/api/web";
 import { FilterBar } from "@/components/filter-bar";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
+import { SetupBar, type SetupStep } from "@/components/setup-progress";
+import { ChangeLine, type StatChange } from "@/components/stat-card";
 import { EmptyState, ErrorState } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatCount, truncateMiddle } from "@/lib/format";
-import { readWebState, webQuery } from "@/lib/web-dashboard";
+import { formatChange, formatCompact, formatCount } from "@/lib/format";
+import { GradeRing } from "@/pages/public/grade-ring";
 import { queryClient } from "@/query-client";
 
 // an operator who is a member of no project starts on the operator review
@@ -75,6 +77,7 @@ export function ProjectsPage() {
   const header = (
     <PageHeader
       title="My projects"
+      items={tenants.length > 0 ? [<span key="range">Last 30 days</span>] : undefined}
       primary={me.data && tenants.length > 0 ? <EnrollButton /> : null}
     />
   );
@@ -83,7 +86,7 @@ export function ProjectsPage() {
     return (
       <section className="flex flex-col gap-8">
         {header}
-        <div role="status" aria-busy="true" className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div role="status" aria-busy="true" className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <span className="sr-only">Loading your projects</span>
           {[0, 1].map((i) => (
             <CardSkeleton key={i} />
@@ -133,20 +136,9 @@ export function ProjectsPage() {
       ) : null}
 
       {tenants.length === 0 ? (
-        <EmptyState
-          icon={<FolderPlus aria-hidden strokeWidth={1.75} />}
-          title="No project yet"
-          action={<EnrollButton />}
-        >
-          Enroll your project to get a tracking tag and private dashboards.
-        </EmptyState>
+        <EmptyState title="No project yet" action={<EnrollButton />} />
       ) : (
         <div className="flex flex-col gap-4">
-          {/* the period is said once for every card, so card labels never
-              lose it to truncation */}
-          <p className="text-caption text-fg-2" data-testid="cards-period">
-            Page views and API requests: last 30 days, UTC
-          </p>
           {tenants.length >= SEARCH_FROM ? (
             <FilterBar
               search={q}
@@ -165,11 +157,9 @@ export function ProjectsPage() {
                   Clear the search
                 </Button>
               }
-            >
-              Search by another name or address.
-            </EmptyState>
+            />
           ) : (
-            <Stagger as="ul" className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            <Stagger as="ul" className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {shown.map((t) => (
                 <StaggerItem as="li" key={t.id} className="flex min-w-0">
                   <ProjectCard tenant={t} onFailed={onFailed} />
@@ -182,8 +172,6 @@ export function ProjectsPage() {
     </section>
   );
 }
-
-const ROLE: Record<MeTenant["role"], string> = { owner: "Owner", member: "Member" };
 
 // the one thing that waits for this project, or null when nothing does.
 // `act` is true when the person must do it (amber); otherwise they wait.
@@ -204,11 +192,63 @@ export function nextStep(t: MeTenant): { text: string; act: boolean } | null {
   return null;
 }
 
-const NO_FILTERS: ApiFilters = { service: null, route: null, method: null };
+// the last 30 days, as the scf review reads them: one call gives the
+// numbers, their previous period, the setup facts, the grade and the award
+const RANGE = {};
 
-// one project as a card: who it is, what waits for it, and its last 30
-// days, read from the sources its own pages read (page views from the web
-// dashboard, requests from the api metrics), so the numbers agree
+// a project's initial on a tint of its own, so cards tell apart at a glance
+const TINTS = [
+  "bg-series-1/20 text-series-1",
+  "bg-series-3/20 text-series-3",
+  "bg-series-4/20 text-series-4",
+  "bg-series-2/20 text-series-2",
+  "bg-series-5/20 text-series-5",
+];
+function tintOf(id: string): string {
+  let h = 0;
+  for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return TINTS[h % TINTS.length] as string;
+}
+
+function changeOf(kpi: Kpi | undefined): StatChange | null {
+  if (!kpi || kpi.change === null) return null;
+  const r = kpi.change;
+  const direction = r > 0.0005 ? "up" : r < -0.0005 ? "down" : "flat";
+  return {
+    text: formatChange(r),
+    direction,
+    good: direction === "flat" ? null : direction === "up",
+    period: "previous 30 days",
+  };
+}
+
+// the three setup steps of a project, as the overview names them: a site,
+// its tracker and domain, then the api or a proven on-chain account
+function setupSteps(v: SCFView): SetupStep[] {
+  const sites = v.sites?.sites ?? 0;
+  const site = sites > 0;
+  const tracker = site && (v.sites?.sites_verified ?? 0) > 0 && v.has_web_data;
+  const data = v.has_api_data || (v.onchain?.ids_verified ?? 0) > 0;
+  const state = (done: boolean, before: boolean): SetupStep["state"] =>
+    done ? "done" : before ? "current" : "todo";
+  return [
+    { key: "site", label: "Add a site", state: state(site, true) },
+    {
+      key: "tracker",
+      label: "Install the tracker and verify the domain",
+      state: state(tracker, site),
+    },
+    {
+      key: "data",
+      label: "Connect your API or an on-chain account",
+      state: state(data, tracker),
+    },
+  ];
+}
+
+// one project as a card: who it is, its grade, and its last 30 days, or
+// what to set up next while it has no data. the whole card opens the
+// project; the page links along its foot open one page each
 function ProjectCard({
   tenant: t,
   onFailed,
@@ -217,161 +257,214 @@ function ProjectCard({
   onFailed: (id: string, retry: (() => void) | null) => void;
 }) {
   const next = nextStep(t);
-  const sites = useQuery(sitesQuery(t.id));
-  const live = (sites.data ?? []).filter((s) => s.status !== "removed");
-  const hasSites = live.length > 0;
-  const web = useQuery({
-    ...webSummaryQuery(t.id, webQuery(readWebState(new URLSearchParams()), new Date())),
-    enabled: hasSites,
-    // a card shows the gap at once; the web page waits for the setup
-    retry: false,
-  });
-  const api = useQuery({ ...apiOverviewQuery(t.id, { range: "30d" }, NO_FILTERS), retry: false });
-  const verified = live.filter((s) => s.verification === "verified").length;
-  const views = web.data?.current.totals.pageviews ?? null;
-  const requests = api.data?.current.summary.requests ?? null;
-  const anyError = sites.isError || web.isError || api.isError;
-  const { refetch: refetchSites } = sites;
-  const { refetch: refetchWeb } = web;
-  const { refetch: refetchApi } = api;
+  // a project in review or rejected has no data pages yet
+  const live = t.status === "active" || t.status === "suspended";
+  const view = useQuery({ ...scfViewQuery(t.id, RANGE), enabled: live, retry: false });
+  const { refetch } = view;
   useEffect(() => {
-    onFailed(
-      t.id,
-      anyError
-        ? () => {
-            refetchSites();
-            if (hasSites) refetchWeb();
-            refetchApi();
-          }
-        : null,
-    );
-  }, [t.id, anyError, hasSites, onFailed, refetchSites, refetchWeb, refetchApi]);
+    onFailed(t.id, view.isError ? () => refetch() : null);
+  }, [t.id, view.isError, onFailed, refetch]);
+
+  const v = view.data;
+  const kpis = v?.comparison?.kpis;
+  const ops = v?.onchain && v.onchain.ids_verified > 0 ? (v.onchain.operations ?? null) : null;
+  const numbers: CardNumber[] = v
+    ? [
+        {
+          key: "visitors",
+          label: "Visitors",
+          series: 1,
+          value: kpis?.visitors.value ?? v.web?.visitors ?? 0,
+          change: changeOf(kpis?.visitors),
+        },
+        {
+          key: "requests",
+          label: "API requests",
+          series: 3,
+          value: kpis?.requests.value ?? v.api?.requests ?? 0,
+          change: changeOf(kpis?.requests),
+        },
+        {
+          key: "onchain",
+          label: "On-chain ops",
+          series: 4,
+          value: kpis?.onchain_operations.value ?? ops,
+          change: changeOf(kpis?.onchain_operations),
+        },
+      ]
+    : [];
+  const steps = v ? setupSteps(v) : [];
+  const hasData = numbers.some((n) => (n.value ?? 0) > 0);
+  const setup = v !== undefined && !hasData && steps.some((s) => s.state !== "done");
+  const base = `/projects/${t.id}`;
+  const links = !live
+    ? [{ to: base, label: "Overview" }]
+    : setup
+      ? [
+          { to: base, label: "Overview" },
+          { to: `${base}/sites`, label: "Sites" },
+          { to: `${base}/connect-api`, label: "Connect API" },
+          { to: `${base}/onchain`, label: "On-chain" },
+        ]
+      : [
+          { to: base, label: "Overview" },
+          { to: `${base}/web`, label: "Web" },
+          { to: `${base}/api`, label: "API" },
+          { to: `${base}/onchain`, label: "On-chain" },
+          { to: `${base}/scf`, label: "SCF review" },
+        ];
+  const award = v?.cohort.confirmed ?? null;
+  const awardText = award ? [award.round, award.program].filter(Boolean).join(" ") : null;
 
   return (
-    <Link
-      to={`/projects/${t.id}`}
+    <article
       data-tenant={t.id}
-      className="group flex w-full min-w-0 flex-col rounded-lg border border-line bg-raised transition-colors duration-(--vs-duration-press) ease-standard hover:border-line-strong hover:bg-hover focus-ring"
+      className="group relative flex min-h-70 w-full min-w-0 flex-col rounded-[18px] border border-line bg-raised transition-colors duration-(--vs-duration-press) ease-standard hover:border-line-strong has-[[data-card-link]:focus-visible]:outline-2 has-[[data-card-link]:focus-visible]:outline-offset-2 has-[[data-card-link]:focus-visible]:outline-accent-text"
     >
-      <div className="flex items-start gap-3 p-5 max-sm:p-4">
+      <div className="flex items-center gap-4 px-6 pt-5.5 pb-4.5 max-sm:px-4">
         <span
           aria-hidden
-          className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-selected text-title text-fg uppercase"
+          className={cn(
+            "flex size-13 shrink-0 items-center justify-center rounded-[14px] text-[20px] font-semibold uppercase",
+            tintOf(t.id),
+          )}
         >
           {t.name.slice(0, 1)}
         </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="truncate text-title text-fg" title={t.name}>
+        <span className="flex min-w-0 flex-1 flex-col gap-1.25">
+          <Link
+            to={base}
+            data-card-link=""
+            className="truncate text-[21px] leading-7 font-semibold tracking-[-0.02em] text-fg outline-none after:absolute after:inset-0 after:rounded-[18px] after:content-['']"
+            title={t.name}
+          >
             {t.name}
-          </span>
-          <span className="flex min-w-0 items-center gap-2 text-small text-fg-2">
-            {/* a long slug keeps its start and its end, which tell similar
-                slugs apart */}
-            <span className="truncate font-mono" title={t.slug}>
-              <span className="sm:hidden">{truncateMiddle(t.slug, 14)}</span>
-              <span className="max-sm:hidden">{truncateMiddle(t.slug, 24)}</span>
-            </span>
-            <span aria-hidden>·</span>
-            <span className="shrink-0">{ROLE[t.role]}</span>
+          </Link>
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-fg-2">
+            <StatusBadge kind="project" status={t.status} />
+            {live ? (
+              view.isPending ? (
+                <Skeleton className="h-3 w-24" />
+              ) : v ? (
+                <span className="truncate">{awardText ?? "No SCF award"}</span>
+              ) : null
+            ) : null}
           </span>
         </span>
-        <span className="flex shrink-0 items-center gap-1">
-          <StatusBadge kind="project" status={t.status} />
-          <ChevronRight
-            aria-hidden
-            className="size-4 text-fg-3 transition-transform duration-(--vs-duration-press) ease-standard group-hover:translate-x-0.5 group-hover:text-fg"
-          />
-        </span>
+        {v && v.integrity && (v.sites?.sites ?? 0) > 0 && v.integrity.graded_days > 0 ? (
+          <GradeRing row={v.integrity} className="ml-auto" />
+        ) : null}
       </div>
+
       {next ? (
-        <span
+        <p
           className={cn(
-            "mx-5 mb-4 flex min-w-0 items-center gap-2 text-small max-sm:mx-4",
+            "mx-6 mb-4 flex min-w-0 items-center gap-2 text-small max-sm:mx-4",
             next.act ? "text-warning" : "text-fg-2",
           )}
         >
           {next.act ? <CircleAlert aria-hidden className="size-4 shrink-0" /> : null}
           <span className="min-w-0">{next.text}</span>
-        </span>
+        </p>
       ) : null}
-      <dl className="mt-auto grid grid-cols-3 border-t border-line-subtle">
-        <Metric label="Sites" pending={sites.isPending}>
-          {sites.isError ? (
-            <NotLoaded />
-          ) : (
-            <span className="flex flex-col">
-              {formatCount(live.length)}
-              {/* the line is kept on a card without sites, so every card
-                  in a row has the same height */}
-              <span
-                aria-hidden={!hasSites}
-                className={cn(
-                  "font-sans text-caption font-normal text-fg-2",
-                  !hasSites && "invisible",
-                )}
-              >
-                {formatCount(verified)} verified
+
+      {live ? (
+        view.isPending ? (
+          <div aria-hidden className="grid grid-cols-3 gap-3 px-6 pb-5.5 max-sm:px-4">
+            {[0, 1, 2].map((i) => (
+              <span key={i} className="flex flex-col gap-2">
+                <Skeleton className="h-3 w-3/4" />
+                <Skeleton className="h-6 w-1/2" />
+              </span>
+            ))}
+          </div>
+        ) : view.isError ? (
+          <p className="flex items-center gap-2 px-6 pb-5.5 text-small text-critical max-sm:px-4">
+            <CircleAlert aria-hidden className="size-4 shrink-0" />
+            Did not load
+          </p>
+        ) : setup ? (
+          <div className="flex flex-col gap-2.5 px-6 pb-5.5 max-sm:px-4" data-setup="">
+            <span className="flex flex-wrap items-baseline gap-x-2.5 text-[14px]">
+              <span className="text-fg-2">Next</span>
+              <span className="font-medium text-fg">
+                {steps.find((s) => s.state !== "done")?.label}
+              </span>
+              <span className="ml-auto text-[12.5px] text-fg-2 tabular">
+                setup {steps.filter((s) => s.state === "done").length} of {steps.length}
               </span>
             </span>
-          )}
-        </Metric>
-        <Metric label="Page views" pending={sites.isPending || (hasSites && web.isPending)}>
-          {/* a count with nothing behind it is 0, the same form as the
-              api count beside it */}
-          {sites.isError || web.isError ? <NotLoaded /> : formatCount(hasSites ? (views ?? 0) : 0)}
-        </Metric>
-        <Metric label="API requests" pending={api.isPending}>
-          {api.isError ? <NotLoaded /> : formatCount(requests ?? 0)}
-        </Metric>
-      </dl>
-    </Link>
+            <SetupBar steps={steps} />
+          </div>
+        ) : (
+          <dl className="grid grid-cols-3 gap-3 px-6 pb-5.5 max-sm:px-4">
+            {numbers.map((n) => (
+              <div key={n.key} data-number={n.key} className="flex min-w-0 flex-col gap-1.5">
+                <dt className="flex items-center gap-1.75 truncate text-caption text-fg-2">
+                  <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", DOT[n.series])} />
+                  {n.label}
+                </dt>
+                <dd className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="text-[22px] leading-6.5 font-semibold tracking-[-0.02em] text-fg tabular">
+                    {n.value === null ? "\u2013" : formatCompact(n.value)}
+                  </span>
+                  {n.change ? <ChangeLine change={n.change} className="font-medium" /> : null}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )
+      ) : null}
+
+      <nav
+        aria-label={`Pages of ${t.name}`}
+        className="relative z-10 mt-auto flex flex-wrap gap-0.5 px-3.5 py-2 shadow-[0_-1px_0_var(--color-line-subtle)]"
+      >
+        {links.map((l, i) => (
+          <Link
+            key={l.to}
+            to={l.to}
+            className={cn(
+              "rounded-lg px-2.5 py-1.5 text-[13px] transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring max-sm:py-2.5",
+              i === 0 ? "text-fg" : "text-fg-2",
+            )}
+          >
+            {l.label}
+          </Link>
+        ))}
+      </nav>
+    </article>
   );
 }
 
-// a number that failed to load is an error, never the missing-value dash
-function NotLoaded() {
-  return (
-    <span className="inline-flex text-critical" title="Did not load">
-      <CircleAlert aria-hidden className="size-4" />
-      <span className="sr-only">Did not load</span>
-    </span>
-  );
-}
-
-function Metric({
-  label,
-  pending,
-  children,
-}: {
+type CardNumber = {
+  key: string;
   label: string;
-  pending: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1 border-r border-line-subtle px-5 py-3 last:border-r-0 max-sm:px-3">
-      <dt className="truncate text-caption text-fg-2">{label}</dt>
-      <dd className="min-h-6 text-body font-medium text-fg tabular">
-        {pending ? <Skeleton className="h-5 w-12" /> : children}
-      </dd>
-    </div>
-  );
-}
+  series: 1 | 3 | 4;
+  value: number | null;
+  change: StatChange | null;
+};
+const DOT: Record<CardNumber["series"], string> = {
+  1: "bg-series-1",
+  3: "bg-series-3",
+  4: "bg-series-4",
+};
 
 function CardSkeleton() {
   return (
-    <div aria-hidden className="flex flex-col rounded-lg border border-line bg-raised">
-      <div className="flex items-start gap-3 p-5">
-        <Skeleton className="size-10 rounded-lg" />
+    <div aria-hidden className="flex min-h-70 flex-col rounded-[18px] border border-line bg-raised">
+      <div className="flex items-center gap-4 px-6 pt-5.5 pb-4.5">
+        <Skeleton className="size-13 rounded-[14px]" />
         <div className="flex flex-1 flex-col gap-2">
-          <Skeleton className="h-4 w-1/2" />
+          <Skeleton className="h-5 w-1/2" />
           <Skeleton className="h-3 w-1/3" />
         </div>
       </div>
-      <div className="grid grid-cols-3 border-t border-line-subtle">
+      <div className="grid grid-cols-3 gap-3 px-6">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="flex flex-col gap-2 px-5 py-3">
+          <div key={i} className="flex flex-col gap-2">
             <Skeleton className="h-3 w-3/4" />
-            <Skeleton className="h-5 w-1/2" />
+            <Skeleton className="h-6 w-1/2" />
           </div>
         ))}
       </div>
