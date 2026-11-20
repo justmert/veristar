@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CirclePause, KeyRound, UserMinus } from "lucide-react";
+import { CirclePause, KeyRound, Lock, UserMinus } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ApiError } from "@/api/client";
 import {
@@ -12,17 +12,19 @@ import {
 } from "@/api/operators";
 import { keys, meQuery } from "@/api/queries";
 import type { User } from "@/api/schemas";
+import { Avatar } from "@/components/avatar";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CreateDialog } from "@/components/create-dialog";
 import { type Column, DataTable } from "@/components/data-table";
-import { SelectField, TextField } from "@/components/form-field";
+import { NativeSelect, TextAreaField, TextField } from "@/components/form-field";
 import { useOperatorAdmin } from "@/components/nav/operator-role";
 import { PageHeader } from "@/components/page-header";
+import { Segmented } from "@/components/segmented";
 import type { RowAction } from "@/components/row-menu";
 import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { Pill } from "@/components/status";
 import { toast } from "@/components/toast";
-import { countOf, formatDateTimeUtc } from "@/lib/format";
+import { countOf, formatDateTimeShort, formatDateTimeUtc } from "@/lib/format";
 import { shortAddress } from "@/lib/stellar-wallet";
 import { fieldMessage, githubLogin, strkey } from "@/lib/validate";
 import { queryClient } from "@/query-client";
@@ -159,58 +161,70 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
       key: "operator",
       header: "Operator",
       primary: true,
-      minWidth: "min-w-56",
+      minWidth: "min-w-64",
       cell: (e) => (
-        <span className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="min-w-0 truncate text-fg">{identity(e)}</span>
-          <span className="text-caption text-fg-2">{kindText(e)}</span>
-          {e.bootstrap ? <RoleTag>Deploy settings</RoleTag> : null}
-          {mine(e, me) ? <RoleTag>You</RoleTag> : null}
+        <span className="flex min-w-0 items-center gap-3">
+          <Avatar name={identity(e) || "?"} className="size-8" />
+          <span className="flex min-w-0 flex-col">
+            <span className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="min-w-0 truncate font-medium text-fg">{identity(e)}</span>
+              {mine(e, me) ? <RoleTag>You</RoleTag> : null}
+              {e.bootstrap ? (
+                <RoleTag>
+                  <Lock aria-hidden className="size-3" />
+                  Deploy settings
+                </RoleTag>
+              ) : null}
+            </span>
+            <span className="text-small text-fg-3">{kindText(e)}</span>
+          </span>
         </span>
       ),
     },
-    { key: "role", header: "Role", mobile: true, cell: (e) => ROLE_TEXT[e.role] },
+    {
+      key: "role",
+      header: "Role",
+      mobile: true,
+      cell: (e) =>
+        admin && !e.bootstrap ? (
+          <NativeSelect
+            bare
+            size="sm"
+            aria-label={`Role of ${identity(e)}`}
+            value={e.role}
+            onChange={(ev) => {
+              const next = ev.target.value as RosterRole;
+              if (next !== e.role) setPending({ entry: e, action: next });
+            }}
+            className="-ml-1 w-fit [&>select]:pr-7 [&>select]:text-body [&>select]:text-fg"
+          >
+            <option value="operator">{ROLE_TEXT.operator}</option>
+            <option value="operator_admin">{ROLE_TEXT.operator_admin}</option>
+          </NativeSelect>
+        ) : (
+          <span className="text-fg">{ROLE_TEXT[e.role]}</span>
+        ),
+    },
     {
       key: "status",
       header: "Status",
       mobile: true,
       cell: (e) => (
-        <span className="flex min-w-0 flex-col items-start gap-1">
+        <span title={e.status_reason ?? undefined} className="inline-flex">
           {e.status === "active" ? (
             <Pill tone="success">Active</Pill>
           ) : (
             <Pill tone="warning">Suspended</Pill>
           )}
-          {e.status_reason ? (
-            <span className="truncate text-caption text-fg-2">{e.status_reason}</span>
-          ) : null}
+          {e.status_reason ? <span className="sr-only">. {e.status_reason}</span> : null}
         </span>
       ),
     },
     {
       key: "account",
       header: "Sign-in",
-      cell: (e) => (
-        <span className="flex flex-col text-small text-fg-2">
-          {e.account ? (
-            <>
-              <span>{countOf(e.account.passkeys, "passkey")}</span>
-              <span className="text-caption">
-                {e.account.last_login_at
-                  ? `Last sign-in ${formatDateTimeUtc(e.account.last_login_at)}`
-                  : "Never signed in"}
-              </span>
-            </>
-          ) : (
-            <span>No sign-in yet</span>
-          )}
-          {e.enrollment_until ? (
-            <span className="text-caption">
-              First passkey before {formatDateTimeUtc(e.enrollment_until)}
-            </span>
-          ) : null}
-        </span>
-      ),
+      minWidth: "min-w-56",
+      cell: (e) => <SignIn e={e} />,
     },
   ];
   const pick = (entry: RosterEntry) => (action: RosterAction | RosterRole) =>
@@ -248,19 +262,49 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
   );
 }
 
-// the row menu: the everyday changes first, the destructive ones last.
+// the sign-in of an operator: the passkeys and the last sign-in, or the
+// warning that no passkey is registered yet with the time its window has
+// left (the exact end on hover)
+function SignIn({ e }: { e: RosterEntry }) {
+  const passkeys = e.account?.passkeys ?? 0;
+  if (passkeys === 0 && e.enrollment_until) {
+    const h = Math.max(0, Math.ceil((new Date(e.enrollment_until).getTime() - Date.now()) / 3_600_000));
+    return (
+      <span
+        className="flex flex-wrap items-center gap-2.5 text-small"
+        title={`First passkey before ${formatDateTimeUtc(e.enrollment_until)}`}
+      >
+        <Pill tone="warning">No passkey yet</Pill>
+        <span className="text-fg-3">
+          {h === 0 ? "window ends" : `window ends in ${h < 48 ? `${h} h` : `${Math.floor(h / 24)} d`}`}
+        </span>
+      </span>
+    );
+  }
+  return (
+    <span className="flex flex-col">
+      <span className="text-body text-fg">
+        {e.account ? countOf(passkeys, "passkey") : "No sign-in yet"}
+      </span>
+      {e.account ? (
+        <span className="text-small text-fg-3">
+          {e.account.last_login_at
+            ? `Last sign-in ${formatDateTimeShort(e.account.last_login_at)}`
+            : "Never signed in"}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+// the row menu: resume first, the destructive ones last; the role is the
+// inline select of its column.
 // each opens the confirmation with its reason.
 function rosterActions(
   entry: RosterEntry,
   onPick: (a: RosterAction | RosterRole) => void,
 ): (RowAction | null)[] {
   return [
-    entry.bootstrap
-      ? null
-      : {
-          label: entry.role === "operator_admin" ? "Make operator" : "Make operator admin",
-          onSelect: () => onPick(entry.role === "operator_admin" ? "operator" : "operator_admin"),
-        },
     entry.bootstrap || entry.status === "active"
       ? null
       : { label: "Resume", onSelect: () => onPick("resume") },
@@ -357,19 +401,18 @@ export function AddOperator() {
         m.reset();
       }}
     >
-      <SelectField
+      <SegmentedField
         label="Signs in with"
-        name="kind"
         value={kind}
-        onChange={(e) => setKind(e.target.value as "github" | "stellar")}
-        className="w-full"
-      >
-        <option value="github">GitHub</option>
-        <option value="stellar">Stellar wallet or passkey</option>
-      </SelectField>
+        options={[
+          { value: "github", label: "GitHub" },
+          { value: "stellar", label: "Stellar wallet or passkey" },
+        ]}
+        onChange={setKind}
+      />
       <TextField
         label={kind === "github" ? "GitHub login" : "Stellar address"}
-        placeholder={kind === "github" ? undefined : "G… or C…"}
+        placeholder={kind === "github" ? "octocat" : "G… or C…"}
         name="identity"
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -377,20 +420,20 @@ export function AddOperator() {
         spellCheck={false}
         error={identityError}
       />
-      <SelectField
+      <SegmentedField
         label="Role"
-        name="role"
         value={role}
-        onChange={(e) => setRole(e.target.value as RosterRole)}
-        className="w-full"
-      >
-        <option value="operator">Operator</option>
-        <option value="operator_admin">Operator admin</option>
-      </SelectField>
-      <TextField
+        options={[
+          { value: "operator", label: ROLE_TEXT.operator },
+          { value: "operator_admin", label: ROLE_TEXT.operator_admin },
+        ]}
+        onChange={setRole}
+      />
+      <TextAreaField
         label="Reason"
         name="reason"
-        hint={REASON_HINT}
+        placeholder={REASON_HINT}
+        rows={3}
         maxLength={500}
         value={reason}
         onChange={(e) => setReason(e.target.value)}
@@ -400,11 +443,33 @@ export function AddOperator() {
   );
 }
 
+// a choice of two in a dialog: its visible label over the segmented control
+function SegmentedField<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span aria-hidden className="text-small font-medium text-fg">
+        {label}
+      </span>
+      <Segmented label={label} value={value} options={options} onChange={onChange} />
+    </div>
+  );
+}
+
 // a plain tag for a fact about a person (from the deploy settings, you),
 // apart from the status pills: no dot, no tint
 function RoleTag({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex h-5 items-center rounded-sm border border-line px-1 text-caption text-fg-2">
+    <span className="inline-flex h-5 items-center gap-1 rounded-[5px] border border-line-2 px-1.5 text-caption text-fg-3">
       {children}
     </span>
   );
