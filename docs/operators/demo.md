@@ -76,6 +76,6 @@ The answer lists the demo projects under `tenants`.
 
 ## Limits
 
-Each visitor may send 60 requests at once and then 5 a second; the demo answers
+Each visitor may send 120 requests at once and then 10 a second; the demo answers
 `429 rate_limited` beyond that. The web analytics pages share one limit of 120 Umami reads a
 minute across all visitors of the demo.

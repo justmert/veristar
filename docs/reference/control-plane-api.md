@@ -4877,8 +4877,8 @@ request.
 this order:
 
 1. The per-client limit: a client (a whole IPv4 address or an IPv6 /48, keyed
-   by an in-memory hash as for sign-in, 4.1.1) may send 60 requests at once
-   and then 5 a second, under a ceiling of 100 a second per control plane
+   by an in-memory hash as for sign-in, 4.1.1) may send 120 requests at once
+   and then 10 a second, under a ceiling of 200 a second per control plane
    instance. Beyond it: 429 `rate_limited` with `Retry-After`.
 2. The method: anything but GET answers 403 `demo_read_only`.
 3. The allowlist: a path whose route is not in the table below answers 403
