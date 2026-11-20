@@ -1104,7 +1104,10 @@ function Scorecards({
         </section>
       ) : null}
 
-      <div className="min-w-0 overflow-x-auto rounded-2xl border border-line bg-raised">
+      {/* relative: the visually hidden texts of the cells are positioned
+        absolutely, and without a positioned scroller they escape it and
+        widen the page on a phone */}
+      <div className="relative min-w-0 overflow-x-auto rounded-2xl border border-line bg-raised">
         <table className="w-full min-w-[44rem] border-separate border-spacing-0 text-body tabular">
           <caption className="sr-only">The compared projects, one column each</caption>
           <colgroup>
