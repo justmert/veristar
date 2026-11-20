@@ -37,7 +37,10 @@ export function ConnectClient({
   const origin = window.location.origin;
   const s = clientSnippets(origin, createdKey);
   return (
-    <section aria-labelledby="connect-client-h" className={cn("flex min-w-0 flex-col gap-3", className)}>
+    <section
+      aria-labelledby="connect-client-h"
+      className={cn("flex min-w-0 flex-col gap-3", className)}
+    >
       <h2 id="connect-client-h" className="text-[15px] leading-5 font-semibold text-fg">
         {title}
       </h2>
@@ -67,7 +70,9 @@ export function ConnectClient({
               <CopyField value={mcpEndpoint(origin)} label="server address" className="min-w-0" />
             </Step>
             <Step n={2} title="Add it as a custom connector">
-              <span className="text-small text-fg-2">Settings, Connectors, Add custom connector</span>
+              <span className="text-small text-fg-2">
+                Settings, Connectors, Add custom connector
+              </span>
             </Step>
             <Step n={3} title={`Sign in to Veristar and approve ${approve}`} />
           </Steps>

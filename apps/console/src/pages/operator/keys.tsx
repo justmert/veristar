@@ -26,8 +26,8 @@ import { Segmented } from "@/components/segmented";
 import { EmptyState, ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
-import { Dialog } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog } from "@/components/ui/dialog";
 import {
   DEFAULT_EXPIRY_DAYS,
   EMPTY_KEY_FORM,
@@ -249,41 +249,44 @@ export function AccessKeysPage() {
             </h2>
             <span className="text-small text-fg-3 tabular">{shown.length}</span>
             {revokedCount > 0 ? (
-              <label className="ml-auto inline-flex cursor-pointer items-center gap-2 text-small text-fg-2">
+              <span className="ml-auto inline-flex items-center gap-2 text-small text-fg-2">
                 <Checkbox
+                  id="show-revoked"
                   checked={showRevoked}
                   onCheckedChange={(v) => setShowRevoked(v === true)}
                 />
-                Show revoked
-              </label>
+                <label htmlFor="show-revoked" className="cursor-pointer">
+                  Show revoked
+                </label>
+              </span>
             ) : null}
           </div>
-        <DataTable
-          label="Keys and connections"
-          columns={columns}
-          rows={shown}
-          getRowKey={(r) => r.id}
-          rowLabel={(r) => r.name}
-          rowProps={(r) => ({ "data-key-id": r.id, "data-kind": r.kind })}
-          rowActions={(r) => [
-            r.kind === "machine" ? { label: "Show usage", onSelect: () => setUsage(r) } : null,
-            r.status !== "revoked"
-              ? {
-                  label: "Revoke",
-                  icon: <Ban aria-hidden />,
-                  destructive: true,
-                  confirm: {
-                    title: `Revoke the key “${r.name}”?`,
-                    description:
-                      "The next request with it is refused. You cannot restore it. Create a new key instead.",
-                    confirmLabel: "Revoke",
-                    pendingLabel: "Revoking",
-                    run: () => revoke(r),
-                  },
-                }
-              : null,
-          ]}
-        />
+          <DataTable
+            label="Keys and connections"
+            columns={columns}
+            rows={shown}
+            getRowKey={(r) => r.id}
+            rowLabel={(r) => r.name}
+            rowProps={(r) => ({ "data-key-id": r.id, "data-kind": r.kind })}
+            rowActions={(r) => [
+              r.kind === "machine" ? { label: "Show usage", onSelect: () => setUsage(r) } : null,
+              r.status !== "revoked"
+                ? {
+                    label: "Revoke",
+                    icon: <Ban aria-hidden />,
+                    destructive: true,
+                    confirm: {
+                      title: `Revoke the key “${r.name}”?`,
+                      description:
+                        "The next request with it is refused. You cannot restore it. Create a new key instead.",
+                      confirmLabel: "Revoke",
+                      pendingLabel: "Revoking",
+                      run: () => revoke(r),
+                    },
+                  }
+                : null,
+            ]}
+          />
         </section>
       )}
 

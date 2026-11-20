@@ -182,7 +182,10 @@ const DEFAULT_RANGE = { from: "", to: "" };
 const GRADE_RANK: Record<IntegrityGrade, number> = { A: 0, B: 1, C: 2 };
 
 // the grade of the project on each day: the lowest grade of its sites
-export function dailyGrades(report: IntegrityReport | undefined, days: string[]): (IntegrityGrade | null)[] {
+export function dailyGrades(
+  report: IntegrityReport | undefined,
+  days: string[],
+): (IntegrityGrade | null)[] {
   return days.map((d) => {
     let worst: IntegrityGrade | null = null;
     for (const s of report?.sites ?? []) {
@@ -332,7 +335,9 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
   const onchain = w?.onchain ?? a?.onchain;
   const chainOk = (onchain?.totals.ids_verified ?? 0) > 0 && (onchain?.totals.operations ?? 0) > 0;
   const spark = (values: number[], series: 1 | 2 | 3): ScorecardVisual =>
-    values.some((x) => x > 0) ? { kind: "spark", values, series, running, labels } : { kind: "none" };
+    values.some((x) => x > 0)
+      ? { kind: "spark", values, series, running, labels }
+      : { kind: "none" };
 
   // the page opens on the weakest check, so it leads with what is missing
   const weakest: CheckKey =
@@ -366,7 +371,12 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
       value: proofs ? `${proofsDone} of ${proofs.length}` : "–",
       sub: "proofs in place",
       visual: proofs
-        ? { kind: "proofs", total: proofs.length, done: proofsDone, labels: proofs.map((x) => x.label) }
+        ? {
+            kind: "proofs",
+            total: proofs.length,
+            done: proofsDone,
+            labels: proofs.map((x) => x.label),
+          }
         : { kind: "none" },
     },
     {
@@ -374,8 +384,10 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
       name: "Traffic integrity",
       tone: gradeTone(grade?.grade),
       value: grade?.grade ? `Grade ${grade.grade}` : "–",
-      sub: grade ? countOf(grade.graded_days, "site day") + " graded" : "not graded",
-      visual: grade ? { kind: "calendar", days: dailyGrades(report.data, days), labels } : { kind: "none" },
+      sub: grade ? `${countOf(grade.graded_days, "site day")} graded` : "not graded",
+      visual: grade
+        ? { kind: "calendar", days: dailyGrades(report.data, days), labels }
+        : { kind: "none" },
     },
     {
       key: "web",
@@ -384,7 +396,10 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
       value: webOk ? compact(w?.totals.visitors ?? 0) : "–",
       change: webOk && w ? countChange(w.totals.visitors, w.previous_totals.visitors) : null,
       sub: "verified visitors",
-      visual: spark((w?.series ?? []).map((x) => x.visitors ?? 0), 1),
+      visual: spark(
+        (w?.series ?? []).map((x) => x.visitors ?? 0),
+        1,
+      ),
     },
     {
       key: "api",
@@ -393,7 +408,10 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
       value: apiOk ? compact(a?.totals.requests ?? 0) : "–",
       change: apiOk && a ? countChange(a.totals.requests, a.previous_totals.requests) : null,
       sub: "requests",
-      visual: spark((a?.series ?? []).map((x) => x.requests), 3),
+      visual: spark(
+        (a?.series ?? []).map((x) => x.requests),
+        3,
+      ),
     },
     {
       key: "onchain",
@@ -401,7 +419,12 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
       tone: chainOk ? "success" : "neutral",
       value: chainOk ? compact(onchain?.totals.operations ?? 0) : "–",
       sub: chainOk ? "operations" : "no proven ID yet",
-      visual: chainOk ? spark((onchain?.series ?? []).map((x) => x.operations ?? 0), 2) : { kind: "none" },
+      visual: chainOk
+        ? spark(
+            (onchain?.series ?? []).map((x) => x.operations ?? 0),
+            2,
+          )
+        : { kind: "none" },
     },
   ];
 
@@ -423,7 +446,9 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
             Enrolled {formatDate(t.created_at)}
             {t.created_by ? ` by ${t.created_by.display_name}` : ""}
           </span>,
-          t.approved_by ? <span key="approved">Approved by {t.approved_by.display_name}</span> : null,
+          t.approved_by ? (
+            <span key="approved">Approved by {t.approved_by.display_name}</span>
+          ) : null,
           t.status !== "active" ? (
             <span key="since">Status since {formatDateTimeUtc(t.status_changed_at)}</span>
           ) : null,
@@ -605,7 +630,9 @@ function CheckDetail({
         <h2 id="check-detail-h" className="text-[15px] font-semibold text-fg">
           {DETAIL_TITLE[open]}
         </h2>
-        {open === "web" ? <span className="text-small text-fg-3">verified visitors per day</span> : null}
+        {open === "web" ? (
+          <span className="text-small text-fg-3">verified visitors per day</span>
+        ) : null}
         {open === "api" ? <span className="text-small text-fg-3">requests per day</span> : null}
         {link ? (
           <Link
@@ -671,7 +698,6 @@ function CheckDetail({
                 title="API requests"
                 description="per day, UTC"
                 headingLevel={3}
-
                 buckets={dayBuckets(days, running)}
                 series={[
                   {
@@ -707,7 +733,9 @@ function Outcomes({ ingest }: { ingest: OperatorTenantDetail["ingest"] }) {
   const refused = sum((k) => k !== "accepted" && !k.startsWith("quarantine"));
   return (
     <div className="flex min-w-0 flex-col border-t border-line">
-      <h3 className="px-5 pt-3 text-small font-medium text-fg-2">Tracker requests, last 30 full days</h3>
+      <h3 className="px-5 pt-3 text-small font-medium text-fg-2">
+        Tracker requests, last 30 full days
+      </h3>
       <dl className="grid grid-cols-3">
         {[
           ["Accepted", accepted],
@@ -719,7 +747,9 @@ function Outcomes({ ingest }: { ingest: OperatorTenantDetail["ingest"] }) {
             className={cn("flex flex-col gap-0.5 px-5 py-3", i > 0 && "border-l border-line")}
           >
             <dt className="text-small text-fg-3">{k}</dt>
-            <dd className="text-[17px] font-semibold text-fg tabular">{formatCount(v as number)}</dd>
+            <dd className="text-[17px] font-semibold text-fg tabular">
+              {formatCount(v as number)}
+            </dd>
           </div>
         ))}
       </dl>
@@ -781,7 +811,12 @@ export function Answers({ detail }: { detail: OperatorTenantDetail }) {
       ? [["Description", <Clamped text={t.description} />] as [string, ReactNode]]
       : []),
     ...(a.scf_round_url
-      ? [["SCF round link", <span className="break-all">{a.scf_round_url}</span>] as [string, ReactNode]]
+      ? [
+          ["SCF round link", <span className="break-all">{a.scf_round_url}</span>] as [
+            string,
+            ReactNode,
+          ],
+        ]
       : []),
   ];
   return (
@@ -801,7 +836,9 @@ export function Answers({ detail }: { detail: OperatorTenantDetail }) {
                 {detail.stellar_ids.map((x) => (
                   <li key={x.id} className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                     <code className="min-w-0 font-mono text-caption break-all text-fg">{x.id}</code>
-                    <span className={x.valid ? "text-caption text-fg-3" : "text-caption text-warning"}>
+                    <span
+                      className={x.valid ? "text-caption text-fg-3" : "text-caption text-warning"}
+                    >
                       {x.valid ? (x.type ?? "").replace("_", " ") : "Not a valid ID"}
                     </span>
                   </li>

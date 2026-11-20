@@ -19,7 +19,9 @@ function joinDetail(...parts: (string | null | undefined)[]): string | null {
 }
 
 export function domainCheck(s: OperatorSite, own = false): CheckItem {
-  const name = own ? "The domain" : (
+  const name = own ? (
+    "The domain"
+  ) : (
     <>
       The domain of <b className="font-semibold">{s.domain}</b>
     </>
@@ -52,7 +54,8 @@ function tomlSummary(t: StellarToml): string {
   const parts: string[] = [];
   if (t.network) parts.push(t.network === "public" ? "public network" : `${t.network} network`);
   if (t.accounts_count !== null) parts.push(countOf(t.accounts_count, "account"));
-  if (t.currencies_total !== null) parts.push(countOf(t.currencies_total, "currency", "currencies"));
+  if (t.currencies_total !== null)
+    parts.push(countOf(t.currencies_total, "currency", "currencies"));
   const keysValid =
     (t.accounts_count === null || t.accounts_valid === t.accounts_count) &&
     t.signing_key_valid !== false;
@@ -65,7 +68,11 @@ export function tomlCheck(s: OperatorSite, own = false): CheckItem {
   const where = own ? "on this domain" : `on ${s.domain}`;
   const detail = checked(s.stellar_toml_checked_at);
   if (!t)
-    return { key: `toml-${s.id}`, status: "missing", children: `stellar.toml not checked ${where}` };
+    return {
+      key: `toml-${s.id}`,
+      status: "missing",
+      children: `stellar.toml not checked ${where}`,
+    };
   if (t.status === "found")
     return {
       key: `toml-${s.id}`,
@@ -95,15 +102,10 @@ export function originsCheck(s: OperatorSite): CheckItem {
   return {
     key: `origins-${s.id}`,
     status: own ? "passed" : "info",
-    children: own ? "Sends only from its own domain" : `Sends from ${countOf(s.origins.length, "origin")}`,
-    detail:
-      s.origins.length > 0 ? (
-        <>
-          {s.origins.map((o) => (
-            <span key={o}>{o}</span>
-          ))}
-        </>
-      ) : null,
+    children: own
+      ? "Sends only from its own domain"
+      : `Sends from ${countOf(s.origins.length, "origin")}`,
+    detail: s.origins.length > 0 ? s.origins.map((o) => <span key={o}>{o}</span>) : null,
   };
 }
 
@@ -122,8 +124,8 @@ export function projectChecks(detail: OperatorTenantDetail): CheckItem[] {
         status: "warning",
         children: (
           <>
-            <b className="font-semibold">{s.domain}</b>, or a parent or subdomain of it, belonged
-            to a removed project
+            <b className="font-semibold">{s.domain}</b>, or a parent or subdomain of it, belonged to
+            a removed project
           </>
         ),
       });

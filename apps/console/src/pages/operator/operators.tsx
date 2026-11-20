@@ -19,8 +19,8 @@ import { type Column, DataTable } from "@/components/data-table";
 import { NativeSelect, TextAreaField, TextField } from "@/components/form-field";
 import { useOperatorAdmin } from "@/components/nav/operator-role";
 import { PageHeader } from "@/components/page-header";
-import { Segmented } from "@/components/segmented";
 import type { RowAction } from "@/components/row-menu";
+import { Segmented } from "@/components/segmented";
 import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { Pill } from "@/components/status";
 import { toast } from "@/components/toast";
@@ -268,7 +268,10 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
 function SignIn({ e }: { e: RosterEntry }) {
   const passkeys = e.account?.passkeys ?? 0;
   if (passkeys === 0 && e.enrollment_until) {
-    const h = Math.max(0, Math.ceil((new Date(e.enrollment_until).getTime() - Date.now()) / 3_600_000));
+    const h = Math.max(
+      0,
+      Math.ceil((new Date(e.enrollment_until).getTime() - Date.now()) / 3_600_000),
+    );
     return (
       <span
         className="flex flex-wrap items-center gap-2.5 text-small"
@@ -276,7 +279,9 @@ function SignIn({ e }: { e: RosterEntry }) {
       >
         <Pill tone="warning">No passkey yet</Pill>
         <span className="text-fg-3">
-          {h === 0 ? "window ends" : `window ends in ${h < 48 ? `${h} h` : `${Math.floor(h / 24)} d`}`}
+          {h === 0
+            ? "window ends"
+            : `window ends in ${h < 48 ? `${h} h` : `${Math.floor(h / 24)} d`}`}
         </span>
       </span>
     );
