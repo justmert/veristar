@@ -1,26 +1,28 @@
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { fade } from "@veristar/brand/motion";
-import { Check, Eraser, ExternalLink, Minus, X } from "lucide-react";
-import { motion } from "motion/react";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
 import { ApiError } from "@/api/client";
 import { api, type ErasureInput } from "@/api/endpoints";
-import { erasureListQuery, erasureRequestQuery, keys, sitesQuery } from "@/api/queries";
+import {
+  erasureListQuery,
+  erasureRequestQuery,
+  keys,
+  membersQuery,
+  sitesQuery,
+} from "@/api/queries";
 import type { ErasureKind, ErasureRequest, Site } from "@/api/schemas";
 import { type WebBand, webSessionsQuery } from "@/api/web";
-import { ChoiceCard } from "@/components/choice-card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { type Column, DataTable } from "@/components/data-table";
 import { FormMessage } from "@/components/error-panel";
-import { SelectField, TextAreaField, TextField } from "@/components/form-field";
+import { TextField } from "@/components/form-field";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/panel";
 import { DateField } from "@/components/range-control";
 import { Segmented } from "@/components/segmented";
 import { EmptyState, ErrorState } from "@/components/states";
-import { StatusDot, type Tone } from "@/components/status";
+import { Pill, type Tone } from "@/components/status";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
@@ -147,24 +149,36 @@ export function erasureErrorText(err: unknown): string | null {
   }
 }
 
+// the three kinds in the page's words, with the scope of each in a short
+// word group
+export const KIND_TEXT: Record<ErasureKind, { label: string; scope: string }> = {
+  visitor_today: { label: "One visitor's visits today", scope: "by IP address and browser" },
+  session: { label: "One session", scope: "any day raw data is kept" },
+  site_reset: { label: "Everything of this site", scope: "events, sessions and daily totals" },
+};
+const KINDS: ErasureKind[] = ["visitor_today", "session", "site_reset"];
+
 export function PrivacyPage() {
   const { tenant, isOwner } = useProject();
   const sites = useQuery(sitesQuery(tenant.id));
   const docs = siblingUrl(window.location.hostname, "docs");
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       <PageHeader
         {...PAGE_HEADERS.privacy}
-        secondary={
-          docs ? (
-            <Button asChild variant="ghost">
-              <a href={`${docs}/compliance/erasure`}>
-                How erasure works
-                <ExternalLink aria-hidden />
-              </a>
-            </Button>
-          ) : null
+        items={
+          docs
+            ? [
+                <a
+                  key="how"
+                  href={`${docs}/compliance/erasure`}
+                  className="rounded-sm underline decoration-line-strong underline-offset-[3px] transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring"
+                >
+                  How erasure works
+                </a>,
+              ]
+            : undefined
         }
       />
       {sites.isPending ? (
@@ -195,9 +209,7 @@ function PrivacyBody({
   return (
     <div className="flex min-w-0 flex-col gap-8">
       {live.length === 0 ? (
-        <EmptyState icon={<Eraser aria-hidden strokeWidth={1.75} />} title="Nothing to erase">
-          The project has no site, so it holds no web data.
-        </EmptyState>
+        <EmptyState title="No site, so no web data to erase" />
       ) : isOwner ? (
         <ErasureForm tenantId={tenantId} sites={live} />
       ) : (
@@ -240,6 +252,111 @@ const CONFIRM_LABEL: Record<ErasureKind, string> = {
   site_reset: "Reset site data",
 };
 
+// one numbered question of the form: its number and words on the left, the
+// answer on the right; stacked on a phone
+function Question({
+  n,
+  label,
+  id,
+  children,
+}: {
+  n: number;
+  label: string;
+  id: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role="group"
+      aria-labelledby={id}
+      className="grid gap-x-6 gap-y-3 border-b border-line px-6 py-5 max-sm:px-4 md:grid-cols-[220px_minmax(0,1fr)]"
+    >
+      <span className="flex items-center gap-3 self-start md:pt-1.5">
+        <span
+          aria-hidden
+          className="flex size-[22px] shrink-0 items-center justify-center rounded-full border border-line-strong text-caption text-fg-2 tabular"
+        >
+          {n}
+        </span>
+        <span id={id} className="text-body font-medium text-fg">
+          {label}
+        </span>
+      </span>
+      <div className="flex min-w-0 flex-col gap-3">{children}</div>
+    </div>
+  );
+}
+
+// a radio group drawn as rows inside one frame: a dot, the words and an
+// optional quiet part on the right. arrow keys move the choice, as in a
+// native radio group.
+function RadioRows<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T | null;
+  options: { value: T; cells: ReactNode }[];
+  onChange: (v: T) => void;
+}) {
+  const at = options.findIndex((o) => o.value === value);
+  function key(e: React.KeyboardEvent<HTMLButtonElement>, i: number) {
+    const d =
+      e.key === "ArrowDown" || e.key === "ArrowRight"
+        ? 1
+        : e.key === "ArrowUp" || e.key === "ArrowLeft"
+          ? -1
+          : 0;
+    if (!d) return;
+    e.preventDefault();
+    const j = (i + d + options.length) % options.length;
+    const next = options[j];
+    if (!next) return;
+    onChange(next.value);
+    (e.currentTarget.parentElement?.children[j] as HTMLElement | undefined)?.focus();
+  }
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className="flex flex-col divide-y divide-line-subtle overflow-hidden rounded-xl border border-line"
+    >
+      {options.map((o, i) => {
+        const on = o.value === value;
+        return (
+          // biome-ignore lint/a11y/useSemanticElements: a row with several cells, keyed like a native radio group
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            tabIndex={on || (at === -1 && i === 0) ? 0 : -1}
+            onClick={() => onChange(o.value)}
+            onKeyDown={(e) => key(e, i)}
+            className={cn(
+              "flex min-h-11 w-full flex-wrap items-center gap-x-4 gap-y-1 px-3.5 py-2.5 text-left text-body transition-colors duration-(--vs-duration-press) ease-standard focus-ring focus-visible:-outline-offset-2",
+              on ? "bg-hover" : "hover:bg-hover",
+            )}
+          >
+            <span
+              aria-hidden
+              className={cn(
+                "flex size-4 shrink-0 items-center justify-center rounded-full border",
+                on ? "border-fg" : "border-line-strong",
+              )}
+            >
+              {on ? <span className="size-2 rounded-full bg-fg" /> : null}
+            </span>
+            {o.cells}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
   const [values, setValues] = useState<ErasureValues>({
     kind: "visitor_today",
@@ -250,6 +367,7 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
   const [confirming, setConfirming] = useState(false);
   const [lastId, setLastId] = useState<string | null>(null);
   const site = sites.find((s) => s.id === values.siteId);
+  const ids = { site: useId(), kind: useId(), who: useId() };
 
   const send = useMutation({
     mutationFn: (body: ErasureInput) => api.requestErasure(tenantId, body),
@@ -291,122 +409,111 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
 
   const fieldError = Object.keys(serverErasureErrors(send.error)).length > 0;
   const special = erasureErrorText(send.error);
-  const today = utcToday(new Date());
   const domain = site?.domain ?? "the site";
   const text = confirmText(values.kind, domain);
-  const kinds: { kind: ErasureKind; hint: string }[] = [
-    {
-      kind: "visitor_today",
-      hint: `What one visitor did today, ${formatDate(today)} (UTC). You need their IP address and user agent.`,
-    },
-    {
-      kind: "session",
-      hint: "One session at any time while raw data is kept. You need its session id.",
-    },
-    {
-      kind: "site_reset",
-      hint: "All events and sessions of the site. The site keeps collecting new visits.",
-    },
-  ];
+  // two sites of one name are told apart by their domain
+  const names = new Map<string, number>();
+  for (const x of sites) names.set(x.name, (names.get(x.name) ?? 0) + 1);
 
   return (
-    <section aria-labelledby="erasure-h" className="flex min-w-0 flex-col gap-4">
-      <h2 id="erasure-h" className="text-title text-fg">
-        Request erasure
-      </h2>
+    <section aria-label="Request erasure" className="flex min-w-0 flex-col gap-4">
       <form
         noValidate
         autoComplete="off"
         onSubmit={submit}
         aria-label="Request erasure"
-        className="max-w-prose flex min-w-0 flex-col gap-6"
+        className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-raised"
       >
-        <div className="max-w-sm">
-          <SelectField
-            label="Site"
-            name="site"
-            className="w-full max-lg:h-(--vs-control-touch)"
-            value={values.siteId}
-            // a session id belongs to one site; a chosen one does not carry over
-            onChange={(e) => change({ siteId: e.target.value, sessionId: "" })}
-            error={errors.siteId}
-          >
-            {sites.length > 1 ? <option value="">Choose a site</option> : null}
-            {sites.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.domain})
-              </option>
-            ))}
-          </SelectField>
-        </div>
-
-        <fieldset className="flex min-w-0 flex-col gap-2">
-          <legend className="pb-2 text-small font-medium text-fg">What to erase</legend>
-          <div className="grid gap-2 md:grid-cols-3">
-            {kinds.map((k) => (
-              <ChoiceCard
-                key={k.kind}
-                name="erasure-kind"
-                value={k.kind}
-                checked={values.kind === k.kind}
-                onChange={() => change({ kind: k.kind })}
-                title={KIND_LABEL[k.kind]}
-                description={k.hint}
-              />
-            ))}
+        <Question n={1} label="Site" id={ids.site}>
+          <div role="radiogroup" aria-labelledby={ids.site} className="flex flex-wrap gap-2">
+            {sites.map((s) => {
+              const on = s.id === values.siteId;
+              return (
+                // biome-ignore lint/a11y/useSemanticElements: a site chip that wraps, keyed like a native radio group
+                <button
+                  key={s.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  title={s.domain}
+                  // a session id belongs to one site; a chosen one does not carry over
+                  onClick={() => change({ siteId: s.id, sessionId: "" })}
+                  className={cn(
+                    "inline-flex h-9 max-w-full items-center rounded-full border px-3.5 text-small transition-colors duration-(--vs-duration-press) focus-ring max-lg:h-(--vs-control-touch)",
+                    on
+                      ? "border-fg-2 text-fg"
+                      : "border-line text-fg-2 hover:bg-hover hover:text-fg",
+                  )}
+                >
+                  <span className="truncate">
+                    {(names.get(s.name) ?? 0) > 1 ? s.domain : s.name}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        </fieldset>
-
-        {/* the fields of the chosen kind fade in; no exit wait, so they are
-            there at once for the keyboard */}
-        <motion.div
-          key={values.kind}
-          initial={fade.initial}
-          animate={fade.animate}
-          className="flex min-w-0 flex-col gap-4 empty:hidden"
-        >
-          {values.kind === "visitor_today" ? (
-            <>
-              <TextField
-                label="Visitor's IP address"
-                name="erasure-ip"
-                autoComplete="off"
-                autoCapitalize="none"
-                spellCheck={false}
-                inputMode="text"
-                className="font-mono max-lg:h-(--vs-control-touch)"
-                placeholder="203.0.113.7"
-                hint="IPv4 or IPv6, as the visitor's browser used it today."
-                value={values.ip}
-                onChange={(e) => change({ ip: e.target.value })}
-                error={errors.ip}
-              />
-              <TextAreaField
-                label="Visitor's user agent"
-                name="erasure-user-agent"
-                rows={3}
-                className="font-mono text-small"
-                autoComplete="off"
-                autoCapitalize="none"
-                spellCheck={false}
-                placeholder="Mozilla/5.0 (X11; Linux x86_64) ..."
-                hint="Exactly as the browser sends it. The service and this page do not store either value."
-                value={values.userAgent}
-                onChange={(e) => change({ userAgent: e.target.value })}
-                error={errors.userAgent}
-              />
-            </>
+          {errors.siteId ? (
+            <p role="alert" className="text-small text-critical">
+              {errors.siteId === fieldMessage("required") ? "Choose a site." : errors.siteId}
+            </p>
           ) : null}
+        </Question>
 
-          {values.kind === "session" && site ? (
-            <SessionFinder
-              tenantId={site.tenant_id}
-              site={site}
-              chosen={values.sessionId}
-              onChoose={(id) => change({ sessionId: id })}
+        <Question n={2} label="What to erase" id={ids.kind}>
+          <RadioRows<ErasureKind>
+            label="What to erase"
+            value={values.kind}
+            onChange={(kind) => change({ kind })}
+            options={KINDS.map((k) => ({
+              value: k,
+              cells: (
+                <>
+                  <span className="min-w-0 flex-1 text-fg">{KIND_TEXT[k].label}</span>
+                  <span className="text-small text-fg-3">{KIND_TEXT[k].scope}</span>
+                </>
+              ),
+            }))}
+          />
+        </Question>
+
+        {values.kind === "visitor_today" ? (
+          <Question n={3} label="Who" id={ids.who}>
+            <TextField
+              label="IP address"
+              name="erasure-ip"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              inputMode="text"
+              className="font-mono max-lg:h-(--vs-control-touch)"
+              placeholder="203.0.113.7"
+              value={values.ip}
+              onChange={(e) => change({ ip: e.target.value })}
+              error={errors.ip}
             />
-          ) : null}
-          {values.kind === "session" ? (
+            <TextField
+              label="User agent"
+              name="erasure-user-agent"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              className="font-mono max-lg:h-(--vs-control-touch)"
+              placeholder="Mozilla/5.0 (X11; Linux x86_64) ..."
+              value={values.userAgent}
+              onChange={(e) => change({ userAgent: e.target.value })}
+              error={errors.userAgent}
+            />
+          </Question>
+        ) : values.kind === "session" ? (
+          <Question n={3} label="Which session" id={ids.who}>
+            {site ? (
+              <SessionFinder
+                tenantId={site.tenant_id}
+                site={site}
+                chosen={values.sessionId}
+                onChoose={(id) => change({ sessionId: id })}
+              />
+            ) : null}
             <TextField
               label="Session id"
               name="erasure-session"
@@ -415,29 +522,27 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
               spellCheck={false}
               className="font-mono max-lg:h-(--vs-control-touch)"
               placeholder="2f1c7a9e-5b3d-4c8e-9a1f-6d0b2e4c8a7f"
-              hint="Choose the session in the list above, or paste its id."
               value={values.sessionId}
               onChange={(e) => change({ sessionId: e.target.value })}
               error={errors.sessionId}
             />
-          ) : null}
-        </motion.div>
+          </Question>
+        ) : null}
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col gap-3 px-6 py-4 max-sm:px-4">
           <Button
             type="submit"
             variant="destructive-outline"
-            className="max-lg:h-(--vs-control-touch)"
+            className="w-fit max-lg:h-(--vs-control-touch)"
           >
-            <Eraser aria-hidden />
-            {values.kind === "site_reset" ? "Reset site data" : "Request erasure"}
+            Review and erase
           </Button>
+          {confirming || fieldError ? null : special ? (
+            <FormMessage error={new Error(special)} />
+          ) : (
+            <FormMessage error={send.error} />
+          )}
         </div>
-        {confirming || fieldError ? null : special ? (
-          <FormMessage error={new Error(special)} />
-        ) : (
-          <FormMessage error={send.error} />
-        )}
       </form>
 
       <ConfirmDialog
@@ -496,75 +601,43 @@ function LastRequest({
     return (
       <div role="status" aria-busy="true">
         <span className="sr-only">Reading the request</span>
-        <Bone className="h-16 w-full" />
+        <Bone className="h-12 w-full" />
       </div>
     );
   const r = q.data;
   const summary = requestSummary(r);
-  const tone = LOOK[summary]?.tone ?? "info";
   return (
     <section
       aria-label="Latest erasure request"
       aria-live="polite"
-      className={cn(
-        "flex animate-rise-in items-start gap-3 rounded-lg border bg-raised p-4 text-body",
-        r.status === "failed"
-          ? "border-critical-line"
-          : r.status === "done"
-            ? "border-success-line"
-            : "border-line-strong",
-      )}
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-raised px-4 py-3 text-body"
     >
-      <StatusDot tone={tone} live={summary === "Running"} className="mt-2" />
-      <div className="flex min-w-0 flex-col gap-1">
-        <p className="font-medium text-fg">
-          {`${KIND_LABEL[r.kind]} on ${site?.domain ?? "the site"}: ${summary.toLowerCase()}`}
-        </p>
-        <p className="text-small text-fg-2">
-          {r.status === "running"
-            ? "The request waits until the queued events of the site are stored, then deletes. This usually takes seconds."
-            : (r.message ?? r.error ?? "")}
-        </p>
-      </div>
+      <SummaryPill r={r} />
+      <span className="font-medium text-fg">
+        {`${KIND_LABEL[r.kind]} on ${site?.domain ?? "the site"}: ${summary.toLowerCase()}`}
+      </span>
+      {r.status !== "running" && (r.message ?? r.error) ? (
+        <span className="text-small text-fg-2">{r.message ?? r.error}</span>
+      ) : null}
     </section>
   );
 }
 
-const LOOK: Record<string, { tone: Tone; icon: ReactNode; text: string }> = {
-  Running: { tone: "info", icon: null, text: "text-fg" },
-  Erased: { tone: "success", icon: <Check aria-hidden />, text: "text-fg" },
-  "Nothing found": { tone: "neutral", icon: <Minus aria-hidden />, text: "text-fg-2" },
-  Failed: { tone: "critical", icon: <X aria-hidden />, text: "text-fg" },
+const LOOK: Record<string, Tone> = {
+  Running: "info",
+  Erased: "success",
+  "Nothing found": "neutral",
+  Failed: "critical",
 };
 
-// the status of a request as an icon and a word
-function SummaryCell({ r }: { r: ErasureRequest }) {
+// the status of a request: a pill, since running and failed are the states
+// to notice and a finished one closes the row
+function SummaryPill({ r }: { r: ErasureRequest }) {
   const summary = requestSummary(r);
-  const look = LOOK[summary];
   return (
-    <span
-      className={cn(
-        "flex items-center gap-2 whitespace-nowrap font-medium [&_svg]:size-4",
-        look?.text ?? "text-fg-2",
-      )}
-    >
-      {summary === "Running" ? (
-        <StatusDot tone="info" live />
-      ) : (
-        <span
-          className={cn(
-            summary === "Erased"
-              ? "text-success"
-              : summary === "Failed"
-                ? "text-critical"
-                : "text-fg-2",
-          )}
-        >
-          {look?.icon}
-        </span>
-      )}
-      {summary}
-    </span>
+    <Pill tone={LOOK[summary] ?? "neutral"} live={summary === "Running"}>
+      {summary === "Erased" ? "Done" : summary}
+    </Pill>
   );
 }
 
@@ -583,38 +656,19 @@ export function deletedText(r: ErasureRequest): string {
   return parts.join(" ");
 }
 
-function target(r: ErasureRequest): string {
-  if (r.kind === "visitor_today")
-    return `Visitor of ${r.day ? formatDate(r.day) : "the day"} (UTC)`;
-  if (r.kind === "session") return `Session ${r.session_id ?? ""}`;
-  return "All web data";
+function target(r: ErasureRequest): string | null {
+  if (r.kind === "visitor_today") return r.day ? `Visitor of ${formatDate(r.day)} (UTC)` : null;
+  if (r.kind === "session") return r.session_id;
+  return null;
 }
 
 function History({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
   const list = useInfiniteQuery(erasureListQuery(tenantId));
-  const names = new Map(sites.map((s) => [s.id, s.domain]));
+  const people = useQuery(membersQuery(tenantId));
+  const names = new Map(sites.map((s) => [s.id, s.name]));
+  const who = new Map((people.data?.members ?? []).map((m) => [m.user_id, m.display_name]));
   const rows = list.data?.pages.flatMap((p) => p.items) ?? [];
   const columns: Column<ErasureRequest>[] = [
-    {
-      key: "request",
-      header: "Request",
-      primary: true,
-      minWidth: "min-w-64",
-      cell: (r) => (
-        <span className="flex min-w-0 flex-col gap-1 py-2">
-          <span className="font-medium text-fg">
-            {KIND_LABEL[r.kind]}: {names.get(r.site_id) ?? "a deleted site"}
-          </span>
-          <span className="break-all font-normal text-fg-2">{target(r)}</span>
-        </span>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      mobile: true,
-      cell: (r) => <SummaryCell r={r} />,
-    },
     {
       key: "requested",
       header: "Requested",
@@ -624,47 +678,79 @@ function History({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
       ),
     },
     {
-      key: "result",
-      header: "Result",
+      key: "what",
+      header: "What",
+      primary: true,
       minWidth: "min-w-64",
+      className: "w-[34%]",
+      cell: (r) => {
+        const detail = [r.message, deletedText(r)].filter(Boolean);
+        const t = target(r);
+        return (
+          <span className="flex min-w-0 flex-col gap-1 py-2">
+            <span className="font-medium text-fg">{KIND_TEXT[r.kind].label}</span>
+            {t ? <span className="break-all font-mono text-caption text-fg-3">{t}</span> : null}
+            {detail.map((d) => (
+              <span key={d} className="text-small font-normal text-fg-2">
+                {d}
+              </span>
+            ))}
+            {r.error ? (
+              <span className="text-small font-normal text-critical">{r.error}</span>
+            ) : null}
+          </span>
+        );
+      },
+    },
+    {
+      key: "site",
+      header: "Site",
+      cell: (r) => <span className="text-fg-2">{names.get(r.site_id) ?? "A deleted site"}</span>,
+    },
+    {
+      key: "by",
+      header: "By",
       cell: (r) => (
-        <span className="flex flex-col gap-1 py-2 text-fg-2">
-          {r.message ? <span>{r.message}</span> : null}
-          {r.error ? <span className="text-critical">{r.error}</span> : null}
-          {deletedText(r) ? <span>{deletedText(r)}</span> : null}
-          {r.completed_at ? <span>Finished {formatDateTimeUtc(r.completed_at)}.</span> : null}
+        <span className="text-fg-2">{who.get(r.requested_by) ?? "A former member"}</span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      mobile: true,
+      cell: (r) => (
+        <span className="flex flex-col items-start gap-1">
+          <SummaryPill r={r} />
+          {r.completed_at ? (
+            <span className="whitespace-nowrap text-caption text-fg-3">
+              {formatDateTimeUtc(r.completed_at)}
+            </span>
+          ) : null}
         </span>
       ),
     },
   ];
   return (
     <Section title="Request history" count={list.data ? rows.length : null}>
-      {/* no request yet is one line, not column headers over an empty box */}
-      {list.data && rows.length === 0 ? (
-        <p role="status" className="text-small text-fg-2">
-          No erasure requested yet
-        </p>
-      ) : (
-        <DataTable<ErasureRequest>
-          label="Request history"
-          columns={columns}
-          rows={rows}
-          getRowKey={(r) => r.id}
-          rowLabel={(r) => `${KIND_LABEL[r.kind]} ${r.id}`}
-          rowProps={(r) => ({ "data-erasure": r.id })}
-          state={list.isPending ? "loading" : list.error ? "error" : "data"}
-          error={list.error}
-          onRetry={() => list.refetch()}
-          loadingRows={3}
-          empty={{ title: "No erasure requested yet" }}
-          footer={{
-            kind: "more",
-            hasMore: list.hasNextPage,
-            loading: list.isFetchingNextPage,
-            onMore: () => void list.fetchNextPage(),
-          }}
-        />
-      )}
+      <DataTable<ErasureRequest>
+        label="Request history"
+        columns={columns}
+        rows={rows}
+        getRowKey={(r) => r.id}
+        rowLabel={(r) => `${KIND_TEXT[r.kind].label} ${r.id}`}
+        rowProps={(r) => ({ "data-erasure": r.id })}
+        state={list.isPending ? "loading" : list.error ? "error" : "data"}
+        error={list.error}
+        onRetry={() => list.refetch()}
+        loadingRows={3}
+        empty={{ title: "No erasure requested yet" }}
+        footer={{
+          kind: "more",
+          hasMore: list.hasNextPage,
+          loading: list.isFetchingNextPage,
+          onMore: () => void list.fetchNextPage(),
+        }}
+      />
     </Section>
   );
 }
@@ -689,8 +775,7 @@ export function SessionFinder({
   const q = useQuery(webSessionsQuery(tenantId, site.id, day, page, band));
   const pages = q.data ? Math.max(1, Math.ceil(q.data.total / q.data.page_size)) : 1;
   return (
-    <fieldset className="flex flex-col gap-3 rounded-md border border-line p-3">
-      <legend className="px-1 text-small font-medium text-fg">Find the session</legend>
+    <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-44">
           <DateField
@@ -720,8 +805,8 @@ export function SessionFinder({
       {q.isPending ? (
         <div role="status" aria-busy="true" className="flex flex-col gap-2">
           <span className="sr-only">Loading sessions</span>
-          <Bone className="h-8 w-full" />
-          <Bone className="h-8 w-full" />
+          <Bone className="h-10 w-full" />
+          <Bone className="h-10 w-full" />
         </div>
       ) : q.error ? (
         <ErrorState
@@ -734,35 +819,36 @@ export function SessionFinder({
         <p className="text-small text-fg-2">No sessions on this day.</p>
       ) : (
         <>
-          <ul aria-label="Sessions" className="flex max-h-72 flex-col gap-1 overflow-y-auto">
-            {q.data.items.map((x) => (
-              <li key={x.id}>
-                <button
-                  type="button"
-                  aria-pressed={chosen === x.id}
-                  onClick={() => onChoose(x.id)}
-                  className={cn(
-                    "flex w-full flex-wrap items-baseline gap-x-3 gap-y-1 rounded-sm px-2 py-1 text-left text-small transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring",
-                    chosen === x.id && "bg-selected",
-                  )}
-                >
-                  <span className="tabular text-fg">{formatTimeRange(x.first_at, x.last_at)}</span>
-                  <span className="text-fg-2">
-                    {formatCount(x.views)} {x.views === 1 ? "page view" : "page views"},{" "}
-                    {[
-                      x.browser && keyLabel("browser", x.browser),
-                      x.os,
-                      x.device && keyLabel("device", x.device),
-                      x.country && keyLabel("country", x.country),
-                    ]
-                      .filter(Boolean)
-                      .join(", ")}
-                  </span>
-                  <span className="font-mono text-caption text-fg-3">{x.id}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className="max-h-80 overflow-y-auto rounded-xl">
+            <RadioRows<string>
+              label="Sessions"
+              value={chosen || null}
+              onChange={onChoose}
+              options={q.data.items.map((x) => ({
+                value: x.id,
+                cells: (
+                  <>
+                    <span className="w-28 shrink-0 text-fg tabular">
+                      {formatTimeRange(x.first_at, x.last_at)}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-small text-fg-2">
+                      {[
+                        x.browser && keyLabel("browser", x.browser),
+                        x.os,
+                        x.device && keyLabel("device", x.device),
+                        x.country && keyLabel("country", x.country),
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </span>
+                    <span className="shrink-0 text-small text-fg-2 tabular">
+                      {formatCount(x.views)} {x.views === 1 ? "page view" : "page views"}
+                    </span>
+                  </>
+                ),
+              }))}
+            />
+          </div>
           {pages > 1 ? (
             <div className="flex items-center justify-between text-caption text-fg-3">
               <span>
@@ -792,6 +878,6 @@ export function SessionFinder({
           ) : null}
         </>
       )}
-    </fieldset>
+    </div>
   );
 }
