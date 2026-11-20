@@ -39,7 +39,7 @@ describe("the award search query", () => {
 
 describe("the enrollment body with a picked award", () => {
   it("names the award instead of the cohort while the cohort is the award's", () => {
-    const picked = { id: AWARD.id, cohort: COHORT };
+    const picked = { id: AWARD.id, project: AWARD.project, cohort: COHORT };
     expect(withAward(BASE, COHORT, picked)).toEqual({ ...BASE, scf_award_id: AWARD.id });
     // an edited cohort field drops the award and sends the cohort as typed
     const edited = { ...COHORT, round: "SCF #45" };
