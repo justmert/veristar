@@ -49,7 +49,10 @@ test("an owner declares an account and gets a challenge to prove it", async () =
   const { page } = owner;
   await page.goto(`${APP}/projects/${tenant.id}/onchain`);
   await expect(page.getByRole("heading", { name: "On-chain", level: 1 })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Accounts and contracts" })).toBeVisible();
+  // with nothing declared the page is one first step: the add form
+  await expect(
+    page.getByRole("heading", { name: "Add a Stellar account or contract" }),
+  ).toBeVisible();
   await page.getByRole("textbox", { name: "Account or contract" }).fill("not-a-key");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(
@@ -60,9 +63,9 @@ test("an owner declares an account and gets a challenge to prove it", async () =
   await page.getByRole("button", { name: "Add", exact: true }).click();
   // the id shows in its short form, the whole id in its tooltip
   await expect(page.locator(`[data-strkey="${ACCOUNT}"]`)).toBeVisible();
-  await expect(page.getByText("Unverified").first()).toBeVisible();
-
-  await page.getByRole("button", { name: "Prove control" }).click();
+  // the unproven id becomes the step to do now: its proof card asks for the
+  // challenge as it opens
+  await expect(page.locator(`[data-step="prove"][data-id="${ACCOUNT}"]`)).toBeVisible();
   const message = page.locator("pre", { hasText: "Veristar ownership proof" });
   await expect(message).toContainText(`(${tenant.id})`);
   await expect(message).toContainText(`Account: ${ACCOUNT}`);
@@ -88,7 +91,7 @@ test("an owner declares an account and gets a challenge to prove it", async () =
   // no on-chain card, and its setup step marks on-chain as not connected
   await page.goto(`${APP}/projects/${tenant.id}`);
   await expect(page.getByRole("region", { name: "On-chain" })).toHaveCount(0);
-  await expect(page.locator('[data-part="onchain"]')).not.toHaveAttribute("data-done", "");
+  await expect(page.locator('[data-attention="unproven"]')).toContainText("is not proven yet");
 
   // weekly active accounts: the project has no verified id and the task
   // has not counted a week of it, so every iso week of the range shows its
@@ -110,8 +113,8 @@ test("an owner declares an account and gets a challenge to prove it", async () =
   // week, strip or number is drawn
   await page.goto(`${APP}/projects/${tenant.id}/onchain`);
   const first = page.locator("[data-first-step]");
-  await expect(first.locator('[data-check="1"]')).toHaveAttribute("data-state", "done");
-  await expect(first.locator('[data-check="2"]')).toHaveAttribute("data-state", "current");
+  await expect(first.locator('[data-step="add"]')).toHaveCount(0);
+  await expect(first.locator(`[data-step="prove"][data-id="${ACCOUNT}"]`)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Weekly active accounts" })).toHaveCount(0);
   await expect(page.getByTestId("activity-scope")).toHaveCount(0);
 });
@@ -120,11 +123,13 @@ test("scf review and the overview export answer for the project", async () => {
   const { page, ctx } = owner;
   await page.goto(`${APP}/projects/${tenant.id}/scf`);
   await expect(page.getByRole("heading", { name: "SCF review", level: 1 })).toBeVisible();
-  // no id is verified: the verdict carries no on-chain number, and the
-  // figures, on demand, say how many ids are verified and draw no strip
-  await expect(page.locator("[data-key-number=onchain_operations]")).toHaveCount(0);
-  await page.locator("details#figures > summary").click();
-  const chain = page.getByRole("region", { name: "On-chain" });
+  // no id is verified: the on-chain check carries no number, and its
+  // evidence says how many ids are verified and draws no strip
+  const tile = page.locator('[data-check="onchain"]');
+  await expect(tile).toContainText("–");
+  await expect(tile).toContainText("no proven ID yet");
+  await tile.click();
+  const chain = page.locator('[data-evidence="onchain"]');
   await expect(chain).toContainText("0 of 1");
   await expect(chain.getByText("Weekly active accounts", { exact: true })).toHaveCount(0);
   const href = await page.getByRole("link", { name: "Export CSV" }).getAttribute("href");
@@ -235,8 +240,9 @@ test("an operator sees the column, exports the rows on screen and reads the deta
     expect(audit.body.items.some((e) => e.detail.view === "web_projects")).toBe(true);
 
     await page.goto(`${APP}/operator/projects/${tenant.id}`);
-    await page.getByText("On-chain IDs", { exact: true }).click();
-    const section = page.locator("details#onchain");
+    // the on-chain check opens its ids under the scorecard
+    await page.locator('[data-check="onchain"]').click();
+    const section = page.locator('[data-detail="onchain"]');
     await expect(section).toContainText(ACCOUNT);
     await expect(section).toContainText("Unverified");
   } finally {
