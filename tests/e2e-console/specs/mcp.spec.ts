@@ -105,6 +105,9 @@ test("a member makes an access key on the AI page, uses it and revokes it", asyn
   await row.getByRole("button", { name: /^Actions for / }).click();
   await page.getByRole("menuitem", { name: "Revoke" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Revoke" }).click();
+  // a revoked key leaves the list until revoked ones are shown
+  await expect(row).toHaveCount(0);
+  await page.getByRole("checkbox", { name: "Show revoked" }).check();
   await expect(row).toContainText("Revoked");
   await expect(row).toContainText("revoked in the console");
   const after = await mcp(context, key, "tools/list");
@@ -236,6 +239,8 @@ test("a connector is approved on the consent page after a github sign-in", async
   await row.getByRole("button", { name: /^Actions for / }).click();
   await page.getByRole("menuitem", { name: "Revoke" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Revoke" }).click();
+  await expect(row).toHaveCount(0);
+  await page.getByRole("checkbox", { name: "Show revoked" }).check();
   await expect(row).toContainText("Revoked");
   expect((await mcp(ctx, tokens.access_token, "tools/list")).status).toBe(401);
   const refreshed = await ctx.request.post(asm.token_endpoint, {
