@@ -1,121 +1,97 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { ListChecks, Trash2 } from "lucide-react";
-import { type FormEvent, type ReactNode, useId, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { useMutation } from "@tanstack/react-query";
+import { cn } from "@veristar/brand/cn";
+import { X } from "lucide-react";
+import { type FormEvent, type KeyboardEvent, type ReactNode, useId, useState } from "react";
+import { Navigate, useNavigate, useParams } from "react-router";
 import { api, type SitePatch } from "@/api/endpoints";
-import { keys, sitesQuery } from "@/api/queries";
+import { keys } from "@/api/queries";
 import type { Site } from "@/api/schemas";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { FormMessage } from "@/components/error-panel";
-import { TextField } from "@/components/form-field";
-import { PageHeader } from "@/components/page-header";
-import { ErrorState } from "@/components/states";
-import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { siteSetupPath } from "@/lib/site-setup";
+import { Input } from "@/components/ui/input";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useProject } from "@/pages/project-layout";
-import { NotFoundPage } from "@/pages/public/not-found";
 import { queryClient } from "@/query-client";
-import { SitePageLoading, SitesBackLink } from "./page-frame";
 import {
-  OriginsField,
+  parseOrigins,
   type SiteErrors,
   type SiteValues,
   serverSiteErrors,
   sitePatch,
   validateSite,
 } from "./sites";
-// one site's settings: name and allowed origins, campaign parameters and,
-// for owners, deleting the site. the domain cannot change.
+
+// the old settings address of a site: settings now live on the site's page
 export function SiteSettingsPage() {
-  const { tenant, isOwner, termsCurrent } = useProject();
+  const { tenant } = useProject();
   const { siteId = "" } = useParams();
-  const sites = useQuery(sitesQuery(tenant.id));
-  const site = sites.data?.find((s) => s.id === siteId && s.status !== "removed");
-  if (sites.data && !site) return <NotFoundPage />;
-  if (sites.error)
-    return (
-      <div className="flex flex-col gap-6">
-        <SitesBackLink tenantId={tenant.id} />
-        <PageHeader title="Site settings" />
-        <ErrorState
-          title="The site did not load"
-          error={sites.error}
-          onRetry={() => sites.refetch()}
-        />
-      </div>
-    );
-  if (!site) return <SitePageLoading tenantId={tenant.id} page="settings" />;
+  return <Navigate to={`/projects/${tenant.id}/sites/${siteId}#settings`} replace />;
+}
+
+// one site's settings as label-left rows on its page: name, allowed origins,
+// campaign parameters and, for owners, deleting the site. the domain cannot
+// change. Save appears once the name or the origins change.
+export function SiteSettings({ site }: { site: Site }) {
+  const { tenant, isOwner, termsCurrent } = useProject();
   // a suspended project's sites cannot be changed (contract 5.11); deleting
   // stays possible
   const canEdit = termsCurrent && tenant.status !== "suspended";
-  return (
-    <div className="flex flex-col gap-6">
-      <SitesBackLink tenantId={tenant.id} />
-      <PageHeader
-        title={`${site.name} settings`}
-        meta={site.status !== "active" ? <StatusBadge kind="site" status={site.status} /> : null}
-        description={
-          <span className="block truncate font-mono text-small" title={site.domain}>
-            {site.domain}
-          </span>
-        }
-        secondary={
-          <Button asChild variant="outline">
-            <Link to={siteSetupPath(site)}>
-              <ListChecks aria-hidden />
-              Setup
-            </Link>
-          </Button>
-        }
-      />
-      <div className="flex max-w-prose flex-col gap-8">
-        <Section title="Name and allowed origins">
-          {canEdit ? <EditSiteForm site={site} /> : <ReadOnly site={site} />}
-        </Section>
-        <Section title="Campaign parameters">
-          <CampaignParams site={site} canEdit={canEdit} isOwner={isOwner} />
-        </Section>
-        {isOwner && termsCurrent ? <DangerZone site={site} /> : null}
-      </div>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-4">
-      <h2 id={id} className="text-title text-fg">
-        {title}
+    <section id="settings" aria-labelledby={id} className="flex scroll-mt-6 flex-col">
+      <h2 id={id} className="pb-3 text-[15px] leading-5 font-semibold text-fg">
+        Settings
       </h2>
-      {children}
+      {canEdit ? (
+        <EditSiteForm site={site} />
+      ) : (
+        <>
+          <Row label="Name">
+            <span className="text-body text-fg">{site.name}</span>
+          </Row>
+          <Row label="Allowed origins">
+            <ul aria-label="Allowed origins" className="flex flex-col gap-1">
+              {site.origins.map((o) => (
+                <li key={o} className="truncate font-mono text-small text-fg" title={o}>
+                  {o}
+                </li>
+              ))}
+            </ul>
+          </Row>
+        </>
+      )}
+      <Row label="Campaign parameters">
+        <CampaignParams site={site} canEdit={canEdit} isOwner={isOwner} />
+      </Row>
+      {isOwner && termsCurrent ? <DeleteRow site={site} /> : null}
     </section>
   );
 }
 
-function ReadOnly({ site }: { site: Site }) {
+// a setting: its name on the left, the control on the right; stacked on a
+// phone
+function Row({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  children: ReactNode;
+}) {
   return (
-    <dl className="flex flex-col gap-3 text-small">
-      <div className="flex flex-col gap-1">
-        <dt className="text-caption text-fg-2">Name</dt>
-        <dd className="text-fg">{site.name}</dd>
-      </div>
-      <div className="flex min-w-0 flex-col gap-1">
-        <dt className="text-caption text-fg-2">Allowed origins</dt>
-        <dd>
-          <ul aria-label="Allowed origins" className="flex flex-col gap-1">
-            {site.origins.map((o) => (
-              <li key={o} className="truncate font-mono text-fg" title={o}>
-                {o}
-              </li>
-            ))}
-          </ul>
-        </dd>
-      </div>
-    </dl>
+    <div className="grid gap-x-6 gap-y-2 border-t border-line-subtle py-4 sm:grid-cols-[240px_minmax(0,560px)] sm:items-start">
+      {htmlFor ? (
+        <label htmlFor={htmlFor} className="text-body font-medium text-fg sm:pt-2">
+          {label}
+        </label>
+      ) : (
+        <span className="text-body font-medium text-fg sm:pt-2">{label}</span>
+      )}
+      <div className="flex min-w-0 flex-col gap-2">{children}</div>
+    </div>
   );
 }
 
@@ -123,6 +99,9 @@ function EditSiteForm({ site }: { site: Site }) {
   const initial = { name: site.name, domain: site.domain, origins: site.origins.join("\n") };
   const [values, setValues] = useState<SiteValues>(initial);
   const [errors, setErrors] = useState<SiteErrors>({});
+  const [draft, setDraft] = useState("");
+  const nameId = useId();
+  const originId = useId();
   const save = useMutation({
     mutationFn: (patch: SitePatch) => api.updateSite(site.tenant_id, site.id, patch),
     onSuccess: async () => {
@@ -131,40 +110,99 @@ function EditSiteForm({ site }: { site: Site }) {
     },
     onError: (err) => setErrors(serverSiteErrors(err, values)),
   });
-  const changed = Object.keys(sitePatch(site, values)).length > 0;
-  const edit = (next: Partial<SiteValues>) => setValues((s) => ({ ...s, ...next }));
+  const origins = parseOrigins(values.origins);
+  // an origin typed but not added yet counts as a change, so Save adds it
+  const pending = draft.trim() ? [...origins, draft.trim()] : origins;
+  const next = { ...values, origins: pending.join("\n") };
+  const changed = Object.keys(sitePatch(site, next)).length > 0;
+
+  function setOrigins(list: string[]) {
+    setValues((s) => ({ ...s, origins: list.join("\n") }));
+    setErrors((e) => ({ ...e, origins: undefined }));
+  }
+
+  function addDraft(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const o = draft.trim();
+    if (!o) return;
+    if (!origins.includes(o)) setOrigins([...origins, o]);
+    setDraft("");
+  }
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    const found = validateSite(values);
+    const found = validateSite(next);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
-    const patch = sitePatch(site, values);
+    const patch = sitePatch(site, next);
     if (Object.keys(patch).length === 0) return;
+    setValues(next);
+    setDraft("");
     save.mutate(patch);
   }
 
   return (
-    <form
-      noValidate
-      onSubmit={submit}
-      aria-label={`Edit ${site.name}`}
-      className="max-w-prose flex flex-col gap-4"
-    >
-      <TextField
-        label="Name"
-        name="name"
-        maxLength={100}
-        value={values.name}
-        onChange={(e) => edit({ name: e.target.value })}
-        error={errors.name}
-      />
-      <OriginsField
-        value={values.origins}
-        onChange={(origins) => edit({ origins })}
-        error={errors.origins}
-        suggestion={null}
-      />
+    <form noValidate onSubmit={submit} aria-label={`Edit ${site.name}`} className="flex flex-col">
+      <Row label="Name" htmlFor={nameId}>
+        <Input
+          id={nameId}
+          name="name"
+          maxLength={100}
+          value={values.name}
+          aria-invalid={errors.name ? true : undefined}
+          aria-describedby={errors.name ? `${nameId}-e` : undefined}
+          onChange={(e) => setValues((s) => ({ ...s, name: e.target.value }))}
+          className="max-lg:h-(--vs-control-touch)"
+        />
+        {errors.name ? (
+          <p id={`${nameId}-e`} className="text-small text-critical">
+            {errors.name}
+          </p>
+        ) : null}
+      </Row>
+      <Row label="Allowed origins" htmlFor={originId}>
+        <ul aria-label="Allowed origins" className="flex flex-col gap-2">
+          {origins.map((o) => (
+            <li
+              key={o}
+              className="flex h-[34px] min-w-0 items-center gap-2 rounded-lg border border-line bg-sunken pr-1 pl-2.5"
+            >
+              <span className="min-w-0 flex-1 truncate font-mono text-small text-fg" title={o}>
+                {o}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label={`Remove ${o}`}
+                disabled={origins.length === 1}
+                onClick={() => setOrigins(origins.filter((x) => x !== o))}
+              >
+                <X aria-hidden />
+              </Button>
+            </li>
+          ))}
+        </ul>
+        <Input
+          id={originId}
+          name="origin"
+          value={draft}
+          placeholder="Add an origin"
+          autoCapitalize="none"
+          spellCheck={false}
+          aria-invalid={errors.origins ? true : undefined}
+          aria-describedby={errors.origins ? `${originId}-e` : undefined}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={addDraft}
+          className="h-[34px] border-dashed font-mono text-small max-lg:h-(--vs-control-touch)"
+        />
+        {errors.origins ? (
+          <p id={`${originId}-e`} className="text-small text-critical">
+            {errors.origins}
+          </p>
+        ) : null}
+      </Row>
       <FormMessage
         error={
           save.error && Object.keys(serverSiteErrors(save.error, values)).length === 0
@@ -172,30 +210,26 @@ function EditSiteForm({ site }: { site: Site }) {
             : null
         }
       />
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="submit"
-          pending={save.isPending}
-          disabled={!changed}
-          className="max-lg:h-(--vs-control-touch)"
-        >
-          {save.isPending ? "Saving" : "Save changes"}
-        </Button>
-        {changed ? (
+      {changed || save.isPending ? (
+        <div className="flex flex-wrap items-center gap-2 pb-4 sm:pl-[264px]">
+          <Button type="submit" pending={save.isPending} className="max-lg:h-(--vs-control-touch)">
+            {save.isPending ? "Saving" : "Save changes"}
+          </Button>
           <Button
             type="button"
             variant="ghost"
             className="max-lg:h-(--vs-control-touch)"
             onClick={() => {
               setValues(initial);
+              setDraft("");
               setErrors({});
               save.reset();
             }}
           >
             Cancel
           </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </form>
   );
 }
@@ -223,30 +257,54 @@ export function CampaignParams({
   });
   const checked =
     save.isPending && save.variables !== undefined ? save.variables : site.collect_utm;
-  return (
-    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2">
-      <Checkbox
+  const disabled = !canEdit || !isOwner || save.isPending;
+  const control = (
+    <span className="flex items-center gap-3 sm:min-h-9">
+      <button
         id={id}
-        checked={checked}
-        disabled={!canEdit || !isOwner || save.isPending}
-        onCheckedChange={(c) => save.mutate(c === true)}
-        aria-describedby={`${id}-d`}
-        className="mt-1"
-      />
-      <label htmlFor={id} className="text-body text-fg">
-        Keep campaign parameters (<code className="font-mono text-small">utm_*</code> and{" "}
-        <code className="font-mono text-small">ref</code>) in page addresses
-      </label>
-      <p id={`${id}-d`} className="col-start-2 text-small text-fg-2">
-        Off by default: they can identify a person.
-        {canEdit && !isOwner ? " Only an owner can change it." : null}
-      </p>
-      <FormMessage error={save.error} className="col-start-2" />
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-labelledby={`${id}-l`}
+        disabled={disabled}
+        onClick={() => save.mutate(!checked)}
+        className={cn(
+          "relative inline-flex h-5 w-[34px] shrink-0 items-center rounded-full transition-colors duration-(--vs-duration-press) ease-standard focus-ring disabled:cursor-not-allowed disabled:opacity-60",
+          checked ? "bg-success" : "bg-line-strong",
+        )}
+      >
+        <span
+          aria-hidden
+          className={cn(
+            "absolute top-[3px] left-[3px] size-3.5 rounded-full transition-transform duration-(--vs-duration-press) ease-standard motion-reduce:transition-none",
+            checked ? "translate-x-[14px] bg-on-accent" : "bg-fg-2",
+          )}
+        />
+      </button>
+      <span id={`${id}-l`} className="text-small text-fg-2">
+        Keep <code className="font-mono text-caption">utm_*</code> and{" "}
+        <code className="font-mono text-caption">ref</code> in page addresses
+      </span>
+    </span>
+  );
+  return (
+    <div className="flex flex-col gap-2">
+      {canEdit && !isOwner ? (
+        <Tooltip content="Only an owner can change it.">
+          <span className="w-fit">
+            {control}
+            <span className="sr-only">Only an owner can change it.</span>
+          </span>
+        </Tooltip>
+      ) : (
+        control
+      )}
+      <FormMessage error={save.error} />
     </div>
   );
 }
 
-function DangerZone({ site }: { site: Site }) {
+function DeleteRow({ site }: { site: Site }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const remove = useMutation({
@@ -259,23 +317,17 @@ function DangerZone({ site }: { site: Site }) {
     },
   });
   return (
-    <section aria-labelledby="danger-h" className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-t border-line pt-6">
-        <h2 id="danger-h" className="text-title text-fg">
-          Delete site
-        </h2>
-        <Button
-          variant="outline"
-          className="max-lg:h-(--vs-control-touch)"
-          onClick={() => {
-            remove.reset();
-            setOpen(true);
-          }}
-        >
-          <Trash2 aria-hidden />
-          Delete site
-        </Button>
-      </div>
+    <Row label="Delete site">
+      <Button
+        variant="destructive-outline"
+        className="w-fit max-lg:h-(--vs-control-touch)"
+        onClick={() => {
+          remove.reset();
+          setOpen(true);
+        }}
+      >
+        Delete site
+      </Button>
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
@@ -289,6 +341,6 @@ function DangerZone({ site }: { site: Site }) {
         typed={{ value: site.domain, label: `Type ${site.domain} to confirm` }}
         onConfirm={() => remove.mutate()}
       />
-    </section>
+    </Row>
   );
 }
