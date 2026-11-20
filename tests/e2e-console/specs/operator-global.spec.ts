@@ -295,12 +295,23 @@ test("a non-operator gets 403 on the global views and the key routes", async () 
   }
 });
 
-// the cells of one column of a totals table, top to bottom
-async function columnOf(page: Page, table: string, header: string): Promise<string[]> {
-  return page.getByRole("table", { name: table }).evaluate((t, h) => {
-    const i = [...t.querySelectorAll("thead th")].findIndex((th) => th.textContent === h);
-    return [...t.querySelectorAll("tbody tr")].map((tr) => tr.children[i]?.textContent ?? "");
-  }, header);
+// the values of one row of the comparison, one per project from left to
+// right: the figure only, without its change or the best mark
+async function rowOf(page: Page, key: string): Promise<string[]> {
+  return page
+    .locator(`tr[data-row="${key}"]`)
+    .evaluate((tr) =>
+      [...tr.querySelectorAll("td")].map(
+        (td) => td.querySelector(":scope > span > span > span")?.textContent ?? "",
+      ),
+    );
+}
+
+// the projects of the comparison, one column each, from left to right
+async function comparedIds(page: Page): Promise<string[]> {
+  return page
+    .locator("thead th[data-tenant]")
+    .evaluateAll((ths) => ths.map((th) => th.getAttribute("data-tenant") ?? ""));
 }
 
 async function rowIds(page: Page): Promise<string[]> {
@@ -334,9 +345,12 @@ test("the operator filters to verified projects, sorts by visitors and compares 
   await page.waitForURL(new RegExp(`q=${run}`));
   // default sort is page views: b (6), d (4), a (3), c (1)
   await expect.poll(() => rowIds(page)).toEqual([b, d, a, c].map((p) => p.tenant.id));
-  // the notes fold away under the table; opened once the rows stand still
-  await page.getByText("About these numbers").click();
-  await expect(page.getByText("IP Geolocation by DB-IP")).toBeVisible();
+  // the notes open in a dialog from the (i) beside the period
+  await page.getByRole("button", { name: "About these numbers" }).click();
+  const about = page.getByRole("dialog", { name: "About these numbers" });
+  await expect(about).toContainText("Every number comes from daily totals of UTC days.");
+  await page.keyboard.press("Escape");
+  await expect(about).toBeHidden();
 
   // the filters sit in one sheet and apply at once
   await page.getByRole("button", { name: "Filters", exact: true }).click();
@@ -348,7 +362,8 @@ test("the operator filters to verified projects, sorts by visitors and compares 
     "At least one site",
   );
   await expect.poll(() => rowIds(page)).toEqual([b, a, c].map((p) => p.tenant.id));
-  await expect(page.getByText("3 projects match")).toBeVisible();
+  // the pager counts every project that matches
+  await expect(page.getByRole("navigation", { name: "Pages" })).toContainText("1 to 3 of 3");
 
   await page
     .getByRole("columnheader", { name: "Visitors", exact: true })
@@ -367,31 +382,44 @@ test("the operator filters to verified projects, sorts by visitors and compares 
   await page.screenshot({ path: join(shots, "global-web.png"), fullPage: true });
 
   // the selection bar with the way into the comparison shows once a row is selected
-  await expect(page.getByRole("region", { name: "Selected for comparison" })).toHaveCount(0);
+  const selected = page.getByRole("region", { name: "Selected projects" });
+  await expect(selected).toHaveCount(0);
   for (const p of [a, b, c])
     await page
       .getByRole("table", { name: "Projects, web numbers" })
       .getByLabel(`Select ${p.tenant.name}`)
       .check();
-  await page.getByRole("link", { name: "Compare 3" }).click();
+  await expect(selected).toContainText("3 selected");
+  await selected.getByRole("link", { name: "Open in Compare" }).click();
   await page.waitForURL(/\/operator\/compare\?tenants=/);
   await expect(page.getByRole("heading", { level: 1, name: "Compare" })).toBeVisible();
-  const compared = page.getByRole("region", { name: "Compared projects" });
-  await expect(compared.getByRole("listitem")).toHaveCount(3);
-  await expect(compared).toContainText(a.tenant.name);
+  // one column per compared project in the order of the comparison
+  await expect.poll(() => comparedIds(page)).toEqual([a, b, c].map((p) => p.tenant.id));
+  await expect(page.locator(`thead th[data-tenant="${a.tenant.id}"]`)).toContainText(a.tenant.name);
 
-  // one row per compared project in the order of the comparison
-  await expect.poll(() => columnOf(page, "Web totals", "Visitors")).toEqual(["3", "2", "1"]);
-  expect(await columnOf(page, "Web totals", "Page views")).toEqual(["3", "6", "1"]);
-  await expect.poll(() => columnOf(page, "API totals", "Requests")).toEqual(["4", "8", "2"]);
-  for (const title of ["Page views", "Visitors", "Requests", "p95 latency"])
-    await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
-  // the breakdowns fold away under one disclosure
-  await page.getByText("Referrers, countries, devices, browsers and systems").click();
-  await expect(page.getByRole("region", { name: "Devices" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Countries" })).toBeVisible();
-  await expect(page.getByText("IP Geolocation by DB-IP")).toBeVisible();
+  // one row per figure, a value per project
+  await expect.poll(() => rowOf(page, "visitors")).toEqual(["3", "2", "1"]);
+  expect(await rowOf(page, "pageviews")).toEqual(["3", "6", "1"]);
+  await expect.poll(() => rowOf(page, "requests")).toEqual(["4", "8", "2"]);
+  // each figure opens its chart of every project above the table
+  for (const title of ["Page views", "Verified visitors", "Requests", "p95 latency"]) {
+    await page.getByRole("rowheader", { name: title, exact: true }).getByRole("button").click();
+    // the open figure's panel holds the chart, both named for the figure
+    await expect(page.getByRole("region", { name: title, exact: true }).first()).toBeVisible();
+  }
+  // the breakdowns open in one dialog
+  await page.getByRole("button", { name: "Referrers, countries, devices", exact: true }).click();
+  const breakdowns = page.getByRole("dialog", {
+    name: "Referrers, countries, devices, browsers and systems",
+  });
+  await expect(breakdowns.getByRole("region", { name: "Devices" })).toBeVisible();
+  await expect(breakdowns.getByRole("region", { name: "Countries" })).toBeVisible();
   await page.screenshot({ path: join(shots, "compare.png"), fullPage: true });
+  await page.keyboard.press("Escape");
+  await expect(breakdowns).toBeHidden();
+  // the country data credit of the global views lives in the terms
+  await page.goto(`${APP}/terms`);
+  await expect(page.getByRole("link", { name: "https://db-ip.com" })).toBeVisible();
 
   // the global api view with the same filter, sorted by requests ascending:
   // the lowest usage project first
@@ -520,6 +548,9 @@ test("an api key is created, read with from a client without a session, and revo
     await dialog.getByRole("button", { name: "Revoke", exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByText(`${name} is revoked`)).toBeVisible();
+    // a revoked key leaves the list until revoked ones are shown
+    await expect(row).toHaveCount(0);
+    await page.getByRole("checkbox", { name: "Show revoked" }).check();
     await expect(row).toContainText("Revoked");
 
     const refused = await get({ authorization: `Bearer ${key}` });
