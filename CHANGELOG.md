@@ -16,6 +16,16 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-11-20
+
+### Fixed
+
+- The console showed its pages without the brand fonts, text sizes, radii and spacing in production builds. The half spacing steps were written as `--vs-space-0.5` and similar; a dot is not valid in a custom property name, and the production CSS minifier dropped the whole `:root` block of the brand tokens, so every token in it was undefined. The generator now escapes the dot (`--vs-space-0\.5`), and the production build keeps every token. The development server was not affected.
+
+### Upgrade notes
+
+- Key-mode release and a rolling deploy as for 0.4.6. No migration, no NATS change; only the console image changes.
+
 ## [0.4.6] - 2026-11-20
 
 ### Added
@@ -1688,7 +1698,9 @@ How to check a file against its release:
   starts tracking on `umami.start()`, the server-issued proof of work, and a
   byte-identical rebuild of every committed release.
 
-[Unreleased]: https://github.com/justmert/veristar/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/justmert/veristar/compare/v0.4.7...HEAD
+[0.4.7]: https://github.com/justmert/veristar/compare/v0.4.6...v0.4.7
+[0.4.6]: https://github.com/justmert/veristar/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/justmert/veristar/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/justmert/veristar/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/justmert/veristar/compare/v0.4.2...v0.4.3
