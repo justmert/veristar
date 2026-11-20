@@ -171,7 +171,7 @@ test("a wallet user approves an mcp connector on the consent page", async ({ bro
     .click();
   await page.waitForURL(`${APP}/ai/consent`);
   await expect(
-    page.getByRole("heading", { name: "Connect Wallet connector to Veristar" }),
+    page.getByRole("heading", { name: "Let Wallet connector read one project" }),
   ).toBeVisible();
   await expect(page.getByText(me.display_name, { exact: true })).toBeVisible();
   await page.getByRole("radio", { name: new RegExp(shared.name) }).check();

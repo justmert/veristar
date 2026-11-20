@@ -183,7 +183,7 @@ test("a connector is approved on the consent page after a github sign-in", async
   await page.click("#fixture-authorize");
   await page.waitForURL(`${APP}/ai/consent`);
   await expect(
-    page.getByRole("heading", { name: "Connect E2E connector to Veristar" }),
+    page.getByRole("heading", { name: "Let E2E connector read one project" }),
   ).toBeVisible();
   await expect(page.getByText(user.login)).toBeVisible();
   await expect(page.getByText("127.0.0.1:65531")).toBeVisible();
