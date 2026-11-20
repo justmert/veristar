@@ -2,9 +2,9 @@ package auth
 
 import (
 	"crypto/hmac"
-	"errors"
 	"crypto/rand"
 	"crypto/sha256"
+	"errors"
 	"net"
 	"net/http"
 	"net/netip"

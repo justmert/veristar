@@ -164,6 +164,14 @@ type Detail struct {
 	File File `json:"file"`
 }
 
+// hideCreator drops the member who signed the report for the public
+// demo's viewer, which sees no person (contract 21.4).
+func (s *Summary) hideCreator(a tenants.Access) {
+	if a.Role == tenants.RoleViewer {
+		s.CreatedBy = nil
+	}
+}
+
 func (h *Routes) link(id string) string { return h.c.ConsoleOrigin + "/r/" + id }
 
 const summaryCols = `id, period_from, period_to, signer, created_at, created_by, revoked_at, view_count, last_viewed_at`
@@ -219,6 +227,9 @@ func (h *Routes) list(w http.ResponseWriter, r *http.Request) error {
 	}
 	if out.Items == nil {
 		out.Items = []Summary{}
+	}
+	for i := range out.Items {
+		out.Items[i].hideCreator(a)
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 	return nil
@@ -453,6 +464,7 @@ func (h *Routes) get(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("reports: get: %w", err)
 	}
+	out.hideCreator(a)
 	writeWithReport(w, http.StatusOK, &out, &out.File)
 	return nil
 }

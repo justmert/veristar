@@ -100,12 +100,12 @@ var Allowlist = []string{
 	"/operator/rules/{rule_id}/matches",
 }
 
-// limits of anonymous demo traffic per instance. a console page fires up to
+// DefaultLimits are the limits of anonymous demo traffic per instance. a console page fires up to
 // about twenty reads at once, so a client may burst 60 and then read 5 per
 // second; the global ceiling bounds what many clients together cost the
 // database and umami (the web routes keep their own per-user engine limit,
 // which all demo visitors share).
-var limits = auth.ClientLimits{
+var DefaultLimits = auth.ClientLimits{
 	ClientRate: 5, ClientBurst: 60,
 	GlobalRate: 100, GlobalBurst: 400,
 	ReserveRate: 10, ReserveBurst: 40,
@@ -135,6 +135,8 @@ type Config struct {
 	Project  []Routes
 	Operator []Routes
 	Now      func() time.Time
+	// Limits replaces DefaultLimits when set (tests)
+	Limits *auth.ClientLimits
 }
 
 // Handler is the demo's http handler.
@@ -151,7 +153,11 @@ func New(c Config) (*Handler, error) {
 	if c.Log == nil || c.DB == nil || c.Now == nil {
 		return nil, errors.New("demo: log, database and clock are required")
 	}
-	lim, err := auth.NewClientLimiter(limits, c.Now)
+	l := DefaultLimits
+	if c.Limits != nil {
+		l = *c.Limits
+	}
+	lim, err := auth.NewClientLimiter(l, c.Now)
 	if err != nil {
 		return nil, err
 	}
@@ -190,8 +196,8 @@ func routePath(pattern string) string {
 // Allowed reports whether GET of the route pattern is served by the demo.
 func (h *Handler) Allowed(pattern string) bool { return h.allowed[pattern] }
 
-// Patterns returns every GET pattern the demo's groups register, allowed or
-// not, for the tests that check each of them.
+// Patterns returns "METHOD /pattern" for every route the demo's groups
+// register, allowed or not, for the tests that check each of them.
 func (h *Handler) Patterns() []string {
 	var out []string
 	_ = chi.Walk(h.inner, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
@@ -200,6 +206,27 @@ func (h *Handler) Patterns() []string {
 	})
 	slices.Sort(out)
 	return slices.Compact(out)
+}
+
+// the handler is a chi.Routes, so chi.Walk over the console's router lists
+// the demo's routes like every other mount's and the isolation gate's
+// route coverage sees them. serving goes through ServeHTTP only.
+var _ chi.Routes = (*Handler)(nil)
+
+// Routes returns the routes of the demo's groups.
+func (h *Handler) Routes() []chi.Route { return h.inner.Routes() }
+
+// Middlewares returns none: ServeHTTP applies the demo's checks itself.
+func (h *Handler) Middlewares() chi.Middlewares { return nil }
+
+// Match reports whether the groups register method and path.
+func (h *Handler) Match(rctx *chi.Context, method, path string) bool {
+	return h.inner.Match(rctx, method, path)
+}
+
+// Find returns the pattern of method and path among the groups' routes.
+func (h *Handler) Find(rctx *chi.Context, method, path string) string {
+	return h.inner.Find(rctx, method, path)
 }
 
 // ServeHTTP answers one demo request; see the package comment for the

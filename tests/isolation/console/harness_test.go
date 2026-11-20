@@ -45,6 +45,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/account"
 	"github.com/justmert/veristar/internal/controlplane/apimetrics"
 	"github.com/justmert/veristar/internal/controlplane/auth"
+	"github.com/justmert/veristar/internal/controlplane/demo"
 	"github.com/justmert/veristar/internal/controlplane/domaincheck"
 	"github.com/justmert/veristar/internal/controlplane/erasure"
 	"github.com/justmert/veristar/internal/controlplane/exports"
@@ -105,6 +106,8 @@ type env struct {
 	mcp *mcpserver.Server
 	// keys are the operators' software authenticators
 	keys stepuptest.Keys
+	// demo is the public demo's handler (contract 21), for its patterns
+	demo *demo.Handler
 }
 
 func repoRoot(t *testing.T) string {
@@ -357,6 +360,19 @@ func start(t *testing.T) *env {
 		DB: e.conn, Sessions: sessions, Umami: e.umami.Admin, Reconcile: scope.Reconcile, StepUp: stepUps,
 	})
 	require.NoError(t, err)
+	// the public demo, wired as cmd/controlplane wires it. its client limit
+	// is raised so the gate's hundreds of requests from one address are not
+	// refused; DemoRateLimit checks the production limit on its own
+	high := auth.ClientLimits{ClientRate: 1e6, ClientBurst: 1e6, GlobalRate: 1e6, GlobalBurst: 1e6, ReserveRate: 1, ReserveBurst: 1}
+	e.demo, err = demo.New(demo.Config{
+		Log: log, DB: e.conn, Now: time.Now, Limits: &high,
+		Project: []demo.Routes{
+			tenants.NewRoutes(scope), sites.NewRoutes(scope), ingest.NewRoutes(scope), snippet,
+			metricRoutes, webRoutes, onchainRoutes, scfView, tenantCohort, demo.RoutesFunc(reportRoutes.Private),
+		},
+		Operator: []demo.Routes{review, global, onchainOperator, cohortRoutes, ruleRoutes},
+	})
+	require.NoError(t, err)
 	api = controlplane.NewHandler(controlplane.Options{
 		Log:           log,
 		ConsoleOrigin: e.srv.URL,
@@ -389,6 +405,7 @@ func start(t *testing.T) *env {
 		},
 		Mounts: []controlplane.Mount{
 			{Path: operator.MachinePath, Handler: machine.Handler()},
+			{Path: demo.Path, Handler: e.demo},
 			{Path: mcpserver.Path, Handler: e.mcp.Handler()},
 			{Path: "/oauth", Handler: e.mcp.OAuthHandler()},
 			{Path: "/.well-known", Handler: e.mcp.MetadataHandler(reportRoutes.WellKnown)},

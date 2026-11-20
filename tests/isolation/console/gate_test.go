@@ -60,6 +60,11 @@ const (
 	// report keys (contract 20.4). PublicReports checks that a link answers
 	// its own report and nothing of another tenant
 	kindPublic
+	// a route of the public demo (contract 21): anonymous, read only, demo
+	// projects only. Demo checks each of them: an allowlisted GET reads the
+	// demo project and nothing of another tenant, everything else answers
+	// 403 demo_read_only
+	kindDemo
 )
 
 // route is one registered route with the request its case sends. path
@@ -559,6 +564,7 @@ func requireUnchanged(t *testing.T, before, after map[string]string, what string
 func TestIsolationGate(t *testing.T) {
 	e := start(t)
 	cat := catalogue(e.terms)
+	cat = append(cat, demoCatalogue(cat, e)...)
 	t.Run("RouteCoverage", func(t *testing.T) { testRouteCoverage(t, e, cat) })
 	w := e.gateWorld(t)
 	t.Run("TenantRoutesCrossTenant", func(t *testing.T) { testTenantRoutes(t, e, w, cat) })
@@ -566,6 +572,7 @@ func TestIsolationGate(t *testing.T) {
 	t.Run("MachineAPIScope", func(t *testing.T) { testMachineAPI(t, e, w, cat) })
 	t.Run("MCPRoutes", func(t *testing.T) { testMCPRoutes(t, e, w, cat) })
 	t.Run("PublicReports", func(t *testing.T) { testPublicRoutes(t, e, w, cat) })
+	t.Run("Demo", func(t *testing.T) { testDemo(t, e, w, cat) })
 	// last: it revokes tenant a's token, key and report link
 	t.Run("TenantChangesNeedCurrentTerms", func(t *testing.T) { testTermsGate(t, e, w, cat) })
 }
@@ -776,9 +783,9 @@ func testRouteCoverage(t *testing.T, e *env, cat []route) {
 	for _, r := range cat {
 		counts[r.kind]++
 	}
-	t.Logf("%d routes walked, all covered: %d tenant, %d operator, %d step-up, %d machine, %d mcp, %d without a tenant",
+	t.Logf("%d routes walked, all covered: %d tenant, %d operator, %d step-up, %d machine, %d mcp, %d without a tenant, %d demo",
 		len(got), counts[kindTenant], counts[kindOperator], counts[kindStepUp], counts[kindMachine], counts[kindMCP],
-		counts[kindOwn])
+		counts[kindOwn], counts[kindDemo])
 }
 
 func testTenantRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
