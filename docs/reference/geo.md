@@ -1,6 +1,7 @@
 ---
 title: "Country and network lookup"
 description: "How the gateway derives a country code and a network class from local open data, and nothing more precise."
+icon: "earth-europe"
 ---
 
 The gateway turns a client address into an ISO 3166-1 alpha-2 country code with

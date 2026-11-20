@@ -1,6 +1,8 @@
 ---
 title: "Go"
 description: "Dual export from a Go service on net/http with otelhttp and the OpenTelemetry Go SDK."
+icon: "golang"
+iconType: "brands"
 ---
 
 Dual export from a Go service on `net/http`. Built from the example

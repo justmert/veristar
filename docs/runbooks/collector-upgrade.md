@@ -1,6 +1,7 @@
 ---
 title: "Collector upgrade"
 description: "Build, test and roll out a new version of the OTLP collector."
+icon: "tower-broadcast"
 ---
 
 The OTLP collector (`scf-otelcol`) is a custom OpenTelemetry Collector distribution built with

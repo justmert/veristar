@@ -2,6 +2,7 @@
 title: "Veristar"
 sidebarTitle: "Introduction"
 description: "Free web, API and on-chain analytics for every project built on Stellar, with signed usage reports that anyone can verify."
+icon: "house"
 ---
 
 Veristar is free web, API and on-chain analytics for every project built on Stellar. You add a
@@ -20,23 +21,23 @@ else.
 ## What you get
 
 <CardGroup cols={2}>
-  <Card title="Web analytics" icon="globe" href="/onboarding/web/quickstart">
+  <Card title="Web analytics" className="tone-web" icon="globe" href="/onboarding/web/quickstart">
     Pageviews, visitors, visits, visit duration, bounce rate, referrers, countries, devices and
     browsers from one script tag, with custom events when you want them.
   </Card>
-  <Card title="API analytics" icon="server" href="/onboarding/api/quickstart">
+  <Card title="API analytics" className="tone-api" icon="server" href="/onboarding/api/quickstart">
     Request volume, status codes and latency percentiles per service, method and route, sent by
     your backend with OpenTelemetry next to the tools you already use.
   </Card>
-  <Card title="On-chain activity" icon="link" href="/onboarding/onchain">
+  <Card title="On-chain activity" className="tone-chain" icon="link" href="/onboarding/onchain">
     Daily operations, transactions and counterparties of your Stellar accounts and Soroban
     contracts, weekly active accounts, and calls per contract function.
   </Card>
-  <Card title="Signed reports" icon="file-signature" href="/onboarding/signed-reports">
+  <Card title="Signed reports" className="tone-report" icon="file-signature" href="/onboarding/signed-reports">
     A usage report for any period, signed with the service's published Stellar key, that anyone
     can verify without an account.
   </Card>
-  <Card title="Privacy by design" icon="shield-check" href="/compliance/privacy-strategy">
+  <Card title="Privacy by design" icon="eye-slash" href="/compliance/privacy-strategy">
     No cookies, no stored IP addresses, and visitor counts based on a daily secret that is
     destroyed at midnight UTC.
   </Card>
@@ -48,12 +49,21 @@ else.
 
 ## Who it is for
 
-- **Project teams (tenants)** building on Stellar who want to understand the use of their sites,
-  dapps and APIs. Start with the [tenant guides](/onboarding/overview).
-- **SCF operators** who review projects and compare them on shared metrics for funding and
-  ecosystem decisions. Start with the [operator guide](/operators/overview).
-- **Whoever runs the service**, today or after a handover. Start with
-  [deploy and operate](/deploy/overview) and the [runbooks](/runbooks/overview).
+<CardGroup cols={2}>
+  <Card title="Project teams (tenants)" icon="compass" href="/onboarding/overview">
+    Teams building on Stellar who want to understand the use of their sites, dapps and APIs.
+  </Card>
+  <Card title="SCF operators" icon="user-shield" href="/operators/overview">
+    The people who review projects and compare them on shared metrics for funding and ecosystem
+    decisions.
+  </Card>
+  <Card title="Deploy and operate" icon="server" href="/deploy/overview">
+    For whoever runs the service, today or after a handover.
+  </Card>
+  <Card title="Runbooks" icon="book" href="/runbooks/overview">
+    Incidents and routine operations of the running service.
+  </Card>
+</CardGroup>
 
 ## How to start
 
@@ -86,7 +96,7 @@ else.
 ## Learn more
 
 <CardGroup cols={2}>
-  <Card title="How it works" icon="diagram-project" href="/how-it-works">
+  <Card title="How it works" icon="route" href="/how-it-works">
     The path an event takes from a page or an app to a dashboard.
   </Card>
   <Card title="Architecture" icon="sitemap" href="/architecture">

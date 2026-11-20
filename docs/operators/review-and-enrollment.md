@@ -1,6 +1,7 @@
 ---
 title: "Review and enrollment modes"
 description: "Self-service enrollment, approval-required enrollment and project review."
+icon: "clipboard-check"
 ---
 
 Any project built on Stellar can enroll itself. Operators review projects, remove those that are

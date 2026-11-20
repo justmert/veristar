@@ -1,6 +1,7 @@
 ---
 title: "Erasure workflow"
 description: "How a project owner asks for erasure, what is erased, and how the request is tracked."
+icon: "eraser"
 ---
 
 How a project owner erases web analytics data, what each kind of request

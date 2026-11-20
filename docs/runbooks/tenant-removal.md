@@ -1,6 +1,7 @@
 ---
 title: "Tenant suspension and removal"
 description: "Suspend, resume and remove a project, and follow a removal to completion."
+icon: "folder-minus"
 ---
 
 How to suspend, resume and remove a project from the infrastructure side: what each action

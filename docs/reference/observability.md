@@ -2,6 +2,7 @@
 title: "Observability reference"
 sidebarTitle: "Observability"
 description: "The metrics, probes and alert rules behind monitoring, and the sources they were checked against."
+icon: "eye"
 ---
 
 The metrics, receivers, status checks and SLO measures behind

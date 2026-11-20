@@ -1,6 +1,7 @@
 ---
 title: "Data processing terms (template)"
 description: "A template for the data processing terms between the hosting operator and a tenant."
+icon: "file-pen"
 ---
 
 The data processing terms between the hosting operator and each tenant. They

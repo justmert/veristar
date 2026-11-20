@@ -1,6 +1,7 @@
 ---
 title: "Bot and inflation strategy"
 description: "How the platform grades the integrity of every site's web traffic from evidence it observes itself, and how it refuses and separates bot traffic."
+icon: "filter-circle-xmark"
 ---
 
 Every site gets an **integrity grade** for every UTC day: **A**, **B** or **C**, with the reasons

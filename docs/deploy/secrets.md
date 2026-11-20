@@ -2,6 +2,7 @@
 title: "Secrets: SOPS with age"
 sidebarTitle: "Secrets"
 description: "How secrets are encrypted with SOPS and age, and which files hold them."
+icon: "lock"
 ---
 
 Every secret of an environment lives in the repository, encrypted with

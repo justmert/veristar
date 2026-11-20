@@ -1,6 +1,7 @@
 ---
 title: "Capacity changes"
 description: "Add resources before a limit is reached, or remove them when they are not used."
+icon: "gauge-high"
 ---
 
 How to add resources before a limit is reached, or remove them when they are not used. An

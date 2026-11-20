@@ -1,6 +1,7 @@
 ---
 title: "Umami's interface for platform administrators"
 description: "How a platform administrator with SSH access to a core node opens Umami's own interface for debugging, over a tunnel to the node's loopback."
+icon: "terminal"
 ---
 
 Projects and SCF operators read web analytics in the console. Umami's own interface has no

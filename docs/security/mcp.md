@@ -2,6 +2,7 @@
 title: "AI clients and the MCP server"
 sidebarTitle: "AI clients (MCP)"
 description: "How the MCP server authenticates AI clients, keeps tenants apart and limits what a client receives."
+icon: "robot"
 ---
 
 The control plane serves a Model Context Protocol endpoint at `https://app.<BASE_DOMAIN>/mcp`

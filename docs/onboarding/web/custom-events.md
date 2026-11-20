@@ -1,6 +1,7 @@
 ---
 title: "Custom events"
 description: "Send named events of your own, such as a click on a sign-up button, next to the pageviews."
+icon: "hand-pointer"
 ---
 
 Pageviews are counted without any code beyond the script tag. On top of them you can send your own

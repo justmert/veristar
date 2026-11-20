@@ -1,6 +1,8 @@
 ---
 title: "Python"
 description: "Dual export from a Python service on FastAPI with the OpenTelemetry Python SDK."
+icon: "python"
+iconType: "brands"
 ---
 
 Dual export from a Python service. Built from the example

@@ -2,6 +2,7 @@
 title: "Backups: storage account, stanza and WAL archiving"
 sidebarTitle: "Backups"
 description: "How the pgBackRest repository is created and protected, from storage to WAL archiving."
+icon: "box-archive"
 ---
 
 This page describes how the pgBackRest repository of an environment comes into existence and

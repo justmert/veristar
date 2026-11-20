@@ -1,6 +1,8 @@
 ---
 title: "Vite and React"
 description: "Add the tracker to a client-routed React app built with Vite."
+icon: "react"
+iconType: "brands"
 ---
 
 For a client-routed React app built with Vite. Tested by the example

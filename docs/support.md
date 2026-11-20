@@ -1,6 +1,7 @@
 ---
 title: "Support"
 description: "How tenants and everyone else get help, and the response and resolution targets the operator commits to."
+icon: "life-ring"
 ---
 
 You get help with Veristar through the repository's public GitHub issue tracker. This page explains

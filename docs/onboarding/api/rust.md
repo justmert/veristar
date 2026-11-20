@@ -1,6 +1,8 @@
 ---
 title: "Rust"
 description: "Dual export from a Rust service on actix-web with the OpenTelemetry Rust SDK."
+icon: "rust"
+iconType: "brands"
 ---
 
 Dual export from a Rust service on actix-web. Built from the example

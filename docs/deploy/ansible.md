@@ -2,6 +2,7 @@
 title: "Ansible: roles, playbooks and images"
 sidebarTitle: "Ansible"
 description: "The Ansible roles, playbooks and images that configure every node."
+icon: "gears"
 ---
 
 Ansible configures every node of an environment: the operating system, the firewall, the

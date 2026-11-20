@@ -1,6 +1,7 @@
 ---
 title: "Self-hosting sdk.js"
 description: "Serve the tracker file from your own domain while events still go to the gateway."
+icon: "hard-drive"
 ---
 
 You can serve the tracker file from your own domain instead of the gateway, for example to keep

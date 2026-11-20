@@ -1,6 +1,7 @@
 ---
 title: "Security patch"
 description: "Take a vulnerability from signal to patched production within the 24-hour commitment."
+icon: "bandage"
 ---
 
 The path from a vulnerability signal to a patched production. The service target is that critical
