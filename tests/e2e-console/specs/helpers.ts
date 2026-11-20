@@ -249,8 +249,9 @@ export function uniqueHost(label: string): string {
 export const NOT_FOUND = { error: expect.objectContaining({ code: "not_found" }) };
 
 // opens the web dashboard of a site the way a tenant does, from the
-// overview's link to web. that link names the site only when the project has
-// one; with more it opens all sites, and the web page's site filter picks it
+// overview's link to web. a link that opens all sites lands on the web page,
+// whose site chips pick the site; a project's only site is already picked
+// there, so its chip is on and the address names no site
 export async function openDashboard(page: Page, tenantId: string, site: Site): Promise<void> {
   const web = `/projects/${tenantId}/web`;
   await page.goto(`${APP}/projects/${tenantId}`);
@@ -260,11 +261,17 @@ export async function openDashboard(page: Page, tenantId: string, site: Site): P
     .first();
   const all = (await link.getAttribute("href")) === web;
   await link.click();
+  const chip = page.locator(`[data-site-chip="${site.id}"]`);
   if (all) {
     await page.waitForURL(`${APP}${web}`);
-    await page.getByLabel("Site", { exact: true }).selectOption(site.id);
+    if ((await chip.getAttribute("aria-pressed")) !== "true") {
+      await chip.click();
+      await page.waitForURL(`${APP}${web}?site=${site.id}`);
+    }
+  } else {
+    await page.waitForURL(`${APP}${web}?site=${site.id}`);
   }
-  await page.waitForURL(`${APP}${web}?site=${site.id}`);
+  await expect(chip).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("heading", { name: "Web", exact: true })).toBeVisible();
 }
 
