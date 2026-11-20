@@ -18,7 +18,7 @@ import { EmptyState, ErrorState } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatChange, formatCompact, formatCount } from "@/lib/format";
+import { formatChange, formatCompact } from "@/lib/format";
 import { queryClient } from "@/query-client";
 
 // an operator who is a member of no project starts on the operator review
@@ -128,11 +128,7 @@ export function ProjectsPage() {
               Try again
             </Button>
           }
-        >
-          {retries.length === 1
-            ? "The numbers of one project did not load. Try again."
-            : `The numbers of ${formatCount(retries.length)} projects did not load. Try again.`}
-        </Notice>
+        />
       ) : null}
 
       {tenants.length === 0 ? (
@@ -204,9 +200,16 @@ const TINTS = [
   "bg-series-2/20 text-series-2",
   "bg-series-5/20 text-series-5",
 ];
+// fnv-1a with a final mix: ids made close together (same time prefix, one
+// differing tail) still spread over every tint instead of landing on one
 function tintOf(id: string): string {
-  let h = 0;
-  for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  let h = 0x811c9dc5;
+  for (const c of id) h = Math.imul(h ^ c.charCodeAt(0), 0x01000193) >>> 0;
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b) >>> 0;
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35) >>> 0;
+  h ^= h >>> 16;
   return TINTS[h % TINTS.length] as string;
 }
 

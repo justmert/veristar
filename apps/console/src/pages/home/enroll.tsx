@@ -275,12 +275,16 @@ export function Optional({
   hint,
   open,
   onToggle,
+  nested,
   children,
 }: {
   title: string;
   hint: string;
   open: boolean;
   onToggle: (open: boolean) => void;
+  // inside a numbered step: the chevron lines up with the step's fields,
+  // not with the step numbers
+  nested?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -289,8 +293,11 @@ export function Optional({
       onToggle={onToggle}
       variant="row"
       className="bg-transparent"
-      summaryClassName="min-h-12 gap-4.5 pl-1.25 text-[14.5px] font-normal"
-      bodyClassName="flex flex-col gap-4 pt-1 pb-5 pl-10.5"
+      summaryClassName={cn(
+        "min-h-12 text-[14.5px] font-normal",
+        nested ? "gap-2" : "gap-4.5 pl-1.25",
+      )}
+      bodyClassName={cn("flex flex-col gap-4 pt-1 pb-5", nested ? "pl-6" : "pl-10.5")}
       summary={
         <span className="flex items-baseline gap-2">
           <span className="font-semibold text-fg">{title}</span>
@@ -447,6 +454,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
               <Optional
                 title="Enter the award by hand"
                 hint="optional"
+                nested
                 open={cohortOpen}
                 onToggle={setCohortOpen}
               >
