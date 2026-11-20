@@ -16,6 +16,8 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-11-20
+
 ### Added
 
 - A public demo of the console at `https://app.<BASE_DOMAIN>/demo`. Anyone can browse the
@@ -34,6 +36,10 @@ here, before they take effect, as the processing terms require
 
 ### Changed
 
+- The console's visual revision: a new Veristar mark in every logo, favicon and icon; a content
+  column up to 1600 px with larger figure tiles; actions beside the lines that need attention; and
+  every type size, radius, spacing step and hairline drawn from the brand tokens. No route or data
+  changes.
 - The README, the documentation introduction and the website describe Veristar as analytics for every project built on Stellar, with signed usage reports for anyone who needs proof of usage and SCF as the overseer of the shared service. No feature changes.
 
 ### Fixed
@@ -45,8 +51,9 @@ here, before they take effect, as the processing terms require
 
 **Before the deploy**
 
-- This release is signed in key mode on a workstation, while the repository's GitHub Actions are
-  off. Add `ANSIBLE_EXTRA='-e sa_signature_mode=key'` to every `make <env>-deploy`.
+- This release is signed in key mode on a workstation, with the repository variable
+  `RELEASE_BUILDER=workstation`. Add `ANSIBLE_EXTRA='-e sa_signature_mode=key'` to every
+  `make <env>-deploy`.
 
 **During the rolling deploy**
 
@@ -57,6 +64,8 @@ here, before they take effect, as the processing terms require
   `api.operator_hourly_listed` and `api.operator_daily_listed`. `platform_owner` creates the role
   with the `createrole` right it already holds. Expected log line: `platform database migrated`
   with `rls_coverage ok`.
+- The replayer container's stop grace period is 45 seconds, so a replayer that stops during the
+  rolling deploy finishes the sends of its hand-over before it exits.
 - No NATS topology or configuration change.
 
 **After the deploy**
