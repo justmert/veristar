@@ -443,7 +443,10 @@ test("ranges switch between minute, hour and day data", async () => {
   await waitExact(ctx, tenant.id, [PAYMENTS, LEDGER], "90d", 420_000);
   await pickRange(page, "90 days");
   await page.waitForURL(/range=90d/);
-  await expect(page.getByRole("heading", { name: "Requests per day", exact: true })).toBeVisible();
+  // the range is answered per day; the chart narrows to the hours of the
+  // last day when every request of the range fell on it
+  await expect(page.locator("main").getByText("per day", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Requests per (day|hour)$/ })).toBeVisible();
   await expect(requestsValue(page, sentFor(PAYMENTS) + sentFor(LEDGER))).toBeVisible();
 
   // a custom range of the last two hours is minute data again

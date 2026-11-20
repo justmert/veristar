@@ -71,7 +71,9 @@ test("the only owner of a project is refused and sees which project", async () =
   await page.getByRole("button", { name: /account menu/i }).click();
   await page.getByRole("menuitem", { name: "Account" }).click();
   await page.waitForURL(`${APP}/account`);
-  await expect(page.getByRole("heading", { name: "Account", level: 1 })).toBeVisible();
+  // the account page is titled with the person's name, which for a github
+  // sign-in without a profile name is the login
+  await expect(page.getByRole("heading", { name: user.login, level: 1 })).toBeVisible();
   // the github method of the linked sign-in methods names the login and the id,
   // each in its own element
   const methods = page.getByRole("list", { name: "Sign-in methods" });
