@@ -20,6 +20,8 @@ export type BreakdownItem = {
   value: number;
   // the row opens this address, such as the web page filtered to the key
   href?: string;
+  // an extra column after the value, such as the 5xx rate of a route
+  aside?: ReactNode;
 };
 
 export type BreakdownListProps = {
@@ -50,6 +52,11 @@ export type BreakdownListProps = {
   onRetry?: () => void;
   emptyTitle?: string;
   emptyText?: string;
+  // the colour of the share bars: the first series, or amber for a list of
+  // quarantined traffic
+  tone?: "series-1" | "warning";
+  // the heading of the extra column, when items carry an `aside`
+  asideLabel?: string;
   className?: string;
 };
 
@@ -57,6 +64,13 @@ export type BreakdownListProps = {
 // 99.8% and 0.2% add up as the reader expects
 const DEFINED =
   "w-12 rounded-sm text-right underline decoration-line-strong decoration-dotted underline-offset-4 focus-ring";
+
+// the bar behind a label, plain and selected: quiet grey for the first
+// series, amber when the list reads quarantined traffic
+const BAR = {
+  "series-1": ["bg-selected", "bg-pressed"],
+  warning: ["bg-warning/25", "bg-warning/40"],
+} as const;
 
 export function partShare(value: number, total: number): string {
   if (total > 0 && value < total && value / total >= 0.995)
@@ -82,6 +96,8 @@ export function BreakdownList({
   onRetry,
   emptyTitle = "No data in this range",
   emptyText,
+  tone = "series-1",
+  asideLabel,
   className,
 }: BreakdownListProps) {
   const [open, setOpen] = useState(false);
@@ -117,6 +133,7 @@ export function BreakdownList({
   const shown = open || onShowMore ? items : items.slice(0, limit);
   const hidden = items.length - shown.length;
   const showShare = total !== undefined && total !== null;
+  const hasAside = shown.some((it) => it.aside !== undefined);
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-2", className)}>
@@ -141,6 +158,11 @@ export function BreakdownList({
           <span aria-hidden className="min-w-16 text-right">
             {valueLabel}
           </span>
+          {hasAside ? (
+            <span aria-hidden className="min-w-14 text-right">
+              {asideLabel}
+            </span>
+          ) : null}
         </span>
       </div>
       <ul aria-label={label} className="flex flex-col gap-1">
@@ -154,7 +176,7 @@ export function BreakdownList({
                   aria-hidden
                   className={cn(
                     "absolute inset-y-1 left-0 rounded-sm transition-colors duration-(--vs-duration-press)",
-                    selectedKey === it.key ? "bg-pressed" : "bg-selected",
+                    BAR[tone][selectedKey === it.key ? 1 : 0],
                   )}
                   style={{ width: `${(it.value / max) * 100}%` }}
                 />
@@ -169,6 +191,7 @@ export function BreakdownList({
                   </span>
                 ) : null}
                 <span className="min-w-16 text-right text-fg">{format(it.value)}</span>
+                {hasAside ? <span className="min-w-14 text-right">{it.aside}</span> : null}
               </span>
             </>
           );

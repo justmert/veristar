@@ -123,6 +123,7 @@ export function DataTable<Row>({
   rowNext,
   pageSize = PAGE_SIZE,
   pageResetKey = "",
+  title,
   className,
 }: {
   // the accessible name of the table and its scroll region
@@ -159,6 +160,9 @@ export function DataTable<Row>({
   pageSize?: number;
   // the page goes back to the first when this changes (the search text)
   pageResetKey?: string;
+  // a title row inside the panel, above the header row: the title, a quiet
+  // count, and a legend or a control on the right
+  title?: { text: string; count?: ReactNode; aside?: ReactNode };
   className?: string;
 }) {
   const paged = useRowPages(rows, pageSize, pageResetKey);
@@ -223,6 +227,19 @@ export function DataTable<Row>({
         className,
       )}
     >
+      {title ? (
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 px-5 py-3.5">
+          <h2 className="text-[14px] leading-5 font-semibold text-fg">{title.text}</h2>
+          {title.count !== undefined && title.count !== null ? (
+            <span className="text-[12.5px] text-fg-3 tabular">{title.count}</span>
+          ) : null}
+          {title.aside ? (
+            <div className="ml-auto flex flex-wrap items-center gap-3.5 text-caption text-fg-3">
+              {title.aside}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {frame.wide ? (
         <FloatingHead
           frame={frame}
@@ -241,7 +258,7 @@ export function DataTable<Row>({
           tabIndex={frame.wide ? 0 : undefined}
           onScroll={frame.onScroll}
           data-wide={frame.wide ? "" : undefined}
-          className={cn("rounded-t-2xl", frame.wide && "overflow-x-auto focus-ring")}
+          className={cn(!title && "rounded-t-2xl", frame.wide && "overflow-x-auto focus-ring")}
         >
           <table
             ref={frame.tableRef}

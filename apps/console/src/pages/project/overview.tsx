@@ -1012,23 +1012,22 @@ function BusiestRoutes({ tenantId, days }: { tenantId: string; days: DayRange })
                 {services.size > 1 ? (
                   <span className="shrink-0 truncate text-caption text-fg-3">{it.service}</span>
                 ) : null}
-                {it.rate_5xx === null ? null : (
-                  <span
-                    className={cn(
-                      "ml-auto shrink-0 text-caption tabular",
-                      it.rate_5xx > 0 ? "text-critical" : "text-fg-3",
-                    )}
-                    data-rate-5xx=""
-                  >
-                    {formatPercent(it.rate_5xx)}
-                    <span className="sr-only"> 5xx</span>
-                  </span>
-                )}
               </span>
             ),
             value: it.requests,
+            aside:
+              it.rate_5xx === null ? null : (
+                <span
+                  className={cn("tabular", it.rate_5xx > 0 ? "text-critical" : "text-fg-3")}
+                  data-rate-5xx=""
+                >
+                  {formatPercent(it.rate_5xx)}
+                  <span className="sr-only"> 5xx</span>
+                </span>
+              ),
           };
         })}
+        asideLabel="5xx"
         valueLabel="Requests"
         format={formatCompact}
         emptyTitle="No API requests in this range"

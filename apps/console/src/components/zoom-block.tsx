@@ -50,6 +50,7 @@ export function ZoomBlock({
   parts,
   caption,
   cleanText,
+  footer,
   className,
 }: {
   title: string;
@@ -65,6 +66,8 @@ export function ZoomBlock({
   caption: string;
   // the line shown when every item is in the main group
   cleanText: string;
+  // a quiet last line inside the panel, such as the success codes of the api
+  footer?: ReactNode;
   className?: string;
 }) {
   const rest = parts.reduce((a, p) => a + p.count, 0);
@@ -213,6 +216,7 @@ export function ZoomBlock({
           {cleanText}
         </span>
       )}
+      {footer ? <div className="text-small text-fg-3">{footer}</div> : null}
     </section>
   );
 }
