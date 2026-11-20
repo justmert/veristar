@@ -19,6 +19,9 @@ import (
 // trigger. column rights are written as letter(columns), columns sorted. a
 // relation missing here, or a right not listed, fails both tests, so every
 // new table must state its rights.
+//
+// db.RoleCPDemo is the role of the public demo's operator views (00053): it
+// reads the relations those views need and nothing else.
 var Want = map[string]map[db.Role]string{
 	"cp.users": {
 		db.RoleCPSystem: "rawd",
@@ -39,7 +42,8 @@ var Want = map[string]map[db.Role]string{
 		db.RoleMetricsWriter: "r(id,status)",
 		// aggregate-web skips removed tenants (00019), integrity skips
 		// internal ones (00045)
-		db.RoleJobs: "r(id,is_internal,status)",
+		db.RoleJobs:   "r(id,is_internal,status)",
+		db.RoleCPDemo: "r",
 	},
 	// role only, and a trigger lets only an owner change members (00028, C-6)
 	"cp.tenant_members": {db.RoleCPSystem: "rawd", db.RoleCPTenant: "rad w(role)"},
@@ -77,22 +81,23 @@ var Want = map[string]map[db.Role]string{
 		db.RoleCPTenant:   "r",
 		db.RoleCPOperator: "r",
 		db.RoleJobs:       "raw",
+		db.RoleCPDemo:     "r",
 	},
 	"cp.stats_dedup":     {db.RoleCPSystem: "rawd", db.RoleJobs: "rawd"},
 	"cp.leader_fence":    {db.RoleCPSystem: "rawd", db.RoleMetricsWriter: "rw", db.RoleJobs: "rw"},
-	"cp.operator_sites":  {db.RoleCPSystem: "r", db.RoleCPOperator: "r"},
-	"cp.tenant_removals": {db.RoleCPSystem: "rawd", db.RoleCPOperator: "r"},
+	"cp.operator_sites":  {db.RoleCPSystem: "r", db.RoleCPOperator: "r", db.RoleCPDemo: "r"},
+	"cp.tenant_removals": {db.RoleCPSystem: "rawd", db.RoleCPOperator: "r", db.RoleCPDemo: "r"},
 
 	// api. partitions carry no rights at all; internal/db checks
 	// them on their own in TestPartitionRights.
 	"api.metrics_minute": {db.RoleCPTenant: "r", db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
-	"api.metrics_hourly": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
-	"api.metrics_daily":  {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
+	"api.metrics_hourly": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd", db.RoleCPDemo: "r"},
+	"api.metrics_daily":  {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd", db.RoleCPDemo: "r"},
 	"api.series_state":   {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
 	// when each traffic class rule set took effect (00040), read by every
 	// role that shows api numbers and by the api rollup's first consistency
 	// check (00043)
-	"api.traffic_class_rules": {db.RoleCPSystem: "r", db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "r"},
+	"api.traffic_class_rules": {db.RoleCPSystem: "r", db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "r", db.RoleCPDemo: "r"},
 	"api.resource_seen":       {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
 	"api.ingest_dedup":        {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
 	"api.route_registry":      {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
@@ -108,30 +113,32 @@ var Want = map[string]map[db.Role]string{
 	"cp.chain_ids": {
 		db.RoleCPSystem: "rawd", db.RoleCPTenant: "rd a(added_by,kind,strkey,tenant_id)",
 		db.RoleCPOperator: "r", db.RoleJobs: "r",
+		db.RoleCPDemo: "r",
 	},
 
 	// agg: read by operators, written by aggregate-web; a tenant reads its
 	// own web rows for the overview export (00032)
-	"agg.web_daily":     {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
-	"agg.web_daily_dim": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
+	"agg.web_daily":     {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd", db.RoleCPDemo: "r"},
+	"agg.web_daily_dim": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd", db.RoleCPDemo: "r"},
 	// ledger activity (00032): written by chain-activity, read by the
 	// tenant (its own rows) and operators
-	"agg.chain_daily": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
-	"agg.chain_reads": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
+	"agg.chain_daily": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd", db.RoleCPDemo: "r"},
+	"agg.chain_reads": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd", db.RoleCPDemo: "r"},
 	// the weeks without their key column; the keyed hashes are jobs' only
 	"agg.chain_weeks": {
 		db.RoleCPTenant:   "r(active_accounts,closed_at,created_at,missing,tenant_id,week)",
 		db.RoleCPOperator: "r(active_accounts,closed_at,created_at,missing,tenant_id,week)",
 		db.RoleJobs:       "rawd",
+		db.RoleCPDemo:     "r(active_accounts,closed_at,created_at,missing,tenant_id,week)",
 	},
 	"agg.chain_week_members": {db.RoleJobs: "rawd"},
 	// calls per contract function (00047): written by chain-activity, read
 	// by the tenant (its own rows) and operators
-	"agg.chain_function_daily": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
+	"agg.chain_function_daily": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd", db.RoleCPDemo: "r"},
 	// integrity (00033): the grades are read by the tenant (its own rows)
 	// and operators; edgestats and integrity write the evidence and network
 	// rows behind them, and cp_system deletes those in a purge
-	"agg.web_integrity_daily": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
+	"agg.web_integrity_daily": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd", db.RoleCPDemo: "r"},
 	"cp.web_evidence_daily":   {db.RoleCPSystem: "rawd", db.RoleJobs: "rawd"},
 	"cp.web_networks_daily":   {db.RoleCPSystem: "rawd", db.RoleJobs: "rawd"},
 
@@ -144,8 +151,9 @@ var Want = map[string]map[db.Role]string{
 			"proposed_round,proposed_source,tenant_id,updated_at) w(proposed_at,proposed_award_date,proposed_by," +
 			"proposed_category,proposed_program,proposed_round,proposed_source,updated_at)",
 		db.RoleCPOperator: "r",
+		db.RoleCPDemo:     "r",
 	},
-	"cp.threshold_rules": {db.RoleCPSystem: "rawd", db.RoleCPOperator: "r"},
+	"cp.threshold_rules": {db.RoleCPSystem: "rawd", db.RoleCPOperator: "r", db.RoleCPDemo: "r"},
 	// the scf award directory (00050): organisation data without a tenant,
 	// written by platformctl scf import and read by the enrollment search
 	// and the matching, all under cp_system; operators lost their unused
@@ -158,12 +166,13 @@ var Want = map[string]map[db.Role]string{
 		db.RoleCPSystem:   "r w(last_viewed_at,view_count)",
 		db.RoleCPTenant:   "r a(body,created_by,id,period_from,period_to,signature,signer,tenant_id) w(revoked_at,revoked_by)",
 		db.RoleCPOperator: "r",
+		db.RoleCPDemo:     "r",
 	},
 	// page signals and coverage (00039): coverage is read by the tenant
 	// (its own rows) and operators and written by edgestats; the signal
 	// rows are edgestats' and integrity's, and cp_system deletes them in a
 	// purge
-	"agg.web_coverage_daily": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
+	"agg.web_coverage_daily": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd", db.RoleCPDemo: "r"},
 	"cp.web_signals_daily":   {db.RoleCPSystem: "rawd", db.RoleJobs: "rawd"},
 }
 

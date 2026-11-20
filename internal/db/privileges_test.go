@@ -19,6 +19,11 @@ import (
 // matrix
 var wantGrants = rolematrix.Want
 
+// matrixRoles are the login roles and cp_demo, the role a demo request's
+// operator transaction switches to (00053): its rights are checked like the
+// others'
+var matrixRoles = append(append([]pdb.Role{}, pdb.AppRoles...), pdb.RoleCPDemo)
+
 var tablePrivs = func() []struct{ letter, name string } {
 	out := make([]struct{ letter, name string }, 0, len(rolematrix.Rights))
 	for _, r := range rolematrix.Rights {
@@ -59,7 +64,7 @@ func TestGrantMatrix(t *testing.T) {
 	got := map[string]map[pdb.Role]string{}
 	for _, r := range rels {
 		got[r.name] = map[pdb.Role]string{}
-		for _, role := range pdb.AppRoles {
+		for _, role := range matrixRoles {
 			var table strings.Builder
 			var cols []string
 			for _, p := range tablePrivs {
@@ -97,16 +102,16 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 	c := superuser(t)
 
 	wantUsage := map[string][]pdb.Role{
-		"cp": pdb.AppRoles,
+		"cp": matrixRoles,
 		// cp_system only to call api.purge_tenant (00017); it has no table right
-		"api": pdb.AppRoles,
+		"api": matrixRoles,
 		// cp_system only to call agg.purge_tenant (00019); cp_tenant reads
 		// its own chain and web rows (00032)
-		"agg":    {pdb.RoleCPSystem, pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs},
-		"public": pdb.AppRoles,
+		"agg":    {pdb.RoleCPSystem, pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs, pdb.RoleCPDemo},
+		"public": matrixRoles,
 	}
 	for schema, roles := range wantUsage {
-		for _, role := range pdb.AppRoles {
+		for _, role := range matrixRoles {
 			var usage, create bool
 			require.NoError(t, c.QueryRow(ctx,
 				`select has_schema_privilege($1, $2, 'USAGE'), has_schema_privilege($1, $2, 'CREATE')`,
@@ -166,16 +171,16 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		"cp.operators_sync_flags()":          nil,
 		"cp.operators_last_admin()":          nil,
 
-		"api.add_buckets(bigint[],bigint[])": {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleMetricsWriter, pdb.RoleJobs},
-		"api.sum_buckets(bigint[])":          {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs},
+		"api.add_buckets(bigint[],bigint[])": {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleMetricsWriter, pdb.RoleJobs, pdb.RoleCPDemo},
+		"api.sum_buckets(bigint[])":          {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs, pdb.RoleCPDemo},
 		"api.histogram_quantile(double precision,bigint[])": {
-			pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs,
+			pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs, pdb.RoleCPDemo,
 		},
 		// the overflow-safe histogram sum of the read routes (00049)
-		"api.sum_buckets_read(bigint[])":                 {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs},
-		"api.add_buckets_numeric(numeric[],bigint[])":    {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs},
-		"api.merge_buckets_numeric(numeric[],numeric[])": {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs},
-		"api.fit_buckets(numeric[])":                     {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs},
+		"api.sum_buckets_read(bigint[])":                 {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs, pdb.RoleCPDemo},
+		"api.add_buckets_numeric(numeric[],bigint[])":    {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs, pdb.RoleCPDemo},
+		"api.merge_buckets_numeric(numeric[],numeric[])": {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs, pdb.RoleCPDemo},
+		"api.fit_buckets(numeric[])":                     {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs, pdb.RoleCPDemo},
 		"api.protect_partition(text)":                    nil,
 		"api.create_minute_partition(date)":              {pdb.RoleJobs},
 		"api.create_hourly_partition(date)":              {pdb.RoleJobs},
@@ -190,9 +195,14 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		"api.rollup_lock_key(uuid,timestamp with time zone)": {pdb.RoleMetricsWriter, pdb.RoleJobs},
 		// hour and day grain only; cp_operator never reads minute rows (00022),
 		// and only of the tenants it names (00023)
-		"api.operator_hourly(timestamp with time zone,timestamp with time zone,uuid[])": {pdb.RoleCPOperator},
-		"api.operator_daily(timestamp with time zone,timestamp with time zone,uuid[])":  {pdb.RoleCPOperator},
-		"agg.purge_tenant(uuid)": {pdb.RoleCPSystem},
+		"api.operator_hourly(timestamp with time zone,timestamp with time zone,uuid[])": {pdb.RoleCPOperator, pdb.RoleCPDemo},
+		"api.operator_daily(timestamp with time zone,timestamp with time zone,uuid[])":  {pdb.RoleCPOperator, pdb.RoleCPDemo},
+		// the bodies behind those two since 00053, and the demo filter they
+		// apply first; both run as their owner only
+		"api.operator_hourly_listed(timestamp with time zone,timestamp with time zone,uuid[])": nil,
+		"api.operator_daily_listed(timestamp with time zone,timestamp with time zone,uuid[])":  nil,
+		"cp.demo_tenants(uuid[])": nil,
+		"agg.purge_tenant(uuid)":  {pdb.RoleCPSystem},
 		// the reconciler's way to the integrity baselines (00033)
 		"agg.site_baselines(uuid)": {pdb.RoleCPSystem},
 		// the chain purge (00032); the enrollment trigger runs as its owner
@@ -207,7 +217,7 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 	var names []string
 	for _, f := range fns {
 		names = append(names, f.name)
-		for _, role := range pdb.AppRoles {
+		for _, role := range matrixRoles {
 			var exec bool
 			require.NoError(t, c.QueryRow(ctx, `select has_function_privilege($1, $2::oid, 'EXECUTE')`, string(role), f.oid).Scan(&exec))
 			require.Equal(t, contains(wantExec[f.name], role), exec, "execute %s for %s", f.name, role)
@@ -218,6 +228,7 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		want = append(want, k)
 	}
 	sort.Strings(want)
+	sort.Strings(names)
 	require.Equal(t, want, names)
 }
 
@@ -267,7 +278,7 @@ func TestPartitionRights(t *testing.T) {
 	for _, p := range parts {
 		perParent[p.parent]++
 		require.Equal(t, pdb.OwnerRole, p.owner, p.name)
-		for _, role := range append([]pdb.Role{"public"}, pdb.AppRoles...) {
+		for _, role := range append([]pdb.Role{"public"}, matrixRoles...) {
 			for _, priv := range tablePrivs {
 				var has bool
 				require.NoError(t, c.QueryRow(ctx, `select has_table_privilege($1, $2::oid, $3)`, string(role), p.oid, priv.name).Scan(&has))
@@ -303,6 +314,34 @@ func TestRoleAttributes(t *testing.T) {
 	require.NoError(t, c.QueryRow(ctx,
 		`select rolsuper, rolbypassrls, rolcanlogin from pg_roles where rolname = $1`, pdb.OwnerRole).Scan(&super, &bypass, &login))
 	require.False(t, super || bypass || login, "platform_owner must not log in or skip row-level security")
+
+	// cp_demo (00053) never logs in, and only cp_operator may switch to it,
+	// without inheriting its rights
+	var createrole, createdb bool
+	require.NoError(t, c.QueryRow(ctx,
+		`select rolsuper, rolbypassrls, rolcreaterole, rolcreatedb, rolcanlogin from pg_roles where rolname = $1`,
+		string(pdb.RoleCPDemo)).Scan(&super, &bypass, &createrole, &createdb, &login))
+	require.False(t, super || bypass || createrole || createdb || login, "cp_demo must be a plain role without login")
+	rows, err := c.Query(ctx, `
+		select m.rolname, a.inherit_option, a.set_option, a.admin_option
+		from pg_auth_members a join pg_roles r on r.oid = a.roleid join pg_roles m on m.oid = a.member
+		where r.rolname = $1 order by 1`, string(pdb.RoleCPDemo))
+	require.NoError(t, err)
+	type member struct {
+		name                string
+		inherit, set, admin bool
+	}
+	members, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (member, error) {
+		var m member
+		return m, r.Scan(&m.name, &m.inherit, &m.set, &m.admin)
+	})
+	require.NoError(t, err)
+	// platform_owner holds the admin option postgresql gives the role's
+	// creator, nothing else
+	require.Equal(t, []member{
+		{name: string(pdb.RoleCPOperator), set: true},
+		{name: pdb.OwnerRole, admin: true},
+	}, members)
 }
 
 // tables later phases add to api and agg get their rights from default
@@ -323,7 +362,7 @@ func TestDefaultPrivilegesForLaterTables(t *testing.T) {
 		"agg.web_daily_probe":      {pdb.RoleCPOperator: "r", pdb.RoleJobs: "rawd"},
 	}
 	for table, roles := range want {
-		for _, role := range pdb.AppRoles {
+		for _, role := range matrixRoles {
 			var s strings.Builder
 			for _, p := range tablePrivs {
 				var has bool

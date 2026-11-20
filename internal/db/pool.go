@@ -110,6 +110,11 @@ func (d *DB) WithTenant(ctx context.Context, tenantID uuid.UUID, fn func(pgx.Tx)
 		if _, err := tx.Exec(ctx, `select set_config('app.tenant_id', $1, true)`, tenantID.String()); err != nil {
 			return fmt.Errorf("db: set tenant: %w", err)
 		}
+		if InDemo(ctx) {
+			if err := demoTenant(ctx, tx, tenantID); err != nil {
+				return err
+			}
+		}
 		return fn(tx)
 	})
 }
@@ -122,7 +127,16 @@ func (d *DB) WithSystem(ctx context.Context, fn func(pgx.Tx) error) error {
 
 // WithOperator runs fn in a cp_operator transaction: operator views and the
 // machine metrics api.
+// in a demo context the transaction runs as cp_demo (demo.go).
 func (d *DB) WithOperator(ctx context.Context, fn func(pgx.Tx) error) error {
+	if InDemo(ctx) {
+		return d.inTx(ctx, RoleCPOperator, func(tx pgx.Tx) error {
+			if err := demoOperator(ctx, tx); err != nil {
+				return err
+			}
+			return fn(tx)
+		})
+	}
 	return d.inTx(ctx, RoleCPOperator, fn)
 }
 
@@ -139,6 +153,11 @@ func (d *DB) inTx(ctx context.Context, r Role, fn func(pgx.Tx) error) error {
 	p, err := d.Pool(r)
 	if err != nil {
 		return err
+	}
+	if InDemo(ctx) {
+		// read only from the start, so no statement of a demo request can
+		// write, whatever its handler does
+		return pgx.BeginTxFunc(ctx, p, pgx.TxOptions{AccessMode: pgx.ReadOnly}, fn)
 	}
 	return pgx.BeginFunc(ctx, p, fn)
 }
