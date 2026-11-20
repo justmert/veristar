@@ -876,12 +876,7 @@ function EmptyPlot({
       >
         0
       </span>
-      <EmptyState
-        compact
-        title={title}
-        action={action}
-        className="absolute inset-0"
-      />
+      <EmptyState compact title={title} action={action} className="absolute inset-0" />
     </div>
   );
 }

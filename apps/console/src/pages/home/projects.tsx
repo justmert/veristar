@@ -8,6 +8,7 @@ import { type SCFView, scfViewQuery } from "@/api/onchain";
 import { meQuery } from "@/api/queries";
 import type { Me, MeTenant, RemovedTenant } from "@/api/schemas";
 import { FilterBar } from "@/components/filter-bar";
+import { GradeRing } from "@/components/grade-ring";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
@@ -18,7 +19,6 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatChange, formatCompact, formatCount } from "@/lib/format";
-import { GradeRing } from "@/components/grade-ring";
 import { queryClient } from "@/query-client";
 
 // an operator who is a member of no project starts on the operator review

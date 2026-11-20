@@ -378,20 +378,12 @@ export function DataTable<Row>({
             <span
               aria-hidden
               data-fade="start"
-              className={cn(
-                FADE,
-                "left-0",
-                frame.start && "opacity-100",
-              )}
+              className={cn(FADE, "left-0", frame.start && "opacity-100")}
             />
             <span
               aria-hidden
               data-fade="end"
-              className={cn(
-                FADE,
-                "right-0",
-                frame.end && "opacity-100",
-              )}
+              className={cn(FADE, "right-0", frame.end && "opacity-100")}
             />
           </>
         ) : null}

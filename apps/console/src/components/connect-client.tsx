@@ -63,7 +63,11 @@ export function ConnectClient({
     setClient(next.value);
     (e.currentTarget.parentElement?.children[j] as HTMLElement | undefined)?.focus();
   }
-  const keyFirst = <Step n={1} title={`Create ${keyName}`}>{keyStep}</Step>;
+  const keyFirst = (
+    <Step n={1} title={`Create ${keyName}`}>
+      {keyStep}
+    </Step>
+  );
   return (
     <section aria-labelledby={headingId} className={cn("flex min-w-0 flex-col gap-3", className)}>
       <h2 id={headingId} className="text-[15px] leading-5 font-semibold text-fg">
@@ -124,7 +128,12 @@ export function ConnectClient({
                 />
               </Step>
               <Step n={3} title="Or sign in through the browser, without a key">
-                <CodeBlock code={s.claudeCodeOAuth} label="Terminal" copyLabel="Copy command" wrap />
+                <CodeBlock
+                  code={s.claudeCodeOAuth}
+                  label="Terminal"
+                  copyLabel="Copy command"
+                  wrap
+                />
               </Step>
             </Steps>
           ) : (
