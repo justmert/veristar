@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import {
+  ArrowUpRight,
   BookOpen,
   CircleAlert,
   Clock,
@@ -65,43 +66,39 @@ export function AlertsPage() {
         meta={
           count !== null && count > 0 ? (
             <span
-              className={cn("text-body tabular", critical > 0 ? "text-critical" : "text-fg-2")}
+              className={cn("text-[15px] tabular", critical > 0 ? "text-critical" : "text-fg-3")}
               data-count=""
             >
               {count}
             </span>
           ) : null
         }
-        freshness={
-          alerts.data && !alerts.error
-            ? {
-                at: alerts.data.checked_at,
-                cadence: `The page checks again every ${EVERY}.`,
-              }
-            : null
-        }
-        details={
+        items={
           alerts.isPending
-            ? undefined
+            ? []
             : [
-                { label: "Source", value: <SourceFact error={alerts.error} data={data} /> },
-                ...(RUNBOOKS
-                  ? [
-                      {
-                        label: "Runbooks",
-                        value: (
-                          <a
-                            href={RUNBOOKS}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="rounded-sm underline-offset-4 hover:underline focus-ring"
-                          >
-                            alerts.md
-                          </a>
-                        ),
-                      },
-                    ]
-                  : []),
+                <SourceFact key="source" error={alerts.error} data={data} />,
+                data ? (
+                  <time
+                    key="checked"
+                    dateTime={new Date(data.checked_at).toISOString()}
+                    title={`The page checks again every ${EVERY}.`}
+                    data-freshness=""
+                  >
+                    checked {formatTimeUtc(data.checked_at)}
+                  </time>
+                ) : null,
+                RUNBOOKS ? (
+                  <a
+                    key="runbooks"
+                    href={RUNBOOKS}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-sm text-fg-3 underline underline-offset-[3px] hover:text-fg focus-ring"
+                  >
+                    Runbooks
+                  </a>
+                ) : null,
               ]
         }
         secondary={
@@ -155,7 +152,7 @@ function SourceFact({ error, data }: { error: unknown; data: OperatorAlerts | nu
       title={data.sources.map((s) => s.address).join(", ")}
       data-sources=""
     >
-      <StatusDot tone={answered === data.sources.length ? "success" : "warning"} live />
+      <StatusDot tone={answered === data.sources.length ? "success" : "warning"} />
       Alertmanager,{" "}
       {answered === data.sources.length
         ? countOf(data.sources.length, "server")
@@ -290,14 +287,14 @@ function SourcesDown({ down, total }: { down: AlertSource[]; total: number }) {
 function SeverityList({ group, now }: { group: SeverityGroup; now: number }) {
   const headingId = `severity-${group.key || "none"}`;
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3" data-severity={group.key}>
-      <h2 id={headingId} className="flex items-baseline gap-2 text-title text-fg">
-        {groupTitle(group.key)}{" "}
-        <span className="text-small font-normal text-fg-2 tabular">{group.alerts.length}</span>
+    <section aria-labelledby={headingId} className="flex flex-col gap-2.5" data-severity={group.key}>
+      <h2 id={headingId} className="flex items-baseline gap-2 text-[15px] font-semibold text-fg">
+        {groupTitle(group.key)}
+        <span className="text-small font-normal text-fg-3 tabular">{group.alerts.length}</span>
       </h2>
-      <ul className="flex flex-col gap-2">
+      <ul className="flex flex-col overflow-hidden rounded-2xl border border-line bg-raised">
         {group.alerts.map((a) => (
-          <li key={a.fingerprint}>
+          <li key={a.fingerprint} className="border-t border-line-subtle first:border-t-0">
             <AlertItem alert={a} now={now} />
           </li>
         ))}
@@ -309,7 +306,7 @@ function SeverityList({ group, now }: { group: SeverityGroup; now: number }) {
 const TONE_TEXT: Record<AlertTone, string> = {
   critical: "text-critical",
   warning: "text-warning",
-  muted: "text-fg-2",
+  muted: "text-fg-3",
 };
 
 const TONE_ICON: Record<AlertTone, typeof CircleAlert> = {
@@ -324,68 +321,88 @@ const HELD_TEXT = {
   unprocessed: "Just received. The alert service did not process it yet.",
 };
 
-// one alert: what is wrong in words first, how long it fires, the runbook
-// as the action, and the labels that place it as a secondary line
+// one alert as one row: the severity icon, the alert as one sentence with
+// its labels as quiet tags, how long it has fired, and the runbook. the
+// description and the held state are on the sentence's hover, so the row
+// carries no second line of prose
 function AlertItem({ alert, now }: { alert: FiringAlert; now: number }) {
   const runbook = runbookUrl(alert.runbook);
   const urgency = alertUrgency(alert);
   const Icon = TONE_ICON[urgency.tone];
   const held = alert.state === "suppressed";
+  const heldText = held
+    ? alert.inhibited_by.length > 0
+      ? HELD_TEXT.inhibited
+      : HELD_TEXT.suppressed
+    : alert.state === "unprocessed"
+      ? HELD_TEXT.unprocessed
+      : null;
   const labels = [
     alert.name,
     alert.node ? `node ${alert.node}` : null,
     alert.service ? `service ${alert.service}` : null,
     alert.instance ? `instance ${alert.instance}` : null,
   ].filter((x): x is string => x !== null);
+  const sentence = sentenceCase(alert.summary ?? alert.name);
+  const description = alert.description ? sentenceCase(alert.description) : null;
   return (
     <article
-      aria-label={sentenceCase(alert.summary ?? alert.name)}
+      aria-label={sentence}
       data-alert={alert.name}
       className={cn(
-        "grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-3 rounded-lg border border-line bg-raised p-4 sm:grid-cols-[2rem_minmax(0,1fr)_auto]",
+        "grid min-w-0 grid-cols-[20px_minmax(0,1fr)] items-center gap-x-4 gap-y-2 px-5 py-3.5 md:grid-cols-[20px_minmax(0,1fr)_14rem_7rem]",
         held && "opacity-70",
       )}
     >
-      <span
-        className={cn(
-          "flex size-8 items-center justify-center rounded-md border border-line-strong",
-          TONE_TEXT[urgency.tone],
-        )}
-      >
+      <span className={cn("flex items-center self-start pt-0.5 md:self-center", TONE_TEXT[urgency.tone])}>
         <Icon aria-hidden className="size-4" />
         <span className="sr-only">{urgency.word}</span>
       </span>
-      <div className="flex min-w-0 flex-col gap-1">
-        <p className="text-body font-medium break-words text-fg">
-          {sentenceCase(alert.summary ?? alert.name)}
+      <div className="flex min-w-0 flex-col">
+        <p className="text-body font-medium break-words text-fg" title={description ?? undefined}>
+          {sentence}
         </p>
-        <p className="text-small text-fg-2">
-          Fires for <span className="text-fg tabular">{firingFor(alert.starts_at, now)}</span>,
-          since <time dateTime={alert.starts_at}>{formatDateTimeUtc(alert.starts_at)}</time>
-        </p>
-        {alert.description ? (
-          <p className="text-small break-words text-fg-2">{sentenceCase(alert.description)}</p>
-        ) : null}
-        {held ? (
-          <p className="text-small text-fg-2">
-            {alert.inhibited_by.length > 0 ? HELD_TEXT.inhibited : HELD_TEXT.suppressed}
-          </p>
-        ) : alert.state === "unprocessed" ? (
-          <p className="text-small text-fg-2">{HELD_TEXT.unprocessed}</p>
-        ) : null}
-        <p className="font-mono text-caption break-all text-fg-2" data-labels="">
-          {labels.join(" · ")}
-        </p>
+        {description ? <span className="sr-only">{description}</span> : null}
+        <ul className="mt-1.5 flex flex-wrap gap-1.5" data-labels="">
+          {labels.map((l) => (
+            <li
+              key={l}
+              className="rounded-[5px] border border-line-2 px-[7px] py-px font-mono text-[11.5px] break-all text-fg-3"
+            >
+              {l}
+            </li>
+          ))}
+          {heldText ? (
+            <li
+              title={heldText}
+              className="rounded-[5px] border border-line-2 px-[7px] py-px text-[11.5px] text-fg-3"
+            >
+              {held ? "Held back" : "Just received"}
+              <span className="sr-only">. {heldText}</span>
+            </li>
+          ) : null}
+        </ul>
       </div>
+      <p
+        className="col-start-2 flex items-baseline gap-2 text-[13.5px] tabular md:col-start-3"
+        title={formatDateTimeUtc(alert.starts_at)}
+      >
+        <span className="sr-only">Fires for</span>
+        <b className="font-semibold text-fg">{firingFor(alert.starts_at, now)}</b>
+        <span className="text-fg-3">
+          since <time dateTime={alert.starts_at}>{formatTimeUtc(alert.starts_at).replace(" UTC", "")}</time>
+        </span>
+      </p>
       {runbook ? (
-        <div className="col-span-2 sm:col-span-1">
-          <Button asChild variant="outline" size="sm" className="max-lg:h-(--vs-control-touch)">
-            <a href={runbook} target="_blank" rel="noreferrer">
-              <BookOpen aria-hidden />
-              Runbook<span className="sr-only"> for {alert.name}</span>
-            </a>
-          </Button>
-        </div>
+        <a
+          href={runbook}
+          target="_blank"
+          rel="noreferrer"
+          className="col-start-2 inline-flex items-center gap-1 justify-self-start rounded-sm text-small text-fg-2 hover:text-fg focus-ring max-md:min-h-(--vs-control-touch) md:col-start-4 md:justify-self-end"
+        >
+          Runbook<span className="sr-only"> for {alert.name}</span>
+          <ArrowUpRight aria-hidden className="size-3" />
+        </a>
       ) : null}
     </article>
   );
