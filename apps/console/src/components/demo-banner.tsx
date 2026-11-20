@@ -14,7 +14,7 @@ export function DemoBanner() {
       data-demo-banner=""
       className="pointer-events-none fixed inset-x-0 bottom-0 z-(--vs-layer-toast) flex justify-center p-4 lg:left-(--vs-sidebar) lg:justify-start"
     >
-      <p className="pointer-events-auto flex animate-rise-in items-center gap-2.5 rounded-[10px] border border-line-2 bg-overlay px-3.5 py-2 text-small text-fg shadow-overlay">
+      <p className="pointer-events-auto flex animate-rise-in items-center gap-2 rounded-lg border border-line-strong bg-overlay px-3 py-2 text-small text-fg shadow-overlay">
         <Info aria-hidden className="size-4 shrink-0 text-info" />
         <span>Demo with sample data. Read-only.</span>
         <Button asChild variant="link" size="sm" className="shrink-0">
