@@ -209,10 +209,10 @@ test("the gateway classified every event and the job graded the day", async () =
 test("the project reads its own grade on the overview, as operators see it", async () => {
   const page = owner.page;
   await page.goto(`${APP}/projects/${tenant.id}`);
-  // the overview sums the grade up in one card that links to the full report
-  const card = page.getByRole("region", { name: "Integrity grade" });
+  // the overview sums the grade up in one figure that links to the full report
+  const card = page.locator('[data-tile="Integrity grade"]');
   await expect(card.locator("[data-grade]")).toHaveAttribute("data-grade", "A");
-  await expect(card.getByRole("link", { name: "SCF review" })).toHaveAttribute(
+  await expect(card.getByRole("link", { name: /site days?$/ })).toHaveAttribute(
     "href",
     `/projects/${tenant.id}/scf`,
   );
@@ -222,14 +222,16 @@ test("the project reads its own grade on the overview, as operators see it", asy
   // sees". the issue the link opens for a lower grade is checked in the
   // console's unit tests
   await page.goto(`${APP}/projects/${tenant.id}/scf`);
-  await expect(page.getByTestId("standing-grade").locator("[data-grade]")).toHaveAttribute(
-    "data-grade",
-    "A",
+  const ring = page.getByTestId("standing-grade");
+  await expect(ring).toHaveAttribute("data-grade", "A");
+  // nothing lowered a day: the ring counts only a days
+  await expect(ring).toHaveAttribute(
+    "aria-label",
+    /^Integrity grade A: \d+ A days?, 0 B days, 0 C days$/,
   );
-  // nothing lowered a day: the day counts stand where the reasons would
-  await expect(page.getByTestId("standing-grade").locator("[data-day-counts]")).toBeVisible();
-  await page.locator("details#integrity > summary").click();
-  await expect(page.getByRole("region", { name: "Integrity report" })).toContainText(site.domain);
+  // the traffic integrity evidence, opened from its check tile, names the site
+  await page.getByRole("button", { name: /^Traffic integrity/ }).click();
+  await expect(page.locator('[data-evidence="integrity"]')).toContainText(site.domain);
   await expect(page.getByRole("link", { name: "Appeal this grade" })).toHaveCount(0);
 });
 
