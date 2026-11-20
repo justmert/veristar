@@ -172,10 +172,8 @@ test("a signed report verifies in a browser without a session, until its link is
     const r = await reader.newPage();
     watch(r);
     await r.goto(url);
-    await expect(r.locator("[data-verdict=verified]")).toHaveText(
-      "Signed by Veristar. This browser checked the signature.",
-    );
-    await r.getByText("Signature details").click();
+    await expect(r.locator("[data-verdict=verified]")).toContainText("Signed by Veristar");
+    await r.getByRole("button", { name: "Details" }).click();
     await expect(r.getByRole("region", { name: "Signature" })).toContainText(
       "Veristar's current report key",
     );
