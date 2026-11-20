@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowRight, Ban, ExternalLink, KeyRound } from "lucide-react";
+import { Ban, Plus } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { Link } from "react-router";
 import { ApiError } from "@/api/client";
@@ -11,6 +11,8 @@ import { CreateDialog } from "@/components/create-dialog";
 import { type Column, DataTable } from "@/components/data-table";
 import { TextField } from "@/components/form-field";
 import { Notice } from "@/components/notice";
+import { Segmented } from "@/components/segmented";
+import { type SetupStep, SetupProgress } from "@/components/setup-progress";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/panel";
 import { Missing } from "@/components/states";
@@ -19,7 +21,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
+import { Skeleton as Bone } from "@/components/ui/skeleton";
 import { formatDateTimeUtc } from "@/lib/format";
 import { siblingUrl } from "@/lib/hosts";
 import { otlpEndpoint } from "@/lib/otlp-endpoint";
@@ -27,9 +30,14 @@ import * as v from "@/lib/validate";
 import { NOT_USED, nameTaken } from "@/pages/project/ai";
 import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
-import { ENDPOINT_PLACEHOLDER, exampleDocsPath, exporterSnippet, STACKS } from "./connect-snippets";
+import {
+  ENDPOINT_PLACEHOLDER,
+  exampleDocsPath,
+  exporterSnippet,
+  STACKS,
+  type Stack,
+} from "./connect-snippets";
 import { PAGE_HEADERS } from "./page-frame";
-import { Step, Steps } from "./steps";
 
 export type TokenValues = { name: string; environment: string };
 export type TokenErrors = Partial<Record<keyof TokenValues, string>>;
@@ -88,6 +96,9 @@ export function ConnectApiPage() {
   const docs = siblingUrl(window.location.hostname, "docs");
   const [showRevoked, setShowRevoked] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [codeShown, setCodeShown] = useState(false);
+  const [stack, setStack] = useState<Stack["id"]>(STACKS[0]?.id ?? "node");
+  const [tokenId, setTokenId] = useState<string | null>(null);
   const list = useQuery({
     ...otlpTokensQuery(tenant.id, showRevoked),
     refetchInterval: (q) => (waiting(q.state.data) ? FIRST_DATA_POLL : false),
@@ -97,68 +108,113 @@ export function ConnectApiPage() {
   const hasToken = active.length > 0;
   const lastUsed = lastUsedToken(tokens);
   const blocked = createBlocked(tenant, termsCurrent);
+  const token = active.find((t) => t.id === tokenId) ?? active[0] ?? null;
   const create = (
-    <Button onClick={() => setCreating(true)} className="w-fit">
-      <KeyRound aria-hidden />
+    <Button onClick={() => setCreating(true)} className="w-fit max-lg:h-(--vs-control-touch)">
+      <Plus aria-hidden />
       Create token
     </Button>
   );
+  const stackPicker = (
+    <Segmented<Stack["id"]>
+      label="Language"
+      value={stack}
+      options={STACKS.map((g) => ({ value: g.id, label: g.label }))}
+      onChange={setStack}
+    />
+  );
+
+  const steps: SetupStep[] = [
+    {
+      key: "token",
+      label: "Create a token",
+      state: hasToken ? "done" : "current",
+      result: <span>{active.length} active</span>,
+    },
+    {
+      key: "exporter",
+      label: "Add the exporter",
+      state: lastUsed ? "done" : hasToken ? "current" : "todo",
+      result: (
+        <>
+          <span>OpenTelemetry metrics</span>
+          <button type="button" aria-expanded={codeShown} onClick={() => setCodeShown((x) => !x)}>
+            {codeShown ? "Hide the code" : "Show the code"}
+          </button>
+        </>
+      ),
+    },
+    {
+      key: "data",
+      label: "Data arrives",
+      state: lastUsed ? "done" : "todo",
+      result: lastUsed ? (
+        <span data-arrived="" className="contents">
+          <span>Last export {formatDateTimeUtc(lastUsed.last_seen_at ?? "")}</span>
+          <Link to={`/projects/${tenant.id}/api`}>See the traffic</Link>
+        </span>
+      ) : null,
+    },
+  ];
+  const exporter = (
+    <Exporter
+      stack={stack}
+      endpoint={endpoint}
+      docs={docs}
+      token={token}
+      tokens={active}
+      onToken={setTokenId}
+      waiting={!lastUsed}
+    />
+  );
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-7">
       <PageHeader
         {...PAGE_HEADERS["connect-api"]}
+        items={
+          docs
+            ? [
+                <a
+                  key="kept"
+                  href={`${docs}/onboarding/api/what-gets-dropped`}
+                  className="rounded-sm underline decoration-line-strong underline-offset-[3px] transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring"
+                >
+                  What is kept
+                </a>,
+              ]
+            : undefined
+        }
         // the first token is created from the first step; later ones here
         primary={hasToken && !blocked ? create : null}
         secondary={
-          docs ? (
-            <Button asChild variant="ghost">
-              <a href={`${docs}/onboarding/api/what-gets-dropped`}>
-                What is kept
-                <ExternalLink aria-hidden />
-              </a>
+          lastUsed ? (
+            <Button asChild variant="outline">
+              <Link to={`/projects/${tenant.id}/api`}>API data</Link>
             </Button>
           ) : null
         }
       />
 
       {hasToken && blocked ? blocked : null}
-      <section
-        aria-label="Setup"
-        className="flex min-w-0 flex-col rounded-lg border border-line bg-raised p-5 max-sm:p-4"
-      >
-        <Steps label="Setup steps">
-          <Step n={1} state={hasToken ? "done" : "current"} title="Create a token">
-            {blocked ?? create}
-          </Step>
-          <Step
-            n={2}
-            state={hasToken ? (lastUsed ? "done" : "current") : "todo"}
-            title="Add the exporter"
+      {list.isPending ? (
+        <Bone className="h-40 w-full rounded-2xl" />
+      ) : (
+        <div className="flex flex-col gap-4">
+          <SetupProgress
+            steps={steps}
+            currentAside={hasToken && !lastUsed ? stackPicker : null}
           >
-            <Snippets endpoint={endpoint} docs={docs} />
-          </Step>
-          <Step
-            n={3}
-            state={lastUsed ? "done" : hasToken ? "waiting" : "todo"}
-            title="Data arrived"
-            aside={
-              lastUsed ? (
-                <Arrived tenantId={tenant.id} lastUsed={lastUsed} />
-              ) : hasToken ? (
-                <span
-                  className="flex items-center gap-2 text-small text-fg-2"
-                  aria-live="polite"
-                  data-waiting=""
-                >
-                  <StatusDot tone="info" live />
-                  Checking every 30 s
-                </span>
-              ) : null
-            }
-          />
-        </Steps>
-      </section>
+            {hasToken ? exporter : (blocked ?? create)}
+          </SetupProgress>
+          {lastUsed && codeShown ? (
+            <div className="flex min-w-0 flex-col gap-4 rounded-2xl border border-line bg-raised px-6 py-5 max-sm:px-4">
+              {stackPicker}
+              {exporter}
+            </div>
+          ) : null}
+        </div>
+      )}
 
       <TokensSection
         tenantId={tenant.id}
@@ -179,8 +235,90 @@ export function ConnectApiPage() {
   );
 }
 
-// the exporter to add, per stack, with the endpoint and the token written
-// in; the copied text holds the token, the shown one only its start
+// the exporter for one language with the endpoint and a token's start
+// written in. the plaintext of a token is shown only once, when it is
+// created, so the copy here holds a placeholder for it; the create dialog
+// copies the code with the whole token.
+function Exporter({
+  stack,
+  endpoint,
+  docs,
+  token,
+  tokens,
+  onToken,
+  waiting,
+}: {
+  stack: Stack["id"];
+  endpoint: string | null;
+  docs: string | null;
+  token: OtlpToken | null;
+  tokens: OtlpToken[];
+  onToken: (id: string) => void;
+  waiting: boolean;
+}) {
+  const at = endpoint ?? ENDPOINT_PLACEHOLDER;
+  const g = STACKS.find((s) => s.id === stack) ?? STACKS[0];
+  const shown = token ? `${token.prefix}...` : "<token>";
+  if (!g) return null;
+  return (
+    <div className="flex min-w-0 flex-col gap-4">
+      <div data-snippet={g.id} className="min-w-0">
+        <CodeBlock
+          code={exporterSnippet(g.id, at, shown)}
+          copyText={exporterSnippet(g.id, at, "<token>")}
+          copyLabel={`Copy the ${g.label} exporter`}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-small">
+        {token ? (
+          <span className="flex items-center gap-2">
+            <span className="text-fg-3">Token</span>
+            <span className="font-mono text-fg">{token.name}</span>
+            {tokens.length > 1 ? (
+              <Menu>
+                <MenuTrigger asChild>
+                  <Button variant="link" size="sm" className="text-small text-fg-2">
+                    Change
+                  </Button>
+                </MenuTrigger>
+                <MenuContent align="start">
+                  {tokens.map((t) => (
+                    <MenuItem key={t.id} onSelect={() => onToken(t.id)}>
+                      {t.name}
+                      {t.environment ? (
+                        <span className="font-mono text-caption text-fg-3">{t.environment}</span>
+                      ) : null}
+                    </MenuItem>
+                  ))}
+                </MenuContent>
+              </Menu>
+            ) : null}
+          </span>
+        ) : null}
+        {waiting ? (
+          <span
+            className="flex items-center gap-2 text-fg-2"
+            aria-live="polite"
+            data-waiting=""
+          >
+            <StatusDot tone="info" live />
+            Waiting for the first export
+          </span>
+        ) : null}
+        {docs ? (
+          <a
+            href={`${docs}${exampleDocsPath(g.id)}`}
+            className="rounded-sm text-fg underline decoration-line-strong underline-offset-[3px] transition-colors duration-(--vs-duration-press) hover:decoration-fg focus-ring sm:ml-auto"
+          >
+            Full {g.label} example
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// the exporter in the create dialog, with the new token written in whole
 function Snippets({
   endpoint,
   docs,
@@ -188,55 +326,36 @@ function Snippets({
 }: {
   endpoint: string | null;
   docs: string | null;
-  token?: string;
+  token: string;
 }) {
+  const [stack, setStack] = useState<Stack["id"]>(STACKS[0]?.id ?? "node");
   const at = endpoint ?? ENDPOINT_PLACEHOLDER;
-  const shown = token ? `${token.slice(0, 12)}...` : "<token>";
+  const g = STACKS.find((s) => s.id === stack) ?? STACKS[0];
+  if (!g) return null;
   return (
-    <Tabs defaultValue={STACKS[0]?.id ?? "node"} className="min-w-0 gap-3">
-      <TabsList aria-label="Language" className="max-w-full overflow-x-auto">
-        {STACKS.map((g) => (
-          <TabsTrigger key={g.id} value={g.id} className="max-lg:h-(--vs-control-touch)">
-            {g.label}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-      {STACKS.map((g) => (
-        <TabsContent key={g.id} value={g.id} className="flex min-w-0 flex-col gap-2">
-          <div data-snippet={g.id} className="min-w-0">
-            <CodeBlock
-              code={exporterSnippet(g.id, at, shown)}
-              copyText={exporterSnippet(g.id, at, token ?? "<token>")}
-              copyLabel={`Copy the ${g.label} exporter`}
-            />
-          </div>
-          {docs ? (
-            <a
-              href={`${docs}${exampleDocsPath(g.id)}`}
-              className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring"
-            >
-              Full {g.label} example
-              <ExternalLink aria-hidden className="size-3.5" />
-            </a>
-          ) : null}
-        </TabsContent>
-      ))}
-    </Tabs>
-  );
-}
-
-function Arrived({ tenantId, lastUsed }: { tenantId: string; lastUsed: OtlpToken }) {
-  return (
-    <span data-arrived="" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-small">
-      <span className="text-fg-2 tabular">{formatDateTimeUtc(lastUsed.last_seen_at ?? "")}</span>
-      <Link
-        to={`/projects/${tenantId}/api`}
-        className="group inline-flex items-center gap-1 rounded-sm font-medium text-fg hover:underline focus-ring"
-      >
-        See the traffic
-        <ArrowRight aria-hidden className="size-3.5" />
-      </Link>
-    </span>
+    <div className="flex min-w-0 flex-col gap-3">
+      <Segmented<Stack["id"]>
+        label="Language"
+        value={stack}
+        options={STACKS.map((x) => ({ value: x.id, label: x.label }))}
+        onChange={setStack}
+      />
+      <div data-snippet={g.id} className="min-w-0">
+        <CodeBlock
+          code={exporterSnippet(g.id, at, `${token.slice(0, 12)}...`)}
+          copyText={exporterSnippet(g.id, at, token)}
+          copyLabel={`Copy the ${g.label} exporter`}
+        />
+      </div>
+      {docs ? (
+        <a
+          href={`${docs}${exampleDocsPath(g.id)}`}
+          className="w-fit rounded-sm text-small text-fg underline decoration-line-strong underline-offset-[3px] transition-colors duration-(--vs-duration-press) hover:decoration-fg focus-ring"
+        >
+          Full {g.label} example
+        </a>
+      ) : null}
+    </div>
   );
 }
 
@@ -258,13 +377,12 @@ function TokensSection({
       header: "Name",
       primary: true,
       minWidth: "min-w-48",
-      // the name takes the spare width and wraps rather than cuts
-      className: "w-full",
+      className: "w-[38%]",
       cell: (t) => (
-        <span className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="flex min-w-0 flex-wrap items-center gap-2.5">
           <span className="font-medium break-words text-fg">{t.name}</span>
           {t.environment ? (
-            <span className="shrink-0 rounded-full border border-line-strong px-2 font-mono text-caption text-fg-2">
+            <span className="shrink-0 rounded-md border border-line-strong px-1.5 font-mono text-caption text-fg-2">
               {t.environment}
             </span>
           ) : null}
@@ -277,13 +395,15 @@ function TokensSection({
       header: "Token",
       mobile: true,
       cell: (t) => (
-        <code className="font-mono text-small whitespace-nowrap text-fg">{t.prefix}...</code>
+        <code className="font-mono text-small whitespace-nowrap text-fg-2">{t.prefix}...</code>
       ),
     },
     {
       key: "created",
       header: "Created",
-      cell: (t) => <span className="whitespace-nowrap">{formatDateTimeUtc(t.created_at)}</span>,
+      cell: (t) => (
+        <span className="whitespace-nowrap text-fg-2">{formatDateTimeUtc(t.created_at)}</span>
+      ),
     },
     {
       key: "used",
@@ -291,7 +411,9 @@ function TokensSection({
       mobile: true,
       cell: (t) =>
         t.last_seen_at ? (
-          <span className="whitespace-nowrap">{formatDateTimeUtc(t.last_seen_at)}</span>
+          <span className="whitespace-nowrap font-medium text-fg">
+            {formatDateTimeUtc(t.last_seen_at)}
+          </span>
         ) : (
           <Missing reason={NOT_USED} />
         ),
@@ -310,7 +432,7 @@ function TokensSection({
             onCheckedChange={(c) => onShowRevoked(c === true)}
           />
           <label htmlFor={revokedId} className="text-small text-fg-2">
-            Show revoked tokens
+            Show revoked
           </label>
         </span>
       }
