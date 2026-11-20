@@ -99,10 +99,10 @@ test("sign in, enroll, add a site and copy the snippet", async ({ browserName })
 
   await page.goto(`${APP}/projects/new`);
   const name = `Flow project ${user.login}`;
-  await page.getByLabel("Project name").fill(name);
+  await page.getByLabel(/^Name/).fill(name);
   await page.getByLabel("Website").fill("https://example.org");
   await page
-    .getByLabel("How does the project use Stellar?")
+    .getByLabel("How the project uses Stellar")
     .fill("Payments on testnet, measured by the console e2e");
   await page.getByRole("checkbox").check();
   await shot(page, "02-enroll");

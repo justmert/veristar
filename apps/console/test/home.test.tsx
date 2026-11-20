@@ -62,7 +62,8 @@ describe("enroll", () => {
     expect([...groups].map((d) => d.open)).toEqual([false, false]);
     await type(byLabel(host, "Short name"), "Not A Slug");
     await click(byRole(host, "button", "Enroll project"));
-    expect(groups[0]?.open).toBe(true);
-    expect(groups[1]?.open).toBe(false);
+    // the award by hand comes first, more about the project second
+    expect(groups[0]?.open).toBe(false);
+    expect(groups[1]?.open).toBe(true);
   });
 });

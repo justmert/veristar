@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { CircleX, PencilLine } from "lucide-react";
+import { PencilLine } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { ApiError } from "@/api/client";
 import { api, type ResubmitInput } from "@/api/endpoints";
@@ -11,7 +11,7 @@ import { Notice } from "@/components/notice";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
 import * as v from "@/lib/validate";
-import { splitIds } from "@/pages/home/enroll";
+import { NumberedSection, StellarFields, splitIds } from "@/pages/home/enroll";
 import { queryClient } from "@/query-client";
 
 export type ResubmitValues = {
@@ -132,18 +132,13 @@ export function ResubmitForm({ tenant }: { tenant: Tenant }) {
 
   // a quiet marker on each answer that differs from the one on file, so the
   // owner sees what the reviewers will read anew
-  const changed = (k: Key, hint?: string) =>
+  const changed = (k: Key) =>
     values[k].trim() !== initial[k].trim() ? (
-      <span className="flex flex-col gap-1">
-        {hint ? <span>{hint}</span> : null}
-        <span className="flex animate-fade-in items-center gap-1 text-warning">
-          <PencilLine aria-hidden className="size-3" />
-          Changed from the answers on file
-        </span>
+      <span className="flex animate-fade-in items-center gap-1 text-warning">
+        <PencilLine aria-hidden className="size-3" />
+        Changed from the answers on file
       </span>
-    ) : (
-      hint
-    );
+    ) : undefined;
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -158,55 +153,42 @@ export function ResubmitForm({ tenant }: { tenant: Tenant }) {
       noValidate
       onSubmit={submit}
       aria-label="Resubmit the enrollment"
-      className="flex animate-rise-in flex-col overflow-hidden rounded-xl border border-line bg-raised"
+      className="flex max-w-180 animate-rise-in flex-col gap-5"
     >
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 border-b border-line px-4 py-4 sm:px-5">
-        <span className="flex size-8 items-center justify-center rounded-md border border-line-strong text-critical">
-          <CircleX aria-hidden className="size-4" />
-        </span>
-        <div className="flex min-w-0 flex-col gap-1">
-          <h2 className="text-title text-fg">Enrollment was not approved</h2>
-          {tenant.status_reason ? (
-            <>
-              <span className="text-body text-fg-2">
-                Reason given, {formatDate(tenant.status_changed_at)}:
-              </span>
-              <blockquote className="rounded-md bg-sunken px-3 py-2 text-body text-fg">
-                {tenant.status_reason}
-              </blockquote>
-            </>
-          ) : (
-            <span className="text-body text-fg-2">No reason was given.</span>
-          )}
-        </div>
-      </div>
-      <div className="flex flex-col gap-4 px-4 py-5 sm:px-5">
-        <h3 className="text-caption tracking-wide text-fg-3 uppercase">
-          Change the answers, then submit again
-        </h3>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <TextField
-            label="Project name"
-            name="name"
-            maxLength={100}
-            value={values.name}
-            onChange={set("name")}
-            error={errors.name}
-            hint={changed("name")}
-          />
-          <TextField
-            label="Website"
-            name="website"
-            type="url"
-            inputMode="url"
-            autoCapitalize="none"
-            spellCheck={false}
-            value={values.website}
-            onChange={set("website")}
-            error={errors.website}
-            hint={changed("website")}
-          />
-        </div>
+      <Notice tone="critical" title="Enrollment was not approved">
+        {tenant.status_reason ? (
+          <span className="flex flex-col gap-1">
+            <span>Reason given on {formatDate(tenant.status_changed_at)}</span>
+            <q className="text-fg">{tenant.status_reason}</q>
+          </span>
+        ) : (
+          "No reason was given."
+        )}
+      </Notice>
+      <NumberedSection n={1} title="Project">
+        <TextField
+          label="Name"
+          name="name"
+          maxLength={100}
+          value={values.name}
+          onChange={set("name")}
+          error={errors.name}
+          hint={changed("name")}
+        />
+        <TextField
+          label="Website"
+          name="website"
+          type="url"
+          inputMode="url"
+          placeholder="https://"
+          className="font-mono"
+          autoCapitalize="none"
+          spellCheck={false}
+          value={values.website}
+          onChange={set("website")}
+          error={errors.website}
+          hint={changed("website")}
+        />
         <TextAreaField
           label="Description"
           name="description"
@@ -218,65 +200,58 @@ export function ResubmitForm({ tenant }: { tenant: Tenant }) {
           error={errors.description}
           hint={changed("description")}
         />
-        <TextAreaField
-          label="How does the project use Stellar?"
-          name="stellar_usage"
-          rows={3}
-          maxLength={2000}
-          value={values.stellarUsage}
-          onChange={set("stellarUsage")}
-          error={errors.stellarUsage}
-          hint={changed("stellarUsage")}
+      </NumberedSection>
+      <NumberedSection n={2} title="Stellar">
+        <StellarFields
+          usage={values.stellarUsage}
+          ids={values.stellarIds}
+          onUsage={set("stellarUsage")}
+          onIds={set("stellarIds")}
+          usageError={errors.stellarUsage}
+          idsError={errors.stellarIds}
         />
-        <TextAreaField
-          label="Account or contract IDs"
-          name="stellar_ids"
-          optional
-          rows={3}
-          className="font-mono text-small"
-          spellCheck={false}
-          hint={changed("stellarIds", "Up to 20 IDs starting with G, M or C, one per line.")}
-          value={values.stellarIds}
-          onChange={set("stellarIds")}
-          error={errors.stellarIds}
-        />
+        {changed("stellarUsage") || changed("stellarIds") ? (
+          <span className="text-caption">{changed("stellarUsage") ?? changed("stellarIds")}</span>
+        ) : null}
         <TextField
-          label="Stellar Community Fund round"
+          label="SCF submission link"
           name="scf_round_url"
           optional
           type="url"
           inputMode="url"
+          placeholder="https://"
           autoCapitalize="none"
           spellCheck={false}
           value={values.scfRoundUrl}
           onChange={set("scfRoundUrl")}
           error={errors.scfRoundUrl}
-          hint={changed("scfRoundUrl", "A link to the project's SCF submission, if it has one.")}
+          hint={changed("scfRoundUrl")}
         />
+      </NumberedSection>
+      <div className="flex flex-col gap-3 sm:pl-10.5">
         <FormMessage
           error={
             send.error && Object.keys(serverErrors(send.error)).length === 0 ? send.error : null
           }
         />
-      </div>
-      <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-3 sm:px-5">
-        <Button
-          type="submit"
-          pending={send.isPending}
-          disabled={send.isPending}
-          className="max-sm:h-(--vs-control-touch)"
-        >
-          {send.isPending ? "Submitting" : "Submit for review"}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          className="max-sm:h-(--vs-control-touch)"
-          onClick={() => setOpen(false)}
-        >
-          Cancel
-        </Button>
-        <span className="text-small text-fg-3">The project returns to the review queue.</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="submit"
+            pending={send.isPending}
+            disabled={send.isPending}
+            className="h-10 px-5 max-sm:h-(--vs-control-touch) max-sm:flex-1"
+          >
+            {send.isPending ? "Submitting" : "Submit for review"}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className="max-sm:h-(--vs-control-touch)"
+            onClick={() => setOpen(false)}
+          >
+            Cancel
+          </Button>
+        </div>
       </div>
     </form>
   );

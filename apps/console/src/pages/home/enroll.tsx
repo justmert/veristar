@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { cn } from "@veristar/brand/cn";
+import { Check } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ApiError } from "@/api/client";
@@ -17,12 +18,14 @@ import {
 import { Disclosure } from "@/components/disclosure";
 import { FormMessage } from "@/components/error-panel";
 import { TextAreaField, TextField } from "@/components/form-field";
+import { LabeledFacts } from "@/components/labeled-facts";
 import { PageHeader } from "@/components/page-header";
 import { ErrorState } from "@/components/states";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatDate } from "@/lib/format";
 import { isDraftTerms, termsVersionLabel } from "@/lib/terms";
 import * as v from "@/lib/validate";
 import { queryClient } from "@/query-client";
@@ -126,7 +129,7 @@ export function withCohort(body: EnrollmentInput, cohort: CohortValues): Enrollm
 // the award picked with the search and the cohort it filled in. the form
 // names the award only while that cohort is unchanged; an edited cohort is
 // sent as typed (contract 4.2.1: never both)
-export type PickedAward = { id: string; cohort: CohortValues };
+export type PickedAward = { id: string; project: string; cohort: CohortValues };
 
 export function sameCohort(a: CohortValues, b: CohortValues): boolean {
   return (["program", "round", "category", "award_date"] as const).every(
@@ -184,26 +187,25 @@ export function serverEnrollErrors(err: unknown, values: EnrollValues): EnrollEr
 // section when one of them needs attention
 const MORE: readonly FieldKey[] = ["slug", "description", "scfRoundUrl"];
 
-function BackLink() {
-  return (
+const CRUMB = (
+  <>
     <Link
       to="/"
-      className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring"
+      className="rounded-sm transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring"
     >
-      <ArrowLeft aria-hidden className="size-4" />
-      Projects
+      My projects
     </Link>
-  );
-}
+    <span aria-hidden>/</span>
+  </>
+);
 
-const HEADER = { title: "Enroll a project" };
+const HEADER = { title: "Enroll a project", crumb: CRUMB };
 
 export function EnrollPage() {
   const me = useQuery(meQuery);
   if (me.isPending)
     return (
       <section className="flex flex-col gap-6">
-        <BackLink />
         <PageHeader {...HEADER} />
         <div role="status" aria-busy="true" className="flex max-w-prose flex-col gap-4">
           <span className="sr-only">Loading the form</span>
@@ -216,7 +218,6 @@ export function EnrollPage() {
   if (me.error)
     return (
       <section className="flex flex-col gap-6">
-        <BackLink />
         <PageHeader {...HEADER} />
         <ErrorState
           title="Your account did not load"
@@ -228,21 +229,48 @@ export function EnrollPage() {
   return <EnrollForm termsVersion={me.data.terms.current_version} />;
 }
 
-// a group of fields under a heading in the caption style
-function Group({ title, children }: { title: string; children: ReactNode }) {
+// one numbered section of the form: its mark (the number, or a check once
+// it is complete) beside the heading and the fields
+export function NumberedSection({
+  n,
+  done = false,
+  title,
+  children,
+}: {
+  n: number;
+  done?: boolean;
+  title: string;
+  children: ReactNode;
+}) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className="flex min-w-0 flex-col gap-4">
-      <h2 id={id} className="text-title text-fg">
-        {title}
-      </h2>
-      {children}
+    <section
+      aria-labelledby={id}
+      data-section={n}
+      className="grid grid-cols-[26px_minmax(0,1fr)] gap-x-4 border-b border-line-subtle pb-5 last:border-b-0"
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "mt-0.5 flex size-6.5 items-center justify-center rounded-full border text-caption tabular",
+          done ? "border-success-line text-success" : "border-line-strong text-fg-2",
+        )}
+      >
+        {done ? <Check className="size-3.5" strokeWidth={2.4} /> : n}
+      </span>
+      <div className="flex min-w-0 flex-col gap-4">
+        <h2 id={id} className="pt-1 text-[14.5px] leading-5 font-semibold text-fg">
+          {title}
+          {done ? <span className="sr-only">, complete</span> : null}
+        </h2>
+        {children}
+      </div>
     </section>
   );
 }
 
 // an optional group that starts closed; `open` forces it open
-function Optional({
+export function Optional({
   title,
   hint,
   open,
@@ -259,14 +287,15 @@ function Optional({
     <Disclosure
       open={open}
       onToggle={onToggle}
+      variant="row"
       className="bg-transparent"
-      summaryClassName="min-h-(--vs-control-touch) font-normal"
-      bodyClassName="flex flex-col gap-4"
+      summaryClassName="min-h-12 gap-4.5 pl-1.25 text-[14.5px] font-normal"
+      bodyClassName="flex flex-col gap-4 pt-1 pb-5 pl-10.5"
       summary={
-        <>
-          <span className="font-medium">{title}</span>
-          <span className="text-small text-fg-2">{hint}</span>
-        </>
+        <span className="flex items-baseline gap-2">
+          <span className="font-semibold text-fg">{title}</span>
+          <span className="text-small text-fg-3">{hint}</span>
+        </span>
       }
     >
       {children}
@@ -294,8 +323,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
       stellarIds: a.stellar_ids.length ? awardIds(a.stellar_ids) : s.stellarIds,
     }));
     setCohort(c);
-    setCohortOpen(true);
-    setAward({ id: a.id, cohort: c });
+    setAward({ id: a.id, project: a.project, cohort: c });
     setAwardError(null);
   }
   const termsId = useId();
@@ -365,136 +393,60 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
 
   const errorCount = Object.keys(errors).length + Object.keys(cohortErrors).length;
 
+  const pickedFacts = award ? awardFacts(award.cohort) : [];
+
   return (
     <section className="flex flex-col gap-6">
-      <BackLink />
-      <div className="flex max-w-prose flex-col gap-8">
-        <div className="flex min-w-0 flex-col gap-8">
-          <PageHeader {...HEADER} />
-
-          <form
-            ref={formRef}
-            noValidate
-            onSubmit={submit}
-            className="flex flex-col gap-8"
-            aria-label="Enroll a project"
-          >
-            <div className="flex flex-col gap-1">
-              <AwardSearch onPick={pick} />
-              {awardError ? (
-                <p role="alert" className="text-caption text-critical" data-award-error="">
-                  {awardError}
-                </p>
-              ) : null}
-            </div>
-
-            <Group title="Project">
-              <TextField
-                label="Project name"
-                name="name"
-                autoComplete="organization"
-                maxLength={100}
-                value={values.name}
-                onChange={set("name")}
-                error={errors.name}
-                required
+      <PageHeader {...HEADER} />
+      <form
+        ref={formRef}
+        noValidate
+        onSubmit={submit}
+        className="flex max-w-180 flex-col gap-5"
+        aria-label="Enroll a project"
+      >
+        <NumberedSection n={1} done={award !== null} title="SCF award">
+          {award ? (
+            <div
+              data-award-picked={award.id}
+              className="flex min-w-0 items-center gap-3 rounded-xl border border-line bg-raised px-4 py-3.5 sm:pl-10.5 sm:relative"
+            >
+              <Check
+                aria-hidden
+                className="size-4 shrink-0 text-success sm:absolute sm:top-1/2 sm:left-4 sm:-translate-y-1/2"
+                strokeWidth={2.4}
               />
-              <TextField
-                label="Website"
-                name="website"
-                type="url"
-                inputMode="url"
-                hint="The full address, with https://."
-                autoCapitalize="none"
-                spellCheck={false}
-                value={values.website}
-                onChange={set("website")}
-                error={errors.website}
-                required
-              />
-            </Group>
-
-            <Group title="Stellar">
-              <TextAreaField
-                label="How does the project use Stellar?"
-                name="stellar_usage"
-                rows={4}
-                maxLength={2000}
-                hint={
-                  <span className="flex justify-between gap-4">
-                    <span>For example: a lending protocol on Soroban, or a Stellar wallet.</span>
-                    <span className="shrink-0 tabular text-fg-2">
-                      {values.stellarUsage.length} / 2000
-                    </span>
-                  </span>
-                }
-                value={values.stellarUsage}
-                onChange={set("stellarUsage")}
-                error={errors.stellarUsage}
-                required
-              />
-              <TextAreaField
-                label="Account or contract IDs"
-                name="stellar_ids"
-                optional
-                rows={3}
-                hint="Up to 20 IDs that start with G, M or C. Put one ID on each line."
-                className="font-mono text-small"
-                autoCapitalize="characters"
-                spellCheck={false}
-                value={values.stellarIds}
-                onChange={set("stellarIds")}
-                error={errors.stellarIds}
-              />
-            </Group>
-
-            <div className="flex flex-col gap-3">
-              <Optional
-                title="More about the project"
-                hint="Optional"
-                open={moreOpen}
-                onToggle={setMoreOpen}
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <span className="truncate text-[14.5px] font-medium text-fg">{award.project}</span>
+                <LabeledFacts items={pickedFacts} />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="shrink-0 max-sm:h-(--vs-control-touch)"
+                onClick={() => {
+                  setAward(null);
+                  setCohort(EMPTY_COHORT);
+                }}
               >
-                <TextField
-                  label="Short name"
-                  name="slug"
-                  optional
-                  hint="Lowercase letters, digits and hyphens. If you leave it empty, the project name is used."
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  className="font-mono"
-                  maxLength={63}
-                  value={values.slug}
-                  onChange={set("slug")}
-                  error={errors.slug}
-                />
-                <TextAreaField
-                  label="Description"
-                  name="description"
-                  optional
-                  rows={2}
-                  maxLength={1000}
-                  value={values.description}
-                  onChange={set("description")}
-                  error={errors.description}
-                />
-                <TextField
-                  label="SCF submission link"
-                  name="scf_round_url"
-                  optional
-                  type="url"
-                  inputMode="url"
-                  hint="The full link to the project's Stellar Community Fund submission, with https://."
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  value={values.scfRoundUrl}
-                  onChange={set("scfRoundUrl")}
-                  error={errors.scfRoundUrl}
-                />
-              </Optional>
+                Change
+                <span className="sr-only"> the SCF award</span>
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-1">
+                <AwardSearch onPick={pick} />
+                {awardError ? (
+                  <p role="alert" className="text-caption text-critical" data-award-error="">
+                    {awardError}
+                  </p>
+                ) : null}
+              </div>
               <Optional
-                title="SCF award"
-                hint="Optional"
+                title="Enter the award by hand"
+                hint="optional"
                 open={cohortOpen}
                 onToggle={setCohortOpen}
               >
@@ -505,77 +457,229 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                   idPrefix="enroll-cohort"
                 />
               </Optional>
-            </div>
+            </>
+          )}
+        </NumberedSection>
 
-            <div className="flex flex-col gap-2">
-              <div className="flex items-start gap-3">
-                <Checkbox
-                  id={termsId}
-                  checked={values.termsAccepted}
-                  onCheckedChange={(c) => setValues((s) => ({ ...s, termsAccepted: c === true }))}
-                  aria-invalid={errors.termsAccepted ? true : undefined}
-                  aria-describedby={errors.termsAccepted ? `${termsId}-e` : undefined}
-                  className="mt-1"
-                />
-                <label htmlFor={termsId} className="flex flex-col gap-1 text-body text-fg">
-                  <span>
-                    I accept the{" "}
-                    <a
-                      href="/terms"
-                      target="_blank"
-                      rel="noopener"
-                      className="rounded-sm underline decoration-line-strong underline-offset-2 transition-colors duration-(--vs-duration-press) hover:decoration-fg focus-ring"
-                    >
-                      terms of the service
-                    </a>{" "}
-                    for this project.
-                  </span>
-                  <span className="text-caption text-fg-2" title={termsVersion}>
-                    {termsVersionLabel(termsVersion)}
-                    {isDraftTerms(termsVersion) ? ", draft" : ""}
-                  </span>
-                </label>
-              </div>
-              {errors.termsAccepted ? (
-                <p
-                  id={`${termsId}-e`}
-                  role="alert"
-                  className="animate-fade-in text-caption text-critical"
-                >
-                  {errors.termsAccepted}
-                </p>
-              ) : null}
-            </div>
+        <NumberedSection n={2} title="Project">
+          <TextField
+            label="Name"
+            name="name"
+            autoComplete="organization"
+            maxLength={100}
+            value={values.name}
+            onChange={set("name")}
+            error={errors.name}
+            required
+          />
+          <TextField
+            label="Website"
+            name="website"
+            type="url"
+            inputMode="url"
+            placeholder="https://"
+            className="font-mono"
+            autoCapitalize="none"
+            spellCheck={false}
+            value={values.website}
+            onChange={set("website")}
+            error={errors.website}
+            required
+          />
+        </NumberedSection>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                type="submit"
-                pending={enroll.isPending}
-                className="min-w-36 max-sm:h-(--vs-control-touch) max-sm:flex-1"
-              >
-                {enroll.isPending ? "Enrolling" : "Enroll project"}
-              </Button>
-              <Button asChild variant="ghost" className="max-sm:h-(--vs-control-touch)">
-                <Link to="/">Cancel</Link>
-              </Button>
-              {errorCount > 0 ? (
-                <span role="status" className="max-sm:basis-full">
-                  <button
-                    type="button"
-                    onClick={() => setFocusTick((n) => n + 1)}
-                    className="rounded-sm text-left text-caption text-critical underline decoration-critical-line underline-offset-2 hover:decoration-critical focus-ring max-sm:py-2"
-                  >
-                    {errorCount === 1
-                      ? "1 field needs attention. Go to it."
-                      : `${errorCount} fields need attention. Go to the first.`}
-                  </button>
-                </span>
-              ) : null}
-              {otherError ? <FormMessage error={otherError} className="w-full" /> : null}
-            </div>
-          </form>
+        <NumberedSection n={3} title="Stellar">
+          <StellarFields
+            usage={values.stellarUsage}
+            ids={values.stellarIds}
+            onUsage={set("stellarUsage")}
+            onIds={set("stellarIds")}
+            usageError={errors.stellarUsage}
+            idsError={errors.stellarIds}
+          />
+        </NumberedSection>
+
+        <div className="border-b border-line-subtle">
+          <Optional
+            title="More about the project"
+            hint="optional"
+            open={moreOpen}
+            onToggle={setMoreOpen}
+          >
+            <TextField
+              label="Short name"
+              name="slug"
+              optional
+              placeholder="lowercase-letters-and-digits"
+              autoCapitalize="none"
+              spellCheck={false}
+              className="font-mono"
+              maxLength={63}
+              value={values.slug}
+              onChange={set("slug")}
+              error={errors.slug}
+            />
+            <TextAreaField
+              label="Description"
+              name="description"
+              optional
+              rows={2}
+              maxLength={1000}
+              value={values.description}
+              onChange={set("description")}
+              error={errors.description}
+            />
+            <TextField
+              label="SCF submission link"
+              name="scf_round_url"
+              optional
+              type="url"
+              inputMode="url"
+              placeholder="https://"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={values.scfRoundUrl}
+              onChange={set("scfRoundUrl")}
+              error={errors.scfRoundUrl}
+            />
+          </Optional>
         </div>
-      </div>
+
+        <div className="flex flex-col gap-5 sm:pl-10.5">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id={termsId}
+                checked={values.termsAccepted}
+                onCheckedChange={(c) => setValues((s) => ({ ...s, termsAccepted: c === true }))}
+                aria-invalid={errors.termsAccepted ? true : undefined}
+                aria-describedby={errors.termsAccepted ? `${termsId}-e` : undefined}
+                className="mt-0.75"
+              />
+              <label
+                htmlFor={termsId}
+                className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-body text-fg-2"
+              >
+                <span>
+                  I accept the{" "}
+                  <a
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener"
+                    className="rounded-sm text-fg underline decoration-line-strong underline-offset-3 transition-colors duration-(--vs-duration-press) hover:decoration-fg focus-ring"
+                  >
+                    terms of the service
+                  </a>{" "}
+                  for this project
+                </span>
+                <span className="text-caption text-fg-3" title={termsVersion}>
+                  {termsVersionLabel(termsVersion)}
+                </span>
+                {isDraftTerms(termsVersion) ? (
+                  <span className="text-caption text-fg-3">Draft</span>
+                ) : null}
+              </label>
+            </div>
+            {errors.termsAccepted ? (
+              <p
+                id={`${termsId}-e`}
+                role="alert"
+                className="animate-fade-in text-caption text-critical"
+              >
+                {errors.termsAccepted}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="submit"
+              pending={enroll.isPending}
+              className="h-10 px-5 max-sm:h-(--vs-control-touch) max-sm:flex-1"
+            >
+              {enroll.isPending ? "Enrolling" : "Enroll project"}
+            </Button>
+            <Button asChild variant="ghost" className="max-sm:h-(--vs-control-touch)">
+              <Link to="/">Cancel</Link>
+            </Button>
+            {errorCount > 0 ? (
+              <span role="status" className="max-sm:basis-full">
+                <button
+                  type="button"
+                  onClick={() => setFocusTick((n) => n + 1)}
+                  className="rounded-sm text-left text-caption text-critical underline decoration-critical-line underline-offset-2 hover:decoration-critical focus-ring max-sm:py-2"
+                >
+                  {errorCount === 1
+                    ? "1 field needs attention. Go to it."
+                    : `${errorCount} fields need attention. Go to the first.`}
+                </button>
+              </span>
+            ) : null}
+            {otherError ? <FormMessage error={otherError} className="w-full" /> : null}
+          </div>
+        </div>
+      </form>
     </section>
+  );
+}
+
+// the cohort of a picked award as labeled facts; an empty field is left out
+export function awardFacts(c: CohortValues) {
+  return [
+    { label: "Program", value: c.program },
+    { label: "Round", value: c.round },
+    { label: "Category", value: c.category },
+    { label: "Awarded", value: c.award_date ? formatDate(c.award_date) : "" },
+  ].filter((f) => f.value.trim() !== "");
+}
+
+// how the project uses stellar, with its counter, and its optional ids:
+// the same two fields on enroll and on resubmit
+export function StellarFields({
+  usage,
+  ids,
+  onUsage,
+  onIds,
+  usageError,
+  idsError,
+}: {
+  usage: string;
+  ids: string;
+  onUsage: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  onIds: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  usageError?: string;
+  idsError?: string;
+}) {
+  return (
+    <>
+      <TextAreaField
+        label="How the project uses Stellar"
+        name="stellar_usage"
+        rows={3}
+        maxLength={2000}
+        hint={
+          <span className="flex justify-end tabular text-fg-2">
+            {usage.length} / 2000
+          </span>
+        }
+        value={usage}
+        onChange={onUsage}
+        error={usageError}
+        required
+      />
+      <TextAreaField
+        label="Account or contract IDs"
+        name="stellar_ids"
+        optional
+        rows={1}
+        placeholder="One per line, G… M… or C…, up to 20"
+        className="min-h-9.5 font-mono text-small"
+        autoCapitalize="characters"
+        spellCheck={false}
+        value={ids}
+        onChange={onIds}
+        error={idsError}
+      />
+    </>
   );
 }

@@ -22,12 +22,12 @@ describe("enrollment form", () => {
     const host = await render(<EnrollForm termsVersion={f.TERMS_VERSION} />);
     await click(byRole(host, "button", "Enroll project"));
     expect(calls).toHaveLength(0);
-    expect(errorOf(host, "Project name")).toBe("Required.");
+    expect(errorOf(host, "Name")).toBe("Required.");
     expect(errorOf(host, "Website")).toBe("Required.");
-    expect(errorOf(host, "How does the project use Stellar?")).toBe("Required.");
+    expect(errorOf(host, "How the project uses Stellar")).toBe("Required.");
     expect(host.textContent).toContain("Accept the terms to enroll.");
-    expect(byLabel(host, "Project name").getAttribute("aria-invalid")).toBe("true");
-    expect(document.activeElement).toBe(byLabel(host, "Project name"));
+    expect(byLabel(host, "Name").getAttribute("aria-invalid")).toBe("true");
+    expect(document.activeElement).toBe(byLabel(host, "Name"));
   });
 
   it("names the account id that is not a valid strkey", async () => {
@@ -43,9 +43,9 @@ describe("enrollment form", () => {
   it("posts the contract's enrollment body with the accepted terms version", async () => {
     const calls = stubFetch([{ status: 201, body: { ...f.tenantBody, provisioning: "pending" } }]);
     const host = await render(<EnrollForm termsVersion={f.TERMS_VERSION} />, "/projects/new");
-    await type(byLabel(host, "Project name"), "  Stellar DEX ");
+    await type(byLabel(host, "Name"), "  Stellar DEX ");
     await type(byLabel(host, "Website"), "https://example.org");
-    await type(byLabel(host, "How does the project use Stellar?"), "Soroban AMM on mainnet");
+    await type(byLabel(host, "How the project uses Stellar"), "Soroban AMM on mainnet");
     await type(byLabel(host, "Account or contract IDs"), `${f.G_KEY}, ${f.C_KEY}`);
     await click(byLabel(host, "I accept the") as unknown as HTMLElement);
     await click(byRole(host, "button", "Enroll project"));
@@ -77,10 +77,10 @@ describe("enrollment form", () => {
       { status: 409, body: f.errorBody("slug_taken") },
     ]);
     const host = await render(<EnrollForm termsVersion={f.TERMS_VERSION} />);
-    await type(byLabel(host, "Project name"), "Stellar DEX");
+    await type(byLabel(host, "Name"), "Stellar DEX");
     await type(byLabel(host, "Short name"), "stellar-dex");
     await type(byLabel(host, "Website"), "https://example.org");
-    await type(byLabel(host, "How does the project use Stellar?"), "AMM");
+    await type(byLabel(host, "How the project uses Stellar"), "AMM");
     await type(byLabel(host, "Account or contract IDs"), `${f.G_KEY}\n${f.C_KEY}`);
     await click(byLabel(host, "I accept the") as unknown as HTMLElement);
     await click(byRole(host, "button", "Enroll project"));
