@@ -25,7 +25,7 @@ import { blankColumns } from "@/pages/operator/project-columns";
 import { OperatorProjectsPage } from "@/pages/operator/projects";
 import * as c from "./fixtures/contract";
 import * as f from "./fixtures/global";
-import { byLabel, byRole, type Call, click, renderRoutes, stubFetch, waitFor } from "./helpers";
+import { byLabel, byRole, type Call, click, renderRoutes, waitFor } from "./helpers";
 
 const EM_DASH = String.fromCharCode(0x2014);
 
