@@ -24,10 +24,17 @@
 //
 // delivery is at least once with a narrow duplicate window: the replayer checks
 // sent.<event id> in visit_state before sending and writes it after umami's
-// 200, then acks. a crash, kill or lock loss between umami's 200 and that
-// write stores the event twice; at most one event per delivery slot can be in that
-// window at any moment. a partition that moves to another node on purpose
-// (a rebalance or a shutdown) finishes the sends in progress first.
+// 200, then acks. a send runs on a context of its own, bounded by
+// sendTimeout, so ending a hold never aborts a send umami may already have
+// stored: its 200 is still recorded. two cases remain in which umami can
+// store an event twice: a crash or kill between umami's 200 and the sent
+// write (at most one event per delivery slot at any moment), and a send
+// that ends without an answer (sendTimeout or a broken connection) after
+// umami stored it, which is retried because its outcome is unknown. a
+// partition that moves to another node on purpose (a rebalance or a
+// shutdown) delivers what it holds for up to yieldTimeout, then starts no
+// new send, waits for the sends in flight, records them and hands back only
+// what it never sent.
 //
 // umami's database cannot be fenced, so a partition's lock is confirmed with
 // the server before every fetch and, at most a second apart, before sends. a
@@ -128,9 +135,19 @@ const (
 	// acquireRetry is how often an instance tries to take a lock it wants.
 	acquireRetry = time.Second
 	// yieldTimeout bounds how long a partition that is handed over on
-	// purpose delivers what it holds before it stops and hands the rest
-	// back. the core role gives the container 30 s to stop.
+	// purpose starts new sends for what it holds. after it, the sends in
+	// flight finish (at most sendTimeout) and the rest is handed back.
 	yieldTimeout = 10 * time.Second
+	// sendTimeout bounds one send to umami, the same bound as the umami
+	// client's own. a send runs detached from the hold, so a hand-over or a
+	// lost lock never aborts it: umami may have stored the event already,
+	// and only a send that returns can record that it did.
+	sendTimeout = umami.DefaultTimeout
+	// handOverLimit is when a hand-over stops waiting even for bookkeeping
+	// that keeps failing: yieldTimeout for new sends, sendTimeout for the
+	// last ones to answer, and bookkeepingTimeout for their records. the
+	// core role gives the container 45 s to stop.
+	handOverLimit = yieldTimeout + sendTimeout + bookkeepingTimeout
 )
 
 // errNotReady ends a hold because jetstream could not serve the consumer
@@ -142,6 +159,10 @@ var errNotReady = errors.New("replayer: jetstream not ready")
 // instance or the process shuts down. what the hold fetched is delivered
 // first, so the next owner finds nothing unacknowledged and starts at once.
 var errYield = errors.New("replayer: partition handed over")
+
+// errSendsStopped ends a delivery before its send: the hand-over's time for
+// new sends is up, and the message is handed back unsent.
+var errSendsStopped = errors.New("replayer: no new sends during the end of a hand-over")
 
 // legacyLead is the leads key of the legacy consumer's hold.
 const legacyLead = -1
@@ -534,6 +555,7 @@ func (r *Replayer) lead(parent context.Context, part int, lock *natsx.Lock, yiel
 		guard:    &lockGuard{lock: lock, m: r.m},
 		bar:      bar,
 		yield:    yield,
+		noSends:  make(chan struct{}),
 		held:     map[uint64]*held{},
 		visitors: map[string]*visitorQueue{},
 		freed:    make(chan struct{}, 1),
@@ -700,6 +722,9 @@ type leadRun struct {
 	bar *seqBarrier
 	// yield is closed when the hold is to end after the sends in progress
 	yield <-chan struct{}
+	// noSends is closed when a hand-over's time for new sends is up: no
+	// send starts after it, the ones in flight finish and are recorded
+	noSends chan struct{}
 	// visitorsWG tracks the visitor goroutines, which are started by the
 	// fetch loop
 	visitorsWG sync.WaitGroup
@@ -760,6 +785,16 @@ func (lr *leadRun) yielding() bool {
 	}
 }
 
+// sendsStopped reports whether the hand-over's time for new sends is up.
+func (lr *leadRun) sendsStopped() bool {
+	select {
+	case <-lr.noSends:
+		return true
+	default:
+		return false
+	}
+}
+
 func (lr *leadRun) run(ctx, parent context.Context) error {
 	var wg sync.WaitGroup
 	wg.Go(func() { lr.keepalive(ctx) })
@@ -779,14 +814,35 @@ func (lr *leadRun) run(ctx, parent context.Context) error {
 		select {
 		case <-done:
 		case <-t.C:
-			lr.r.log.Warn("messages still held at the end of the hand-over, handing them back", "consumer", lr.name)
+			// under a backlog the hold cannot deliver everything in time.
+			// cancelling now would abort sends umami may already have
+			// stored, with no sent key written, and the next owner would
+			// send them again. so no new send starts, the sends in flight
+			// finish within sendTimeout and are recorded, and only what was
+			// never sent is handed back
+			close(lr.noSends)
+			lr.r.log.Warn("messages still held at the end of the hand-over, finishing the sends in flight and handing back the rest",
+				"consumer", lr.name, "held", lr.count())
+			// a send answers within sendTimeout and its record is written
+			// within bookkeepingTimeout; only bookkeeping that keeps failing
+			// is cut off here, and that message is handed back
+			last := time.NewTimer(handOverLimit - yieldTimeout)
+			select {
+			case <-done:
+			case <-last.C:
+				lr.r.log.Warn("bookkeeping still failing at the end of the hand-over, handing those messages back", "consumer", lr.name)
+			case <-ctx.Done():
+			}
+			last.Stop()
 		case <-ctx.Done():
 		}
 		t.Stop()
 	}
 	lr.cancel(err)
 	wg.Wait()
-	// the fetch loop has returned, so no visitor goroutine starts any more
+	// the fetch loop has returned, so no visitor goroutine starts any more.
+	// a send in flight is not cancelled with the hold, so this also waits
+	// until every send has answered and its bookkeeping ran
 	lr.visitorsWG.Wait()
 	lr.release()
 	if cause := context.Cause(ctx); errors.Is(cause, natsx.ErrLockLost) {
@@ -996,13 +1052,20 @@ func slotsPerTarget(workers, n, i int) int {
 }
 
 // acquire takes a delivery slot of an umami process; release gives it back.
-func (lr *leadRun) acquire(ctx context.Context, target int) (func(), error) {
+// a wait for a slot to send in ends when the hand-over stops new sends.
+func (lr *leadRun) acquire(ctx context.Context, target int, send bool) (func(), error) {
 	slots := lr.r.pool.slots[target]
+	var stop <-chan struct{}
+	if send {
+		stop = lr.noSends
+	}
 	select {
 	case slots <- struct{}{}:
 		return func() { <-slots }, nil
 	case <-ctx.Done():
 		return nil, context.Cause(ctx)
+	case <-stop:
+		return nil, errSendsStopped
 	}
 }
 
@@ -1130,7 +1193,9 @@ func (lr *leadRun) keepalive(ctx context.Context) {
 		lr.mu.Unlock()
 		failed := 0
 		for _, h := range hs {
-			if err := h.current().InProgress(); err != nil {
+			// a message acked or handed back since the list was taken is
+			// no longer held; its signal fails without any risk
+			if err := h.current().InProgress(); err != nil && !errors.Is(err, jetstream.ErrMsgAlreadyAckd) {
 				failed++
 			}
 		}

@@ -352,7 +352,8 @@ keeps suspect traffic visible but apart from the headline numbers
   `192.0.2.1` (TEST-NET-1), the country in a header and the visitor token as Umami's client salt.
   Umami's session id therefore depends on the token and never on a real address.
 - `visit_state` (memory bucket, 24 h) keeps visit continuity. `sent.<event id>` keys guard
-  against duplicates.
+  against duplicates. A hand-over never cancels a send: the old owner lets the sends in flight
+  finish and records them before it hands back what it never sent.
 - Messages that Umami refuses permanently go to `WEB_DLQ` (7 days).
 
 Detail: `docs/architecture.md`, "Web event partitions".

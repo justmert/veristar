@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
 	"slices"
@@ -38,6 +39,16 @@ type sendEntry struct {
 // node, and returns its url. it passes every other request through.
 func newSendProxy(t *testing.T, log *sendLog, node string, target *url.URL) *url.URL {
 	t.Helper()
+	return newSlowSendProxy(t, log, node, target, 0)
+}
+
+// newSlowSendProxy is newSendProxy that holds umami's answer to every send
+// for delay before passing it on. the send reaches umami at once and is not
+// cancelled when the replayer gives up on it, so umami stores the event
+// whatever the replayer does meanwhile: a send whose answer is lost is
+// stored all the same, as on a slow umami under a backlog.
+func newSlowSendProxy(t *testing.T, log *sendLog, node string, target *url.URL, delay time.Duration) *url.URL {
+	t.Helper()
 	rp := httputil.NewSingleHostReverseProxy(target)
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/send" {
@@ -56,12 +67,26 @@ func newSendProxy(t *testing.T, log *sendLog, node string, target *url.URL) *url
 			} `json:"payload"`
 		}
 		_ = json.Unmarshal(body, &req)
-		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		start := time.Now()
-		rp.ServeHTTP(sw, r)
+		var status int
+		if delay > 0 {
+			rec := httptest.NewRecorder()
+			rp.ServeHTTP(rec, r.WithContext(context.WithoutCancel(r.Context())))
+			time.Sleep(delay)
+			for k, v := range rec.Header() {
+				w.Header()[k] = v
+			}
+			w.WriteHeader(rec.Code)
+			_, _ = w.Write(rec.Body.Bytes())
+			status = rec.Code
+		} else {
+			sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+			rp.ServeHTTP(sw, r)
+			status = sw.status
+		}
 		end := time.Now()
 		log.mu.Lock()
-		log.entries = append(log.entries, sendEntry{node: node, path: req.Payload.URL, status: sw.status, start: start, end: end})
+		log.entries = append(log.entries, sendEntry{node: node, path: req.Payload.URL, status: status, start: start, end: end})
 		log.mu.Unlock()
 	})
 	var lc net.ListenConfig

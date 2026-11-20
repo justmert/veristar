@@ -174,10 +174,17 @@ visitor's events are in one partition. Each partition has its own durable consum
   even while two replayers briefly see different member lists. A partition whose lock stays
   free for 10 s is taken by any replayer.
 - **Hand-over.** A replayer that stops, or whose partition is assigned to a node that joined,
-  stops fetching, delivers what it holds and releases the lock; the next owner starts at once.
-  A killed replayer's partitions are free when their locks expire (15 s), and the next owner
-  waits until the killed one's unacknowledged messages can be redelivered (at most the 30 s ack
-  wait), so a visitor's events reach Umami in order through node loss and rolling deploys.
+  stops fetching and delivers what it holds for up to 10 s. When it holds more than it can send
+  in that time, as under a backlog, it starts no new send, lets the sends in flight finish (each
+  is bounded by the 15 s send timeout and is never cancelled by the hand-over), writes the
+  `sent.<event id>` key of every one Umami answered with 200, and only then hands back the
+  messages it never sent and releases the lock. It keeps renewing the lock until then, so the
+  next owner cannot start before. When everything was delivered the next owner starts at once;
+  handed-back messages count as unacknowledged until they are delivered again, so it waits for
+  them up to the 30 s ack wait. A killed replayer's partitions are free when their locks expire
+  (15 s), and the next owner waits until the killed one's unacknowledged messages can be
+  redelivered (at most the 30 s ack wait), so a visitor's events reach Umami in order through
+  node loss and rolling deploys.
 - **Delivery.** Each replayer sends to the Umami processes of its own node. Every process shares
   the one database and `APP_SECRET`, so which node stores an event does not change what is
   stored ([reference/umami-contract.md](reference/umami-contract.md) item 14). Visit continuity
