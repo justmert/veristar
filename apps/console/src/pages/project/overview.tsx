@@ -361,7 +361,7 @@ function Dashboard({
         <StatCard
           data-tile="API requests"
           series={3}
-          label="API requests"
+          label="Requests"
           definition="Requests that your services answered. Health checks and preflights are not included."
           value={apiUsed ? (cur?.requests ?? null) : null}
           missingReason="No API connected"
@@ -377,7 +377,7 @@ function Dashboard({
         <StatCard
           data-tile="API 5xx rate"
           series={3}
-          label="API 5xx rate"
+          label="5xx rate"
           definition="Share of requests answered with a 5xx status."
           value={apiUsed ? (cur?.rate_5xx ?? null) : null}
           format={formatPercent}
@@ -389,7 +389,7 @@ function Dashboard({
         <StatCard
           data-tile="API p95"
           series={3}
-          label="API p95 latency"
+          label="p95 latency"
           definition="95 of 100 requests were faster than this."
           value={apiUsed && cur ? latencyText(cur.p95) : null}
           missingReason={apiUsed ? "No API requests in this range" : "No API connected"}
@@ -834,13 +834,12 @@ function Attention({
             <li
               key={it.key}
               data-attention={it.key}
-              className="grid grid-cols-[10px_minmax(0,1fr)] items-start gap-3 border-t border-line-subtle py-3 first:border-t-0"
+              className="grid grid-cols-[10px_minmax(0,1fr)_auto] items-center gap-3 border-t border-line-subtle py-2.5 first:border-t-0"
             >
-              <StatusDot tone={it.tone} className="mt-1.5" />
-              <span className="flex min-w-0 flex-col gap-2">
-                <span className="text-body text-fg">{it.text}</span>
-                <span className="flex flex-wrap items-center gap-2">{it.actions}</span>
-              </span>
+              <StatusDot tone={it.tone} />
+              <span className="min-w-0 text-small text-fg">{it.text}</span>
+              {/* the action beside its line keeps the list as short as the chart */}
+              <span className="flex items-center gap-1.5">{it.actions}</span>
             </li>
           ))}
         </ul>

@@ -146,7 +146,7 @@ export function AppShell() {
             <main
               id="main"
               tabIndex={-1}
-              className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col px-4 pt-6 pb-16 outline-none sm:px-6 lg:px-10 lg:pt-7"
+              className="mx-auto flex w-full max-w-[1600px] min-w-0 flex-1 flex-col px-4 pt-6 pb-16 outline-none sm:px-6 lg:px-10 lg:pt-7"
             >
               {/* a column that fills the window, so a message page (404,
                   operators only) centres in it as on the canvas */}
