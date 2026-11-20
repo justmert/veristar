@@ -273,11 +273,20 @@ test("the operator sorts the global web table by grade and opens the reasons", a
 
   // the same report on the project's detail page and in the comparison
   await page.goto(`${APP}/operator/projects/${tenant.id}`);
-  await expect(page.locator("[data-stat=grade]")).toContainText("A");
-  await page.getByText("Integrity report", { exact: true }).click();
-  const detail = page.getByRole("region", { name: "Integrity" });
+  // the traffic integrity tile of the scorecard opens the report under it
+  const tile = page.locator('[data-check="integrity"]');
+  await expect(tile).toContainText("Grade A");
+  await tile.click();
+  const detail = page
+    .locator('[data-detail="integrity"]')
+    .getByRole("region", { name: "Integrity" });
   await expect(detail.locator("[data-grade]").first()).toHaveText("Grade A");
   await page.goto(`${APP}/operator/compare?tenants=${tenant.id}`);
+  // the traffic integrity row opens the reasons per project
+  await page
+    .locator('tr[data-row="integrity"]')
+    .getByRole("button", { name: "Traffic integrity" })
+    .click();
   const cmp = page.getByRole("list", { name: "Integrity per project" });
   await expect(cmp.locator("[data-grade]").first()).toHaveText("Grade A");
   expect(problems, "console errors on the operator pages").toEqual([]);
