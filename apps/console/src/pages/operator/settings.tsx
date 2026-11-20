@@ -1,11 +1,12 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { cn } from "@veristar/brand/cn";
 import { type ReactNode, useState } from "react";
 import { api } from "@/api/endpoints";
 import { enrollmentModeQuery, keepAggregatesQuery, keys } from "@/api/queries";
 import type { EnrollmentMode } from "@/api/schemas";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageHeader } from "@/components/page-header";
-import { Segmented } from "@/components/segmented";
+import { ChoiceCard } from "@/components/choice-card";
 import { ErrorState, LoadingState } from "@/components/states";
 import { toast } from "@/components/toast";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
@@ -23,15 +24,15 @@ const MODE_TEXT: Record<EnrollmentMode, { name: string; detail: string }> = {
   },
 };
 
-// settings that apply to every project, as rows of one list: the setting
-// and what its current value does on the left, the value on the right. a
-// new value opens its confirmation at once; cancelling keeps the current
-// one, so the control always shows what is in force.
+// settings that apply to every project, as rows of one list: the setting on
+// the left, its two options on the right. a new value opens its
+// confirmation at once; cancelling keeps the current one, so the control
+// always shows what is in force.
 export function SettingsPage() {
   return (
     <div className="flex min-w-0 flex-col gap-8">
       <PageHeader title="Settings" />
-      <ul className="flex min-w-0 flex-col divide-y divide-line-subtle rounded-lg border border-line bg-raised">
+      <ul className="flex min-w-0 flex-col divide-y divide-line">
         <li>
           <EnrollmentModeSetting />
         </li>
@@ -43,35 +44,64 @@ export function SettingsPage() {
   );
 }
 
+// one setting as a pair of options, each with its own effect, so the effect
+// of the other choice is known before it is clicked. the chosen one is
+// marked; choosing the other asks once, with the same words.
 function SettingRow({
   id,
   title,
-  detail,
   control,
   dialog,
 }: {
   id: string;
   title: string;
-  detail: ReactNode;
   control: ReactNode;
   dialog?: ReactNode;
 }) {
   return (
     <section
       aria-labelledby={id}
-      className="grid min-w-0 gap-x-6 gap-y-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5"
+      className="grid min-w-0 gap-x-6 gap-y-3 py-5 first:pt-2 md:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]"
     >
-      <div className="flex min-w-0 flex-col gap-1">
-        <h2 id={id} className="text-body font-medium text-fg">
-          {title}
-        </h2>
-        <p className="text-small text-fg-2" aria-live="polite">
-          {detail}
-        </p>
-      </div>
+      <h2 id={id} className="pt-3 text-body font-medium text-fg max-md:pt-0">
+        {title}
+      </h2>
       {control}
       {dialog}
     </section>
+  );
+}
+
+function OptionPair<T extends string>({
+  name,
+  label,
+  value,
+  options,
+  onPick,
+}: {
+  name: string;
+  label: string;
+  value: T;
+  options: { value: T; title: string; detail: string }[];
+  onPick: (v: T) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="grid min-w-0 gap-2.5 sm:grid-cols-2">
+      {options.map((o) => (
+        <ChoiceCard
+          key={o.value}
+          name={name}
+          value={o.value}
+          checked={o.value === value}
+          onChange={() => {
+            if (o.value !== value) onPick(o.value);
+          }}
+          title={o.title}
+          description={o.detail}
+          className={cn("p-4", o.value === value ? "border-line-focus" : "bg-sunken")}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -80,12 +110,11 @@ function SettingLoading({ id, title, label }: { id: string; title: string; label
     <SettingRow
       id={id}
       title={title}
-      detail={
+      control={
         <LoadingState label={label}>
-          <Bone aria-hidden className="h-4 w-2/3" />
+          <Bone aria-hidden className="h-20 w-full" />
         </LoadingState>
       }
-      control={null}
     />
   );
 }
@@ -113,7 +142,7 @@ function EnrollmentModeSetting() {
     );
   if (mode.error)
     return (
-      <div className="p-4">
+      <div className="py-5">
         <ErrorState
           compact
           title="The enrollment mode did not load"
@@ -129,18 +158,17 @@ function EnrollmentModeSetting() {
     <SettingRow
       id="mode-h"
       title="Enrollment mode"
-      detail={MODE_TEXT[current].detail}
       control={
-        <Segmented
+        <OptionPair
+          name="enrollment-mode"
           label="Enrollment mode"
           value={current}
-          options={(["approval", "open"] as const).map((m) => ({
+          options={(["open", "approval"] as const).map((m) => ({
             value: m,
-            label: MODE_TEXT[m].name,
+            title: MODE_TEXT[m].name,
+            detail: MODE_TEXT[m].detail,
           }))}
-          onChange={(m) => {
-            if (m !== current) setTarget(m);
-          }}
+          onPick={setTarget}
         />
       }
       dialog={
@@ -194,7 +222,7 @@ function KeepAggregatesSetting() {
     );
   if (keep.error)
     return (
-      <div className="p-4">
+      <div className="py-5">
         <ErrorState
           compact
           title="The removal setting did not load"
@@ -209,18 +237,16 @@ function KeepAggregatesSetting() {
     <SettingRow
       id="keep-h"
       title="Daily totals of removed projects"
-      detail={current ? KEEP_TEXT.keep : KEEP_TEXT.delete}
       control={
-        <Segmented
+        <OptionPair
+          name="keep-aggregates"
           label="Daily totals of removed projects"
           value={current ? "keep" : "delete"}
           options={[
-            { value: "keep", label: "Keep" },
-            { value: "delete", label: "Delete" },
+            { value: "keep", title: "Keep", detail: KEEP_TEXT.keep },
+            { value: "delete", title: "Delete", detail: KEEP_TEXT.delete },
           ]}
-          onChange={(v) => {
-            if ((v === "keep") !== current) setOpen(true);
-          }}
+          onPick={() => setOpen(true)}
         />
       }
       dialog={
