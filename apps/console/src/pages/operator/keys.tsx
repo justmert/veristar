@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, KeyRound } from "lucide-react";
+import { cn } from "@veristar/brand/cn";
+import { Ban, Lock } from "lucide-react";
 import { useState } from "react";
 import { globalApi } from "@/api/endpoints";
 import {
@@ -7,7 +8,6 @@ import {
   type McpCredential,
   type McpCredentialCreated,
   mcpApi,
-  mcpEndpoint,
   mcpKeys,
   operatorMcpQuery,
   REVOKED_REASON,
@@ -15,17 +15,19 @@ import {
 import { apiKeysQuery, apiKeyUsageQuery, keys, keyTenantsQuery } from "@/api/queries";
 import type { ApiKey, ApiKeyCreated } from "@/api/schemas";
 import { ChoiceCard } from "@/components/choice-card";
-import { CodeBlock, CopyField } from "@/components/code-block";
+import { CodeBlock } from "@/components/code-block";
+import { ConnectClient } from "@/components/connect-client";
 import { CreateDialog } from "@/components/create-dialog";
 import { type Column, DataTable } from "@/components/data-table";
 import { FormMessage } from "@/components/error-panel";
 import { SelectField, TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
-import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
+import { Segmented } from "@/components/segmented";
+import { EmptyState, ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
 import { Dialog } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DEFAULT_EXPIRY_DAYS,
   EMPTY_KEY_FORM,
@@ -54,6 +56,8 @@ type KeyRow = {
   prefix: string | null;
   status: "active" | "expired" | "revoked";
   reads: string;
+  // the account an ai key or connection acts as
+  actsAs: string | null;
   created: string;
   expires: string | null;
   revoked: string | null;
@@ -74,9 +78,8 @@ function machineRow(k: ApiKey, names: Map<string, string>): KeyRow {
     name: k.name,
     prefix: k.prefix,
     status: k.status,
-    reads: k.tenant_id
-      ? `One project: ${names.get(k.tenant_id) ?? "a removed project"}`
-      : "Every project",
+    reads: k.tenant_id ? (names.get(k.tenant_id) ?? "A removed project") : "Every project",
+    actsAs: null,
     created: k.created_at,
     expires: k.expires_at,
     revoked: k.revoked_at,
@@ -92,7 +95,8 @@ function assistantRow(c: McpCredential): KeyRow {
     name: c.name,
     prefix: c.prefix,
     status: c.status,
-    reads: `Operator view, as ${c.display_name ?? "its creator"}`,
+    reads: "Every project",
+    actsAs: c.display_name ?? "its creator",
     created: c.created_at,
     expires: c.expires_at,
     revoked: c.revoked_at,
@@ -113,6 +117,7 @@ export function AccessKeysPage() {
   const assistants = useQuery(operatorMcpQuery);
   const tenants = useQuery(keyTenantsQuery);
   const [usage, setUsage] = useState<KeyRow | null>(null);
+  const [showRevoked, setShowRevoked] = useState(false);
   const names = new Map((tenants.data ?? []).map((t) => [t.id, t.name]));
 
   const rows: KeyRow[] = [
@@ -122,6 +127,8 @@ export function AccessKeysPage() {
     (a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || b.created.localeCompare(a.created),
   );
   const error = machines.error ?? assistants.error;
+  const revokedCount = rows.filter((r) => r.status === "revoked").length;
+  const shown = showRevoked ? rows : rows.filter((r) => r.status !== "revoked");
 
   async function revoke(r: KeyRow) {
     await (r.kind === "machine"
@@ -139,15 +146,22 @@ export function AccessKeysPage() {
       key: "name",
       header: "Name",
       primary: true,
-      minWidth: "min-w-48",
+      minWidth: "min-w-56",
       cell: (r) => (
         <span className="flex min-w-0 flex-col">
-          <span className="truncate font-medium text-fg">{r.name}</span>
-          {r.prefix ? <span className="font-mono text-caption text-fg-2">{r.prefix}…</span> : null}
+          <span className="flex min-w-0 items-baseline gap-2.5">
+            <span className="truncate font-medium text-fg">{r.name}</span>
+            {r.prefix ? (
+              <span className="max-w-24 shrink-0 truncate font-mono text-caption text-fg-3">
+                {r.prefix}…
+              </span>
+            ) : null}
+          </span>
+          {r.actsAs ? <span className="text-small text-fg-3">acts as {r.actsAs}</span> : null}
         </span>
       ),
     },
-    { key: "kind", header: "Type", mobile: true, cell: (r) => KIND_TEXT[r.kind] },
+    { key: "kind", header: "Kind", mobile: true, cell: (r) => KIND_TEXT[r.kind] },
     {
       key: "status",
       header: "Status",
@@ -157,35 +171,37 @@ export function AccessKeysPage() {
     {
       key: "reads",
       header: "Reads",
-      minWidth: "min-w-40",
-      className: "max-w-64",
+      minWidth: "min-w-32",
+      className: "max-w-56",
       truncate: (r) => r.reads,
       cell: (r) => r.reads,
     },
     {
       key: "used",
       header: "Last used",
-      cell: (r) =>
-        r.lastUsed ? (
-          <span className="whitespace-nowrap">{formatDateTimeShort(r.lastUsed)}</span>
-        ) : (
-          <Missing reason="Not used yet" />
-        ),
+      cell: (r) => (
+        <span className="whitespace-nowrap text-fg-3">
+          {r.lastUsed ? formatDateTimeShort(r.lastUsed) : "Never"}
+        </span>
+      ),
     },
     {
       key: "until",
-      header: "Expires",
+      header: "Ends",
       // the cell holds only the value; the status column says active,
       // expired or revoked
       cell: (r) =>
         r.revoked ? (
-          <Missing
-            reason={`Revoked ${formatDate(r.revoked)}${r.revokedReason ? `, ${r.revokedReason}` : ""}`}
-          />
+          <span className="whitespace-nowrap" title={r.revokedReason ?? undefined}>
+            Revoked {formatDate(r.revoked)}
+            {r.revokedReason ? <span className="sr-only">, {r.revokedReason}</span> : null}
+          </span>
         ) : r.expires ? (
-          <span className="whitespace-nowrap">{formatDateTimeShort(r.expires)}</span>
+          <span className="whitespace-nowrap" title={formatDateTimeUtc(r.expires)}>
+            {formatDate(r.expires)}
+          </span>
         ) : (
-          <span className="whitespace-nowrap">Renewed by the client</span>
+          <span className="whitespace-nowrap">Until revoked</span>
         ),
     },
   ];
@@ -194,6 +210,12 @@ export function AccessKeysPage() {
     <div className="flex min-w-0 flex-col gap-8">
       <PageHeader
         title="Access keys"
+        meta={
+          <span className="inline-flex h-[22px] items-center gap-1.5 rounded-full border border-line-2 px-2.5 text-[12.5px] text-fg-2">
+            <Lock aria-hidden className="size-3" />
+            Read-only, every project
+          </span>
+        }
         primary={
           <CreateKey
             tenants={tenants.data?.map((t) => ({ id: t.id, name: t.name })) ?? []}
@@ -218,12 +240,28 @@ export function AccessKeysPage() {
           }}
         />
       ) : rows.length === 0 ? (
-        <EmptyState icon={<KeyRound aria-hidden strokeWidth={1.75} />} title="No key yet" compact />
+        <EmptyState title="No key yet" />
       ) : (
+        <section aria-labelledby="keys-h" className="flex min-w-0 flex-col gap-3">
+          <div className="flex flex-wrap items-baseline gap-2">
+            <h2 id="keys-h" className="text-[15px] font-semibold text-fg">
+              Keys and connections
+            </h2>
+            <span className="text-small text-fg-3 tabular">{shown.length}</span>
+            {revokedCount > 0 ? (
+              <label className="ml-auto inline-flex cursor-pointer items-center gap-2 text-small text-fg-2">
+                <Checkbox
+                  checked={showRevoked}
+                  onCheckedChange={(v) => setShowRevoked(v === true)}
+                />
+                Show revoked
+              </label>
+            ) : null}
+          </div>
         <DataTable
           label="Keys and connections"
           columns={columns}
-          rows={rows}
+          rows={shown}
           getRowKey={(r) => r.id}
           rowLabel={(r) => r.name}
           rowProps={(r) => ({ "data-key-id": r.id, "data-kind": r.kind })}
@@ -246,9 +284,10 @@ export function AccessKeysPage() {
               : null,
           ]}
         />
+        </section>
       )}
 
-      <ConnectSteps />
+      <ConnectClient approve="the operator view" keyName="an AI assistant key" />
 
       <Dialog
         open={usage !== null}
@@ -347,8 +386,8 @@ function CreateKey({
         create.reset();
       }}
     >
-      <fieldset className="flex flex-col gap-2">
-        <legend className="pb-2 text-small font-medium text-fg">Type</legend>
+      <fieldset className="flex flex-col">
+        <legend className="sr-only">Kind</legend>
         <div className="grid gap-2 sm:grid-cols-2">
           <ChoiceCard
             name="key-type"
@@ -356,7 +395,8 @@ function CreateKey({
             checked={machine}
             onChange={() => setForm({ ...form, type: "machine" })}
             title="Machine API key"
-            description="For a script or a job that reads the metrics API."
+            description="For a script or a job that reads the metrics API"
+            className={cn("p-3.5", machine ? "border-line-focus" : "bg-sunken")}
           />
           <ChoiceCard
             name="key-type"
@@ -364,25 +404,47 @@ function CreateKey({
             checked={!machine}
             onChange={() => setForm({ ...form, type: "assistant" })}
             title="AI assistant key"
-            description="For an AI client that searches and compares projects as you."
+            description="For an AI client that searches and compares projects as you"
+            className={cn("p-3.5", !machine ? "border-line-focus" : "bg-sunken")}
           />
         </div>
       </fieldset>
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_11rem]">
-        <TextField
-          label="Name"
-          hint={
-            nameTaken(takenNames, form.name) ? (
-              <span className="text-warning">A key with this name exists.</span>
-            ) : undefined
-          }
-          placeholder={machine ? "warehouse" : "laptop"}
-          maxLength={100}
-          className="max-lg:h-(--vs-control-touch)"
-          value={form.name}
-          error={errors.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-        />
+      <TextField
+        label="Name"
+        hint={
+          nameTaken(takenNames, form.name) ? (
+            <span className="text-warning">A key with this name exists.</span>
+          ) : undefined
+        }
+        placeholder={machine ? "e.g. Grafana read-only" : "e.g. Claude on the review laptop"}
+        maxLength={100}
+        className="max-lg:h-(--vs-control-touch)"
+        value={form.name}
+        error={errors.name}
+        onChange={(e) => setForm({ ...form, name: e.target.value })}
+      />
+      <div className="grid items-start gap-4 sm:grid-cols-[minmax(0,1fr)_9.5rem]">
+        {machine ? (
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <span aria-hidden className="text-small font-medium text-fg">
+              Reads
+            </span>
+            <Segmented
+              label="Reads"
+              value={form.scope}
+              options={[
+                { value: "all", label: "Every project" },
+                { value: "tenant", label: "One project" },
+              ]}
+              onChange={(v) => setForm({ ...form, scope: v })}
+            />
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-small font-medium text-fg">Reads</span>
+            <span className="text-body text-fg-2">Every project, as you</span>
+          </div>
+        )}
         <TextField
           label="Expires after, days"
           placeholder={`${DEFAULT_EXPIRY_DAYS}, at most ${MAX_EXPIRY_DAYS}`}
@@ -393,45 +455,24 @@ function CreateKey({
           onChange={(e) => setForm({ ...form, days: e.target.value })}
         />
       </div>
-      {machine ? (
-        <fieldset className="flex flex-col gap-2">
-          <legend className="pb-2 text-small font-medium text-fg">Reads the metrics of</legend>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <ChoiceCard
-              name="scope"
-              value="all"
-              checked={form.scope === "all"}
-              onChange={() => setForm({ ...form, scope: "all" })}
-              title="Every project"
-            />
-            <ChoiceCard
-              name="scope"
-              value="tenant"
-              checked={form.scope === "tenant"}
-              onChange={() => setForm({ ...form, scope: "tenant" })}
-              title="One project"
-            />
-          </div>
-          {form.scope === "tenant" ? (
-            <div className="flex animate-rise-in flex-col gap-2 pt-2">
-              <SelectField
-                label="Project"
-                value={form.tenantId}
-                error={errors.tenantId}
-                className="w-full max-lg:h-(--vs-control-touch)"
-                onChange={(e) => setForm({ ...form, tenantId: e.target.value })}
-              >
-                <option value="">Choose a project</option>
-                {tenants.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </SelectField>
-              {tenantsError ? <FormMessage error={tenantsError} /> : null}
-            </div>
-          ) : null}
-        </fieldset>
+      {machine && form.scope === "tenant" ? (
+        <div className="flex animate-rise-in flex-col gap-2">
+          <SelectField
+            label="Project"
+            value={form.tenantId}
+            error={errors.tenantId}
+            className="w-full max-lg:h-(--vs-control-touch)"
+            onChange={(e) => setForm({ ...form, tenantId: e.target.value })}
+          >
+            <option value="">Choose a project</option>
+            {tenants.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </SelectField>
+          {tenantsError ? <FormMessage error={tenantsError} /> : null}
+        </div>
       ) : null}
     </CreateDialog>
   );
@@ -489,87 +530,6 @@ function CreatedKey({ created, tenantName }: { created: Created; tenantName: str
         copyLabel="Copy configuration"
       />
     </div>
-  );
-}
-
-// how to connect an ai client: the server address once, then each
-// client as a tab of numbered steps
-function ConnectSteps() {
-  const origin = window.location.origin;
-  const s = clientSnippets(origin, null);
-  return (
-    <section aria-labelledby="connect-h" className="flex min-w-0 flex-col gap-4">
-      <h2 id="connect-h" className="text-title text-fg">
-        Connect an AI assistant
-      </h2>
-      <div className="flex min-w-0 flex-col gap-1">
-        <span className="text-caption text-fg-2">Server address</span>
-        <CopyField value={mcpEndpoint(origin)} label="server address" className="min-w-0" />
-      </div>
-      <Tabs defaultValue="connector" className="min-w-0 gap-4">
-        <TabsList aria-label="Client" className="max-w-full overflow-x-auto">
-          <TabsTrigger value="connector" className="max-lg:h-(--vs-control-touch)">
-            Claude and ChatGPT
-          </TabsTrigger>
-          <TabsTrigger value="claude-code" className="max-lg:h-(--vs-control-touch)">
-            Claude Code
-          </TabsTrigger>
-          <TabsTrigger value="cursor" className="max-lg:h-(--vs-control-touch)">
-            Cursor
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="connector" className="min-w-0 animate-rise-in">
-          <Steps>
-            <Step n={1}>Settings, Connectors, Add custom connector.</Step>
-            <Step n={2}>Paste the server address.</Step>
-            <Step n={3}>Sign in and approve the operator view.</Step>
-          </Steps>
-        </TabsContent>
-        <TabsContent value="claude-code" className="min-w-0 animate-rise-in">
-          <Steps>
-            <Step n={1}>Create an AI assistant key.</Step>
-            <Step n={2}>
-              Run with the key:
-              <CodeBlock code={s.claudeCode} copyLabel="Copy command" wrap />
-            </Step>
-            <Step n={3}>
-              Or sign in through the browser:
-              <CodeBlock code={s.claudeCodeOAuth} copyLabel="Copy command" wrap />
-            </Step>
-          </Steps>
-        </TabsContent>
-        <TabsContent value="cursor" className="min-w-0 animate-rise-in">
-          <Steps>
-            <Step n={1}>Create an AI assistant key.</Step>
-            <Step n={2}>
-              <span>
-                Add to <code className="font-mono">.cursor/mcp.json</code>:
-              </span>
-              <CodeBlock code={s.cursor} copyLabel="Copy configuration" />
-            </Step>
-            <Step n={3}>Put the key in place of the angle brackets.</Step>
-          </Steps>
-        </TabsContent>
-      </Tabs>
-    </section>
-  );
-}
-
-function Steps({ children }: { children: React.ReactNode }) {
-  return <ol className="flex min-w-0 list-none flex-col gap-3">{children}</ol>;
-}
-
-function Step({ n, children }: { n: number; children: React.ReactNode }) {
-  return (
-    <li className="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)] gap-2 text-small text-fg">
-      <span
-        aria-hidden
-        className="flex size-6 items-center justify-center rounded-full border border-line-strong font-mono text-caption text-fg-2"
-      >
-        {n}
-      </span>
-      <div className="flex min-w-0 flex-col gap-2 pt-1">{children}</div>
-    </li>
   );
 }
 
