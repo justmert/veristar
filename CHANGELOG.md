@@ -16,6 +16,22 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+### Added
+
+- A public demo of the console at `https://app.<BASE_DOMAIN>/demo`. Anyone can browse the
+  projects an operator marks as demo projects, and the operator views over those projects only,
+  without signing in. The demo is read only, shows a small banner with a link to enroll, and sets
+  no cookie. The control plane serves it under `/api/demo` with the console's own read handlers
+  behind an allowlist of GET routes; every other request answers `403 demo_read_only`, and each
+  visitor is limited to 60 requests at once and then 5 a second
+  ([docs/reference/control-plane-api.md](docs/reference/control-plane-api.md), section 21).
+- `platformctl tenant demo (-tenant ID | -slug S) (-on | -off) [-dry-run]` marks a project as a
+  demo project or takes it out, with a `tenant.demo` audit row
+  ([docs/operators/demo.md](docs/operators/demo.md)).
+- The isolation gate sends every demo route with the demo project's ids, another project's ids
+  and a member's session cookie, and checks that no other project and no person appears in any
+  answer.
+
 ### Changed
 
 - The README, the documentation introduction and the website describe Veristar as analytics for every project built on Stellar, with signed usage reports for anyone who needs proof of usage and SCF as the overseer of the shared service. No feature changes.
@@ -23,6 +39,29 @@ here, before they take effect, as the processing terms require
 ### Fixed
 
 - A `stellar.toml` fetch whose body ends only after the 10 second request deadline is now a timeout, never a file, so a body cut short at the deadline is not read as complete. The slow-host test names the path, status, size and time when it fails.
+
+### Upgrade notes
+
+**Before the deploy**
+
+- This release is signed in key mode on a workstation, while the repository's GitHub Actions are
+  off. Add `ANSIBLE_EXTRA='-e sa_signature_mode=key'` to every `make <env>-deploy`.
+
+**During the rolling deploy**
+
+- The bootstrap step applies migration 00053 with the new release's images, before the core tier
+  restarts. It adds `cp.tenants.demo` (default `false`); the role `cp_demo` without login, which
+  `cp_operator` may switch to but does not inherit, with its read policies; and the demo filter in
+  `cp.operator_sites`, `api.operator_hourly` and `api.operator_daily`, whose bodies move to
+  `api.operator_hourly_listed` and `api.operator_daily_listed`. `platform_owner` creates the role
+  with the `createrole` right it already holds. Expected log line: `platform database migrated`
+  with `rls_coverage ok`.
+- No NATS topology or configuration change.
+
+**After the deploy**
+
+- No project is in the demo until an operator runs `platformctl tenant demo -slug <slug> -on`
+  ([docs/operators/demo.md](docs/operators/demo.md)).
 
 ## [0.4.5] - 2026-11-19
 

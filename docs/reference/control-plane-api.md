@@ -14,7 +14,7 @@ Database names are those of the migrations in `db/migrations/`
 response field maps to a column, the field has the column's name.
 
 Sections 1 to 3 hold the conventions every route follows: transport,
-authentication, errors, shared objects and the audit log. Sections 4 to 20 hold
+authentication, errors, shared objects and the audit log. Sections 4 to 21 hold
 the routes by area:
 
 | Section | Area |
@@ -34,6 +34,7 @@ the routes by area:
 | 18 | a project's web dashboard: totals, days, breakdowns, hours and visitors right now |
 | 19 | SCF cohorts, growth and percentiles in the global views, and threshold rules |
 | 20 | signed usage reports and their public verification |
+| 21 | the public demo: the console's reads of demo projects, without sign-in |
 
 A new route adds its error codes to section 2.4 and its audit actions to section
 3.3. The meaning of an existing field never changes.
@@ -236,6 +237,7 @@ List routes answer:
 | 403 | `challenge_used` | the wallet or passkey challenge was verified before (4.1.7, 4.1.9) |
 | 403 | `passkey_unknown` | a passkey answer without a public key names a credential that no live account holds (4.1.9) |
 | 403 | `scope_forbidden` | a machine API key scoped to one tenant names another tenant (9.3) |
+| 403 | `demo_read_only` | a request to `/api/demo` that is not a GET of an allowlisted route (21.2) |
 | 404 | `not_found` | unknown id, malformed id, or not a member |
 | 405 | `method_not_allowed` | method not defined for the path |
 | 409 | `slug_taken` | `cp.tenants.slug` already exists |
@@ -451,7 +453,8 @@ Operator governance (section 5): `user.operator_sync`, `settings.enrollment_mode
 `purge.complete`, `site.verify`, `site.stellar_toml`, `operator.bootstrap`,
 `operator.add`, `operator.suspend`, `operator.resume`, `operator.role_change`,
 `operator.passkeys_reset`, `operator.remove`, `operator.step_up`,
-`operator.passkey_add`, `operator.passkey_delete`. Actors added:
+`operator.passkey_add`, `operator.passkey_delete`, `tenant.demo` (21.1, written by
+`platformctl tenant demo`). Actors added:
 `system:startup` (roster bootstrap and operator sync), `system:verify-domains`, `system:purge`.
 Every operator action of section 5 carries `reason` in `detail` when one was given,
 and every row about one tenant carries `detail.tenant_id`, which the audit
@@ -4849,3 +4852,94 @@ one row by its unguessable id and returns that row's body, which holds the
 aggregates of one project only. The member routes follow 1.3: a member of
 another project gets 404 for every report id. The isolation gate
 (`tests/isolation/console`) covers every route of this section.
+
+## 21. Public demo
+
+The console's demo at `https://app.<BASE_DOMAIN>/demo` lets anyone browse
+projects an operator marked as demo projects, with sample data, without
+signing in. The control plane serves it under `/api/demo`: the same paths as
+`/api`, the same handlers, read only, and only for demo projects.
+
+### 21.1 The demo flag
+
+`cp.tenants.demo` (migration 00053, default `false`) marks a demo project.
+Only `platformctl tenant demo` sets it, under `cp_system`, with a `tenant.demo`
+audit row (actor `system:platformctl-tenant`, detail `{"demo": {"old", "new"}}`).
+`cp_tenant` has no right on the column, and no console route writes it. The
+command refuses the internal monitoring project and refuses to mark a removed
+project. A removed project leaves the demo even with the flag set. The flag is
+read on every demo request, so clearing it ends the project's demo at the next
+request.
+
+### 21.2 Requests
+
+`/api/demo` loads no session and sets no cookie. A request goes through, in
+this order:
+
+1. The per-client limit: a client (a whole IPv4 address or an IPv6 /48, keyed
+   by an in-memory hash as for sign-in, 4.1.1) may send 60 requests at once
+   and then 5 a second, under a ceiling of 100 a second per control plane
+   instance. Beyond it: 429 `rate_limited` with `Retry-After`.
+2. The method: anything but GET answers 403 `demo_read_only`.
+3. The allowlist: a path whose route is not in the table below answers 403
+   `demo_read_only`, unknown paths included.
+4. The handler of the console route, with the demo viewer as its user.
+
+| Demo route (`GET /api/demo...`) | Console route it serves |
+|---|---|
+| `/me` | 21.3 |
+| `/tenants`, `/tenants/{tenant_id}`, `/tenants/{tenant_id}/integrity` | 4.2, 17.2 |
+| `/tenants/{tenant_id}/sites`, `/tenants/{tenant_id}/sites/{site_id}`, `/sites/{site_id}/ingest`, `/sites/{site_id}/snippet` | 4.3 |
+| `/tenants/{tenant_id}/api-metrics/{overview,timeseries,routes,status,services,warnings}` | 7 |
+| `/tenants/{tenant_id}/web/{summary,breakdown,hourly,realtime,sessions}` | 18 |
+| `/tenants/{tenant_id}/onchain`, `/tenants/{tenant_id}/onchain/ids/{chain_id}/functions` | 15 |
+| `/tenants/{tenant_id}/scf-view`, `/tenants/{tenant_id}/cohort` | 16.3, 19.1 |
+| `/tenants/{tenant_id}/reports`, `/tenants/{tenant_id}/reports/{report_id}` | 20.1 |
+| `/operator/tenants`, `/operator/tenants/{tenant_id}` | 5.3, 5.4 |
+| `/operator/web/{projects,compare,integrity}`, `/operator/api/{projects,compare}` | 8, 17.3 |
+| `/operator/tenants/{tenant_id}/onchain`, `/operator/tenants/{tenant_id}/onchain/ids/{chain_id}/functions` | 15 |
+| `/operator/cohorts`, `/operator/tenants/{tenant_id}/cohort` | 19.1 |
+| `/operator/rules`, `/operator/rules/{rule_id}`, `/operator/rules/{rule_id}/matches` | 19.4 |
+
+Everything else stays out: every write, members and invites, OTLP tokens,
+erasure, site verification, MCP access keys, the account, step-up and
+passkeys, every CSV export, and the operator alerts, audit log, roster,
+settings and API keys.
+
+### 21.3 The demo viewer
+
+`GET /api/demo/me` answers the shape of `GET /api/me` (4.1.4) plus
+`"demo": true`. The user has the id `ffffffff-ffff-ffff-ffff-ffffffffffff`,
+no identity, `display_name` `Demo`, `is_operator` `true` and `operator_role`
+`operator`, so the console shows the operator views without their admin pages.
+`tenants` lists the demo projects with role `viewer`, and
+`removed_tenants` is empty.
+
+The tenant scope (1.3) gives the viewer role `viewer` on a live demo project
+and answers 404 `not_found` for any other id, as for a tenant the caller is not
+a member of. A tenant answer carries `"role": "viewer"`. Role `viewer` passes no
+owner check. The web dashboard reads Umami as the umami user of the project's
+first owner, still only the site's own two websites (18).
+
+### 21.4 Isolation
+
+Every database transaction of a demo request is read only. A tenant
+transaction checks under row-level security that its tenant is a live demo
+project and answers 404 otherwise. The operator views run as the role
+`cp_demo`, which `cp_operator` switches to for the transaction. Its policies
+keep demo projects only, and it has no right on settings, operator keys,
+the audit log, users, sessions, members, invites or tokens. The view
+`cp.operator_sites` and the functions `api.operator_hourly` and
+`api.operator_daily`, which run with their owner's rights, keep demo projects
+only in a demo transaction too.
+
+Demo answers name no person: the operator project detail answers empty
+`members` and `recent_audit`, `null` `created_by` and `approved_by`, no
+`removal.requested_by` and no `allowed_actions`. A report Summary answers
+`created_by` `null`. The operator views list, count, compare and match demo
+projects only: totals, cohorts and threshold rule matches include no other
+project. The isolation gate (`make isolation`) sends every demo route with the
+demo project's ids, with another project's ids and with a member's session
+cookie, and checks each answer for the other project's data and for any
+person's name or id.
+

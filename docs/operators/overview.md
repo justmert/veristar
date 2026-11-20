@@ -92,3 +92,6 @@ project's members.
 
 The HTTP routes behind these pages are section 5 of the
 [control plane API reference](../reference/control-plane-api.md).
+
+The public demo at `/demo` shows the Work pages without sign-in, read only and over demo projects
+only ([demo.md](demo.md)).
