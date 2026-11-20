@@ -1,5 +1,5 @@
 import { cn } from "@veristar/brand/cn";
-import { CircleAlert, Inbox, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,6 @@ import { siblingUrl } from "@/lib/hosts";
 function StateFrame({
   tone,
   role,
-  icon,
   title,
   children,
   actions,
@@ -26,7 +25,6 @@ function StateFrame({
 }: {
   tone: "neutral" | "critical";
   role: "status" | "alert";
-  icon?: ReactNode;
   title: string;
   children?: ReactNode;
   actions?: ReactNode;
@@ -37,15 +35,14 @@ function StateFrame({
     <div
       role={role}
       className={cn(
-        "flex animate-fade-in flex-col items-center justify-center gap-3 rounded-lg border text-center",
+        "flex animate-fade-in flex-col items-center justify-center gap-3 rounded-2xl border text-center",
         compact ? "px-4 py-6" : "px-6 py-10",
-        tone === "critical" ? "border-line bg-raised" : "border-dashed border-line-strong",
+        tone === "critical" ? "border-critical-line bg-raised" : "border-line bg-raised",
         className,
       )}
     >
-      {icon ? <IconTile tone={tone}>{icon}</IconTile> : null}
       <span className="flex max-w-prose flex-col gap-1">
-        <span className="text-title text-fg">{title}</span>
+        <span className="text-[17px] leading-6 font-semibold text-fg">{title}</span>
         {children ? <span className="text-small text-fg-2">{children}</span> : null}
       </span>
       {actions ? (
@@ -55,12 +52,11 @@ function StateFrame({
   );
 }
 
-// nothing to show yet, one anatomy everywhere: an icon tile, a title that
-// says what is missing (no full stop), the text that says why or what comes
-// next (sentences), and the one way forward. a dashed edge marks a section
-// that is empty; a whole page that has nothing uses MessagePage
+// nothing to show yet, as on the canvas: no decoration (no icon tile, no
+// frame, no rings), a title that says what is missing and the one way
+// forward. `icon` is accepted for older callers and not drawn. `children`
+// is an older explanation line; the redesigned pages pass none
 export function EmptyState({
-  icon,
   title,
   children,
   action,
@@ -75,34 +71,40 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <StateFrame
-      tone="neutral"
+    <div
       role="status"
-      icon={icon ?? <Inbox aria-hidden strokeWidth={1.75} />}
-      title={title}
-      actions={action}
-      compact={compact}
-      className={className}
+      data-empty-state=""
+      className={cn(
+        "flex animate-fade-in flex-col items-center justify-center gap-2.5 text-center",
+        compact ? "px-4 py-6" : "px-6 py-12",
+        className,
+      )}
     >
-      {children}
-    </StateFrame>
+      <span className="text-[17px] leading-6 font-semibold text-fg">{title}</span>
+      {children ? <span className="max-w-prose text-small text-fg-2">{children}</span> : null}
+      {action ? (
+        <span className="mt-1.5 flex flex-wrap items-center justify-center gap-2">{action}</span>
+      ) : null}
+    </div>
   );
 }
 
-// a whole page that stands in for the one asked for (not found, removed,
-// revoked, operators only, a crash, a link that no longer works): one solid
-// card in one place, the same icon tile as every state, the page title,
-// what happened and why, and the way on. a section that is only empty uses
-// EmptyState instead
+// a whole page that stands in for the one asked for (not found, old link,
+// revoked report, a crash, operators only), as on the canvas: a small mono
+// code line, the title, one sentence, the main action and an optional
+// second one. no card and no icon. `icon` and `tone` are accepted for older
+// callers; a critical tone colours the code line
 export function MessagePage({
-  icon,
+  code,
   tone = "neutral",
   title,
   children,
   actions,
   className,
 }: {
-  icon: ReactNode;
+  // the small line above the title ("404", "Link expired")
+  code?: string;
+  icon?: ReactNode;
   tone?: "neutral" | "critical";
   title: string;
   children?: ReactNode;
@@ -112,32 +114,30 @@ export function MessagePage({
   return (
     <section
       data-message-page=""
+      aria-label={title}
       className={cn(
-        "mx-auto flex w-full max-w-prose animate-rise-in flex-col gap-4 rounded-lg border border-line bg-raised px-6 py-10 sm:px-10",
+        "m-auto flex w-full max-w-[480px] animate-rise-in flex-col gap-3.5 py-16 lg:py-24",
         className,
       )}
     >
-      <IconTile tone={tone}>{icon}</IconTile>
-      <h1 className="text-heading text-fg">{title}</h1>
-      {children ? (
-        <div className="flex max-w-prose flex-col gap-1 text-body text-fg-2">{children}</div>
+      {code ? (
+        <span
+          className={cn(
+            "font-mono text-small",
+            tone === "critical" ? "text-critical" : "text-fg-3",
+          )}
+        >
+          {code}
+        </span>
       ) : null}
-      {actions ? <div className="flex flex-wrap gap-2 pt-1">{actions}</div> : null}
+      <h1 className="text-[26px] leading-8 font-semibold tracking-[-0.02em] text-fg">{title}</h1>
+      {children ? (
+        <div className="flex flex-col gap-1 text-[14.5px] leading-[22px] text-fg-2">{children}</div>
+      ) : null}
+      {actions ? (
+        <div className="mt-1.5 flex flex-wrap gap-2 [&>*]:h-[38px] [&>*]:px-4">{actions}</div>
+      ) : null}
     </section>
-  );
-}
-
-// the square that holds the icon of every state and message page
-function IconTile({ tone, children }: { tone: "neutral" | "critical"; children: ReactNode }) {
-  return (
-    <span
-      className={cn(
-        "flex size-10 shrink-0 items-center justify-center rounded-lg border border-line-strong bg-raised [&_svg]:size-5",
-        tone === "critical" ? "text-critical" : "text-fg-2",
-      )}
-    >
-      {children}
-    </span>
   );
 }
 
@@ -162,7 +162,6 @@ export function ErrorState({
     <StateFrame
       tone="critical"
       role="alert"
-      icon={<CircleAlert aria-hidden strokeWidth={1.75} />}
       title={title}
       compact={compact}
       className={className}

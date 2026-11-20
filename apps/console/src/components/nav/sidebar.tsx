@@ -10,15 +10,12 @@ import {
   ChevronsUpDown,
   CircleAlert,
   Ellipsis,
-  FolderOpen,
+  FileText,
+  Folder,
   LogOut,
-  Monitor,
-  Moon,
   Plus,
-  ScrollText,
   Search,
   Shield,
-  Sun,
   UserRound,
 } from "lucide-react";
 import { LayoutGroup, motion } from "motion/react";
@@ -30,7 +27,7 @@ import { operatorAlertsQuery, operatorTenantsQuery, tenantQuery } from "@/api/qu
 import type { FiringAlert, Me } from "@/api/schemas";
 import { Avatar } from "@/components/avatar";
 import { Segmented } from "@/components/segmented";
-import { CountBadge, StatusDot, statusEntry } from "@/components/status";
+import { CountBadge, StatusDot, statusEntry, toneText } from "@/components/status";
 import {
   Menu,
   MenuContent,
@@ -43,6 +40,7 @@ import { criticalCount } from "@/lib/alerts";
 import { isNotFound } from "@/lib/errors";
 import { formatCount } from "@/lib/format";
 import { siblingUrl } from "@/lib/hosts";
+import { GoToButton } from "./go-to";
 import {
   areaOf,
   HOME_NAV,
@@ -105,16 +103,16 @@ export function Sidebar({
     <LayoutGroup id={group}>
       {/* the brand and the switcher stay at the top and the account at the
           bottom; only the page list between them scrolls */}
-      <div className="flex h-full flex-col gap-4 py-4">
-        <div className="flex shrink-0 flex-col gap-4 px-3">
+      <div className="flex h-full flex-col py-4">
+        <div className="flex shrink-0 flex-col px-3">
           <Link
             to="/"
             onClick={onNavigate}
             aria-label="Veristar, your projects"
-            className="flex items-center gap-2 self-start rounded-md px-2 py-1 text-fg focus-ring"
+            className="mb-2 flex items-center gap-2 self-start rounded-md px-2 py-1 text-[15px] font-semibold text-fg focus-ring"
           >
-            <Mark className="size-5" />
-            <span className="text-title">Veristar</span>
+            <Mark className="size-[18px]" />
+            Veristar
           </Link>
 
           {/* the switcher is the one way between contexts: a project, or the
@@ -126,8 +124,10 @@ export function Sidebar({
             operatorArea={area.kind === "operator"}
             onNavigate={onNavigate}
           />
+          {/* the command palette, also on ctrl k from any page */}
+          <GoToButton variant="sidebar" className="mt-1.5" />
         </div>
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3">
+        <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-2">
           {area.kind === "operator" && me.user.is_operator ? (
             <OperatorGroups rest={area.rest} onNavigate={onNavigate} />
           ) : navProject ? (
@@ -138,7 +138,7 @@ export function Sidebar({
               onNavigate={onNavigate}
             />
           ) : (
-            <nav aria-label="Console" className="flex flex-col gap-px">
+            <nav aria-label="Console" className="mt-2.5 flex flex-col gap-1">
               {HOME_NAV.filter((i) => i.key === "projects").map((i) => (
                 <Item
                   key={i.key}
@@ -150,7 +150,7 @@ export function Sidebar({
             </nav>
           )}
         </div>
-        <div className="mx-3 flex shrink-0 flex-col gap-px border-t border-line pt-3">
+        <div className="mx-3 flex shrink-0 flex-col gap-0.5 border-t border-line pt-2.5">
           {docs ? (
             <FooterLink href={docs} icon={<BookOpen aria-hidden />}>
               Docs
@@ -161,7 +161,7 @@ export function Sidebar({
               Service status
             </FooterLink>
           ) : null}
-          <FooterLink to="/terms" icon={<ScrollText aria-hidden />}>
+          <FooterLink to="/terms" icon={<FileText aria-hidden />}>
             Terms
           </FooterLink>
           {/* one way to Account: the account menu, which also holds the
@@ -179,20 +179,19 @@ export function Sidebar({
   );
 }
 
-// the theme: system, light or dark, as three icons
+// the theme: system, light or dark, as three words
 function ThemeToggle() {
   const theme = useTheme();
   return (
     <Segmented
       label="Theme"
-      iconOnly
       value={theme.choice}
       onChange={(v) => theme.setChoice(v as ThemeChoice)}
-      className="mt-1 px-2"
+      className="mx-2 mt-2 mb-1.5"
       options={[
-        { value: "system", label: "System", icon: <Monitor aria-hidden /> },
-        { value: "light", label: "Light", icon: <Sun aria-hidden /> },
-        { value: "dark", label: "Dark", icon: <Moon aria-hidden /> },
+        { value: "system", label: "System" },
+        { value: "light", label: "Light" },
+        { value: "dark", label: "Dark" },
       ]}
     />
   );
@@ -216,10 +215,10 @@ function AccountMenu({
         <button
           type="button"
           aria-current={current ? "page" : undefined}
-          className="mt-1 flex items-center gap-2 rounded-md px-2 py-2 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-selected aria-[current=page]:bg-selected max-lg:min-h-(--vs-control-touch)"
+          className="flex items-center gap-2.5 rounded-[8px] px-2 py-1.5 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-hover aria-[current=page]:bg-hover max-lg:min-h-(--vs-control-touch)"
         >
-          <Avatar name={me.user.display_name} />
-          <span className="min-w-0 flex-1 truncate text-small">{me.user.display_name}</span>
+          <Avatar name={me.user.display_name} className="size-6 border-0 text-axis" />
+          <span className="min-w-0 flex-1 truncate text-body">{me.user.display_name}</span>
           <Ellipsis aria-hidden className="size-4 text-fg-3" />
           <span className="sr-only">, Account menu</span>
         </button>
@@ -282,29 +281,29 @@ function ContextSwitcher({
       <MenuTrigger asChild>
         <button
           type="button"
-          className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-line bg-raised p-2 text-left text-fg transition-colors duration-(--vs-duration-press) hover:border-line-strong hover:bg-hover focus-ring aria-expanded:border-line-strong max-lg:min-h-(--vs-control-touch)"
+          className="grid min-h-12 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-lg border border-line bg-sunken px-2.5 py-1.5 text-left text-fg transition-colors duration-(--vs-duration-press) hover:border-line-strong focus-ring aria-expanded:border-line-strong max-lg:min-h-(--vs-control-touch)"
         >
-          <span className="flex size-7 items-center justify-center rounded-md bg-selected text-caption font-semibold">
+          <span className="flex size-[26px] items-center justify-center rounded-md bg-selected text-caption font-semibold">
             {operatorArea ? (
-              <Shield aria-hidden className="size-4" />
+              "O"
             ) : id ? (
-              name.slice(0, 1)
+              name.slice(0, 1).toUpperCase()
             ) : (
-              <FolderOpen aria-hidden className="size-4" />
+              <Folder aria-hidden className="size-3.5" />
             )}
           </span>
           <span className="flex min-w-0 flex-col">
-            <span className="truncate text-body font-semibold" title={name}>
+            <span className="truncate text-body leading-[18px] font-semibold" title={name}>
               {name}
             </span>
             {word ? (
-              <span className="flex items-center gap-1 text-caption font-normal text-fg-2">
-                <StatusDot tone={word.tone} />
+              <span className="flex items-center gap-[5px] text-caption font-normal text-fg-2">
+                <StatusDot tone={word.tone} className="size-1.5" />
                 {word.word}
               </span>
             ) : null}
           </span>
-          <ChevronsUpDown aria-hidden className="size-4 text-fg-3" />
+          <ChevronsUpDown aria-hidden className="size-3.5 text-fg-3" />
           <span className="sr-only">, switch</span>
         </button>
       </MenuTrigger>
@@ -351,7 +350,7 @@ function ContextSwitcher({
         ) : null}
         <MenuSeparator />
         <MenuItem onSelect={() => go("/")}>
-          <FolderOpen aria-hidden />
+          <Folder aria-hidden />
           My projects
         </MenuItem>
         <MenuItem onSelect={() => go("/projects/new")}>
@@ -377,10 +376,10 @@ function Groups({
   badges?: Record<string, ReactNode>;
 }) {
   return (
-    <nav aria-label={label} className="flex flex-col gap-3">
+    <nav aria-label={label} className="flex flex-col">
       {groups.map((g) => (
-        <div key={g.key} className="flex flex-col gap-px">
-          <span className="px-2 pb-1 text-caption text-fg-2">{g.label}</span>
+        <div key={g.key} className="flex flex-col gap-1">
+          <span className="px-2 pt-3.5 text-caption text-fg-3">{g.label}</span>
           {g.items
             .filter((n) => !n.paletteOnly)
             .map((n) => (
@@ -425,23 +424,59 @@ function OperatorGroups({ rest, onNavigate }: { rest: string; onNavigate?: () =>
       badges={{
         review:
           waiting > 0 ? (
-            <CountBadge
+            <NavCount
               tone="neutral"
               label={`${waiting === 1 && !more ? "1 project waits" : `${formatCount(waiting)}${more ? " or more" : ""} projects wait`} for review`}
             >
               {formatCount(waiting)}
               {more ? "+" : ""}
-            </CountBadge>
+            </NavCount>
           ) : null,
         alerts: failed ? (
-          <CountBadge tone="critical" label="The alert source did not answer">
-            <CircleAlert />
-          </CountBadge>
-        ) : current ? (
-          <AlertsBadge alerts={current.alerts} />
+          <NavCount tone="critical" label="The alert source did not answer">
+            <CircleAlert aria-hidden className="size-3.5" />
+          </NavCount>
+        ) : current && current.alerts.length > 0 ? (
+          <NavCount
+            tone={criticalCount(current.alerts) > 0 ? "critical" : "warning"}
+            label={
+              current.alerts.length === 1
+                ? "1 alert firing"
+                : `${current.alerts.length} alerts firing`
+            }
+          >
+            {formatCount(current.alerts.length)}
+          </NavCount>
         ) : null,
       }}
     />
+  );
+}
+
+// the count at the end of a nav item: a plain number, quiet unless it is a
+// problem (firing alerts). the words for a screen reader go in `label`
+function NavCount({
+  tone,
+  label,
+  children,
+}: {
+  tone: "neutral" | "warning" | "critical";
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      data-tone={tone}
+      className={cn(
+        "inline-flex items-center text-caption font-normal tabular",
+        tone === "neutral" ? "text-fg-3" : toneText(tone),
+      )}
+    >
+      <span aria-hidden className="inline-flex items-center">
+        {children}
+      </span>
+      <span className="sr-only">{label}</span>
+    </span>
   );
 }
 
@@ -479,7 +514,7 @@ function Item({
       onClick={onNavigate}
       aria-current={current ? "page" : undefined}
       className={cn(
-        "relative flex h-8 items-center gap-2 rounded-md px-2 text-body transition-colors duration-(--vs-duration-press) ease-standard focus-ring active:bg-selected max-lg:h-(--vs-control-touch)",
+        "group/item relative flex h-8 items-center gap-2.5 rounded-[8px] px-2 text-body transition-colors duration-(--vs-duration-press) ease-standard focus-ring active:bg-selected max-lg:h-(--vs-control-touch)",
         current ? "font-medium text-fg" : "text-fg-2 hover:bg-hover hover:text-fg",
       )}
     >
@@ -488,10 +523,14 @@ function Item({
           layoutId="sidebar-current"
           transition={transition.layout}
           aria-hidden
-          className="absolute inset-0 rounded-md bg-selected"
+          className="absolute inset-0 rounded-[8px] bg-hover"
         />
       ) : null}
-      <Icon aria-hidden className="relative size-4 shrink-0" />
+      <Icon
+        aria-hidden
+        strokeWidth={1.8}
+        className={cn("relative size-4 shrink-0", current ? "text-fg" : "text-fg-3")}
+      />
       <span className="relative min-w-0 flex-1 truncate">{item.label}</span>
       {badge ? <span className="relative">{badge}</span> : null}
     </Link>
@@ -514,8 +553,8 @@ function FooterLink({
   children: ReactNode;
 }) {
   const cls = cn(
-    "flex h-8 items-center gap-2 rounded-md px-2 text-small transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring [&_svg]:size-4 max-lg:h-(--vs-control-touch)",
-    current ? "bg-selected text-fg" : "text-fg-2",
+    "flex h-[30px] items-center gap-2.5 rounded-[8px] px-2 text-small transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring [&_svg]:size-4 [&_svg]:text-fg-3 [&_svg]:stroke-[1.8] max-lg:h-(--vs-control-touch)",
+    current ? "bg-hover text-fg" : "text-fg-2",
   );
   return to ? (
     <Link to={to} onClick={onNavigate} aria-current={current ? "page" : undefined} className={cls}>

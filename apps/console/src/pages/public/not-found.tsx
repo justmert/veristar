@@ -1,9 +1,10 @@
 import { useMutation } from "@tanstack/react-query";
-import { LockKeyhole, LogOut, RotateCcw, SearchX, TriangleAlert } from "lucide-react";
+import { LockKeyhole, LogOut, RotateCcw, TriangleAlert } from "lucide-react";
 import { isRouteErrorResponse, Link, useNavigate, useRouteError } from "react-router";
 import { api } from "@/api/endpoints";
 import { CopyButton } from "@/components/copy-button";
 import { FormMessage } from "@/components/error-panel";
+import { GoToButton } from "@/components/nav/go-to";
 import { PublicFrame } from "@/components/public-frame";
 import { MessagePage } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -21,14 +22,19 @@ export function ProjectsButton() {
 export function NotFoundPage({ project = false }: { project?: boolean }) {
   return (
     <MessagePage
-      icon={<SearchX aria-hidden />}
+      code="404"
       title={project ? "Project not found" : "Page not found"}
-      actions={<ProjectsButton />}
+      actions={
+        <>
+          <ProjectsButton />
+          <GoToButton />
+        </>
+      }
     >
       <p>
         {project
           ? "This project does not exist, or you are not a member of it."
-          : "This address does not exist in the console, or the project behind it is not yours."}
+          : "This address is not in the console, or its project is not yours."}
       </p>
     </MessagePage>
   );

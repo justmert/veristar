@@ -1,5 +1,6 @@
 import { cn } from "@veristar/brand/cn";
 import { type ReactNode, useId } from "react";
+import { LabeledFactItem } from "@/components/labeled-facts";
 import { formatCount } from "@/lib/format";
 
 // a raised surface with an optional header. raised = border only; depth
@@ -31,13 +32,13 @@ export function Panel({
 } & Omit<React.HTMLAttributes<HTMLElement>, "title">) {
   return (
     <As
-      className={cn("flex min-w-0 flex-col rounded-lg border border-line bg-raised", className)}
+      className={cn("flex min-w-0 flex-col rounded-2xl border border-line bg-raised", className)}
       {...rest}
     >
       {title || actions ? (
-        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-4 pt-3 pb-3 sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 pt-4 pb-3 sm:px-5">
           <div className="flex min-w-0 flex-col gap-1">
-            {title ? <h2 className="text-title text-fg">{title}</h2> : null}
+            {title ? <h2 className="text-body font-semibold text-fg">{title}</h2> : null}
             {description ? <p className="text-small text-fg-2">{description}</p> : null}
           </div>
           {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -58,7 +59,8 @@ export function Panel({
   );
 }
 
-// a label above a value, for definition-style facts inside a panel
+// a label above a value, for definition-style facts inside a panel: the
+// same fact as LabeledFacts (labeled-facts.tsx)
 export function Fact({
   label,
   children,
@@ -69,10 +71,9 @@ export function Fact({
   className?: string;
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1", className)}>
-      <dt className="text-caption text-fg-3">{label}</dt>
-      <dd className="min-w-0 text-body text-fg">{children}</dd>
-    </div>
+    <LabeledFactItem label={label} size="lg" className={className}>
+      {children}
+    </LabeledFactItem>
   );
 }
 
@@ -130,10 +131,16 @@ export function SectionTitle({
   className?: string;
 }) {
   return (
-    <h2 id={id} className={cn("flex items-baseline gap-2 text-title text-fg", className)}>
+    <h2
+      id={id}
+      className={cn(
+        "flex items-baseline gap-2 text-[15px] leading-5 font-semibold text-fg",
+        className,
+      )}
+    >
       {title}
       {count !== undefined && count !== null ? (
-        <span className="font-normal text-fg-3 tabular">{formatCount(count)}</span>
+        <span className="text-small font-normal text-fg-3 tabular">{formatCount(count)}</span>
       ) : null}
     </h2>
   );

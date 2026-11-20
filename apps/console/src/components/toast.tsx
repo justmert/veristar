@@ -118,14 +118,14 @@ function ToastItem({ item }: { item: Item }) {
       onBlur={release}
       data-toast={item.kind}
       className={cn(
-        "pointer-events-auto flex animate-rise-in items-start gap-3 rounded-lg border bg-overlay px-4 py-3 text-body shadow-overlay",
-        item.kind === "error" ? "border-critical-line" : "border-line-strong",
+        "pointer-events-auto flex animate-rise-in items-start gap-2.5 rounded-[10px] border bg-overlay px-3.5 py-2.5 text-small shadow-overlay",
+        item.kind === "error" ? "border-critical-line" : "border-line-2",
       )}
     >
       {item.kind === "error" ? (
-        <CircleAlert aria-hidden className="mt-1 size-4 shrink-0 text-critical" />
+        <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-critical" />
       ) : (
-        <CircleCheck aria-hidden className="mt-1 size-4 shrink-0 text-success" />
+        <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0 text-success" />
       )}
       <span className="min-w-0 flex-1 text-fg">{item.message}</span>
       {a ? (
