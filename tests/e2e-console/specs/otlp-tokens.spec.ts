@@ -60,8 +60,8 @@ test("the api analytics page shows the steps and one short exporter per stack", 
   await page.waitForURL(`${APP}/projects/${tenant.id}/connect-api`);
   await expect(page.getByRole("heading", { name: "Connect API", exact: true })).toBeVisible();
   // a new project: the token is the step to do now, the rest waits
-  await expect(page.locator('[data-check="1"]')).toHaveAttribute("data-state", "current");
-  await expect(page.locator('[data-check="2"]')).toHaveAttribute("data-state", "todo");
+  await expect(page.getByRole("heading", { name: "Create a token", level: 3 })).toBeVisible();
+  await expect(page.getByText("1 of 3", { exact: true })).toBeVisible();
   await page.screenshot({ path: join(shots, "page.png"), fullPage: true });
 });
 
@@ -91,13 +91,13 @@ test("a token is created through the control plane and shown once", async () => 
   await expect(panel).not.toContainText(plain);
   // the exporter of each stack is written for this token and the endpoint;
   // the code on screen shows only the token's start
-  const tabs = panel.getByRole("tab");
+  const tabs = panel.getByRole("radiogroup", { name: "Language" }).getByRole("radio");
   await expect(tabs).toHaveText(["Node.js", "Go", "Python", "Rust", "Java"]);
   const node = panel.locator("[data-snippet=node]");
   await expect(node).toContainText(`https://otlp.${BASE_DOMAIN}/v1/metrics`);
   await expect(node).toContainText(`Bearer ${plain.slice(0, 12)}...`);
   await expect(node).not.toContainText("apps/console");
-  await panel.getByRole("tab", { name: "Java" }).click();
+  await panel.getByRole("radio", { name: "Java" }).click();
   await expect(panel.locator("[data-snippet=java]")).toContainText("otlp_http:");
   await panel.getByRole("button", { name: "Show the secret" }).click();
   await expect(panel.locator("code").first()).toHaveText(plain);
@@ -117,7 +117,7 @@ test("a token is created through the control plane and shown once", async () => 
   await expect(list.getByText("Payments API", { exact: true })).toBeVisible();
   await expect(list.getByText(`${body.prefix}...`)).toBeVisible();
   await expect(list).not.toContainText(plain);
-  await expect(page.locator('[data-check="2"]')).toHaveAttribute("data-state", "current");
+  await expect(page.getByRole("heading", { name: "Add the exporter", level: 3 })).toBeVisible();
   await expect(page.getByText(plain)).toHaveCount(0);
   // a reload shows the token again only as its prefix
   await page.reload();
@@ -169,7 +169,7 @@ test("the token is revoked after a confirmation", async () => {
   expect(one.body.status).toBe("revoked");
   expect(one.body.revoked_at).not.toBeNull();
 
-  await page.getByLabel("Show revoked tokens").check();
+  await page.getByLabel("Show revoked").check();
   const shown = page
     .getByRole("table", { name: "Tokens" })
     .getByRole("row")

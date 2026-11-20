@@ -386,7 +386,7 @@ function People({
         />
       ) : null}
       <DataTable<Person>
-        label="People"
+        label="Members"
         columns={columns}
         rows={paged.rows}
         getRowKey={personKey}
