@@ -1,0 +1,12 @@
+{
+  "day": "2026-11-17",
+  "collected_at": "2026-11-20T07:40:50Z",
+  "source": "https://status.veristar.app",
+  "interval_seconds": 30,
+  "endpoints": {
+    "slo_dashboard": [],
+    "slo_freshness-api": [],
+    "slo_freshness-web": [],
+    "slo_ingestion": []
+  }
+}
