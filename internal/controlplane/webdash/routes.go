@@ -267,7 +267,12 @@ func (h *Routes) engine(req request) error {
 // read reads one website route of s as the member's umami user and maps
 // its failures to answers.
 func (h *Routes) read(ctx context.Context, req request, s site, websiteID, sub string, q url.Values, out any) error {
-	err := h.um.Read(ctx, req.access.User.ID, umamiread.Website{Tenant: req.access.TenantID, Site: s.ID, ID: websiteID}, sub, q, out)
+	// the demo's viewer has no umami user; it reads as the project's owner
+	// (tenants.Access.ReadAs), still limited to this site's two websites
+	if req.access.ReadAs == uuid.Nil {
+		return httpx.Conflict(CodeProvisioningPending, "web analytics for this site are still being set up; try again in a few minutes")
+	}
+	err := h.um.Read(ctx, req.access.ReadAs, umamiread.Website{Tenant: req.access.TenantID, Site: s.ID, ID: websiteID}, sub, q, out)
 	if err == nil {
 		return nil
 	}

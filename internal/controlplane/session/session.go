@@ -307,3 +307,24 @@ func ViaCredential(ctx context.Context) bool {
 	v, _ := ctx.Value(credentialKey{}).(bool)
 	return v
 }
+
+// DemoUserID is the user of every request of the public demo (contract
+// 21). no cp.users row has it: uuid version 7 ids never take the all-ones
+// value, so it can match no membership, invite or audit row.
+var DemoUserID = uuid.Max
+
+type demoKey struct{}
+
+// WithDemo returns ctx carrying the anonymous viewer of the public demo as
+// its user. the demo handler puts it there instead of a session; such a
+// user is no operator and no member, and the tenant scope lets it read
+// demo projects only.
+func WithDemo(ctx context.Context) context.Context {
+	return context.WithValue(context.WithValue(ctx, userKey{}, User{ID: DemoUserID}), demoKey{}, true)
+}
+
+// Demo reports whether the request's user is the viewer of the public demo.
+func Demo(ctx context.Context) bool {
+	v, _ := ctx.Value(demoKey{}).(bool)
+	return v
+}
