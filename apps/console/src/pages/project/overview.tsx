@@ -567,7 +567,12 @@ function ChainChart({ daily }: { daily: { day: string; value: number | null }[] 
       description="per day, UTC"
       buckets={buckets}
       series={[
-        { key: "operations", label: "Operations", tone: "series-2", values: daily.map((d) => d.value) },
+        {
+          key: "operations",
+          label: "Operations",
+          tone: "series-2",
+          values: daily.map((d) => d.value),
+        },
       ]}
       axisFormat={formatCompact}
       state={daily.some((d) => (d.value ?? 0) > 0) ? "data" : "empty"}
@@ -938,7 +943,8 @@ function WebTop({
 }) {
   const b = useQuery(webBreakdownQuery(tenantId, { ...days, site, band: "primary" }, dim, TOP));
   const sites = b.data?.sites ?? [];
-  const names = site || sites.length < 2 ? null : Object.fromEntries(sites.map((s) => [s.id, s.name]));
+  const names =
+    site || sites.length < 2 ? null : Object.fromEntries(sites.map((s) => [s.id, s.name]));
   return (
     <TopPanel title={title} to={to} link="Web">
       <BreakdownList
