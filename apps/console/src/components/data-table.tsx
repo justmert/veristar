@@ -313,7 +313,7 @@ export function DataTable<Row>({
                 </tr>
               ) : showEmpty ? (
                 <tr>
-                  <td colSpan={span} className="p-4">
+                  <td colSpan={span} className="px-5 py-4">
                     <EmptyRow empty={empty} />
                   </td>
                 </tr>
@@ -711,8 +711,16 @@ function CellValue<Row>({ column: c, row }: { column: Column<Row>; row: Row }) {
   );
 }
 
-// the empty state of a table: the shared empty anatomy, without its box
+// the empty state of a table: the shared empty anatomy, without its box. an
+// empty state with nothing to do is one quiet line in the table, as the
+// canvas draws it, not a title in the middle of a box
 function EmptyRow({ empty }: { empty?: { title: string; text?: ReactNode; action?: ReactNode } }) {
+  if (!empty?.action && !empty?.text)
+    return (
+      <p role="status" className="py-1 text-small text-fg-2">
+        {empty?.title ?? "Nothing to show"}
+      </p>
+    );
   return (
     <EmptyState
       compact
@@ -842,12 +850,9 @@ function RowEnd({
   return (
     <span className="inline-flex items-center justify-end gap-2">
       {next ? (
-        <Link
-          to={next.to}
-          className="rounded-sm text-small font-medium whitespace-nowrap text-fg underline decoration-line-strong underline-offset-4 hover:decoration-fg focus-ring"
-        >
-          {next.label}
-        </Link>
+        <Button asChild size="xs" className="h-7 px-3 text-small">
+          <Link to={next.to}>{next.label}</Link>
+        </Button>
       ) : null}
       <RowMenu name={name} actions={actions} />
     </span>

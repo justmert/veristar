@@ -518,7 +518,11 @@ export function SitesTable({
         const all = Object.values(t).reduce((a, b) => a + b, 0);
         // a site with no event has no share: the cell stays empty
         if (all === 0) return null;
-        return formatShareOf((t.quarantined ?? 0) + (t.bot ?? 0) + sumRejected(t), all);
+        return (
+          <span className="font-normal text-fg-2">
+            {formatShareOf((t.quarantined ?? 0) + (t.bot ?? 0) + sumRejected(t), all)}
+          </span>
+        );
       },
     },
   ];

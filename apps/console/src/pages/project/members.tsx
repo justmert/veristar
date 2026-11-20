@@ -437,8 +437,10 @@ function RoleSelect({
   locked: boolean;
   onChange: (role: Role) => void;
 }) {
+  // pulled left by its inner padding, so the role text lines up with the
+  // column heading and with the plain role of an invite
   const select = (
-    <span className="relative inline-flex items-center">
+    <span className="relative -ml-1.5 inline-flex items-center">
       <select
         aria-label={`Role of ${member.display_name}`}
         value={member.role}
