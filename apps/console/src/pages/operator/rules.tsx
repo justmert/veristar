@@ -1,5 +1,6 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ListChecks, Trash2 } from "lucide-react";
+import { cn } from "@veristar/brand/cn";
+import { ChevronDown, Download, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
@@ -17,13 +18,15 @@ import {
   rulesQuery,
 } from "@/api/cohorts";
 import { CreateDialog } from "@/components/create-dialog";
-import { type Column, DataTable } from "@/components/data-table";
-import { SelectField, TextField } from "@/components/form-field";
+import { NativeSelect } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
 import { DateField, isIsoDay } from "@/components/range-control";
+import { RowMenu } from "@/components/row-menu";
 import { EmptyState, ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { countOf, formatCount, formatDate, formatDateRange } from "@/lib/format";
 import { isDay } from "@/lib/global";
 import { fieldMessage } from "@/lib/validate";
@@ -46,6 +49,64 @@ export function describeRule(
     r.months === 1 ? "the last complete month" : `each of the last ${r.months} complete months`;
   const grade = r.min_grade ? `, integrity grade ${r.min_grade} or better` : "";
   return `${METRIC_TEXT[r.metric]} of at least ${formatCount(r.min_per_day)} a day on ${r.min_days} or more days in ${months}${grade}`;
+}
+
+type RulePart = { text: string; value?: boolean };
+
+// the rule as one sentence whose values are marked: who, what, how much,
+// how often, and the grade
+export function ruleParts(
+  r: Pick<Rule, "metric" | "min_per_day" | "min_days" | "months" | "min_grade" | "cohort">,
+): RulePart[] {
+  const who = cohortText(r.cohort);
+  const parts: RulePart[] = [
+    { text: who ?? "Every project", value: true },
+    { text: who ? "projects with" : "with" },
+    { text: METRIC_TEXT[r.metric].toLowerCase().replace("api", "API"), value: true },
+    { text: "of at least" },
+    { text: formatCount(r.min_per_day), value: true },
+    { text: "a day on" },
+    { text: String(r.min_days), value: true },
+    { text: "or more days in" },
+    {
+      text:
+        r.months === 1 ? "the last complete month" : `each of the last ${r.months} complete months`,
+      value: true,
+    },
+  ];
+  if (r.min_grade)
+    parts.push({ text: r.min_grade === "A" ? "grade A" : `grade ${r.min_grade} or better`, value: true });
+  return parts;
+}
+
+function RuleSentence({ rule, size = "lg" }: { rule: Parameters<typeof ruleParts>[0]; size?: "lg" | "sm" }) {
+  const parts = ruleParts(rule);
+  return (
+    <p
+      className={cn(
+        "break-words text-fg-2",
+        size === "lg" ? "text-[17px] leading-[30px]" : "text-small leading-6",
+      )}
+    >
+      {parts.map((p, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: the parts are a fixed sentence, in order
+        <span key={i}>
+          {i > 0 ? (parts[i - 1]?.value && p.value ? ", " : " ") : null}
+          {p.value ? (
+            size === "lg" ? (
+              <span className="rounded-md border border-line-2 bg-sunken px-2 py-px font-medium text-fg [box-decoration-break:clone]">
+                {p.text}
+              </span>
+            ) : (
+              <b className="font-semibold text-fg">{p.text}</b>
+            )
+          ) : (
+            p.text
+          )}
+        </span>
+      ))}
+    </p>
+  );
 }
 
 export type RuleForm = {
@@ -71,6 +132,21 @@ export const EMPTY_RULE: RuleForm = {
   round: "",
   category: "",
 };
+
+// the form read back as a rule, for the sentence under it; a field that is
+// not a number yet reads as its text
+function formRule(f: RuleForm): Parameters<typeof ruleParts>[0] {
+  const n = (v: string) => (/^\d+$/.test(v.trim()) ? Number(v.trim()) : 0);
+  const opt = (v: string) => (v.trim() === "" ? null : v.trim());
+  return {
+    metric: f.metric,
+    min_per_day: n(f.minPerDay),
+    min_days: n(f.minDays),
+    months: Math.max(1, n(f.months)),
+    min_grade: f.minGrade === "" ? null : f.minGrade,
+    cohort: { program: opt(f.program), round: opt(f.round), category: opt(f.category) },
+  };
+}
 
 function formOf(r: Rule): RuleForm {
   return {
@@ -155,48 +231,12 @@ export function RulesPage() {
     await refreshRules(qc);
   }
   const open = (id: string) => setParams({ rule: id }, { replace: true });
-  const current = items.find((r) => r.id === selected) ?? null;
-
-  const columns: Column<ListedRule>[] = [
-    {
-      key: "rule",
-      header: "Rule",
-      primary: true,
-      minWidth: "min-w-64",
-      cell: (r) => (
-        <span className="flex min-w-0 flex-col">
-          <span className="truncate font-medium text-fg">{r.name}</span>
-          <span className="text-caption font-normal whitespace-normal text-fg-2">
-            {describeRule(r)}
-          </span>
-        </span>
-      ),
-    },
-    {
-      key: "cohort",
-      header: "Cohort",
-      mobile: true,
-      cell: (r) => cohortText(r.cohort) ?? "Every project",
-    },
-    {
-      key: "matches",
-      header: "Projects that meet it",
-      definition: "Projects that meet the rule when it is evaluated today.",
-      align: "right",
-      numeric: true,
-      mobile: true,
-      cell: (r) => (
-        <span data-matches={r.id}>
-          {formatCount(r.match_count)} of {formatCount(r.evaluated)}
-        </span>
-      ),
-    },
-  ];
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title="Rules"
+        count={rules.data ? items.length : null}
         primary={
           <RuleDialog
             key={editing?.id ?? (editing ? "new" : "closed")}
@@ -226,48 +266,155 @@ export function RulesPage() {
           onRetry={() => rules.refetch()}
         />
       ) : items.length === 0 ? (
-        <EmptyState icon={<ListChecks aria-hidden />} title="No rule is saved yet" />
+        <EmptyState title="No rule is saved yet" />
       ) : (
-        <DataTable
-          label="Rules"
-          columns={columns}
-          rows={items}
-          getRowKey={(r) => r.id}
-          rowLabel={(r) => r.name}
-          rowHref={(r) => `/operator/rules?rule=${r.id}`}
-          rowProps={(r) => ({
-            "data-rule": r.id,
-            ...(r.id === selected ? { "data-current": "" } : {}),
-          })}
-          rowActions={(r) => [
-            { label: "Edit rule", onSelect: () => setEditing({ id: r.id, form: formOf(r) }) },
-            {
-              label: "Delete rule",
-              icon: <Trash2 aria-hidden />,
-              destructive: true,
-              confirm: {
-                title: `Delete the rule “${r.name}”?`,
-                description:
-                  "The rule goes away for every operator, the machine API and the AI tools. The audit log keeps its definition.",
-                confirmLabel: "Delete rule",
-                pendingLabel: "Deleting",
-                run: () => remove(r),
-              },
-            },
-          ]}
-        />
+        <ul aria-label="Rules" className="flex min-w-0 flex-col gap-4">
+          {items.map((r) => (
+            <li key={r.id}>
+              <RuleCard
+                rule={r}
+                open={r.id === selected}
+                onToggle={() =>
+                  r.id === selected ? setParams({}, { replace: true }) : open(r.id)
+                }
+                onEdit={() => setEditing({ id: r.id, form: formOf(r) })}
+                onDelete={() => remove(r)}
+                asOf={r.id === selected ? asOf : ""}
+                onAsOf={(d) =>
+                  setParams(d ? { rule: r.id, as_of: d } : { rule: r.id }, { replace: true })
+                }
+              />
+            </li>
+          ))}
+        </ul>
       )}
-
-      {current ? (
-        <Matches
-          rule={current}
-          asOf={asOf}
-          onAsOf={(d) =>
-            setParams(d ? { rule: current.id, as_of: d } : { rule: current.id }, { replace: true })
-          }
-        />
-      ) : null}
     </div>
+  );
+}
+
+// one rule: its name, the rule as a sentence, how many meet it with a bar,
+// and the way to its matches, its edit and its delete. open, it shows the
+// evaluation date, the matches CSV and the projects that meet it.
+function RuleCard({
+  rule: r,
+  open,
+  onToggle,
+  onEdit,
+  onDelete,
+  asOf,
+  onAsOf,
+}: {
+  rule: ListedRule;
+  open: boolean;
+  onToggle: () => void;
+  onEdit: () => void;
+  onDelete: () => Promise<void>;
+  asOf: string;
+  onAsOf: (d: string) => void;
+}) {
+  const share = r.evaluated > 0 ? Math.round((r.match_count / r.evaluated) * 100) : 0;
+  const bodyId = `rule-${r.id}-matches`;
+  return (
+    <article
+      aria-labelledby={`rule-${r.id}-h`}
+      data-rule={r.id}
+      data-current={open ? "" : undefined}
+      className="overflow-hidden rounded-2xl border border-line bg-raised"
+    >
+      <div className="grid min-w-0 gap-x-6 gap-y-3 px-5 py-4 sm:px-6 md:grid-cols-[minmax(0,1fr)_14rem_auto] md:items-center">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h2 id={`rule-${r.id}-h`} className="text-body font-semibold text-fg">
+            {r.name}
+          </h2>
+          <RuleSentence rule={r} />
+        </div>
+        <div className="flex min-w-0 flex-col gap-2" data-matches={r.id}>
+          <p className="flex items-baseline gap-1.5 text-small text-fg-3">
+            <span className="text-[19px] font-semibold text-fg tabular">
+              {formatCount(r.match_count)}
+            </span>
+            of {formatCount(r.evaluated)} meet it
+          </p>
+          <span
+            aria-hidden
+            className="flex h-1.5 w-full overflow-hidden rounded-full bg-selected"
+          >
+            <i className="block h-full rounded-full bg-fg-3" style={{ width: `${share}%` }} />
+          </span>
+        </div>
+        <div className="flex items-center gap-1 justify-self-end max-md:hidden">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-expanded={open}
+            aria-controls={bodyId}
+            aria-label={open ? `Hide the projects that meet ${r.name}` : `Show the projects that meet ${r.name}`}
+            onClick={onToggle}
+          >
+            <ChevronDown
+              aria-hidden
+              className={cn(
+                "transition-transform duration-(--vs-duration-change) ease-standard",
+                open && "rotate-180",
+              )}
+            />
+          </Button>
+          <RuleMenu rule={r} onEdit={onEdit} onDelete={onDelete} />
+        </div>
+        <div className="flex items-center gap-2 md:hidden">
+          <Button
+            variant="outline"
+            size="sm"
+            aria-expanded={open}
+            aria-controls={bodyId}
+            onClick={onToggle}
+            className="h-(--vs-control-touch) flex-1"
+          >
+            {open ? "Hide the projects" : "Show the projects"}
+          </Button>
+          <RuleMenu rule={r} onEdit={onEdit} onDelete={onDelete} />
+        </div>
+      </div>
+      {open ? (
+        <div id={bodyId} className="animate-fade-in border-t border-line">
+          <Matches rule={r} asOf={asOf} onAsOf={onAsOf} />
+        </div>
+      ) : (
+        <span id={bodyId} hidden />
+      )}
+    </article>
+  );
+}
+
+function RuleMenu({
+  rule: r,
+  onEdit,
+  onDelete,
+}: {
+  rule: ListedRule;
+  onEdit: () => void;
+  onDelete: () => Promise<void>;
+}) {
+  return (
+    <RowMenu
+      name={r.name}
+      actions={[
+        { label: "Edit rule", onSelect: onEdit },
+        {
+          label: "Delete rule",
+          icon: <Trash2 aria-hidden />,
+          destructive: true,
+          confirm: {
+            title: `Delete the rule “${r.name}”?`,
+            description:
+              "The rule goes away for every operator, the machine API and the AI tools. The audit log keeps its definition.",
+            confirmLabel: "Delete rule",
+            pendingLabel: "Deleting",
+            run: onDelete,
+          },
+        },
+      ]}
+    />
   );
 }
 
@@ -284,34 +431,64 @@ function CohortSelect({
   loading,
   value,
   onChange,
-  error,
 }: {
   field: "program" | "round" | "category";
   values: CohortValue[];
   loading: boolean;
   value: string;
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
-  error?: string;
 }) {
   const opts = values.map((v) => v.value);
   // a rule saved with a value no project holds any more keeps showing it
   if (value && !opts.includes(value)) opts.unshift(value);
   return (
-    <SelectField
-      label={COHORT_LABEL[field]}
+    <NativeSelect
+      aria-label={COHORT_LABEL[field]}
       value={value}
       onChange={onChange}
-      error={error}
       disabled={loading}
-      className="w-full"
+      className="w-fit max-w-full"
     >
-      <option value="">{loading ? "Loading" : "Any"}</option>
+      <option value="">{loading ? "Loading" : ANY[field]}</option>
       {opts.map((o) => (
         <option key={o} value={o}>
           {o}
         </option>
       ))}
-    </SelectField>
+    </NativeSelect>
+  );
+}
+
+const ANY = { program: "Any program", round: "Any round", category: "Any category" } as const;
+
+// one part of the rule: its name at the left, its fields as a phrase, and
+// the errors of the part under them
+function FormRow({
+  label,
+  children,
+  errors,
+}: {
+  label: string;
+  children: React.ReactNode;
+  errors?: (string | undefined)[];
+}) {
+  const shown = (errors ?? []).filter((e): e is string => Boolean(e));
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className="grid min-w-0 gap-x-4 gap-y-1.5 border-b border-line py-3 first:pt-0 sm:grid-cols-[6.5rem_minmax(0,1fr)] sm:items-center"
+    >
+      <span aria-hidden className="text-small text-fg-2">
+        {label}
+      </span>
+      <div className="flex min-w-0 flex-wrap items-center gap-2 text-small text-fg-2">{children}</div>
+      {shown.length ? (
+        <p role="alert" className="text-small text-critical sm:col-start-2">
+          {shown.join(" ")}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -382,66 +559,16 @@ function RuleDialog({
       onOpenChange={onOpenChange}
       onClosed={() => onDone(null)}
     >
-      <TextField
-        label="Name"
-        value={form.name}
-        onChange={set("name")}
-        error={errors.name}
-        maxLength={100}
-      />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <SelectField
-          label="Metric"
-          value={form.metric}
-          onChange={set("metric")}
-          error={errors.metric}
-          className="w-full"
+      <div className="flex min-w-0 flex-col">
+        <FormRow
+          label="Who"
+          errors={[
+            errors.program,
+            errors.round,
+            errors.category,
+            cohorts.error ? "The cohort values did not load. Reload the page." : undefined,
+          ]}
         >
-          {(Object.keys(METRIC_TEXT) as RuleMetric[]).map((m) => (
-            <option key={m} value={m}>
-              {METRIC_TEXT[m]}
-            </option>
-          ))}
-        </SelectField>
-        <TextField
-          label="Minimum per day"
-          inputMode="numeric"
-          value={form.minPerDay}
-          onChange={set("minPerDay")}
-          error={errors.minPerDay}
-        />
-        <TextField
-          label="Days per month"
-          inputMode="numeric"
-          hint="1 to 28"
-          value={form.minDays}
-          onChange={set("minDays")}
-          error={errors.minDays}
-        />
-        <TextField
-          label="Complete months"
-          inputMode="numeric"
-          hint="1 to 12"
-          value={form.months}
-          onChange={set("months")}
-          error={errors.months}
-        />
-      </div>
-      <fieldset className="flex flex-col gap-3 border-t border-line pt-4">
-        <legend className="float-left mb-3 text-small text-fg-2">Optional</legend>
-        <div className="clear-left grid gap-4 sm:grid-cols-2">
-          <SelectField
-            label="Integrity grade"
-            value={form.minGrade}
-            onChange={set("minGrade")}
-            error={errors.minGrade}
-            className="w-full"
-          >
-            <option value="">Any grade</option>
-            <option value="A">A</option>
-            <option value="B">B or better</option>
-            <option value="C">C or better</option>
-          </SelectField>
           {(["program", "round", "category"] as const).map((k) => (
             <CohortSelect
               key={k}
@@ -450,14 +577,80 @@ function RuleDialog({
               loading={cohorts.isPending}
               value={form[k]}
               onChange={set(k)}
-              error={
-                errors[k] ??
-                (cohorts.error ? "The cohort values did not load. Reload the page." : undefined)
-              }
             />
           ))}
-        </div>
-      </fieldset>
+        </FormRow>
+        <FormRow label="Counts" errors={[errors.metric, errors.minPerDay]}>
+          <NativeSelect
+            aria-label="Metric"
+            value={form.metric}
+            onChange={set("metric")}
+            className="w-fit"
+          >
+            {(Object.keys(METRIC_TEXT) as RuleMetric[]).map((m) => (
+              <option key={m} value={m}>
+                {METRIC_TEXT[m]}
+              </option>
+            ))}
+          </NativeSelect>
+          <span>at least</span>
+          <Input
+            aria-label="Minimum per day"
+            inputMode="numeric"
+            value={form.minPerDay}
+            onChange={set("minPerDay")}
+            aria-invalid={errors.minPerDay ? true : undefined}
+            className="w-24 tabular"
+          />
+          <span>a day</span>
+        </FormRow>
+        <FormRow label="How often" errors={[errors.minDays, errors.months]}>
+          <Input
+            aria-label="Days per month, 1 to 28"
+            inputMode="numeric"
+            value={form.minDays}
+            onChange={set("minDays")}
+            aria-invalid={errors.minDays ? true : undefined}
+            className="w-[4.75rem] tabular"
+          />
+          <span>or more days in each of the last</span>
+          <Input
+            aria-label="Complete months, 1 to 12"
+            inputMode="numeric"
+            value={form.months}
+            onChange={set("months")}
+            aria-invalid={errors.months ? true : undefined}
+            className="w-16 tabular"
+          />
+          <span>complete months</span>
+        </FormRow>
+        <FormRow label="Grade" errors={[errors.minGrade]}>
+          <NativeSelect
+            aria-label="Integrity grade"
+            value={form.minGrade}
+            onChange={set("minGrade")}
+            className="w-fit"
+          >
+            <option value="">Any grade</option>
+            <option value="A">A</option>
+            <option value="B">B or better</option>
+            <option value="C">C or better</option>
+          </NativeSelect>
+        </FormRow>
+        <FormRow label="Name" errors={[errors.name]}>
+          <Input
+            aria-label="Name"
+            value={form.name}
+            onChange={set("name")}
+            maxLength={100}
+            aria-invalid={errors.name ? true : undefined}
+            className="min-w-0 flex-1"
+          />
+        </FormRow>
+      </div>
+      <div className="mt-1 rounded-xl border border-line bg-sunken px-4 py-3" aria-live="polite">
+        <RuleSentence size="sm" rule={formRule(form)} />
+      </div>
     </CreateDialog>
   );
 }
@@ -475,47 +668,47 @@ function Matches({
   const [draft, setDraft] = useState(asOf);
   useEffect(() => setDraft(asOf), [asOf]);
   return (
-    <section
-      aria-label="Rule matches"
-      className="flex min-w-0 flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5"
-    >
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h2 className="text-title break-words text-fg">Projects that meet {rule.name}</h2>
-          <p className="text-small text-fg-2">{describeRule(rule)}.</p>
+    <section aria-label={`Projects that meet ${rule.name}`} className="flex min-w-0 flex-col">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-5 py-2.5 sm:px-6">
+        <div className="w-44 [&_label]:sr-only">
+          <DateField
+            label="Evaluated on"
+            optional
+            value={draft}
+            onChange={(v) => {
+              setDraft(v);
+              const t = v.trim();
+              if (t !== asOf && (t === "" || isIsoDay(t))) onAsOf(t);
+            }}
+          />
         </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="w-44">
-            <DateField
-              label="Evaluated on"
-              optional
-              value={draft}
-              onChange={(v) => {
-                setDraft(v);
-                const t = v.trim();
-                if (t !== asOf && (t === "" || isIsoDay(t))) onAsOf(t);
-              }}
-            />
-          </div>
-          <Button
-            asChild
-            variant="outline"
-            size="sm"
-            className="mb-6 max-lg:h-(--vs-control-touch)"
-          >
-            <a href={ruleMatchesCsv(rule.id, asOf)} download>
-              <Download aria-hidden />
-              Export CSV
-            </a>
-          </Button>
-        </div>
+        <span aria-hidden className="order-first text-small text-fg-3">
+          Evaluated on
+        </span>
+        {q.data ? (
+          <span className="text-small text-fg-3" title={`${formatDateRange(q.data.from, q.data.to)}, UTC`}>
+            {monthsText(q.data.months)}, UTC
+          </span>
+        ) : null}
+        <a
+          href={ruleMatchesCsv(rule.id, asOf)}
+          download
+          className="ml-auto inline-flex items-center gap-1.5 rounded-sm text-small text-fg-2 hover:text-fg focus-ring max-lg:min-h-(--vs-control-touch)"
+        >
+          <Download aria-hidden className="size-3.5" />
+          Matches CSV
+        </a>
       </div>
       {q.isPending ? (
-        <LoadingState label="Evaluating the rule">
-          <Skeleton.Table rows={3} columns={2} />
-        </LoadingState>
+        <div className="p-5">
+          <LoadingState label="Evaluating the rule">
+            <Skeleton.Table rows={3} columns={4} />
+          </LoadingState>
+        </div>
       ) : q.error ? (
-        <ErrorState title="The rule did not evaluate" error={q.error} onRetry={() => q.refetch()} />
+        <div className="p-5">
+          <ErrorState title="The rule did not evaluate" error={q.error} onRetry={() => q.refetch()} />
+        </div>
       ) : (
         <MatchList data={q.data} />
       )}
@@ -523,51 +716,84 @@ function Matches({
   );
 }
 
+const monthFmt = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+
+// "October 2026", or "August 2026 to October 2026"
+function monthsText(months: string[]): string {
+  const name = (m: string) => monthFmt.format(new Date(`${m}-01T00:00:00Z`));
+  const first = months[0];
+  const last = months.at(-1);
+  if (!first || !last) return "";
+  return first === last ? name(first) : `${name(first)} to ${name(last)}`;
+}
+
+function daysIn(month: string): number {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y ?? 1970, m ?? 1, 0)).getUTCDate();
+}
+
+// the projects that meet the rule, with their cohort and their qualifying
+// days; each month's days and values are on the hover of its count
 function MatchList({ data }: { data: RuleMatches }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <p className="text-small text-fg-2" aria-live="polite">
-        {formatCount(data.items.length)} of {countOf(data.evaluated, "project")} meet the rule.
-        Months: {data.months.join(", ")}. Days {formatDateRange(data.from, data.to)}, UTC.
+  if (data.items.length === 0)
+    return (
+      <p className="px-5 py-6 text-small text-fg-3 sm:px-6" aria-live="polite">
+        No project of {countOf(data.evaluated, "project")} meets the rule.
       </p>
-      {data.items.length === 0 ? null : (
-        <ul className="flex flex-col divide-y divide-line" aria-label="Projects that meet the rule">
-          {data.items.map((m) => (
-            <li
-              key={m.tenant.id}
-              data-tenant={m.tenant.id}
-              className="flex min-w-0 flex-col gap-1 py-3"
+    );
+  return (
+    <Table aria-label="Projects that meet the rule">
+      <TableHeader>
+        <TableRow>
+          <TableHead>Project</TableHead>
+          <TableHead className="max-md:hidden">Program</TableHead>
+          <TableHead className="max-md:hidden">Round</TableHead>
+          <TableHead className="max-md:hidden">Category</TableHead>
+          <TableHead className="max-md:hidden">Grade</TableHead>
+          <TableHead className="text-right">Qualifying days</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {data.items.map((m) => (
+          <TableRow key={m.tenant.id} data-tenant={m.tenant.id}>
+            <TableCell>
+              <Link
+                to={`/operator/projects/${m.tenant.id}`}
+                className="rounded-sm font-medium text-fg underline-offset-4 hover:underline focus-ring"
+              >
+                {m.tenant.name}
+              </Link>
+            </TableCell>
+            <TableCell className="text-fg-2 max-md:hidden">{m.cohort.program ?? ""}</TableCell>
+            <TableCell className="text-fg-2 max-md:hidden">{m.cohort.round ?? ""}</TableCell>
+            <TableCell className="text-fg-2 max-md:hidden">{m.cohort.category ?? ""}</TableCell>
+            <TableCell
+              className="text-fg-2 max-md:hidden"
+              title={`${countOf(m.integrity.graded_days, "graded site day")}`}
             >
-              <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-                <Link
-                  to={`/operator/projects/${m.tenant.id}`}
-                  className="min-w-0 truncate rounded-sm text-body font-medium text-fg underline-offset-4 hover:underline focus-ring"
-                >
-                  {m.tenant.name}
-                </Link>
-                <span className="text-caption text-fg-2">
-                  {m.integrity.grade ? `Grade ${m.integrity.grade}` : "No grade"},{" "}
-                  {countOf(m.integrity.graded_days, "graded site day")}
-                </span>
-                {cohortText(m.cohort) ? (
-                  <span className="text-caption text-fg-2">{cohortText(m.cohort)}</span>
-                ) : null}
-              </span>
-              <ul className="flex flex-col gap-1 text-caption text-fg-2">
+              {m.integrity.grade ?? "None"}
+            </TableCell>
+            <TableCell className="text-right tabular">
+              <ul className="flex flex-col items-end">
                 {m.months.map((mo) => (
-                  <li key={mo.month} data-month={mo.month} className="break-words">
-                    <span className="font-medium text-fg">{mo.month}</span>:{" "}
-                    {countOf(mo.qualifying_days, "qualifying day")}
-                    {mo.days.length > 0
-                      ? ` (${mo.days.map((d) => `${formatDate(d.day)}: ${formatCount(d.value)}`).join(", ")})`
-                      : ""}
+                  <li
+                    key={mo.month}
+                    data-month={mo.month}
+                    title={mo.days
+                      .map((d) => `${formatDate(d.day)}: ${formatCount(d.value)}`)
+                      .join("\n")}
+                  >
+                    {data.months.length > 1 ? (
+                      <span className="mr-2 text-fg-3">{mo.month}</span>
+                    ) : null}
+                    {formatCount(mo.qualifying_days)} of {daysIn(mo.month)}
                   </li>
                 ))}
               </ul>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
