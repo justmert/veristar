@@ -322,3 +322,62 @@ func TestTenantRemove(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+func TestTenantDemo(t *testing.T) {
+	e, _ := startTenantEnv(t)
+	ctx := context.Background()
+	owner := e.SignIn(t, e.NewGitHubID(), "demo-owner")
+	tenant, _ := owner.Enroll(t, "Sample Data")
+
+	_, err := parseDemo([]string{"-slug", "sample-data"})
+	require.ErrorContains(t, err, "exactly one of -on and -off")
+	_, err = parseDemo([]string{"-slug", "sample-data", "-on", "-off"})
+	require.ErrorContains(t, err, "exactly one of -on and -off")
+	_, err = parseDemo([]string{"-on"})
+	require.ErrorContains(t, err, "exactly one of -tenant and -slug")
+
+	demoOf := func() int {
+		return e.Count(t, `select count(*) from cp.tenants where id = $1 and demo`, tenant)
+	}
+	o, err := parseDemo([]string{"-slug", "sample-data", "-on", "-dry-run"})
+	require.NoError(t, err)
+	row, err := setDemo(ctx, e.DB, o)
+	require.NoError(t, err)
+	require.False(t, row.WasDemo)
+	require.Zero(t, demoOf(), "a dry run changes nothing")
+	require.Zero(t, auditCount(t, e, ActionTenantDemo, "tenant:"+tenant.String()))
+
+	o.dryRun = false
+	row, err = setDemo(ctx, e.DB, o)
+	require.NoError(t, err)
+	require.Equal(t, tenant, row.ID)
+	require.Equal(t, 1, demoOf())
+	require.Equal(t, 1, auditCount(t, e, ActionTenantDemo, "tenant:"+tenant.String()))
+	var out bytes.Buffer
+	require.NoError(t, printDemo(&out, row, o))
+	require.Equal(t, "tenant_id="+tenant.String()+"\nslug=sample-data\nname=Sample Data\nstatus=active\ndemo=true\nwas_demo=false\n", out.String())
+
+	off, err := parseDemo([]string{"-tenant", tenant.String(), "-off"})
+	require.NoError(t, err)
+	row, err = setDemo(ctx, e.DB, off)
+	require.NoError(t, err)
+	require.True(t, row.WasDemo)
+	require.Zero(t, demoOf())
+	require.Equal(t, 2, auditCount(t, e, ActionTenantDemo, "tenant:"+tenant.String()))
+
+	// internal and removed projects never join the demo
+	internal, _ := owner.Enroll(t, "Probe Like")
+	e.Superuser(t, func(c *pgx.Conn) {
+		_, err := c.Exec(context.Background(), `update cp.tenants set is_internal = true where id = $1`, internal)
+		require.NoError(t, err)
+	})
+	_, err = setDemo(ctx, e.DB, demoOpts{ref: tenantRef{id: internal}, on: true})
+	require.ErrorContains(t, err, "internal projects are refused")
+	e.Superuser(t, func(c *pgx.Conn) {
+		_, err := c.Exec(context.Background(), `update cp.tenants set status = 'removed' where id = $1`, tenant)
+		require.NoError(t, err)
+	})
+	_, err = setDemo(ctx, e.DB, o)
+	require.ErrorContains(t, err, "cannot be in the demo")
+	require.Zero(t, demoOf())
+}
