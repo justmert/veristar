@@ -280,7 +280,7 @@ test("remove takes the project away from its members and keeps the audit trail",
 
   // the audit log, filtered to this project in the console
   const page = op.page;
-  await page.getByRole("link", { name: "Audit log", exact: true }).click();
+  await page.getByRole("link", { name: `Audit log of ${tenant.name}` }).click();
   await page.waitForURL(`${APP}/operator/audit?tenant_id=${tenant.id}`);
   const entries = page.getByRole("list", { name: "Audit entries" });
   // each entry reads as a sentence; the action code stays in its details

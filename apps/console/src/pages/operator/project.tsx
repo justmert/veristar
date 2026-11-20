@@ -468,6 +468,9 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
             )}
             <Link
               to={`/operator/audit?tenant_id=${t.id}`}
+              // the sidebar has an "audit log" link too; this one names the
+              // project so the two read differently to a screen reader
+              aria-label={`Audit log of ${t.name}`}
               className="rounded-sm px-2 text-small text-fg-2 hover:text-fg focus-ring"
             >
               Audit log
