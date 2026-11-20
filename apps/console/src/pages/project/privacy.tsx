@@ -34,6 +34,7 @@ import { keyLabel } from "@/lib/web-dashboard";
 import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
 import { PAGE_HEADERS, PrivacySkeleton } from "./page-frame";
+import { SiteChips } from "./site-chips";
 
 // the form's values. ip and userAgent are personal data the owner types on
 // behalf of a visitor: they live only in this react state, are sent once in
@@ -400,9 +401,6 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
   const special = erasureErrorText(send.error);
   const domain = site?.domain ?? "the site";
   const text = confirmText(values.kind, domain);
-  // two sites of one name are told apart by their domain
-  const names = new Map<string, number>();
-  for (const x of sites) names.set(x.name, (names.get(x.name) ?? 0) + 1);
 
   return (
     <section aria-label="Request erasure" className="flex min-w-0 flex-col gap-4">
@@ -414,33 +412,14 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
         className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-raised"
       >
         <Question n={1} label="Site" id={ids.site}>
-          <div role="radiogroup" aria-labelledby={ids.site} className="flex flex-wrap gap-2">
-            {sites.map((s) => {
-              const on = s.id === values.siteId;
-              return (
-                // biome-ignore lint/a11y/useSemanticElements: a site chip that wraps, keyed like a native radio group
-                <button
-                  key={s.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  title={s.domain}
-                  // a session id belongs to one site; a chosen one does not carry over
-                  onClick={() => change({ siteId: s.id, sessionId: "" })}
-                  className={cn(
-                    "inline-flex h-9 max-w-full items-center rounded-full border px-3.5 text-small transition-colors duration-(--vs-duration-press) focus-ring max-lg:h-(--vs-control-touch)",
-                    on
-                      ? "border-fg-2 text-fg"
-                      : "border-line text-fg-2 hover:bg-hover hover:text-fg",
-                  )}
-                >
-                  <span className="truncate">
-                    {(names.get(s.name) ?? 0) > 1 ? s.domain : s.name}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <SiteChips
+            required
+            labelledBy={ids.site}
+            sites={sites}
+            value={values.siteId || null}
+            // a session id belongs to one site; a chosen one does not carry over
+            onChange={(siteId) => change({ siteId, sessionId: "" })}
+          />
           {errors.siteId ? (
             <p role="alert" className="text-small text-critical">
               {errors.siteId === fieldMessage("required") ? "Choose a site." : errors.siteId}

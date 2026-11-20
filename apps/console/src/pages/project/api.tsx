@@ -28,6 +28,7 @@ import type {
 } from "@/api/schemas";
 import { BreakdownList, type TimeBucket, TimeChart } from "@/components/charts";
 import { type Column, DataTable } from "@/components/data-table";
+import { FilterChip } from "@/components/filter-chip";
 import { NativeSelect } from "@/components/form-field";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
@@ -277,16 +278,6 @@ function methodName(m: string): string {
 // the methods the switch shows; the others are in the select beside it
 const MAIN_METHODS = ["GET", "POST", "PUT", "DELETE"];
 
-// the same chip as the site chips of the overview and web pages
-const CHIP =
-  "inline-flex h-8 max-w-full items-center gap-2 rounded-full border px-3 text-small transition-colors duration-(--vs-duration-press) focus-ring max-lg:h-(--vs-control-touch)";
-
-function chipTone(on: boolean): string {
-  return on
-    ? "border-line-focus bg-selected text-fg"
-    : "border-line bg-raised text-fg-2 hover:text-fg";
-}
-
 function Filters({
   state,
   set,
@@ -319,28 +310,21 @@ function Filters({
       <legend className="sr-only">Filters</legend>
       <fieldset className="flex min-w-0 flex-wrap items-center gap-1.5">
         <legend className="sr-only">Service</legend>
-        <button
-          type="button"
-          aria-pressed={f.service === null}
-          onClick={() => setFilter("service", null)}
-          className={cn(CHIP, chipTone(f.service === null))}
-        >
+        <FilterChip on={f.service === null} onClick={() => setFilter("service", null)}>
           All services
-        </button>
+        </FilterChip>
         {names.map((n) => (
-          <button
+          <FilterChip
             key={n}
-            type="button"
-            aria-pressed={f.service === n}
+            on={f.service === n}
             data-service-chip={n}
             onClick={() => setFilter("service", f.service === n ? null : n)}
-            className={cn(CHIP, chipTone(f.service === n))}
           >
             <span className="truncate font-mono text-[12.5px]">{serviceName(n)}</span>
             {byName.get(n)?.span_data_ignored ? (
               <span className="text-caption text-fg-3">metrics only</span>
             ) : null}
-          </button>
+          </FilterChip>
         ))}
       </fieldset>
       <span aria-hidden className="mx-1.5 h-5 w-px bg-line-strong max-sm:hidden" />

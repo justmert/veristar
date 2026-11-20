@@ -1,24 +1,22 @@
 // the site filter of the overview and web pages: one chip per site with its
 // health dot, all sites first, add site last; and the count of visitors
 // right now on the right of the same row. a project has one to three
-// sites, so a chip row reads faster than a select.
+// sites, so a chip row reads faster than a select. `required` is the same
+// row as a single choice with no "all" chip and no dots (privacy).
 
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { Plus } from "lucide-react";
 import { useState } from "react";
 import { ingestMonthQuery } from "@/api/queries";
 import type { Site } from "@/api/schemas";
 import { webRealtimeQuery } from "@/api/web";
+import { AddChip, ChipRadioGroup, FilterChip } from "@/components/filter-chip";
 import { StatusDot } from "@/components/status";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { formatCount, formatTimeUtc } from "@/lib/format";
 import { type FirstEvent, firstEvent } from "@/lib/site-setup";
 import { AddSiteDialog } from "@/pages/project/sites";
-
-const CHIP =
-  "inline-flex h-8 max-w-full items-center gap-2 rounded-full border px-3 text-small transition-colors duration-(--vs-duration-press) focus-ring max-lg:h-(--vs-control-touch)";
 
 type Health = { tone: "success" | "warning" | "critical" | "neutral"; note: string | null };
 
@@ -46,41 +44,60 @@ export function useSiteHealth(sites: Site[]): Map<string, Health> {
   return out;
 }
 
-export function SiteChips({
-  sites,
-  value,
-  onChange,
-  tenantId,
-  canAdd = false,
-  allLabel = "All sites",
-}: {
-  sites: Site[];
-  value: string | null;
-  onChange: (site: string | null) => void;
-  tenantId: string;
-  canAdd?: boolean;
-  allLabel?: string;
-}) {
-  const health = useSiteHealth(sites);
+export function SiteChips(
+  props:
+    | {
+        required?: false;
+        sites: Site[];
+        value: string | null;
+        onChange: (site: string | null) => void;
+        tenantId: string;
+        canAdd?: boolean;
+        allLabel?: string;
+      }
+    | {
+        // a required single choice: no "all" chip, no health dots
+        required: true;
+        sites: Site[];
+        value: string | null;
+        onChange: (site: string) => void;
+        // the id of the visible label of the choice
+        labelledBy?: string;
+      },
+) {
+  const { sites } = props;
+  // a required choice shows no health, so it asks for none
+  const health = useSiteHealth(props.required ? [] : sites);
   const [adding, setAdding] = useState(false);
   // two sites of one name are told apart by their domain
   const names = new Map<string, number>();
   for (const x of sites) names.set(x.name, (names.get(x.name) ?? 0) + 1);
+  const nameOf = (s: Site) => ((names.get(s.name) ?? 0) > 1 ? s.domain : s.name);
+  if (props.required)
+    return (
+      <ChipRadioGroup
+        label={props.labelledBy ? undefined : "Site"}
+        labelledBy={props.labelledBy}
+        value={props.value}
+        options={sites.map((s) => ({ value: s.id, label: nameOf(s), title: s.domain }))}
+        onChange={props.onChange}
+      />
+    );
+  const { value, onChange, tenantId, canAdd = false, allLabel = "All sites" } = props;
   const many = sites.length > 1;
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       <fieldset className="contents">
         <legend className="sr-only">Site</legend>
         {many ? (
-          <Chip on={value === null} onClick={() => onChange(null)}>
+          <FilterChip on={value === null} onClick={() => onChange(null)}>
             {allLabel}
-          </Chip>
+          </FilterChip>
         ) : null}
         {sites.map((s) => {
           const h = health.get(s.id) ?? { tone: "neutral" as const, note: null };
-          const label = (names.get(s.name) ?? 0) > 1 ? s.domain : s.name;
           return (
-            <Chip
+            <FilterChip
               key={s.id}
               data-site-chip={s.id}
               on={value === s.id || (!many && value === null)}
@@ -88,58 +105,19 @@ export function SiteChips({
               title={s.domain}
             >
               <StatusDot tone={h.tone} />
-              <span className="truncate">{label}</span>
+              <span className="truncate">{nameOf(s)}</span>
               {h.note ? <span className="text-caption text-fg-3">{h.note}</span> : null}
-            </Chip>
+            </FilterChip>
           );
         })}
       </fieldset>
       {canAdd ? (
         <>
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className={cn(CHIP, "border-dashed border-line text-fg-2 hover:text-fg")}
-          >
-            <Plus aria-hidden className="size-3.5" />
-            Add site
-          </button>
+          <AddChip onClick={() => setAdding(true)}>Add site</AddChip>
           <AddSiteDialog tenantId={tenantId} open={adding} onOpenChange={setAdding} />
         </>
       ) : null}
     </div>
-  );
-}
-
-function Chip({
-  on,
-  onClick,
-  children,
-  title,
-  ...data
-}: {
-  on: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-  title?: string;
-  [attr: `data-${string}`]: string | undefined;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onClick}
-      title={title}
-      {...data}
-      className={cn(
-        CHIP,
-        on
-          ? "border-line-focus bg-selected text-fg"
-          : "border-line bg-raised text-fg-2 hover:text-fg",
-      )}
-    >
-      {children}
-    </button>
   );
 }
 
