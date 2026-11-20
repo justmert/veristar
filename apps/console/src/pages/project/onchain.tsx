@@ -492,7 +492,7 @@ function ProveHead({ id, until, menu }: { id: ChainId; until?: string | null; me
           <KindLabel kind={id.kind} />
           {until ? (
             <span className="text-caption text-fg-2">
-              Proof open until {formatTimeUtc(until)} UTC
+              Proof open until {formatTimeUtc(until)}
             </span>
           ) : null}
         </div>
