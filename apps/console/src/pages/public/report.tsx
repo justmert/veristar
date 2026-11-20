@@ -185,7 +185,7 @@ function Signature({ verdict, r }: { verdict: Verdict | null; r: PublicReport })
     tone = "ok";
     line = (
       <p role="status" data-verdict="verified" className="flex flex-col gap-1.5">
-        <span className="text-[14px] font-semibold text-fg">Signed by Veristar</span>
+        <span className="text-body font-semibold text-fg">Signed by Veristar</span>
         <span className="text-small text-fg-2">Checked in this browser</span>
       </p>
     );
@@ -210,7 +210,7 @@ function Signature({ verdict, r }: { verdict: Verdict | null; r: PublicReport })
     <section
       aria-label="Signature"
       className={cn(
-        "flex min-w-0 flex-col gap-3 rounded-2xl border bg-ground px-4.5 py-4 lg:max-w-80 print:border-line-strong",
+        "flex min-w-0 flex-col gap-3 rounded-2xl border bg-ground px-4 py-4 lg:max-w-80 print:border-line-strong",
         tone === "bad"
           ? "border-critical-line"
           : tone === "warn"
@@ -301,7 +301,7 @@ function FactList({ title, rows }: { title: string; rows: Row[] }) {
   if (shown.length === 0) return null;
   return (
     <section aria-label={title} className="flex min-w-0 break-inside-avoid flex-col">
-      <h2 className="border-b border-line pb-2.5 text-caption font-semibold tracking-[0.06em] text-fg-2 uppercase">
+      <h2 className="border-b border-line pb-2.5 text-caption font-semibold tracking-wider text-fg-2 uppercase">
         {title}
       </h2>
       <dl className="flex flex-col">
@@ -431,10 +431,10 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
 
   return (
     <article className="flex min-w-0 flex-col gap-6">
-      <header className="grid min-w-0 items-center gap-6 rounded-[20px] border border-line bg-raised p-5 sm:p-7 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
+      <header className="grid min-w-0 items-center gap-6 rounded-2xl border border-line bg-raised p-5 sm:p-7 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
         <GradeRing row={g} size="lg" className="max-sm:size-28" />
         <div className="flex min-w-0 flex-col gap-1.5">
-          <h1 className="text-[32px] leading-10 font-semibold tracking-[-0.025em] break-words text-fg">
+          <h1 className="text-h1 leading-10 font-semibold tracking-tight break-words text-fg">
             {doc.project.name}
           </h1>
           <p className="text-body text-fg-2">

@@ -66,7 +66,7 @@ export function AlertsPage() {
         meta={
           count !== null && count > 0 ? (
             <span
-              className={cn("text-[15px] tabular", critical > 0 ? "text-critical" : "text-fg-3")}
+              className={cn("text-body tabular", critical > 0 ? "text-critical" : "text-fg-3")}
               data-count=""
             >
               {count}
@@ -292,7 +292,10 @@ function SeverityList({ group, now }: { group: SeverityGroup; now: number }) {
       className="flex flex-col gap-2.5"
       data-severity={group.key}
     >
-      <h2 id={headingId} className="flex items-baseline gap-2 text-[15px] font-semibold text-fg">
+      <h2
+        id={headingId}
+        className="flex items-baseline gap-2 text-title font-semibold text-fg leading-5"
+      >
         {groupTitle(group.key)}{" "}
         <span className="text-small font-normal text-fg-3 tabular">{group.alerts.length}</span>
       </h2>
@@ -376,7 +379,7 @@ function AlertItem({ alert, now }: { alert: FiringAlert; now: number }) {
           {labels.map((l) => (
             <li
               key={l}
-              className="rounded-[5px] border border-line-2 px-[7px] py-px font-mono text-[11.5px] break-all text-fg-3"
+              className="rounded-sm border border-line-2 px-1.5 py-px font-mono text-axis break-all text-fg-3 leading-5"
             >
               {l}
             </li>
@@ -384,7 +387,7 @@ function AlertItem({ alert, now }: { alert: FiringAlert; now: number }) {
           {heldText ? (
             <li
               title={heldText}
-              className="rounded-[5px] border border-line-2 px-[7px] py-px text-[11.5px] text-fg-3"
+              className="rounded-sm border border-line-2 px-1.5 py-px text-axis text-fg-3 leading-5"
             >
               {held ? "Held back" : "Just received"}
               <span className="sr-only">. {heldText}</span>
@@ -393,7 +396,7 @@ function AlertItem({ alert, now }: { alert: FiringAlert; now: number }) {
         </ul>
       </div>
       <p
-        className="col-start-2 flex items-baseline gap-2 text-[13.5px] tabular md:col-start-3"
+        className="col-start-2 flex items-baseline gap-2 text-small tabular md:col-start-3"
         title={formatDateTimeUtc(alert.starts_at)}
       >
         <span className="sr-only">Fires for </span>

@@ -84,11 +84,11 @@ export function ScorecardTile({
         <span aria-hidden className={cn("size-2 shrink-0 rounded-full", DOT[tone])} />
         {name}
       </span>
-      <span className="text-[30px] leading-[34px] font-semibold tracking-[-0.02em] text-fg tabular">
+      <span className="text-h1 leading-8.5 font-semibold tracking-tight text-fg tabular">
         {value}
       </span>
       {change || sub ? (
-        <span className="flex flex-wrap items-center gap-x-1 text-[12.5px] text-fg-3 tabular">
+        <span className="flex flex-wrap items-center gap-x-1 text-small text-fg-3 tabular">
           {change ? <ChangeLine change={change} /> : null}
           {sub ? <span>{sub}</span> : null}
         </span>
@@ -149,7 +149,7 @@ export function ProofCells({
         <i
           key={i}
           title={labels?.[i]}
-          className={cn("block h-3 rounded-[3px]", i < done ? "bg-success/85" : "bg-line")}
+          className={cn("block h-3 rounded-sm", i < done ? "bg-success/85" : "bg-line")}
         />
       ))}
     </span>
@@ -181,7 +181,7 @@ export function GradeCalendar({
     <span
       role="img"
       aria-label={`${graded} of ${days.length} days graded`}
-      className={cn("grid", size === "sm" ? "gap-0.5" : "gap-[3px]", className)}
+      className={cn("grid", size === "sm" ? "gap-0.5" : "gap-1", className)}
       style={{ gridTemplateColumns: `repeat(${Math.max(1, days.length)}, minmax(0, 1fr))` }}
     >
       {days.map((g, i) => (
@@ -190,7 +190,7 @@ export function GradeCalendar({
           title={labels?.[i]}
           className={cn(
             "block",
-            size === "sm" ? "h-3 rounded-[2px]" : "h-[22px] rounded-[3px]",
+            size === "sm" ? "h-3 rounded-bar" : "h-[22px] rounded-sm",
             g ? GRADE_CELL[g] : "border border-line-2",
           )}
         />
@@ -244,7 +244,7 @@ export function MiniBars({
             key={i}
             title={labels?.[i]}
             className={cn(
-              "block rounded-[1px]",
+              "block rounded-bar",
               v === 0
                 ? "bg-line"
                 : last

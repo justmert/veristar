@@ -51,6 +51,14 @@
   --vs-text-display-line: 52px;
   --vs-text-display-weight: 600;
   --vs-text-display-tracking: -0.035em;
+  --vs-text-grade-lg: 56px;
+  --vs-text-grade-lg-line: 56px;
+  --vs-text-grade-lg-weight: 600;
+  --vs-text-grade-lg-tracking: -0.03em;
+  --vs-text-grade-xl: 64px;
+  --vs-text-grade-xl-line: 64px;
+  --vs-text-grade-xl-weight: 600;
+  --vs-text-grade-xl-tracking: -0.03em;
   --vs-radius-bar: 2px;
   --vs-radius-sm: 4px;
   --vs-radius-md: 6px;
@@ -60,6 +68,7 @@
   --vs-radius-full: 9999px;
   --vs-shadow-overlay: 0 8px 24px var(--vs-shadow-soft);
   --vs-shadow-dialog: 0 16px 48px var(--vs-shadow-strong);
+  --vs-shadow-showcase: 0 30px 80px var(--vs-shadow-strong);
   --vs-duration-press: 120ms;
   --vs-duration-reveal: 180ms;
   --vs-duration-change: 240ms;
@@ -79,10 +88,18 @@
   --vs-space-4: 16px;
   --vs-space-5: 20px;
   --vs-space-6: 24px;
+  --vs-space-7: 28px;
   --vs-space-8: 32px;
+  --vs-space-9: 36px;
   --vs-space-10: 40px;
   --vs-space-12: 48px;
+  --vs-space-14: 56px;
   --vs-space-16: 64px;
+  --vs-space-24: 96px;
+  --vs-space-0.5: 2px;
+  --vs-space-1.5: 6px;
+  --vs-space-2.5: 10px;
+  --vs-space-3.5: 14px;
   --vs-layer-raised: 10;
   --vs-layer-sticky: 20;
   --vs-layer-header: 30;
@@ -115,6 +132,8 @@
   --vs-line: #313131;
   --vs-line-strong: #484848;
   --vs-line-subtle: #2a2a2a;
+  --vs-line-2: #3d3d3d;
+  --vs-line-focus: #6a6a6a;
   --vs-line-input: #747474;
   --vs-fg: #eeeeee;
   --vs-fg-2: #b7b7b7;
@@ -169,6 +188,8 @@
   --vs-line: #d9d9d9;
   --vs-line-strong: #bababa;
   --vs-line-subtle: #e3e3e3;
+  --vs-line-2: #cacaca;
+  --vs-line-focus: #8c8c8c;
   --vs-line-input: #868686;
   --vs-fg: #171717;
   --vs-fg-2: #525252;
@@ -224,6 +245,8 @@
     --vs-line: #d9d9d9;
     --vs-line-strong: #bababa;
     --vs-line-subtle: #e3e3e3;
+    --vs-line-2: #cacaca;
+    --vs-line-focus: #8c8c8c;
     --vs-line-input: #868686;
     --vs-fg: #171717;
     --vs-fg-2: #525252;

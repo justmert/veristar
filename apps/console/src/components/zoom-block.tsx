@@ -89,20 +89,20 @@ export function ZoomBlock({
     >
       <div className="flex items-baseline gap-2.5">
         <h2 className="text-body font-semibold text-fg">{title}</h2>
-        <span className="text-[12.5px] text-fg-3 tabular">
+        <span className="text-small text-fg-3 tabular">
           {formatCount(total)} {unit}
         </span>
       </div>
 
       <dl className="flex flex-wrap items-baseline gap-x-7 gap-y-3">
         <Figure label={main.label} definition={main.definition}>
-          <span className="text-[26px] leading-[30px] font-semibold tabular">
+          <span className="text-page leading-7.5 font-semibold tabular tracking-normal">
             {pct(main.count, total)}
           </span>
         </Figure>
         {sums.map((g) => (
           <Figure key={g.label} label={g.label} definition={g.definition} tone={g.tone}>
-            <span className="text-[20px] leading-6 font-semibold tabular">
+            <span className="text-section leading-6 font-semibold tabular">
               {formatCount(g.count)}
             </span>
             <span className="text-small font-normal text-fg-3 tabular">{pct(g.count, total)}</span>
@@ -113,7 +113,7 @@ export function ZoomBlock({
       {rest > 0 ? (
         <>
           <div aria-hidden className="flex flex-col">
-            <div className="flex h-3 gap-0.5 overflow-hidden rounded-[7px]">
+            <div className="flex h-3 gap-0.5 overflow-hidden rounded-md">
               <i className="block h-full bg-success opacity-60" style={{ flexGrow: main.count }} />
               {sums
                 .filter((g) => g.count > 0)
@@ -185,13 +185,13 @@ export function ZoomBlock({
                       ? `${p.label}, ${formatCount(p.count)}. ${p.definition}`
                       : undefined
                   }
-                  className="flex min-w-0 flex-col gap-[3px] rounded-[10px] border border-line px-3 py-2.5"
+                  className="flex min-w-0 flex-col gap-1 rounded-lg border border-line px-3 py-2.5"
                 >
-                  <span className="flex min-w-0 items-center gap-[7px] text-small">
+                  <span className="flex min-w-0 items-center gap-1.5 text-small">
                     <i
                       aria-hidden
                       className={cn(
-                        "block size-2.5 shrink-0 rounded-[3px]",
+                        "block size-2.5 shrink-0 rounded-sm",
                         FILL[groupOf(p.group)?.tone ?? "neutral"],
                         SHADE[(p.shade ?? 0) % SHADE.length],
                       )}
@@ -240,7 +240,7 @@ function Figure({
   );
   return (
     <div className="flex flex-col gap-0.5">
-      <dt className="flex items-center gap-1.5 text-[12.5px] text-fg-2">
+      <dt className="flex items-center gap-1.5 text-small text-fg-2">
         {tone ? <i aria-hidden className={cn("block size-2 rounded-full", FILL[tone])} /> : null}
         {definition ? (
           <Tooltip content={definition}>

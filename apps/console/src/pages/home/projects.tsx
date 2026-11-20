@@ -327,28 +327,28 @@ function ProjectCard({
   return (
     <article
       data-tenant={t.id}
-      className="group relative flex min-h-70 w-full min-w-0 flex-col rounded-[18px] border border-line bg-raised transition-colors duration-(--vs-duration-press) ease-standard hover:border-line-strong has-[[data-card-link]:focus-visible]:outline-2 has-[[data-card-link]:focus-visible]:outline-offset-2 has-[[data-card-link]:focus-visible]:outline-accent-text"
+      className="group relative flex min-h-70 w-full min-w-0 flex-col rounded-2xl border border-line bg-raised transition-colors duration-(--vs-duration-press) ease-standard hover:border-line-strong has-[[data-card-link]:focus-visible]:outline-2 has-[[data-card-link]:focus-visible]:outline-offset-2 has-[[data-card-link]:focus-visible]:outline-accent-text"
     >
-      <div className="flex items-center gap-4 px-6 pt-5.5 pb-4.5 max-sm:px-4">
+      <div className="flex items-center gap-4 px-6 pt-5 pb-4 max-sm:px-4">
         <span
           aria-hidden
           className={cn(
-            "flex size-13 shrink-0 items-center justify-center rounded-[14px] text-[20px] font-semibold uppercase",
+            "flex size-13 shrink-0 items-center justify-center rounded-xl text-section font-semibold uppercase leading-5",
             tintOf(t.id),
           )}
         >
           {t.name.slice(0, 1)}
         </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-1.25">
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
           <Link
             to={base}
             data-card-link=""
-            className="truncate text-[21px] leading-7 font-semibold tracking-[-0.02em] text-fg outline-none after:absolute after:inset-0 after:rounded-[18px] after:content-['']"
+            className="truncate text-heading leading-7 font-semibold tracking-tight text-fg outline-none after:absolute after:inset-0 after:rounded-2xl after:content-['']"
             title={t.name}
           >
             {t.name}
           </Link>
-          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-fg-2">
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-small text-fg-2">
             <StatusBadge kind="project" status={t.status} />
             {live ? (
               view.isPending ? (
@@ -378,7 +378,7 @@ function ProjectCard({
 
       {live ? (
         view.isPending ? (
-          <div aria-hidden className="grid grid-cols-3 gap-3 px-6 pb-5.5 max-sm:px-4">
+          <div aria-hidden className="grid grid-cols-3 gap-3 px-6 pb-5 max-sm:px-4">
             {[0, 1, 2].map((i) => (
               <span key={i} className="flex flex-col gap-2">
                 <Skeleton className="h-3 w-3/4" />
@@ -387,28 +387,28 @@ function ProjectCard({
             ))}
           </div>
         ) : view.isError ? (
-          <p className="flex items-center gap-2 px-6 pb-5.5 text-small text-critical max-sm:px-4">
+          <p className="flex items-center gap-2 px-6 pb-5 text-small text-critical max-sm:px-4">
             <CircleAlert aria-hidden className="size-4 shrink-0" />
             Did not load
           </p>
         ) : setup ? (
-          <div className="flex flex-col gap-2.5 px-6 pb-5.5 max-sm:px-4" data-setup="">
-            <span className="flex flex-wrap items-baseline gap-x-2.5 text-[14px]">
+          <div className="flex flex-col gap-2.5 px-6 pb-5 max-sm:px-4" data-setup="">
+            <span className="flex flex-wrap items-baseline gap-x-2.5 text-body">
               <span className="text-fg-2">Next</span>
               <span className="font-medium text-fg">
                 {steps.find((s) => s.state !== "done")?.label}
               </span>
-              <span className="ml-auto text-[12.5px] text-fg-2 tabular">
+              <span className="ml-auto text-small text-fg-2 tabular">
                 setup {steps.filter((s) => s.state === "done").length} of {steps.length}
               </span>
             </span>
             <SetupBar steps={steps} />
           </div>
         ) : (
-          <dl className="grid grid-cols-3 gap-3 px-6 pb-5.5 max-sm:px-4">
+          <dl className="grid grid-cols-3 gap-3 px-6 pb-5 max-sm:px-4">
             {numbers.map((n) => (
               <div key={n.key} data-number={n.key} className="flex min-w-0 flex-col gap-1.5">
-                <dt className="flex items-center gap-1.75 truncate text-caption text-fg-2">
+                <dt className="flex items-center gap-1.5 truncate text-caption text-fg-2">
                   <span
                     aria-hidden
                     className={cn("size-1.5 shrink-0 rounded-full", DOT[n.series])}
@@ -416,7 +416,7 @@ function ProjectCard({
                   {n.label}
                 </dt>
                 <dd className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="text-[22px] leading-6.5 font-semibold tracking-[-0.02em] text-fg tabular">
+                  <span className="text-heading leading-6.5 font-semibold tracking-tight text-fg tabular">
                     {n.value === null ? "\u2013" : formatCompact(n.value)}
                   </span>
                   {n.change ? <ChangeLine change={n.change} className="font-medium" /> : null}
@@ -429,14 +429,14 @@ function ProjectCard({
 
       <nav
         aria-label={`Pages of ${t.name}`}
-        className="relative z-10 mt-auto flex flex-wrap gap-0.5 px-3.5 py-2 shadow-[0_-1px_0_var(--color-line-subtle)]"
+        className="relative z-10 mt-auto flex flex-wrap gap-0.5 px-3.5 py-2 border-t border-line-subtle"
       >
         {links.map((l, i) => (
           <Link
             key={l.to}
             to={l.to}
             className={cn(
-              "rounded-lg px-2.5 py-1.5 text-[13px] transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring max-sm:py-2.5",
+              "rounded-lg px-2.5 py-1.5 text-small transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring max-sm:py-2.5",
               i === 0 ? "text-fg" : "text-fg-2",
             )}
           >
@@ -463,9 +463,9 @@ const DOT: Record<CardNumber["series"], string> = {
 
 function CardSkeleton() {
   return (
-    <div aria-hidden className="flex min-h-70 flex-col rounded-[18px] border border-line bg-raised">
-      <div className="flex items-center gap-4 px-6 pt-5.5 pb-4.5">
-        <Skeleton className="size-13 rounded-[14px]" />
+    <div aria-hidden className="flex min-h-70 flex-col rounded-2xl border border-line bg-raised">
+      <div className="flex items-center gap-4 px-6 pt-5 pb-4">
+        <Skeleton className="size-13 rounded-xl" />
         <div className="flex flex-1 flex-col gap-2">
           <Skeleton className="h-5 w-1/2" />
           <Skeleton className="h-3 w-1/3" />

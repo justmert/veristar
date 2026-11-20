@@ -65,22 +65,22 @@ export function CheckRow({
   return (
     <li
       data-check={status}
-      className="grid grid-cols-[22px_minmax(0,1fr)_auto] items-start gap-x-3 border-t border-line-subtle py-[11px] text-[14.5px] leading-[22px] first:border-t-0"
+      className="grid grid-cols-[22px_minmax(0,1fr)_auto] items-start gap-x-3 border-t border-line-subtle py-2.5 text-body leading-5.5 first:border-t-0"
     >
-      <span className="pt-[3px]">
+      <span className="pt-1">
         {ICON[status]}
         <span className="sr-only">{SAID[status]}: </span>
       </span>
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="min-w-0 break-words text-fg">{children}</span>
         {detail ? (
-          <span className="flex min-w-0 flex-col font-mono text-[12.5px] leading-5 break-all text-fg-3">
+          <span className="flex min-w-0 flex-col font-mono text-small leading-5 break-all text-fg-3">
             {detail}
           </span>
         ) : null}
       </span>
       {aside ? (
-        <span className="flex items-center gap-2 self-center text-[12.5px] text-fg-3">{aside}</span>
+        <span className="flex items-center gap-2 self-center text-small text-fg-3">{aside}</span>
       ) : (
         <span />
       )}

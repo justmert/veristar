@@ -76,7 +76,7 @@ export function PageHeader({
             {title}
           </h1>
           {count !== undefined && count !== null ? (
-            <span className="text-[15px] text-fg-3 tabular" data-header-count="">
+            <span className="text-body text-fg-3 tabular" data-header-count="">
               {formatCount(count)}
             </span>
           ) : null}

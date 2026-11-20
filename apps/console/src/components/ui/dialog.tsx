@@ -8,7 +8,7 @@ import { Button } from "./button";
 // page, focus inside and Escape to close. radix dialog injects a <style>
 // element for its scroll lock, which the console's csp (style-src 'self')
 // refuses. it grows in over a fading scrim with css only (dialog-motion).
-const PANEL = "flex flex-col rounded-[14px] border border-line-2 bg-overlay shadow-dialog";
+const PANEL = "flex flex-col rounded-xl border border-line-2 bg-overlay shadow-dialog";
 const WIDTH = { sm: "max-w-dialog-sm", md: "max-w-dialog" } as const;
 
 // the first focus inside an opened dialog: a field the caller marked, else
@@ -78,11 +78,11 @@ export function Dialog({
     <>
       <div className="flex items-start gap-3 px-5 pt-5">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <h2 id={titleId} className="text-[17px] leading-6 font-semibold text-fg">
+          <h2 id={titleId} className="text-title leading-6 font-semibold text-fg">
             {title}
           </h2>
           {description ? (
-            <div id={descId} className="text-body leading-[21px] text-fg-2">
+            <div id={descId} className="text-body leading-5.25 text-fg-2">
               {description}
             </div>
           ) : null}

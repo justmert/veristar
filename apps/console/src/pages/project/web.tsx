@@ -630,7 +630,7 @@ function CustomEvents({
           className="flex items-baseline gap-2.5 text-body font-semibold text-fg"
         >
           Custom events
-          <span className="text-[12.5px] font-normal text-fg-3 tabular">
+          <span className="text-small font-normal text-fg-3 tabular">
             {formatCount(cur.data.total_keys)} {cur.data.total_keys === 1 ? "event" : "events"}
           </span>
         </h2>
@@ -663,7 +663,7 @@ function CustomEvents({
                 {it.key}
               </code>
               <span className="flex items-baseline gap-2">
-                <span className="text-[22px] leading-7 font-semibold text-fg tabular">
+                <span className="text-heading leading-7 font-semibold text-fg tabular tracking-normal">
                   {formatCount(it.value)}
                 </span>
                 {change ? <ChangeLine change={change} /> : null}

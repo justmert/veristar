@@ -345,7 +345,7 @@ export function TimeChart({
             quieter, not as a line under it */}
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
           <Heading className="text-title text-fg">{title}</Heading>
-          {description ? <p className="text-[12.5px] text-fg-3">{description}</p> : null}
+          {description ? <p className="text-small text-fg-3">{description}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           {actions}

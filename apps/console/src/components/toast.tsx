@@ -118,7 +118,7 @@ function ToastItem({ item }: { item: Item }) {
       onBlur={release}
       data-toast={item.kind}
       className={cn(
-        "pointer-events-auto flex animate-rise-in items-start gap-2.5 rounded-[10px] border bg-overlay px-3.5 py-2.5 text-small shadow-overlay",
+        "pointer-events-auto flex animate-rise-in items-start gap-2.5 rounded-lg border bg-overlay px-3.5 py-2.5 text-small shadow-overlay",
         item.kind === "error" ? "border-critical-line" : "border-line-2",
       )}
     >

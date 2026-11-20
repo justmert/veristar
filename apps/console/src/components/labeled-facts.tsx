@@ -17,7 +17,7 @@ export function LabeledFacts({
   size?: "md" | "lg";
 }) {
   return (
-    <dl className={cn("flex flex-wrap gap-x-[22px] gap-y-3", className)}>
+    <dl className={cn("flex flex-wrap gap-x-5 gap-y-3", className)}>
       {items.map((f, i) => (
         <LabeledFactItem
           key={f.key ?? (typeof f.label === "string" ? f.label : i)}
@@ -45,13 +45,13 @@ export function LabeledFactItem({
 }) {
   return (
     <div className={cn("flex min-w-0 flex-col gap-0.5", className)}>
-      <dt className={cn("text-fg-3", size === "md" ? "text-[11.5px] leading-4" : "text-caption")}>
+      <dt className={cn("text-fg-3", size === "md" ? "text-axis leading-4" : "text-caption")}>
         {label}
       </dt>
       <dd
         className={cn(
           "min-w-0 break-words text-fg",
-          size === "md" ? "text-[13.5px] leading-5" : "text-body",
+          size === "md" ? "text-small leading-5" : "text-body",
         )}
       >
         {children}

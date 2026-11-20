@@ -98,7 +98,7 @@ export function ReviewQueuePage() {
         count={list.data && items.length > 0 && !list.hasNextPage ? items.length : null}
         meta={
           list.hasNextPage ? (
-            <span className="text-[15px] text-fg-3 tabular" data-count="">
+            <span className="text-body text-fg-3 tabular" data-count="">
               {items.length}+
             </span>
           ) : null
@@ -385,19 +385,19 @@ function ProjectCase({
     >
       <header className="flex min-w-0 flex-col gap-1.5">
         <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <h2 className="text-[28px] leading-9 font-semibold tracking-[-0.015em] break-words text-fg">
+          <h2 className="text-page leading-9 font-semibold tracking-tight break-words text-fg">
             {t.name}
           </h2>
           <StatusBadge kind="project" status={t.status} operator />
         </div>
         {t.description ? <p className="text-body break-words text-fg-2">{t.description}</p> : null}
-        <span className="font-mono text-[12.5px] break-all text-fg-2">
+        <span className="font-mono text-small break-all text-fg-2">
           {t.enrollment_answers.website}
         </span>
       </header>
       <section aria-labelledby="usage-h" className="flex min-w-0 flex-col gap-2">
         <Label id="usage-h">How it uses Stellar</Label>
-        <p className="max-w-[46rem] text-[18px] leading-[29px] break-words whitespace-pre-line text-fg">
+        <p className="max-w-[46rem] text-section leading-7.25 break-words whitespace-pre-line text-fg font-normal">
           {t.enrollment_answers.stellar_usage}
         </p>
       </section>
@@ -439,7 +439,7 @@ function SiteCase({
     >
       <header className="flex min-w-0 flex-col gap-1.5">
         <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <h2 className="text-[28px] leading-9 font-semibold tracking-[-0.015em] break-all text-fg">
+          <h2 className="text-page leading-9 font-semibold tracking-tight break-all text-fg">
             {site.domain}
           </h2>
           <Pill tone="warning">Site in review</Pill>
@@ -452,7 +452,7 @@ function SiteCase({
       {site.domain_previously_removed ? (
         <section aria-labelledby={`why-${site.id}`} className="flex min-w-0 flex-col gap-2">
           <Label id={`why-${site.id}`}>Why it waits</Label>
-          <p className="max-w-[46rem] text-[18px] leading-[29px] text-fg">
+          <p className="max-w-[46rem] text-section leading-7.25 text-fg font-normal">
             This domain, or a parent or subdomain of it, belonged to a project that was removed.
           </p>
         </section>
@@ -579,13 +579,13 @@ function EmptyQueue() {
   ];
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <p className="flex items-center gap-2.5 text-[15px] text-fg" role="status">
+      <p className="flex items-center gap-2.5 text-body text-fg" role="status">
         <Check aria-hidden className="size-4 text-success" strokeWidth={2.6} />
         Nothing waits for a decision
       </p>
       <section aria-labelledby="recent-h" className="flex min-w-0 flex-col gap-3">
         <div className="flex items-baseline justify-between gap-3">
-          <h2 id="recent-h" className="text-[15px] font-semibold text-fg">
+          <h2 id="recent-h" className="text-title font-semibold text-fg leading-5">
             Recent decisions
           </h2>
           <Link

@@ -172,7 +172,7 @@ export function LiveCount({
           {minutes.map((m) => (
             <span
               key={m.at}
-              className={cn("flex-1 rounded-t-[1px]", m.pageviews > 0 ? "bg-success" : "bg-line")}
+              className={cn("flex-1 rounded-t-bar", m.pageviews > 0 ? "bg-success" : "bg-line")}
               // the height is data; react writes it through the cssom
               style={{ height: `${Math.max(12, (m.pageviews / max) * 100)}%` }}
             />
