@@ -1,22 +1,23 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Columns2, Columns3, Download, X } from "lucide-react";
+import { Columns3, Download, Info } from "lucide-react";
 import { type ReactNode, useEffect, useId, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
 import { cohortListQuery } from "@/api/cohorts";
 import type { TenantListQuery } from "@/api/endpoints";
+import { exportPaths } from "@/api/onchain";
 import { apiProjectsQuery, operatorTenantsQuery, webProjectsQuery } from "@/api/queries";
 import { type ApiSort, apiSort, type TenantStatus, tenantStatus, webSort } from "@/api/schemas";
 import { DataTable, PAGE_SIZE } from "@/components/data-table";
-import { DbIpAttribution } from "@/components/dbip-attribution";
-import { Disclosure } from "@/components/disclosure";
 import { type Filter, FilterBar } from "@/components/filter-bar";
 import { SelectField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
+import { Kbd } from "@/components/panel";
 import { DateField, isIsoDay } from "@/components/range-control";
 import { Segmented } from "@/components/segmented";
 import { statusText } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog } from "@/components/ui/dialog";
 import {
   Menu,
   MenuCheckboxItem,
@@ -26,7 +27,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "@/components/ui/menu";
-import { countOf, formatDate } from "@/lib/format";
+import { formatDate, formatDateRange } from "@/lib/format";
 import {
   COHORT_KEYS,
   type CohortKey,
@@ -60,7 +61,7 @@ import {
 } from "@/lib/operator-projects";
 import { PortfolioBar, type Segment, usePortfolio } from "./portfolio";
 import { apiColumns, blankColumns, pick, statusColumns, webColumns } from "./project-columns";
-import { handedOver, ListRange, type Selection, SeriesSwatch } from "./shared";
+import { handedOver, ListRange, type Selection } from "./shared";
 
 const SEARCH_DELAY_MS = 250;
 
@@ -353,6 +354,11 @@ export function OperatorProjectsPage() {
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title="All projects"
+        items={[
+          resolved ? (
+            <span key="range">{`${formatDateRange(resolved.from, resolved.to)}, UTC`}</span>
+          ) : null,
+        ]}
         freshness={
           readAt
             ? {
@@ -366,11 +372,22 @@ export function OperatorProjectsPage() {
         }
         secondary={
           view !== "status" ? (
-            <ListRange
-              resolved={resolved}
-              requested={listState.range}
-              onRange={(range) => writeList({ ...listState, range })}
-            />
+            <>
+              <ListRange
+                resolved={resolved}
+                requested={listState.range}
+                onRange={(range) => writeList({ ...listState, range })}
+              />
+              <AboutNumbers view={view} />
+              {resolved && loaded > 0 && !badDays ? (
+                <Button asChild variant="outline">
+                  <a href={listExportHref(view, listState, resolved, loaded)} download>
+                    <Download aria-hidden />
+                    Export CSV
+                  </a>
+                </Button>
+              ) : null}
+            </>
           ) : null
         }
       />
@@ -419,31 +436,18 @@ export function OperatorProjectsPage() {
             {dayPairError(filters)}
           </p>
         ) : null}
+        {table}
         <SelectionBar
           selected={selected}
           onChange={setSelected}
           href={`/operator/compare?${compare.toString()}`}
+          csv={exportPaths.compare(
+            view === "api" ? "api" : "web",
+            selected.map((x) => x.id),
+            resolved ?? listState.range,
+          )}
         />
-        {table}
-        {list.data && loaded > 0 && !badDays ? (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            {/* the pager counts the rows; this says how many match the filters */}
-            <p className="text-small text-fg-2" aria-live="polite" data-count="">
-              {total !== null ? `${countOf(total, "project")} match.` : null}
-            </p>
-            {view !== "status" && resolved ? (
-              <Button asChild variant="outline" size="sm" className="max-lg:h-(--vs-control-touch)">
-                <a href={listExportHref(view, listState, resolved, loaded)} download>
-                  <Download aria-hidden />
-                  Export CSV
-                </a>
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
       </div>
-
-      {view !== "status" ? <AboutNumbers view={view} /> : null}
     </div>
   );
 }
@@ -778,56 +782,66 @@ function ColumnMenu({
 
 // ---- comparison
 
-// the selection bar sits where the checkboxes are and holds the way into
-// the comparison: it shows once a row is selected and stays in view while
-// the list scrolls
+// the selection bar floats at the foot of the list once a row is selected:
+// how many, the way into the comparison, their csv and clear (escape)
 function SelectionBar({
   selected,
   onChange,
   href,
+  csv,
 }: {
   selected: Selection;
   onChange: (s: Selection) => void;
   href: string;
+  csv: string;
 }) {
-  if (selected.length === 0) return null;
+  const any = selected.length > 0;
+  useEffect(() => {
+    if (!any) return;
+    function onKey(e: globalThis.KeyboardEvent) {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if ((e.target as HTMLElement | null)?.closest("dialog, [role=menu]")) return;
+      onChange([]);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [any, onChange]);
+  if (!any) return null;
   return (
     <section
-      aria-label="Selected for comparison"
-      className="sticky top-0 z-(--vs-layer-raised) flex animate-fade-in flex-wrap items-center gap-2 rounded-lg border border-fg bg-overlay px-3 py-2 shadow-overlay max-lg:top-(--vs-header)"
+      aria-label="Selected projects"
+      className="sticky bottom-4 z-(--vs-layer-raised) mx-auto flex w-fit max-w-full animate-fade-in flex-wrap items-center gap-2 rounded-xl border border-line-2 bg-overlay py-1.5 pr-2 pl-4 shadow-overlay"
     >
-      <span className="text-small text-fg-2">
-        <span className="font-medium text-fg tabular">{selected.length}</span> of {MAX_COMPARE}
+      <span
+        className="mr-2 text-body font-semibold text-fg tabular"
+        aria-live="polite"
+        title={selected.map((s) => s.name).join(", ")}
+      >
+        {selected.length} selected
+        {selected.length >= MAX_COMPARE ? (
+          <span className="ml-2 font-normal text-fg-3">at most {MAX_COMPARE}</span>
+        ) : null}
       </span>
-      <ul className="flex min-w-0 flex-1 flex-wrap gap-2">
-        {selected.map((s, i) => (
-          <li key={s.id} className="min-w-0">
-            <button
-              type="button"
-              aria-label={`Remove ${s.name} from the comparison`}
-              onClick={() => onChange(selected.filter((x) => x.id !== s.id))}
-              className="inline-flex h-7 max-w-56 items-center gap-1 rounded-full border border-line-strong pr-1 pl-2 text-caption text-fg transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring max-lg:h-(--vs-control-touch)"
-            >
-              <SeriesSwatch slot={i} />
-              <span className="truncate">{s.name}</span>
-              <X aria-hidden className="size-3.5 shrink-0 text-fg-3" />
-            </button>
-          </li>
-        ))}
-      </ul>
+      <Button asChild size="sm" className="max-lg:h-(--vs-control-touch)">
+        <Link to={href}>Open in Compare</Link>
+      </Button>
+      <Button asChild variant="outline" size="sm" className="max-lg:h-(--vs-control-touch)">
+        <a href={csv} download>
+          <Download aria-hidden />
+          Export CSV
+        </a>
+      </Button>
       <Button
         variant="ghost"
         size="sm"
+        aria-keyshortcuts="Escape"
         onClick={() => onChange([])}
         className="max-lg:h-(--vs-control-touch)"
       >
         Clear
-      </Button>
-      <Button asChild size="sm" className="max-lg:h-(--vs-control-touch)">
-        <Link to={href}>
-          <Columns2 aria-hidden />
-          Compare {selected.length}
-        </Link>
+        <span aria-hidden className="max-lg:hidden">
+          <Kbd>Esc</Kbd>
+        </span>
       </Button>
     </section>
   );
@@ -835,17 +849,29 @@ function SelectionBar({
 
 // ---- about
 
+// what the numbers are, behind the (i) next to the period
 function AboutNumbers({ view }: { view: "web" | "api" }) {
+  const [open, setOpen] = useState(false);
   return (
-    <Disclosure variant="inline" summary="About these numbers" className="max-w-prose">
-      <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-small text-fg-2">
-        <li>Every number comes from daily totals of UTC days.</li>
-        <li>Today is partial. It holds the data read so far.</li>
-        {view === "web" ? null : (
-          <li>Latency percentiles come from summed duration buckets, not from averages.</li>
-        )}
-      </ul>
-      {view === "web" ? <DbIpAttribution className="mt-2 text-small text-fg-2" /> : null}
-    </Disclosure>
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="About these numbers"
+        aria-haspopup="dialog"
+        onClick={() => setOpen(true)}
+      >
+        <Info aria-hidden />
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen} title="About these numbers" size="sm">
+        <ul className="flex list-disc flex-col gap-1.5 pb-4 pl-5 text-body text-fg-2">
+          <li>Every number comes from daily totals of UTC days.</li>
+          <li>Today is partial. It holds the data read so far.</li>
+          {view === "web" ? null : (
+            <li>Latency percentiles come from summed duration buckets, not from averages.</li>
+          )}
+        </ul>
+      </Dialog>
+    </>
   );
 }
