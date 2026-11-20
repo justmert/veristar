@@ -294,11 +294,12 @@ describe("web dashboard page (contract 18)", () => {
     await waitFor(() =>
       expect(host.querySelector('[data-testid="web-active"]')?.textContent).toBe("7"),
     );
-    // what the totals leave out, with the reasons
-    expect(host.textContent).toContain("300 quarantined page views, 20% of all page views");
+    // where every event went, with the reasons
     await waitFor(() => expect(host.textContent).toContain("Origin not allowed"));
-    expect(host.querySelector('[data-outcome="accepted"]')?.textContent).toContain("2,810");
-    expect(host.querySelector('[data-outcome="rejected"]')?.textContent).toContain("17");
+    const went = host.querySelector('[aria-label="Where events went"]')?.textContent ?? "";
+    expect(went).toContain("Counted");
+    expect(went).toContain("Rejected");
+    expect(went).toContain("17");
     expect(host.querySelector("[data-freshness]")?.textContent).toContain("Updated");
     // the default range is the last 30 utc days, the whole project, counted traffic
     const summary = urls.find((u) => u.includes("/web/summary")) ?? "";
@@ -310,7 +311,7 @@ describe("web dashboard page (contract 18)", () => {
     // more values of a breakdown are one press away
     await click(byRole(host, "button", "Show all 22"));
     await waitFor(() =>
-      expect(urls.some((u) => u.includes("dimension=page") && u.includes("limit=100"))).toBe(true),
+      expect(urls.some((u) => u.includes("dimension=page") && u.includes("limit=50"))).toBe(true),
     );
   });
 
@@ -360,21 +361,28 @@ describe("web dashboard address", () => {
       routes,
       `/projects/${f.TENANT_ID}/web?range=custom&from=2026-10-01&to=2026-10-31`,
     );
-    await waitFor(() => expect(urls.some((u) => u.includes("/ingest?"))).toBe(true));
-    const ingest = decodeURIComponent(urls.find((u) => u.includes("/ingest?")) ?? "");
+    // the site chips read the last 30 days; where events went reads the range
+    const ranged = (u: string) => decodeURIComponent(u).includes("from=2026-10-01");
+    await waitFor(() => expect(urls.some((u) => u.includes("/ingest?") && ranged(u))).toBe(true));
+    const ingest = decodeURIComponent(urls.find((u) => u.includes("/ingest?") && ranged(u)) ?? "");
     expect(ingest).toContain(`/sites/${f.SITE_ID}/ingest?from=2026-10-01T00:00:00Z`);
     expect(ingest).toContain("to=2026-11-01T00:00:00Z&bucket=day");
     await waitFor(() => expect(host.textContent).toContain("Unique visitors"));
     expect(urls.some((u) => u.includes("/onchain") || u.includes("/integrity"))).toBe(false);
   });
 
-  it("switches to quarantined traffic from the not counted section", async () => {
-    stubRoutes();
+  it("switches to quarantined traffic from the header", async () => {
+    const urls = stubRoutes();
     const host = await renderRoutes(routes, `/projects/${f.TENANT_ID}/web`);
     await waitFor(() => expect(host.textContent).toContain("Unique visitors"));
-    await click(byRole(host, "button", "Show quarantined traffic"));
-    await waitFor(() => expect(host.textContent).toContain("You see quarantined traffic"));
-    expect(host.querySelector('[aria-label="Right now"]')).toBeNull();
+    await click(byRole(host, "radio", "Quarantined"));
+    await waitFor(() =>
+      expect(host.querySelector('[data-testid="web-dashboard"]')?.getAttribute("data-band")).toBe(
+        "quarantine",
+      ),
+    );
+    expect(urls.some((u) => u.includes("band=quarantine"))).toBe(true);
+    expect(host.querySelector('[data-testid="web-active"]')).toBeNull();
   });
 });
 

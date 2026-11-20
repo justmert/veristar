@@ -619,6 +619,8 @@ function Review({ v }: { v: SCFView }) {
             <span className="ml-2">{kpiPlace(v, "onchain_operations")}</span>
           ) : null}
         </>
+      ) : (v.onchain?.ids_verified ?? 0) > 0 ? (
+        "no ledger read yet"
       ) : (
         "no proven ID yet"
       ),
@@ -725,7 +727,7 @@ function Evidence({
         : null;
   const names = Object.fromEntries(sites.map((s) => [s.id, s.domain]));
   const actions =
-    open === "integrity" && report.data && sites.length ? (
+    open === "integrity" && report.data ? (
       <AppealLink report={report.data} appeal={{ slug: tenant.slug, siteDomains: names }} />
     ) : open === "web" || open === "api" || open === "onchain" ? (
       <Link
@@ -1303,7 +1305,7 @@ export function SignedReports({
           columns={columns}
           rows={items}
           getRowKey={(r) => r.id}
-          rowLabel={(r) => formatDateRange(r.from, r.to)}
+          rowLabel={(r) => of(r)}
           rowProps={(r) => ({ "data-report": r.id })}
           rowActions={(r) => [
             r.revoked_at
