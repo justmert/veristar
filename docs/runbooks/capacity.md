@@ -14,7 +14,9 @@ The measured numbers behind the sizing:
 
 - gateway throughput and capacity per node and per cluster: [gateway limits](../reference/gateway-limits.md);
 - API metric storage: [API metrics capacity](../reference/capacity.md);
-- replayer and metrics writer drain rates: the [local drill record](../reference/drills/2026-11-13.md);
+- web event delivery on production with one, two and three replayer nodes:
+  [web events end to end](../reference/capacity.md#web-events-end-to-end);
+- replayer and metrics writer drain rates on the local topology: the [local drill record](../reference/drills/2026-11-13.md);
 - the availability effects of the topology: [availability](../reference/availability.md).
 
 ## Signals

@@ -1230,6 +1230,7 @@ Every figure below is measured. The source document names the run, the date and 
 |---|---|---|
 | Gateway ingest, one production node (`Standard_B2as_v2`), release `v0.2.1`, k6 2.3.0 | about 700 events/s per node at p99 50 ms; about 2,100 events/s across three nodes; 1,665 events/s achieved at saturation; every request answered 202 | `docs/reference/gateway-limits.md`, "Capacity" |
 | End to end on production, release `v0.4.0`, challenges included | 55.5 web events/s with no backlog, every event stored in Umami within the second it was sent; client p50 55 ms including a 58 ms round trip | `docs/reference/capacity.md`, "Web events end to end" |
+| Partitioned web event delivery on production, release `v0.4.7`, 24,000 queued page views | 168 events/s with one replayer node, 203 with two and 210 with three from a cold start; 258 and 270 events/s once every partition of two and three nodes was consuming; every event stored in Umami exactly once | `docs/reference/capacity.md`, "Web events end to end" |
 | API volume run, 1,000,000 requests across 10 tenants and 30 services, PostgreSQL 18.6 | stored `sum(count)` equal to 1,000,000 per tenant and in total; 0 duplicates, 0 dead-lettered; writer lag zero 3 s after the last export | `docs/reference/capacity.md`, "Volume run" (`make api-volume`) |
 | Storage per minute row | 467.5 bytes (volume run); 506.9 bytes (synthetic measurement, kept as the planning bound) | `docs/reference/capacity.md` |
 | Storage at 2,000 active series reporting every minute | about 67.7 GiB after 3 years (40.8 GiB minute rows for 30 days, 25.8 GiB hourly rows for 36 months, 0.36 GiB daily rows per year) | `docs/reference/capacity.md`, "Extrapolation" |
@@ -1238,7 +1239,7 @@ Every figure below is measured. The source document names the run, the date and 
 The RFP design target for API traffic is about 1,000,000 requests per day across all tenants. The
 volume run above stores that volume exactly. The expected web peak in
 `docs/reference/availability.md` is 50 events/s. One node alone accepts 500 events/s at p99 under
-50 ms.
+50 ms, and the three nodes deliver a backlog at 210 to 270 events/s.
 
 ---
 
