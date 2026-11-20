@@ -133,7 +133,14 @@ events stay in one partition, which has one owner at a time, and three things re
   overwrites it in between.
 - **The duplicate guard.** `sent.<event id>` is checked before a send and written after Umami's
   200. Only the partition's owner holds the event, so no second process passes the check at the
-  same time.
+  same time. A send is never cancelled by a hand-over or a lost lock: it runs until Umami
+  answers or the 15 s send timeout ends it, so every 200 is recorded before the message can
+  reach another owner. Umami has no idempotency key, so two cases remain in which it can store
+  an event twice: a replayer killed between Umami's 200 and the `sent` write (at most one event
+  per delivery slot), and a send that ends without an answer (the 15 s timeout or a broken
+  connection) after Umami stored it, which is retried because its outcome is unknown. A
+  hand-over whose bookkeeping writes still fail after 35 s (10 s for new sends, 15 s for the
+  last answers, 10 s for their records) hands such a message back without its `sent` key.
 
 Which Umami process, and which node, stores an event does not matter: every process uses the one
 database and `APP_SECRET`, and Umami derives the session and visit from them and the event alone
