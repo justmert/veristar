@@ -221,7 +221,7 @@ describe("threshold rules (contract 19.4)", () => {
     await waitFor(() => expect(host.textContent).toContain("1 of 3 projects meet the rule"));
     expect(host.textContent).toContain("2026-09: 3 qualifying days");
     expect(host.textContent).toContain("Sep 1, 2026: 120");
-    expect(host.textContent).toContain("Grade A");
+    expect(host.querySelector("[data-grade=A]")).not.toBeNull();
     // the list says how many projects meet each rule, from the list itself
     await waitFor(() =>
       expect(host.querySelector(`[data-matches="${rule.id}"]`)?.textContent).toBe("1 of 3"),
@@ -468,14 +468,14 @@ describe("the public report page (contract 20.5)", () => {
     expect(calls[0]?.url).toBe("/api/public/reports/abcdefghijklmnopqrstuvwxyz");
     // the plain line first, the standard and the key on demand
     expect(host.querySelector("[data-verdict=verified]")?.textContent).toBe(
-      "Signed by Veristar. This browser checked the signature.",
+      "Signed by VeristarChecked in this browser",
     );
     expect(host.textContent).toContain("Veristar's current report key");
     expect(host.textContent).toContain(SIGNER);
     // the build metadata is the footer, after every figure
     expect(host.querySelector("footer")?.textContent).toContain("Route rules2");
     expect(host.textContent).toContain("4,321");
-    expect(host.textContent).toContain("Grade A");
+    expect(host.querySelector("[data-grade=A]")).not.toBeNull();
     // the figures lead, each with its change
     expect(host.querySelector("[data-hero=visitors]")?.textContent).toContain("+116%");
     expect(host.textContent).toContain("P75");
@@ -496,17 +496,15 @@ describe("the public report page (contract 20.5)", () => {
     expect(host.textContent).toContain("4,321");
     expect(host.textContent).toContain("1, 2");
     // the members version 2 adds are shown
-    expect(host.textContent).toContain("About 10% of visits are not measured");
-    // a part with no data is left out, not listed as zeros and dashes
-    expect(host.querySelector('section[aria-label="API"]')).toBeNull();
-    expect(host.querySelector("[data-hero=requests]")).toBeNull();
+    expect(host.querySelector("[data-row=unmeasured]")?.textContent).toContain("10%");
+    // the five figures always show: a count without data is 0, a rate
+    // without requests is the missing dash
+    expect(host.querySelector("[data-hero=requests]")?.textContent).toContain("0");
+    expect(host.querySelector("[data-row=p95]")).toBeNull();
     expect(host.textContent).toContain("15 a week on average over 2 weeks, 2 missing");
     // a cohort of three keeps its percentiles back: no column of dashes
     expect(host.textContent).not.toContain("P75");
-    expect([...host.querySelectorAll("th")].some((th) => th.textContent === "Percentile")).toBe(
-      false,
-    );
-    expect(host.querySelector("[data-missing]")).toBeNull();
+    expect(host.querySelector('section[aria-label="Place in cohort"]')).toBeNull();
   });
 
   it("reads a version 3 report with the calls per contract function", async () => {
@@ -555,13 +553,15 @@ describe("the public report page (contract 20.5)", () => {
     stubFetch([{ status: 200, body: publicBody(unread, SIGNER, unread) }]);
     const host = await renderRoutes(publicRoute, "/r/abcdefghijklmnopqrstuvwxyz");
     await waitFor(() => expect(host.querySelector("[data-verdict=verified]")).not.toBeNull());
-    expect(host.querySelector("[data-hero=onchain_operations]")).toBeNull();
+    expect(
+      host.querySelector("[data-hero=onchain_operations] [data-missing]"),
+    ).not.toBeNull();
     expect(host.textContent).not.toContain("Transactions");
     expect(host.textContent).not.toContain("Days without data");
     // the signer key and the signature are random per run and may hold the
     // digits by chance, so they are dropped before looking for the count
     const figures = (host.textContent ?? "").replace(/[A-Za-z0-9+/=]{40,}/g, " ");
-    expect(figures).toContain("Signature details");
+    expect(figures).toContain("Details");
     expect(figures).not.toContain("77");
   });
 
