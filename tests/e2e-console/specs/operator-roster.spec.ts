@@ -111,8 +111,11 @@ test("the admin adds an operator who registers a first passkey", async ({ browse
   await add.getByLabel("Reason").fill("joins the review team");
   await add.getByRole("button", { name: "Add operator" }).click();
   const row = p.locator("tr", { hasText: secondUser.login });
-  await expect(row).toContainText("Operator");
-  await expect(row).toContainText("First passkey before");
+  // the role is an inline select of the row, for an admin
+  await expect(row.getByLabel(`Role of ${secondUser.login}`)).toHaveValue("operator");
+  // no passkey yet: the window to register one, its exact end on hover
+  await expect(row).toContainText("No passkey yet");
+  await expect(row.locator('[title^="First passkey before "]')).toBeVisible();
   await expect(p.getByText(`${secondUser.login} is added.`)).toBeVisible();
 
   const ctx = await browser.newContext();
@@ -142,10 +145,13 @@ test("a suspension ends the operator's access at once", async () => {
   const p = admin.page;
   await p.reload();
   const row = p.locator("tr", { hasText: secondUser.login });
+  // the role changes in its inline select, which offers the admin role
+  await expect(
+    row.getByLabel(`Role of ${secondUser.login}`).locator("option", { hasText: "Operator admin" }),
+  ).toHaveCount(1);
   // one menu per row; the destructive actions come last
   await row.getByRole("button", { name: `Actions for ${secondUser.login}` }).click();
   await expect(p.getByRole("menuitem")).toHaveText([
-    "Make operator admin",
     "Reset passkeys",
     "Suspend",
     "Remove from the roster",
