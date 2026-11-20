@@ -31,6 +31,12 @@ function pending(err: unknown): err is ApiError {
   return err instanceof ApiError && err.code === "provisioning_pending";
 }
 
+// a query that keeps retrying because web analytics are still being set up:
+// pages show that instead of a loading placeholder that never ends
+export function waitsOnProvisioning(q: { isPending: boolean; failureReason: unknown }): boolean {
+  return q.isPending && pending(q.failureReason);
+}
+
 // client errors do not get better by repeating them; network errors and 5xx
 // get two more tries. provisioning_pending clears by itself once the
 // reconciler has created the member's analytics access, so it is asked

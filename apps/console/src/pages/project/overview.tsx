@@ -73,6 +73,7 @@ import {
 } from "@/lib/web-dashboard";
 import { canAddSites } from "@/pages/project/sites";
 import { useProject } from "@/pages/project-layout";
+import { waitsOnProvisioning } from "@/query-client";
 import { OverviewSkeleton, PAGE_HEADERS } from "./page-frame";
 import { LiveCount, SiteChips } from "./site-chips";
 import { METRIC_LABEL, WebTrendChart } from "./web-chart";
@@ -957,7 +958,9 @@ function WebTop({
     <TopPanel title={title} to={to} link="Web">
       <BreakdownList
         label={title}
-        state={b.isPending ? "loading" : b.error ? "error" : undefined}
+        state={
+          waitsOnProvisioning(b) ? "empty" : b.isPending ? "loading" : b.error ? "error" : undefined
+        }
         error={b.error}
         onRetry={() => b.refetch()}
         items={(b.data?.items ?? []).map((it) => {
@@ -972,7 +975,9 @@ function WebTop({
         })}
         header={false}
         valueLabel="Visitors"
-        emptyTitle="Nothing in this range"
+        emptyTitle={
+          waitsOnProvisioning(b) ? "Web analytics are still being set up" : "Nothing in this range"
+        }
       />
     </TopPanel>
   );
