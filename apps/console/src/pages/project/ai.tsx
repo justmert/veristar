@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, ExternalLink, KeyRound } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { cn } from "@veristar/brand/cn";
+import { Ban, Lock } from "lucide-react";
+import { type ReactNode, useId, useState } from "react";
 import { ApiError } from "@/api/client";
 import {
   clientSnippets,
@@ -16,18 +17,18 @@ import {
   tenantMcpQuery,
 } from "@/api/mcp";
 import { CodeBlock, CopyField } from "@/components/code-block";
-import { CreateDialog } from "@/components/create-dialog";
 import { type Column, DataTable } from "@/components/data-table";
-import { TextField } from "@/components/form-field";
+import { FormMessage } from "@/components/error-panel";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/panel";
-import { Missing } from "@/components/states";
+import { SecretPanel } from "@/components/secret-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatDateTimeUtc } from "@/lib/format";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { formatDate, formatDateTimeUtc } from "@/lib/format";
 import { siblingUrl } from "@/lib/hosts";
 import { useProject } from "@/pages/project-layout";
 import { PAGE_HEADERS } from "./page-frame";
@@ -70,55 +71,225 @@ function serverErrors(err: unknown): McpKeyErrors {
   return out;
 }
 
+type Client = "connector" | "claude-code" | "cursor";
+
+const CLIENTS: { id: Client; name: string; how: string }[] = [
+  { id: "connector", name: "Claude and ChatGPT", how: "sign in, no key" },
+  { id: "claude-code", name: "Claude Code", how: "terminal, with a key" },
+  { id: "cursor", name: "Cursor", how: "mcp.json, with a key" },
+];
+
 export function AiPage() {
   const { tenant, me, isOwner } = useProject();
   const list = useQuery(tenantMcpQuery(tenant.id));
   const qc = useQueryClient();
   const canCreate = tenant.status === "active" || tenant.status === "pending";
   const docs = siblingUrl(window.location.hostname, "docs");
+  const [client, setClient] = useState<Client>("connector");
+  const [showRevoked, setShowRevoked] = useState(false);
+  const revokedId = useId();
+  // a key made here is shown once, then only its start
+  const [created, setCreated] = useState<McpCredentialCreated | null>(null);
+  const all = list.data ?? [];
+  const rows = showRevoked ? all : all.filter((c) => c.status !== "revoked");
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-7">
       <PageHeader
-        {...PAGE_HEADERS.ai}
-        primary={
-          canCreate ? (
-            <CreateKey
-              takenNames={(list.data ?? []).filter((c) => c.status === "active").map((c) => c.name)}
-              create={(b) => mcpApi.createTenantKey(tenant.id, b)}
-              onCreated={() => qc.invalidateQueries({ queryKey: mcpKeys.tenant(tenant.id) })}
-            />
-          ) : null
+        title={PAGE_HEADERS.ai.title}
+        meta={
+          <span className="inline-flex h-6 items-center gap-1.5 rounded-full border border-line-strong px-2 text-label text-fg-2">
+            <Lock aria-hidden className="size-3" />
+            Read-only, this project
+          </span>
         }
         secondary={
           docs ? (
-            <Button asChild variant="outline">
-              <a href={`${docs}/onboarding/mcp`}>
-                Guide
-                <ExternalLink aria-hidden />
-              </a>
+            <Button asChild variant="ghost">
+              <a href={`${docs}/onboarding/mcp`}>Guide</a>
             </Button>
           ) : null
         }
       />
-      {canCreate ? null : (
-        <Notice tone="info" title="No new keys while the project is suspended or removed" />
-      )}
-      <Section title="Keys and connections" count={list.data?.length ?? null}>
+
+      <Section title="Connect a client">
+        <div className="grid min-w-0 overflow-hidden rounded-2xl border border-line bg-raised md:grid-cols-[260px_minmax(0,1fr)]">
+          <div
+            role="radiogroup"
+            aria-label="Client"
+            className="flex flex-col gap-1 border-line p-3 max-md:border-b md:border-r"
+          >
+            {CLIENTS.map((c, i) => {
+              const on = c.id === client;
+              return (
+                // biome-ignore lint/a11y/useSemanticElements: a client card keyed like a native radio group
+                <button
+                  key={c.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  tabIndex={on ? 0 : -1}
+                  onClick={() => setClient(c.id)}
+                  onKeyDown={(e) => {
+                    const d =
+                      e.key === "ArrowDown" || e.key === "ArrowRight"
+                        ? 1
+                        : e.key === "ArrowUp" || e.key === "ArrowLeft"
+                          ? -1
+                          : 0;
+                    if (!d) return;
+                    e.preventDefault();
+                    const j = (i + d + CLIENTS.length) % CLIENTS.length;
+                    const next = CLIENTS[j];
+                    if (!next) return;
+                    setClient(next.id);
+                    (e.currentTarget.parentElement?.children[j] as HTMLElement | undefined)?.focus();
+                  }}
+                  className={cn(
+                    "flex flex-col gap-1 rounded-xl border px-3.5 py-3 text-left transition-colors duration-(--vs-duration-press) ease-standard focus-ring",
+                    on ? "border-line-focus bg-hover" : "border-transparent hover:bg-hover",
+                  )}
+                >
+                  <span className="text-body font-medium text-fg">{c.name}</span>
+                  <span className="text-small text-fg-3">{c.how}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="min-w-0 p-5 max-sm:p-4">
+            <ClientSteps
+              client={client}
+              tenantName={tenant.name}
+              canCreate={canCreate}
+              created={created}
+              takenNames={all.filter((c) => c.status === "active").map((c) => c.name)}
+              create={(b) => mcpApi.createTenantKey(tenant.id, b)}
+              onCreated={(k) => {
+                setCreated(k);
+                void qc.invalidateQueries({ queryKey: mcpKeys.tenant(tenant.id) });
+              }}
+              onDone={() => setCreated(null)}
+            />
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        title="Keys and connections"
+        count={list.data ? rows.length : null}
+        actions={
+          <span className="flex items-center gap-2">
+            <Checkbox
+              id={revokedId}
+              checked={showRevoked}
+              onCheckedChange={(c) => setShowRevoked(c === true)}
+            />
+            <label htmlFor={revokedId} className="text-small text-fg-2">
+              Show revoked
+            </label>
+          </span>
+        }
+      >
         <CredentialSection
-          list={list}
+          list={{ ...list, data: list.data ? rows : undefined }}
           canRevoke={(c) => isOwner || c.user_id === me.user.id}
           revoke={(c) => mcpApi.revokeTenantCredential(tenant.id, c.id)}
           invalidate={() => qc.invalidateQueries({ queryKey: mcpKeys.tenant(tenant.id) })}
         />
       </Section>
-      <Connect created={null} />
     </div>
   );
 }
 
-// the header's Create key: a name and an expiry in a dialog, then the key
-// once in the same dialog, with the client commands that hold it
+// the numbered steps of one client: the server address and the approval
+// for the connector clients, a key and its command for the others
+function ClientSteps({
+  client,
+  tenantName,
+  canCreate,
+  created,
+  takenNames,
+  create,
+  onCreated,
+  onDone,
+}: {
+  client: Client;
+  tenantName: string;
+  canCreate: boolean;
+  created: McpCredentialCreated | null;
+  takenNames: string[];
+  create: (b: McpKeyInput) => Promise<McpCredentialCreated>;
+  onCreated: (k: McpCredentialCreated) => void;
+  onDone: () => void;
+}) {
+  const origin = window.location.origin;
+  const s = clientSnippets(origin, created?.key ?? null);
+  const shown = clientSnippets(origin, created ? `${created.key.slice(0, 11)}...` : null);
+  if (client === "connector")
+    return (
+      <Steps>
+        <StepItem n={1} title="Copy the server address">
+          <CopyField value={mcpEndpoint(origin)} label="server address" />
+        </StepItem>
+        <StepItem n={2} title="Add it as a custom connector">
+          <span className="text-small text-fg-2">Settings, Connectors, Add custom connector</span>
+        </StepItem>
+        <StepItem n={3} title={`Sign in to Veristar and approve ${tenantName}`} />
+      </Steps>
+    );
+  const keyStep = (
+    <StepItem n={1} title="Create a key for this client">
+      {!canCreate ? (
+        <Notice tone="info" title="No new keys while the project is suspended or removed" />
+      ) : created ? (
+        <SecretPanel
+          plain
+          value={created.key}
+          noun="key"
+          name={created.name}
+          copyLabel="Copy key"
+          onDone={onDone}
+        />
+      ) : (
+        <CreateKey create={create} onCreated={onCreated} takenNames={takenNames} />
+      )}
+    </StepItem>
+  );
+  if (client === "claude-code")
+    return (
+      <Steps>
+        {keyStep}
+        <StepItem n={2} title="Run in the terminal">
+          <CodeBlock
+            code={shown.claudeCode}
+            copyText={s.claudeCode}
+            label="Terminal"
+            copyLabel="Copy command"
+            wrap
+          />
+        </StepItem>
+        <StepItem n={3} title="Or sign in without a key">
+          <CodeBlock code={s.claudeCodeOAuth} label="Terminal" copyLabel="Copy command" wrap />
+        </StepItem>
+      </Steps>
+    );
+  return (
+    <Steps>
+      {keyStep}
+      <StepItem n={2} title="Add to .cursor/mcp.json">
+        <CodeBlock
+          code={shown.cursor}
+          copyText={s.cursor}
+          label="mcp.json"
+          copyLabel="Copy configuration"
+        />
+      </StepItem>
+    </Steps>
+  );
+}
+
+// a key for one client: a name and the days until it ends, on one line.
+// the key itself shows once in the step, then only its start in the table
 export function CreateKey({
   create,
   onCreated,
@@ -131,108 +302,79 @@ export function CreateKey({
 }) {
   const [form, setForm] = useState<McpKeyForm>({ name: "", days: String(MCP_KEY_DEFAULT_DAYS) });
   const [errors, setErrors] = useState<McpKeyErrors>({});
+  const nameId = useId();
+  const daysId = useId();
   const m = useMutation({
     mutationFn: create,
-    onSuccess: (k) => onCreated(k),
+    onSuccess: (k) => {
+      setForm({ name: "", days: String(MCP_KEY_DEFAULT_DAYS) });
+      onCreated(k);
+    },
     onError: (err) => setErrors(serverErrors(err)),
   });
-  const created = m.data;
+  const taken = nameTaken(takenNames, form.name);
+  const problem = errors.name ?? errors.days ?? (taken ? TAKEN : null);
   return (
-    <CreateDialog
-      label="Create key"
-      title="Create an access key"
-      icon={<KeyRound aria-hidden />}
-      pending={m.isPending}
-      pendingLabel="Creating"
-      error={m.error && Object.keys(serverErrors(m.error)).length === 0 ? m.error : null}
-      onSubmit={() => {
+    <form
+      noValidate
+      aria-label="Create key"
+      onSubmit={(e) => {
+        e.preventDefault();
         const v = validateMcpKey(form);
         setErrors(v.errors);
         if (v.body) m.mutate(v.body);
       }}
-      onClosed={() => {
-        m.reset();
-        setForm({ name: "", days: String(MCP_KEY_DEFAULT_DAYS) });
-        setErrors({});
-      }}
-      secret={
-        created
-          ? {
-              value: created.key,
-              noun: "key",
-              name: created.name,
-              copyLabel: "Copy key",
-              children: <ClientCommands created={created} />,
-            }
-          : null
-      }
+      className="flex flex-col gap-2"
     >
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_11rem]">
-        <TextField
-          label="Name"
-          hint={
-            nameTaken(takenNames, form.name) ? (
-              <span className="text-warning">
-                A key with this name exists. Use another name to tell them apart.
-              </span>
-            ) : undefined
-          }
-          placeholder="laptop"
+      <div className="flex flex-wrap gap-2">
+        <label htmlFor={nameId} className="sr-only">
+          Name
+        </label>
+        <Input
+          id={nameId}
+          placeholder="Name, e.g. laptop"
           maxLength={100}
-          className="max-lg:h-(--vs-control-touch)"
+          autoComplete="off"
           value={form.name}
-          error={errors.name}
+          aria-invalid={errors.name ? true : undefined}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
+          className="min-w-48 flex-1 max-lg:h-(--vs-control-touch)"
         />
-        <TextField
-          label="Expires after (days)"
-          hint={`At most ${MCP_KEY_MAX_DAYS}`}
-          type="number"
-          inputMode="numeric"
-          min={1}
-          max={MCP_KEY_MAX_DAYS}
-          className="tabular max-lg:h-(--vs-control-touch)"
-          value={form.days}
-          error={errors.days}
-          onChange={(e) => setForm({ ...form, days: e.target.value })}
-        />
+        <span className="flex h-(--vs-control) items-center gap-2 rounded-lg border border-line-input bg-sunken px-3 text-small text-fg-2 max-lg:h-(--vs-control-touch)">
+          <label htmlFor={daysId}>Ends in</label>
+          <input
+            id={daysId}
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={MCP_KEY_MAX_DAYS}
+            value={form.days}
+            aria-invalid={errors.days ? true : undefined}
+            onChange={(e) => setForm({ ...form, days: e.target.value })}
+            className="w-12 rounded-sm bg-transparent text-fg tabular outline-none focus-ring"
+          />
+          <span>days</span>
+        </span>
+        <Button type="submit" pending={m.isPending} className="max-lg:h-(--vs-control-touch)">
+          {m.isPending ? "Creating" : "Create key"}
+        </Button>
       </div>
-    </CreateDialog>
+      {problem ? (
+        <p
+          role={errors.name || errors.days ? "alert" : undefined}
+          className={cn("text-small", errors.name || errors.days ? "text-critical" : "text-warning")}
+        >
+          {problem}
+        </p>
+      ) : null}
+      <FormMessage
+        error={m.error && Object.keys(serverErrors(m.error)).length === 0 ? m.error : null}
+      />
+    </form>
   );
 }
 
-// the commands of the clients that take a key, written with the new key;
-// the code on screen shows its start, the copy holds it whole
-function ClientCommands({ created }: { created: McpCredentialCreated }) {
-  const origin = window.location.origin;
-  const s = clientSnippets(origin, created.key);
-  const shown = clientSnippets(origin, `${created.key.slice(0, 11)}...`);
-  return (
-    <Tabs defaultValue="claude-code" className="min-w-0 gap-3">
-      <TabsList aria-label="Client" className="max-w-full overflow-x-auto">
-        <TabsTrigger value="claude-code">Claude Code</TabsTrigger>
-        <TabsTrigger value="cursor">Cursor</TabsTrigger>
-      </TabsList>
-      <TabsContent value="claude-code" className="min-w-0">
-        <CodeBlock
-          code={shown.claudeCode}
-          copyText={s.claudeCode}
-          label="Terminal"
-          copyLabel="Copy command"
-          wrap
-        />
-      </TabsContent>
-      <TabsContent value="cursor" className="min-w-0">
-        <CodeBlock
-          code={shown.cursor}
-          copyText={s.cursor}
-          label="mcp.json"
-          copyLabel="Copy configuration"
-        />
-      </TabsContent>
-    </Tabs>
-  );
-}
+const TAKEN = "A key with this name exists. Use another name to tell them apart.";
 
 // keys and connections in the same table form as the api tokens: name,
 // status, created, ends, last used, revoke. the table draws the loading,
@@ -254,17 +396,27 @@ export function CredentialSection({
       header: "Name",
       primary: true,
       minWidth: "min-w-56",
-      className: "w-full",
+      className: "w-[34%]",
       cell: (c) => (
-        <span className="flex min-w-0 flex-col py-1">
-          <span className="font-medium break-words text-fg">{c.name}</span>
-          <span className="truncate text-caption font-normal text-fg-2">
-            {c.kind === "key" ? "Access key" : "Connector"}
-            {c.prefix ? <code className="ml-2 font-mono">{c.prefix}...</code> : null}
-            {c.display_name ? `, acts as ${c.display_name}` : ""}
+        <span className="flex min-w-0 flex-col gap-0.5 py-1">
+          <span className="flex min-w-0 flex-wrap items-baseline gap-x-2.5">
+            <span className="font-medium break-words text-fg">{c.name}</span>
+            {c.prefix ? (
+              <code className="font-mono text-caption text-fg-3">{c.prefix}...</code>
+            ) : null}
           </span>
+          {c.display_name ? (
+            <span className="truncate text-caption font-normal text-fg-2">
+              acts as {c.display_name}
+            </span>
+          ) : null}
         </span>
       ),
+    },
+    {
+      key: "kind",
+      header: "Kind",
+      cell: (c) => <span className="text-fg-2">{c.kind === "key" ? "Key" : "Connector"}</span>,
     },
     {
       key: "status",
@@ -273,16 +425,9 @@ export function CredentialSection({
       cell: (c) => <StatusBadge kind="key" status={c.status} />,
     },
     {
-      key: "created",
-      header: "Created",
-      cell: (c) => (
-        <span className="whitespace-nowrap text-fg-2">{formatDateTimeUtc(c.created_at)}</span>
-      ),
-    },
-    {
       key: "ends",
-      header: "Expires",
-      minWidth: "min-w-44",
+      header: "Ends",
+      minWidth: "min-w-36",
       cell: (c) => <span className="text-fg-2">{credentialEnd(c)}</span>,
     },
     {
@@ -293,7 +438,7 @@ export function CredentialSection({
         c.last_seen_at ? (
           <span className="whitespace-nowrap text-fg-2">{formatDateTimeUtc(c.last_seen_at)}</span>
         ) : (
-          <Missing reason={NOT_USED} />
+          <span className="text-fg-2">{NOT_USED}</span>
         ),
     },
   ];
@@ -336,7 +481,7 @@ export function CredentialSection({
 
 // one wording for a credential that never sent a request, on this page and
 // on Connect API
-export const NOT_USED = "Not used yet";
+export const NOT_USED = "Never";
 
 // when a credential stops: revoked with the reason, expired, expires, or
 // kept alive by its client
@@ -346,83 +491,29 @@ export function credentialEnd(c: McpCredential): string {
       c.revoked_reason ? `: ${REVOKED_REASON[c.revoked_reason] ?? c.revoked_reason}` : ""
     }`;
   // the status column says active or expired; the cell holds the date only
-  if (c.expires_at) return formatDateTimeUtc(c.expires_at);
+  if (c.expires_at) return formatDate(c.expires_at);
   return "Renewed by the client";
 }
 
 // numbered steps of one client
 function Steps({ children }: { children: ReactNode }) {
-  return <ol className="flex min-w-0 list-none flex-col gap-3">{children}</ol>;
+  return <ol className="flex min-w-0 list-none flex-col gap-5">{children}</ol>;
 }
 
-function StepItem({ n, children }: { n: number; children: ReactNode }) {
+function StepItem({ n, title, children }: { n: number; title: string; children?: ReactNode }) {
   return (
-    <li className="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)] gap-2 text-small text-fg">
+    <li className="grid min-w-0 grid-cols-[26px_minmax(0,1fr)] gap-x-3.5">
       <span
         aria-hidden
-        className="flex size-6 items-center justify-center rounded-full border border-line-strong font-mono text-caption text-fg-2"
+        className="flex size-[26px] items-center justify-center rounded-full border border-line-strong text-caption text-fg-2 tabular"
       >
         {n}
       </span>
-      <div className="flex min-w-0 flex-col gap-2 pt-1">{children}</div>
-    </li>
-  );
-}
-
-// how to connect each client: the server url once, then a few numbered
-// steps per client. a key's commands are in the create dialog, filled in
-export function Connect({ created }: { created: McpCredentialCreated | null }) {
-  const origin = window.location.origin;
-  const s = clientSnippets(origin, created?.key ?? null);
-  return (
-    <Section title="Connect a client">
-      <div className="flex min-w-0 flex-col gap-1">
-        <span className="text-caption text-fg-2">Server URL</span>
-        <CopyField value={mcpEndpoint(origin)} label="server URL" className="max-w-md" />
+      <div className="flex min-w-0 flex-col gap-2.5 pt-0.5">
+        <span className="text-body font-medium text-fg">{title}</span>
+        {children}
       </div>
-      <Tabs defaultValue="connector" className="min-w-0 gap-4">
-        <TabsList aria-label="Client" className="max-w-full overflow-x-auto">
-          <TabsTrigger value="connector" className="max-lg:h-(--vs-control-touch)">
-            Claude and ChatGPT
-          </TabsTrigger>
-          <TabsTrigger value="claude-code" className="max-lg:h-(--vs-control-touch)">
-            Claude Code
-          </TabsTrigger>
-          <TabsTrigger value="cursor" className="max-lg:h-(--vs-control-touch)">
-            Cursor
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="connector" className="min-w-0">
-          <Steps>
-            <StepItem n={1}>Settings, then Connectors</StepItem>
-            <StepItem n={2}>Add a custom connector with the server URL</StepItem>
-            <StepItem n={3}>Sign in and approve</StepItem>
-          </Steps>
-        </TabsContent>
-        <TabsContent value="claude-code" className="min-w-0">
-          <Steps>
-            <StepItem n={1}>Create a key</StepItem>
-            <StepItem n={2}>
-              Run the command
-              <CodeBlock code={s.claudeCode} label="Terminal" copyLabel="Copy command" wrap />
-            </StepItem>
-            <StepItem n={3}>
-              Or sign in without a key
-              <CodeBlock code={s.claudeCodeOAuth} label="Terminal" copyLabel="Copy command" wrap />
-            </StepItem>
-          </Steps>
-        </TabsContent>
-        <TabsContent value="cursor" className="min-w-0">
-          <Steps>
-            <StepItem n={1}>Create a key</StepItem>
-            <StepItem n={2}>
-              Add to <code className="font-mono">.cursor/mcp.json</code>
-              <CodeBlock code={s.cursor} label="mcp.json" copyLabel="Copy configuration" />
-            </StepItem>
-          </Steps>
-        </TabsContent>
-      </Tabs>
-    </Section>
+    </li>
   );
 }
 
