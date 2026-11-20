@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import { MonitorSmartphone, Plus } from "lucide-react";
-import { type FormEvent, type ReactNode, useMemo, useState } from "react";
+import { BarChart3, Plus, Settings, Trash2 } from "lucide-react";
+import { type FormEvent, type ReactNode, useId, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { ApiError } from "@/api/client";
 import { api, type SiteInput, type SitePatch } from "@/api/endpoints";
@@ -10,9 +10,11 @@ import { webHourlyQuery } from "@/api/web";
 import { type Column, DataTable, type Sort } from "@/components/data-table";
 import { FormMessage } from "@/components/error-panel";
 import { FilterBar } from "@/components/filter-bar";
-import { TextAreaField, TextField } from "@/components/form-field";
+import { TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
+import { type SetupStep as SetupBarStep, SetupNext } from "@/components/setup-progress";
 import { EmptyState, ErrorState, Missing } from "@/components/states";
+import { Pill } from "@/components/status";
 import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
@@ -24,13 +26,13 @@ import {
   combineFirstEvent,
   type FirstEvent,
   firstEvent,
-  nextAction,
   setupRank,
   setupStatus,
   siteSetupPath,
   webSeen,
 } from "@/lib/site-setup";
 import * as v from "@/lib/validate";
+import { webPath } from "@/lib/web-dashboard";
 import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
 import { PAGE_HEADERS, SitesSkeleton } from "./page-frame";
@@ -94,21 +96,30 @@ export function sitePatch(site: Site, values: SiteValues): SitePatch {
 
 // ------------------------------------------------------------ add a site
 
+// a new site starts with its own domain as the one allowed origin; more
+// origins are added on the site's page
 export function AddSiteForm({
   tenantId,
   onDone,
   onCancel,
   cancellable,
   submitLabel = "Add site",
+  wide = false,
 }: {
   tenantId: string;
   onDone: (site?: Site) => void;
   onCancel?: () => void;
   cancellable: boolean;
   submitLabel?: string;
+  // the full-width submit of the first-site card
+  wide?: boolean;
 }) {
   const [values, setValues] = useState<SiteValues>({ name: "", domain: "", origins: "" });
   const [errors, setErrors] = useState<SiteErrors>({});
+  const withOrigin = (s: SiteValues): SiteValues => ({
+    ...s,
+    origins: s.domain.trim() ? `https://${s.domain.trim()}` : "",
+  });
   const create = useMutation({
     mutationFn: (body: SiteInput) => api.createSite(tenantId, body),
     onSuccess: async (site) => {
@@ -116,30 +127,31 @@ export function AddSiteForm({
       toast.success(`${site.name} is added. Install its tag next.`);
       onDone(site);
     },
-    onError: (err) => setErrors(serverSiteErrors(err, values)),
+    onError: (err) => setErrors(serverSiteErrors(err, withOrigin(values))),
   });
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    const found = validateSite(values);
+    const full = withOrigin(values);
+    const found = validateSite(full);
+    // the origin follows the domain, so its error is the domain's
+    if (found.origins && !found.domain) found.domain = found.origins;
+    delete found.origins;
     setErrors(found);
     if (Object.keys(found).length > 0) return;
     create.mutate({
-      name: values.name.trim(),
-      domain: values.domain.trim(),
-      origins: parseOrigins(values.origins),
+      name: full.name.trim(),
+      domain: full.domain.trim(),
+      origins: parseOrigins(full.origins),
     });
   }
-
-  const domain = values.domain.trim();
-  const suggestion = domain && !v.domain(domain) ? `https://${domain}` : null;
 
   return (
     <form noValidate onSubmit={submit} aria-label="Add a site" className="flex flex-col gap-4">
       <TextField
         label="Name"
         name="name"
-        placeholder="Marketing site"
+        placeholder="Lumen Pay app"
         maxLength={100}
         value={values.name}
         onChange={(e) => setValues((s) => ({ ...s, name: e.target.value }))}
@@ -148,43 +160,51 @@ export function AddSiteForm({
       <TextField
         label="Domain"
         name="domain"
-        placeholder="example.org"
-        hint="Cannot be changed later."
+        placeholder="lumenpay.example"
         autoCapitalize="none"
         spellCheck={false}
         className="font-mono"
         value={values.domain}
         onChange={(e) => setValues((s) => ({ ...s, domain: e.target.value.toLowerCase() }))}
-        error={errors.domain}
-      />
-      <OriginsField
-        value={values.origins}
-        onChange={(origins) => setValues((s) => ({ ...s, origins }))}
-        error={errors.origins}
-        suggestion={values.origins.trim() === "" ? suggestion : null}
+        error={errors.domain ?? errors.origins}
       />
       <FormMessage
         error={
-          create.error && Object.keys(serverSiteErrors(create.error, values)).length === 0
+          create.error &&
+          Object.keys(serverSiteErrors(create.error, withOrigin(values))).length === 0
             ? create.error
             : null
         }
       />
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line pt-4">
-        {cancellable ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="max-lg:h-(--vs-control-touch)"
-            onClick={onCancel ?? (() => onDone())}
-          >
-            Cancel
-          </Button>
-        ) : null}
-        <Button type="submit" pending={create.isPending} className="max-lg:h-(--vs-control-touch)">
+      {wide ? (
+        <Button
+          type="submit"
+          pending={create.isPending}
+          className="mt-1 h-[42px] w-full"
+        >
           {create.isPending ? "Adding" : submitLabel}
         </Button>
-      </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+          {cancellable ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="max-lg:h-(--vs-control-touch)"
+              onClick={onCancel ?? (() => onDone())}
+            >
+              Cancel
+            </Button>
+          ) : null}
+          <Button
+            type="submit"
+            pending={create.isPending}
+            className="max-lg:h-(--vs-control-touch)"
+          >
+            {create.isPending ? "Adding" : submitLabel}
+          </Button>
+        </div>
+      )}
     </form>
   );
 }
@@ -250,47 +270,39 @@ export function AddSiteButton({
   );
 }
 
-export function OriginsField({
-  value,
-  onChange,
-  error,
-  suggestion,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  error?: string;
-  suggestion: string | null;
-}) {
-  return (
-    <div className="flex flex-col items-start gap-2">
-      <div className="w-full">
-        <TextAreaField
-          label="Allowed origins"
-          name="origins"
-          rows={3}
-          className="font-mono text-small"
-          autoCapitalize="none"
-          spellCheck={false}
-          placeholder="https://example.org"
-          hint="Put one origin on each line. Only pages on these origins can send events: the domain or its subdomains over https, or http://localhost for tests."
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          error={error}
-        />
-      </div>
-      {suggestion ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="xs"
-          className="animate-fade-in font-mono max-lg:h-(--vs-control-touch)"
-          onClick={() => onChange(suggestion)}
-        >
-          Use {suggestion}
-        </Button>
-      ) : null}
-    </div>
-  );
+// ------------------------------------------------------------ setup steps
+
+// the three required steps of a site in the shared setup bar: the tracker
+// runs once any event arrives (counted or refused), events arrive once one
+// is counted, the domain once a check passed. a failed domain check or
+// refused events are the problem of their step.
+export function siteSteps(site: Site, event: FirstEvent | null): SetupBarStep[] {
+  const received = event === "received";
+  const installed = received || event === "refused";
+  return [
+    { key: "install", label: "Install the tracker", state: installed ? "done" : "current" },
+    {
+      key: "event",
+      label: "Events arrive",
+      state: received ? "done" : event === "refused" ? "problem" : installed ? "current" : "todo",
+    },
+    {
+      key: "domain",
+      label: "Verify the domain",
+      state:
+        site.verification === "verified"
+          ? "done"
+          : !received
+            ? "todo"
+            : site.last_verify_error
+              ? "problem"
+              : "current",
+    },
+  ];
+}
+
+export function setupComplete(steps: SetupBarStep[]): boolean {
+  return steps.every((s) => s.state === "done");
 }
 
 // ------------------------------------------------------------ first event
@@ -349,6 +361,8 @@ type Row = {
 };
 
 const PAGE_SIZE = 25;
+// from this many sites the list gets search, sort and pages
+export const SITE_TOOLS_FROM = 11;
 
 // the sites whose name or domain holds the search text
 export function matchSites(list: Site[], q: string): Site[] {
@@ -381,27 +395,41 @@ export function sortRows(rows: Row[], sort: Sort): Row[] {
   });
 }
 
+// the state pill of a site that is not simply live: paused, removed by an
+// operator, or a domain an operator checks first
+function siteStatePill(site: Site): ReactNode {
+  if (site.status !== "active") return <StatusBadge kind="site" status={site.status} />;
+  if (site.in_review) return <Pill tone="info">In review</Pill>;
+  return null;
+}
+
 function SetupCell({ row }: { row: Row }) {
   if (row.failed) return <Missing reason="Did not load" />;
-  return <StatusBadge kind="setup" status={setupStatus(row.site, row.event)} />;
+  if (row.event === null) return <Bone className="h-8 w-44" />;
+  return (
+    <SetupNext steps={siteSteps(row.site, row.event)} status={siteStatePill(row.site)} />
+  );
 }
 
 // the project's sites with how far each is set up and its last 30 days:
-// search, sort and pages for long lists, one status and one next action per
-// site. rows stack on a phone.
+// one row per site that opens the site, the next step only where one is
+// open, the rest in the row menu. search, sort and pages from 11 sites.
 export function SitesTable({
   sites,
-  actions,
   nextStep = true,
+  canRemove = false,
 }: {
   sites: Site[];
-  actions?: ReactNode;
   // false while no setup step can finish (a suspended project)
   nextStep?: boolean;
+  // owners who accepted the current terms delete sites
+  canRemove?: boolean;
 }) {
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<Sort>({ key: "setup", order: "asc" });
   const [page, setPage] = useState(0);
+  const navigate = useNavigate();
+  const tools = sites.length >= SITE_TOOLS_FROM;
   const months = useQueries({ queries: sites.map((s) => ingestMonthQuery(s.id)) });
   const gateway = months.map((m) => (m.data ? firstEvent(m.data) : null));
   const webs = useQueries({
@@ -423,29 +451,32 @@ export function SitesTable({
     };
   });
   const byId = new Map(rows.map((r) => [r.site.id, r]));
-  const shown = sortRows(
-    matchSites(sites, q).flatMap((s) => byId.get(s.id) ?? []),
-    sort,
-  );
+  const matched = matchSites(sites, q).flatMap((s) => byId.get(s.id) ?? []);
+  // a short list keeps the project's order of sites: the ones that need a
+  // step first, by name
+  const shown = sortRows(matched, tools ? sort : { key: "setup", order: "asc" });
   const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
   const current = Math.min(page, pages - 1);
   const slice = shown.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
+
+  const remove = async (site: Site) => {
+    await api.deleteSite(site.tenant_id, site.id);
+    toast.success(`${site.name} was deleted.`);
+    await queryClient.invalidateQueries({ queryKey: keys.sites(site.tenant_id) });
+  };
 
   const columns: Column<Row>[] = [
     {
       key: "site",
       header: "Site",
-      sortKey: "name",
+      sortKey: tools ? "name" : undefined,
       primary: true,
       minWidth: "min-w-56",
-      className: "max-w-0 w-full",
+      className: "max-w-0 w-[34%]",
       truncate: (r) => `${r.site.name}, ${r.site.domain}`,
       cell: (r) => (
-        <span className="flex min-w-0 flex-col py-1">
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate">{r.site.name}</span>
-            {r.site.status !== "active" ? <StatusBadge kind="site" status={r.site.status} /> : null}
-          </span>
+        <span className="flex min-w-0 flex-col gap-1 py-1">
+          <span className="truncate font-medium text-fg">{r.site.name}</span>
           <span className="truncate font-mono text-caption font-normal text-fg-2">
             {r.site.domain}
           </span>
@@ -455,28 +486,34 @@ export function SitesTable({
     {
       key: "setup",
       header: "Setup",
-      sortKey: "setup",
+      sortKey: tools ? "setup" : undefined,
       mobile: true,
-      minWidth: "min-w-40",
+      minWidth: "min-w-56",
       cell: (r) => <SetupCell row={r} />,
     },
     {
       key: "events",
-      header: "Counted events, 30 days",
-      sortKey: "events",
+      header: "Events, 30 days",
+      sortKey: tools ? "events" : undefined,
       align: "right",
       numeric: true,
       mobile: true,
-      minWidth: "min-w-40",
+      minWidth: "min-w-32",
       cell: (r) => {
         if (r.monthFailed) return <Missing reason="Did not load" />;
         const n = counted(r.month);
-        return n === null ? <Bone className="ml-auto h-3 w-12" /> : formatCount(n);
+        return n === null ? (
+          <Bone className="ml-auto h-3 w-12" />
+        ) : (
+          <span className="font-semibold text-fg">{formatCount(n)}</span>
+        );
       },
     },
     {
       key: "held",
-      header: "Not counted",
+      header: "Held back",
+      definition:
+        "The share of this site's events in 30 days that were not counted: quarantined, from bots or refused.",
       align: "right",
       numeric: true,
       minWidth: "min-w-28",
@@ -485,8 +522,7 @@ export function SitesTable({
         if (r.monthFailed) return <Missing reason="Did not load" />;
         if (!t) return <Bone className="ml-auto h-3 w-10" />;
         const all = Object.values(t).reduce((a, b) => a + b, 0);
-        // a site with no event has no share: the cell stays empty, like the
-        // other cells of the table that hold nothing
+        // a site with no event has no share: the cell stays empty
         if (all === 0) return null;
         return formatShareOf((t.quarantined ?? 0) + (t.bot ?? 0) + sumRejected(t), all);
       },
@@ -495,23 +531,18 @@ export function SitesTable({
 
   return (
     <div className="flex flex-col gap-4">
-      {sites.length > 5 || actions ? (
-        <div className="flex flex-wrap items-end gap-3">
-          {sites.length > 5 ? (
-            <FilterBar
-              className="min-w-0 flex-1"
-              search={q}
-              onSearch={(t) => {
-                setQ(t);
-                setPage(0);
-              }}
-              searchLabel="Search sites"
-              placeholder="Search by name or domain"
-              onClearAll={() => setQ("")}
-            />
-          ) : null}
-          {actions}
-        </div>
+      {tools ? (
+        <FilterBar
+          className="min-w-0"
+          search={q}
+          onSearch={(t) => {
+            setQ(t);
+            setPage(0);
+          }}
+          searchLabel="Search sites"
+          placeholder="Search by name or domain"
+          onClearAll={() => setQ("")}
+        />
       ) : null}
       <DataTable<Row>
         label="Sites"
@@ -521,21 +552,51 @@ export function SitesTable({
         rowLabel={(r) => r.site.name}
         rowHref={(r) => siteSetupPath(r.site)}
         rowProps={(r) => ({ "data-site": r.site.id })}
-        // the one inline action: the site's next setup step
+        // the one inline action: continue the setup of a site that is not
+        // ready
         rowNext={(r) =>
-          nextStep && r.event !== null ? nextAction(r.site, setupStatus(r.site, r.event)) : null
+          nextStep && r.event !== null && !setupComplete(siteSteps(r.site, r.event))
+            ? { label: "Continue setup", to: siteSetupPath(r.site) }
+            : null
         }
-        sort={sort}
-        onSort={(key) =>
-          setSort((s) =>
-            s.key === key
-              ? { key, order: s.order === "asc" ? "desc" : "asc" }
-              : { key, order: "asc" },
-          )
+        rowActions={(r) => [
+          {
+            label: "Web data",
+            icon: <BarChart3 aria-hidden />,
+            onSelect: () => navigate(webPath(r.site.tenant_id, r.site.id)),
+          },
+          {
+            label: "Settings",
+            icon: <Settings aria-hidden />,
+            onSelect: () => navigate(`${siteSetupPath(r.site)}#settings`),
+          },
+          canRemove && {
+            label: "Remove",
+            icon: <Trash2 aria-hidden />,
+            destructive: true,
+            confirm: {
+              title: `Delete the site “${r.site.name}”?`,
+              description: `Events from ${r.site.domain} are refused, and all web data of this site is deleted. You cannot undo this.`,
+              confirmLabel: "Delete site",
+              pendingLabel: "Deleting",
+              typed: { value: r.site.domain, label: `Type ${r.site.domain} to confirm` },
+              run: () => remove(r.site),
+            },
+          },
+        ]}
+        sort={tools ? sort : undefined}
+        onSort={
+          tools
+            ? (key) =>
+                setSort((s) =>
+                  s.key === key
+                    ? { key, order: s.order === "asc" ? "desc" : "asc" }
+                    : { key, order: "asc" },
+                )
+            : undefined
         }
         empty={{
           title: "No site matches",
-          text: "Search by another name or domain.",
           action: (
             <Button variant="outline" size="sm" onClick={() => setQ("")}>
               Clear the search
@@ -561,14 +622,11 @@ export function SitesTable({
 // ------------------------------------------------------------ the page
 
 export function SitesPage() {
-  const { tenant, termsCurrent } = useProject();
+  const { tenant, isOwner, termsCurrent } = useProject();
   // the control plane's rule: a suspended project's sites cannot be created
   // or changed (contract 5.11); a project that is not approved takes sites,
   // and they wait for review with it
   const canChange = canAddSites(tenant.status, termsCurrent);
-  // the resubmit form above holds the main action of a project that is not
-  // approved, and no setup step can finish while it is suspended
-  const rejected = tenant.status === "rejected";
   const suspended = tenant.status === "suspended";
   const sites = useQuery(sitesQuery(tenant.id));
   const [adding, setAdding] = useState(false);
@@ -582,21 +640,19 @@ export function SitesPage() {
     read.length > 0
       ? { at: new Date(Math.min(...read)), cadence: "Event counts refresh every few minutes." }
       : null;
+  const empty = sites.data !== undefined && live.length === 0;
 
-  const add = canChange ? (
-    <Button
-      variant={rejected ? "outline" : "default"}
-      onClick={() => setAdding(true)}
-      className="max-lg:h-(--vs-control-touch)"
-    >
-      <Plus aria-hidden />
-      Add site
-    </Button>
-  ) : null;
+  const add =
+    canChange && !empty ? (
+      <Button onClick={() => setAdding(true)} className="max-lg:h-(--vs-control-touch)">
+        <Plus aria-hidden />
+        Add site
+      </Button>
+    ) : null;
 
   return (
-    <div className="flex flex-col gap-8">
-      <PageHeader {...PAGE_HEADERS.sites} freshness={freshness} primary={add} />
+    <div className="flex flex-col gap-6">
+      <PageHeader {...PAGE_HEADERS.sites} freshness={empty ? null : freshness} primary={add} />
       {sites.isPending ? (
         <SitesSkeleton />
       ) : sites.error ? (
@@ -607,24 +663,44 @@ export function SitesPage() {
         />
       ) : live.length === 0 ? (
         canChange ? (
-          <EmptyState
-            icon={<MonitorSmartphone aria-hidden strokeWidth={1.75} />}
-            title="No site yet"
-          />
+          <FirstSiteCard tenantId={tenant.id} />
         ) : (
-          <EmptyState
-            icon={<MonitorSmartphone aria-hidden strokeWidth={1.75} />}
-            title="No site yet"
-          >
-            {tenant.status === "suspended"
+          <EmptyState title="No site yet">
+            {suspended
               ? "You cannot add sites while the project is suspended."
               : "An owner must accept the new terms before you can add sites."}
           </EmptyState>
         )
       ) : (
-        <SitesTable sites={live} nextStep={!suspended} />
+        <SitesTable sites={live} nextStep={!suspended} canRemove={isOwner && termsCurrent} />
       )}
       <AddSiteDialog tenantId={tenant.id} open={adding} onOpenChange={setAdding} />
+    </div>
+  );
+}
+
+// a project without a site: the add form is the page, centred in a card
+function FirstSiteCard({ tenantId }: { tenantId: string }) {
+  const navigate = useNavigate();
+  const id = useId();
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <section
+        aria-labelledby={id}
+        className="flex w-full max-w-[600px] flex-col gap-5 rounded-2xl border border-line bg-raised px-[30px] py-7 max-sm:px-5"
+      >
+        <h2 id={id} className="text-title text-fg">
+          Add your first site
+        </h2>
+        <AddSiteForm
+          tenantId={tenantId}
+          cancellable={false}
+          wide
+          onDone={(site) => {
+            if (site) navigate(siteSetupPath(site));
+          }}
+        />
+      </section>
     </div>
   );
 }

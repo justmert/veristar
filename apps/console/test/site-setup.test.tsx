@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import type { Site } from "@/api/schemas";
 import type { WebHourly } from "@/api/web";
@@ -6,16 +5,13 @@ import {
   combineFirstEvent,
   nextAction,
   nextText,
-  type SetupStep,
   setupProgress,
   setupStatus,
   setupSteps,
   webSeen,
 } from "@/lib/site-setup";
-import { Step } from "@/pages/project/site-setup";
-import { matchSites } from "@/pages/project/sites";
+import { matchSites, setupComplete, siteSteps } from "@/pages/project/sites";
 import * as f from "./fixtures/contract";
-import { byRole, click, render, waitFor } from "./helpers";
 
 const site = {
   ...(f.siteBody as Site),
@@ -110,73 +106,20 @@ describe("sites list", () => {
   });
 });
 
-describe("a setup step", () => {
-  function Harness({ start, settled = true }: { start: SetupStep["state"]; settled?: boolean }) {
-    const [state, setState] = useState(start);
-    const [known, setKnown] = useState(settled);
-    return (
-      <>
-        <button type="button" onClick={() => setState("done")}>
-          finish
-        </button>
-        <button type="button" onClick={() => setState("current")}>
-          undo
-        </button>
-        <button type="button" onClick={() => setKnown(true)}>
-          settle
-        </button>
-        <ol>
-          <Step
-            n={1}
-            step={{ key: "install", title: "Install the tag", state, optional: false }}
-            id="install"
-            settled={known}
-          >
-            <p>copy this snippet</p>
-          </Step>
-        </ol>
-      </>
-    );
-  }
-  const toggle = (host: HTMLElement) =>
-    host.querySelector("li button[aria-expanded]") as HTMLButtonElement | null;
-
-  it("folds a step that is done when the page opens", async () => {
-    const host = await render(<Harness start="done" />);
-    expect(host.textContent).not.toContain("copy this snippet");
-    expect(toggle(host)?.textContent).toBe("Show");
-    await click(toggle(host) as HTMLElement);
-    expect(host.textContent).toContain("copy this snippet");
-    expect(toggle(host)?.getAttribute("aria-expanded")).toBe("true");
+describe("the site's setup bar", () => {
+  it("names the tracker step first while nothing arrived", () => {
+    const st = siteSteps(site, "waiting").map((x) => x.state);
+    expect(st).toEqual(["current", "todo", "todo"]);
   });
 
-  it("folds once the state is known on load, not before", async () => {
-    const host = await render(<Harness start="done" settled={false} />);
-    // the state is not known yet: the body waits behind a loading line, so
-    // it never shows and then folds away
-    expect(host.textContent).not.toContain("copy this snippet");
-    expect(host.querySelector('[aria-busy="true"]')).not.toBeNull();
-    expect(toggle(host)).toBeNull();
-    await click(byRole(host, "button", "settle"));
-    await waitFor(() => expect(host.textContent).not.toContain("copy this snippet"));
-    expect(toggle(host)?.textContent).toBe("Show");
+  it("marks refused events as the problem of the second step", () => {
+    const st = siteSteps(site, "refused").map((x) => x.state);
+    expect(st).toEqual(["done", "problem", "todo"]);
   });
 
-  it("keeps a step open that becomes done while the person works in it", async () => {
-    const host = await render(<Harness start="current" />);
-    expect(toggle(host)).toBeNull();
-    await click(byRole(host, "button", "finish"));
-    // done now, but the body stays where the person was working
-    expect(host.querySelector('li[data-state="done"]')).not.toBeNull();
-    expect(host.textContent).toContain("copy this snippet");
-    expect(toggle(host)?.textContent).toBe("Hide");
-    // the person folds it on purpose
-    await click(toggle(host) as HTMLElement);
-    await waitFor(() => expect(host.textContent).not.toContain("copy this snippet"));
-    expect(toggle(host)?.textContent).toBe("Show");
-    // a step that is no longer done shows its body again
-    await click(byRole(host, "button", "undo"));
-    expect(host.textContent).toContain("copy this snippet");
-    expect(toggle(host)).toBeNull();
+  it("moves to the domain once an event arrived and is complete when verified", () => {
+    expect(siteSteps(site, "received").map((x) => x.state)).toEqual(["done", "done", "current"]);
+    const verified = { ...site, verification: "verified" } as Site;
+    expect(setupComplete(siteSteps(verified, "received"))).toBe(true);
   });
 });
