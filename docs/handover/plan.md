@@ -2,6 +2,7 @@
 title: "Handover plan"
 sidebarTitle: "Plan"
 description: "How stewardship of the service moves from the original operator to a community-appointed operator."
+icon: "map"
 ---
 
 This plan describes how stewardship of the service moves from the original operator to a

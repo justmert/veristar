@@ -2,6 +2,7 @@
 title: "Alerts runbook"
 sidebarTitle: "Alerts"
 description: "Every alert, its threshold, what it means and what to do."
+icon: "bell"
 ---
 
 Every alert of the platform, its threshold, what it means and what to do.

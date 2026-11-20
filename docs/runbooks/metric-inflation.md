@@ -2,6 +2,7 @@
 title: "Investigating suspected metric inflation"
 sidebarTitle: "Metric inflation"
 description: "Investigate a project whose numbers look higher than its real use."
+icon: "arrow-trend-up"
 ---
 
 A project's numbers look higher than its real use: someone reports it, an operator comparing

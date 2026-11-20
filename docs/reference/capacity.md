@@ -1,6 +1,7 @@
 ---
 title: "API metrics and web event capacity"
 description: "Measured storage cost of API metric rows, extrapolated to the retention horizons, and the web event delivery rate."
+icon: "gauge-high"
 ---
 
 What API metric rows cost in PostgreSQL, measured, and the extrapolation to the

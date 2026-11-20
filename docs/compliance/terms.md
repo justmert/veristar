@@ -4,6 +4,7 @@ description: "The terms of use that every project accepts when it enrolls."
 version: 2026-11-19.1
 status: final
 effective: 2026-11-19
+icon: "file-contract"
 ---
 
 

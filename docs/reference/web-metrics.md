@@ -1,6 +1,7 @@
 ---
 title: "Web metrics"
 description: "How each of the seven web metrics is produced, and how visitors and visits are counted."
+icon: "chart-line"
 ---
 
 How each of the seven web metrics (page views, unique visitors, referrers, session duration,

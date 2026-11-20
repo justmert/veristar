@@ -2,6 +2,7 @@
 title: "Deploying Veristar"
 sidebarTitle: "Overview"
 description: "Stand up, verify, upgrade and remove a Veristar environment from this repository, step by step."
+icon: "compass"
 ---
 
 This section shows you how to stand up a Veristar environment from this repository, check that it

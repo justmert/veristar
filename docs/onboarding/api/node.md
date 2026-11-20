@@ -1,6 +1,8 @@
 ---
 title: "Node.js"
 description: "Dual export from a Node.js service on Express with the OpenTelemetry Node SDK."
+icon: "node-js"
+iconType: "brands"
 ---
 
 Dual export from a Node.js service. Built from the example

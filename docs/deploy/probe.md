@@ -2,6 +2,7 @@
 title: "The external probe and status page"
 sidebarTitle: "Probe"
 description: "Install the prober and the public status page on a host outside the platform, behind that host's edge Caddy."
+icon: "satellite-dish"
 ---
 
 The prober (`cmd/prober`) is the outside view of the platform. Every 30 s it sends a real web

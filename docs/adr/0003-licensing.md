@@ -1,6 +1,7 @@
 ---
 title: "0003: Licensing"
 description: "The open-source licence of the repository and of the infrastructure tooling it depends on."
+icon: "scale-balanced"
 ---
 
 - Status: accepted

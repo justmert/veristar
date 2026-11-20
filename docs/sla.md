@@ -1,6 +1,7 @@
 ---
 title: "Service targets"
 description: "The operational targets for ingestion, dashboards and security patching, and how each one is measured."
+icon: "bullseye"
 ---
 
 Veristar has operational targets for ingestion, dashboards, security patching and support. This

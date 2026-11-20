@@ -2,6 +2,7 @@
 title: "Jurisdictions: use without and with end-user opt-in"
 sidebarTitle: "Jurisdictions"
 description: "Where the tracker can run without end-user opt-in, and where consent mode applies."
+icon: "scale-balanced"
 ---
 
 This page tells you, country by country, whether your site can run the

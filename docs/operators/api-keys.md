@@ -2,6 +2,7 @@
 title: "Operator API keys"
 sidebarTitle: "API keys"
 description: "Give a downstream machine read access to aggregate metrics through the machine API."
+icon: "key"
 ---
 
 Operator API keys give a downstream machine (a data warehouse job, a report

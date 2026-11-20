@@ -1,6 +1,7 @@
 ---
 title: "Threshold rules"
 description: "Save a traction threshold once and list the projects that meet it, with the qualifying days and the integrity grade as evidence."
+icon: "sliders"
 ---
 
 A threshold rule states a traction requirement once, for example "verified visitors at or above

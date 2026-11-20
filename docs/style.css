@@ -27,3 +27,106 @@ html.dark .dark\:hover\:text-primary:hover {
 html.dark #footer a[href*="mintlify.com"] {
   color: rgb(var(--gray-400));
 }
+
+/* each kind of data keeps the hue the console charts give it: web blue,
+   api aqua, on-chain violet, signed reports magenta, ai assistants ochre.
+   the hues only colour icons and card edges, never text, and each one holds
+   at least 3:1 on the page ground and the card in its mode (wcag 1.4.11):
+   the light steps reach 3.9 to 4.3:1 on #EFEFEF and 3.8 to 4.2:1 on their
+   tinted card tile, the dark steps 4.5 to 5.8:1 on #171717 and 4.0 to 5.0:1
+   on their tile */
+html {
+  --tone-web: #2a6fd6;
+  --tone-api: #14876a;
+  --tone-chain: #6e5ed6;
+  --tone-report: #c23f78;
+  --tone-ai: #a66b00;
+}
+
+html.dark {
+  --tone-web: #3987e5;
+  --tone-api: #199e70;
+  --tone-chain: #9085e9;
+  --tone-report: #d55181;
+  --tone-ai: #c98500;
+}
+
+.tone-web { --tone: var(--tone-web); }
+.tone-api { --tone: var(--tone-api); }
+.tone-chain { --tone: var(--tone-chain); }
+.tone-report { --tone: var(--tone-report); }
+.tone-ai { --tone: var(--tone-ai); }
+
+/* every card icon sits on a soft tile; a card about one kind of data tints
+   the tile and the icon with that kind's hue */
+.card [data-component-part="card-icon"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  align-self: flex-start;
+  border-radius: 0.75rem;
+  background-color: rgb(var(--gray-500) / 0.1);
+}
+
+.card [data-component-part="card-icon"] svg {
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+}
+
+.card[class*="tone-"] [data-component-part="card-icon"] {
+  background-color: color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+.card[class*="tone-"] [data-component-part="card-icon"] svg {
+  background-color: var(--tone) !important;
+}
+
+.card[class*="tone-"]:hover {
+  border-color: var(--tone) !important;
+}
+
+/* the sidebar marks the same kinds by page, so a page about web analytics
+   carries the web hue in every tab it appears in */
+#navigation-items li:is([id^="/onboarding/web/"], [id="/reference/web-metrics"], [id="/reference/browser-proof"]) > a > div:first-child > svg {
+  background-color: var(--tone-web) !important;
+}
+
+#navigation-items li:is([id^="/onboarding/api/"], [id="/reference/collector"], [id="/reference/api-storage"]) > a > div:first-child > svg {
+  background-color: var(--tone-api) !important;
+}
+
+#navigation-items li:is([id="/onboarding/onchain"], [id="/operators/onchain-and-exports"], [id="/reference/onchain-sources"]) > a > div:first-child > svg {
+  background-color: var(--tone-chain) !important;
+}
+
+#navigation-items li:is([id="/onboarding/signed-reports"], [id="/reference/usage-reports"]) > a > div:first-child > svg {
+  background-color: var(--tone-report) !important;
+}
+
+#navigation-items li:is([id="/onboarding/mcp"], [id="/operators/mcp"], [id="/security/mcp"], [id="/runbooks/mcp-access"]) > a > div:first-child > svg {
+  background-color: var(--tone-ai) !important;
+}
+
+/* a group whose pages share one kind carries its hue on the group icon */
+.sidebar-group-header:has(+ .sidebar-group > li[id="/onboarding/web/static-html"]) .sidebar-group-icon {
+  background-color: var(--tone-web);
+}
+
+.sidebar-group-header:has(+ .sidebar-group > li[id="/onboarding/api/node"]) .sidebar-group-icon {
+  background-color: var(--tone-api);
+}
+
+.sidebar-group-header:has(+ .sidebar-group > li[id="/onboarding/onchain"]) .sidebar-group-icon {
+  background-color: var(--tone-chain);
+}
+
+.sidebar-group-header:has(+ .sidebar-group > li[id="/onboarding/signed-reports"]) .sidebar-group-icon {
+  background-color: var(--tone-report);
+}
+
+.sidebar-group-header:has(+ .sidebar-group > li[id="/onboarding/mcp"]) .sidebar-group-icon {
+  background-color: var(--tone-ai);
+}

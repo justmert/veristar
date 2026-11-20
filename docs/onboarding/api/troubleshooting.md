@@ -2,6 +2,7 @@
 title: "Troubleshooting API analytics"
 sidebarTitle: "Troubleshooting"
 description: "Checks for the OTLP endpoint, the token and the data when API metrics do not appear."
+icon: "screwdriver-wrench"
 ---
 
 ## Check the token and the endpoint first

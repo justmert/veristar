@@ -1,6 +1,7 @@
 ---
 title: "Reading the global views"
 description: "Compare every enrolled project on the core web and API metrics."
+icon: "chart-line"
 ---
 
 The global views compare every enrolled project on the core web and API metrics, for funding and

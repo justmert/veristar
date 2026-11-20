@@ -14,6 +14,9 @@
     "href": "/introduction"
   },
   "favicon": "/favicon.svg",
+  "icons": {
+    "library": "fontawesome"
+  },
   "appearance": {
     "default": "system",
     "strict": false
@@ -53,13 +56,16 @@
     "tabs": [
       {
         "tab": "Get started",
+        "icon": "rocket",
         "groups": [
           {
             "group": "Get started",
+            "icon": "play",
             "pages": ["introduction", "how-it-works", "architecture"]
           },
           {
             "group": "Design decisions",
+            "icon": "lightbulb",
             "pages": [
               "adr/0001-base-platform",
               "adr/0002-overlay-not-fork",
@@ -72,9 +78,11 @@
       },
       {
         "tab": "Tenant guides",
+        "icon": "book-open",
         "groups": [
           {
             "group": "Start here",
+            "icon": "flag",
             "pages": [
               "onboarding/overview",
               "onboarding/sign-in",
@@ -84,6 +92,7 @@
           },
           {
             "group": "Web analytics",
+            "icon": "globe",
             "pages": [
               "onboarding/web/static-html",
               "onboarding/web/vite-react",
@@ -106,6 +115,7 @@
           },
           {
             "group": "API analytics",
+            "icon": "server",
             "pages": [
               "onboarding/api/node",
               "onboarding/api/python",
@@ -121,27 +131,33 @@
           },
           {
             "group": "On-chain",
+            "icon": "link",
             "pages": ["onboarding/onchain"]
           },
           {
             "group": "Reports",
+            "icon": "file-signature",
             "pages": ["onboarding/signed-reports"]
           },
           {
             "group": "AI assistants",
+            "icon": "robot",
             "pages": ["onboarding/mcp"]
           },
           {
             "group": "Help",
+            "icon": "life-ring",
             "pages": ["support"]
           }
         ]
       },
       {
         "tab": "Operators",
+        "icon": "user-shield",
         "groups": [
           {
             "group": "Operator guide",
+            "icon": "user-shield",
             "pages": [
               "operators/overview",
               "operators/roster",
@@ -163,9 +179,11 @@
       },
       {
         "tab": "Deploy and operate",
+        "icon": "server",
         "groups": [
           {
             "group": "Deploy",
+            "icon": "cloud-arrow-up",
             "pages": [
               "deploy/overview",
               "deploy/prerequisites",
@@ -183,10 +201,12 @@
           },
           {
             "group": "Runbooks",
+            "icon": "book",
             "pages": [
               "runbooks/overview",
               {
                 "group": "Incidents",
+                "icon": "triangle-exclamation",
                 "pages": [
                   "runbooks/alerts",
                   "runbooks/edge-node-failure",
@@ -201,6 +221,7 @@
               },
               {
                 "group": "Routine operations",
+                "icon": "calendar-check",
                 "pages": [
                   "runbooks/capacity",
                   "runbooks/security-patch",
@@ -215,6 +236,7 @@
               },
               {
                 "group": "People and projects",
+                "icon": "users",
                 "pages": [
                   "runbooks/operators",
                   "runbooks/operator-key-revocation",
@@ -227,15 +249,18 @@
           },
           {
             "group": "Service targets",
+            "icon": "bullseye",
             "pages": ["sla", "reference/availability", "reference/observability"]
           }
         ]
       },
       {
         "tab": "Reference",
+        "icon": "code",
         "groups": [
           {
             "group": "Wire format and APIs",
+            "icon": "plug",
             "pages": [
               "reference/wire-v1",
               "reference/browser-proof",
@@ -245,14 +270,17 @@
           },
           {
             "group": "Metrics API",
+            "icon": "chart-line",
             "openapi": "reference/openapi/metrics-v1.yaml"
           },
           {
             "group": "Limits and capacity",
+            "icon": "gauge",
             "pages": ["reference/gateway-limits", "reference/capacity"]
           },
           {
             "group": "Data and metrics",
+            "icon": "database",
             "pages": [
               "reference/web-metrics",
               "reference/collector",
@@ -266,9 +294,11 @@
       },
       {
         "tab": "Security and privacy",
+        "icon": "shield-halved",
         "groups": [
           {
             "group": "Security",
+            "icon": "shield",
             "pages": [
               "security/SECURITY",
               "security/threat-model",
@@ -281,6 +311,7 @@
           },
           {
             "group": "Privacy and compliance",
+            "icon": "eye-slash",
             "pages": [
               "compliance/privacy-strategy",
               "compliance/jurisdictions",
@@ -298,9 +329,11 @@
       },
       {
         "tab": "Handover",
+        "icon": "handshake",
         "groups": [
           {
             "group": "Handover",
+            "icon": "handshake",
             "pages": ["handover/plan", "handover/checklist", "handover/rebuild"]
           }
         ]

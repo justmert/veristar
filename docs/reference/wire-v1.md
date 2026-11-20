@@ -1,6 +1,7 @@
 ---
 title: "Wire format v1"
 description: "How sdk.js talks to the gateway: endpoints, payloads and limits."
+icon: "plug"
 ---
 
 How `sdk.js` talks to the gateway at `in.<BASE_DOMAIN>`. The TypeScript source of truth is

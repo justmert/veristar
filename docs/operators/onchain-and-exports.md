@@ -1,6 +1,7 @@
 ---
 title: "On-chain activity and exports"
 description: "Read projects' ledger activity next to web and API usage, and export the views you decide on."
+icon: "file-export"
 ---
 
 Every project can declare the Stellar accounts and Soroban contracts it operates and prove that it

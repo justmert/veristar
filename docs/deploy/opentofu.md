@@ -2,6 +2,7 @@
 title: "OpenTofu: infrastructure, state and the Ansible inventory contract"
 sidebarTitle: "OpenTofu"
 description: "The OpenTofu infrastructure, its state, and the inventory it hands to Ansible."
+icon: "cubes"
 ---
 
 OpenTofu creates every cloud resource of an environment: the Azure network, the VMs, Traffic

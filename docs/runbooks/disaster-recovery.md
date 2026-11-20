@@ -2,6 +2,7 @@
 title: "Disaster recovery: the database cluster lost"
 sidebarTitle: "Disaster recovery"
 description: "Bring the platform back when the database cluster is lost."
+icon: "fire-extinguisher"
 ---
 
 Brings the platform back after the PostgreSQL cluster is gone: an operator mistake that dropped

@@ -1,6 +1,7 @@
 ---
 title: "Security incident"
 description: "Respond to a suspected attack or breach, with clear roles and steps."
+icon: "bug"
 ---
 
 Something suggests the platform's confidentiality, integrity or availability was attacked or

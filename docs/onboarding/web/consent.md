@@ -2,6 +2,7 @@
 title: "Consent: starting the tracker later"
 sidebarTitle: "Consent"
 description: "Load the tracker without measuring, and start it once the visitor agrees."
+icon: "user-check"
 ---
 
 Some sites must ask visitors before measuring them; whether yours must depends on the countries it

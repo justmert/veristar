@@ -1,6 +1,7 @@
 ---
 title: "Content security policy"
 description: "The Content-Security-Policy directives that let the tracker load and send events."
+icon: "shield-halved"
 ---
 
 If your site sends a `Content-Security-Policy` header (or a `<meta http-equiv>` policy), the browser

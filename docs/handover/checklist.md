@@ -2,6 +2,7 @@
 title: "Handover readiness checklist"
 sidebarTitle: "Checklist"
 description: "Every item that changes hands so the new operator can run the service on its own, with the evidence for each."
+icon: "list-check"
 ---
 
 This checklist lists every item that changes hands for the new operator to run the service on its

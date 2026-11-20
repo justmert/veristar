@@ -2,6 +2,7 @@
 title: "OTLP collector (scf-otelcol)"
 sidebarTitle: "OTLP collector"
 description: "What the OTLP collector accepts and publishes, and the upstream behaviour its configuration rests on."
+icon: "tower-broadcast"
 ---
 
 What the OTLP collector accepts, what it publishes, and the facts about the

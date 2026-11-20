@@ -1,6 +1,7 @@
 ---
 title: "Signed usage reports"
 description: "The report format, its canonical JSON form, the SEP-53 signature and how to verify a report with any tool."
+icon: "file-signature"
 ---
 
 A signed usage report states a project's web, API and on-chain usage for a period, with its

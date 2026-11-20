@@ -1,6 +1,7 @@
 ---
 title: "Edge node failure"
 description: "Diagnose and recover an edge node that answers badly or not at all."
+icon: "network-wired"
 ---
 
 An edge node (Caddy, gateway, collector, one NATS server, one etcd member) answers badly or not
