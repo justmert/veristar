@@ -10,7 +10,7 @@ COPY pom.xml ./
 COPY src ./src
 RUN --mount=type=cache,target=/root/.m2 mvn --batch-mode --no-transfer-progress package
 
-FROM eclipse-temurin:25.0.5_8-jre-resolute@sha256:480ef64e4540d45b0301e8afb7873bd3fa61ce93c5f66273eb569420718f38e2
+FROM eclipse-temurin:27.0.1.1_4-jre-resolute@sha256:9723bc085e2a7bd142b78c9a293427941c309962276d8ef28053a61f73238930
 # created up front: a directory ADD creates would take the jar's mode
 WORKDIR /app
 # docs:start agent
