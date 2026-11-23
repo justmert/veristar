@@ -23,7 +23,7 @@ d4aa118f5f3945754a358f1cc4ddce2cc6e190b8:cmd/adoptionreport/main_test.go:generic
 # not a secret: the value is the sops key name alertmanager_discord_webhook_url
 # in the map from environment variable names to secret file keys
 e9abd695689e1870a3deccf135e96074ba247e33:infra/secrets/new-secrets.py:discord-client-secret:36
-91b79909f56f59bb02c007035319e3d78f201ebd:infra/secrets/new-secrets.py:discord-client-secret:38
+b2cbc5772f8bb112ed69bba3ba69c091ea893e18:infra/secrets/new-secrets.py:discord-client-secret:38
 # the literal fixture client secret that the observability test stack hands to
 # the test-only github oauth fixture container; no real oauth app exists
 20e0dfcd475ddf1a145dae0864220dde34a823ab:tests/observability/up.sh:generic-api-key:75
@@ -36,8 +36,8 @@ c777175c1e21a1c8987979488d169f0e9fcf475e:docs/handover/rebuild.md:generic-api-ke
 # reviewed 2026-11-16: a public muxed account address (an M strkey) that the
 # on-chain routes test sends to prove the ids endpoint refuses it; strkeys
 # are public ledger ids, never credentials
-4931e2f79dcf130a7fc6f7edce47b180bf340854:internal/controlplane/onchain/routes_test.go:generic-api-key:374
+faaaab71ee1a5e58c2ebff49fb8423daa37b6c30:internal/controlplane/onchain/routes_test.go:generic-api-key:374
 # reviewed 2026-11-18: a public account address (a G strkey) in the audit
 # entry detail that the console test shortens to its first and last four
 # characters; strkeys are public ledger ids, never credentials
-a8c7439a8dc5a35803d00f8baefd94642b9fa2bb:apps/console/test/operator.test.tsx:generic-api-key:478
+60a0efdc491ae9a4af5113732eb31c2caf81cbf9:apps/console/test/operator.test.tsx:generic-api-key:478
