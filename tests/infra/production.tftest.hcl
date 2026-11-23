@@ -6,6 +6,7 @@
 variables {
   # fixture only: tofu test keeps state in memory, nothing is written
   state_passphrase = "fixture-passphrase-for-tofu-test-only"
+  probe_address    = "192.0.2.10"
 }
 
 # arm ids are paths; the mock's random strings would not look like one

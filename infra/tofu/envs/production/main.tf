@@ -160,7 +160,7 @@ module "dns" {
   # the public status page on the probe host in azure east us, outside the
   # platform's own nodes and region (docs/deploy/probe.md); that host's edge
   # caddy gets the certificate by http-01, which the caa issuer allows
-  a_records = { status = "192.0.2.10" }
+  a_records = var.probe_address == null ? {} : { status = var.probe_address }
 }
 
 module "inventory" {
@@ -169,7 +169,7 @@ module "inventory" {
   environment = local.environment
   base_domain = var.base_domain
   # status. is the public status page on the probe host (docs/deploy/probe.md)
-  hostnames            = merge(module.dns.hostnames, module.dns.a_hostnames)
+  hostnames            = merge(module.dns.hostnames, module.dns.a_hostnames, { status = "status.${var.base_domain}" })
   private_network_cidr = module.network.ip_range
   admin_cidrs          = var.admin_cidrs
   admin_user           = local.admin_user

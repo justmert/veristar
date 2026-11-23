@@ -196,7 +196,7 @@ This section is the agreement with the Ansible side. Change it only together.
   probe runs as a Compose project on a separate virtual machine in Azure East US ([probe.md](probe.md)),
   outside this state, so OpenTofu leaves `probe` empty; the key stays so playbooks that name
   the group keep working. Its one record here is the DNS-only A record `status.` (`a_records`
-  of module `dns`).
+  of module `dns`), set from `probe_address` in `terraform.tfvars`.
 - Inventory host names equal the VM names: `<env>-<tier>-<index>`, index from 1.
   Every node runs a Patroni member; index 1 is the one that initialises the cluster.
 - Values written as `<BASE_DOMAIN>` and `<admin cidr>` above are your values from

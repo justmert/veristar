@@ -168,8 +168,9 @@ Put the printed value into `probe_bundle_csp_script_hashes` and render the bundl
 `status.<BASE_DOMAIN>` is an A record to the probe host's public address in the Cloudflare zone,
 DNS only (not proxied), TTL 300, so the edge Caddy obtains the certificate itself. The zone's CAA
 records (`issue letsencrypt.org`, `issuewild ;`) allow that certificate. In code it is the
-`a_records = { status = "<probe host address>" }` argument of `module "dns"` in
-`infra/tofu/envs/<env>/main.tf`, applied with the rest of the environment
+`a_records` argument of `module "dns"` in `infra/tofu/envs/<env>/main.tf`, filled from
+`probe_address` in your `terraform.tfvars` (not committed; unset, the record is left to be managed
+outside OpenTofu), applied with the rest of the environment
 ([opentofu.md](opentofu.md)). The inventory module adds the name to `sa_hostnames`, which the
 bundle's templates read.
 

@@ -132,3 +132,9 @@ variable "server_image_version" {
     error_message = "server_image_version must be an exact image version, not latest."
   }
 }
+
+variable "probe_address" {
+  description = "public address of the probe host for the status.<base_domain> a record; set in terraform.tfvars, which is not committed. null leaves the record to be managed outside opentofu"
+  type        = string
+  default     = null
+}
